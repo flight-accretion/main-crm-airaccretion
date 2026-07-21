@@ -1,0 +1,24 @@
+@media (max-width:575.98px){
+    .box-header{
+        display: flex;
+    }
+    .payment-header{
+        display: block;
+    }
+    .payment-status{
+        text-align: left;
+        margin-top: 20px;
+    }
+}
+@media (max-width: 768px) {
+  #calendar2 {
+    overflow-x: auto;
+  }
+  #calendar2 .fc-daygrid.fc-dayGridMonth-view.fc-view {
+    min-width: 600px;
+  }
+  table.lead-datatable thead th:first-child,
+    table.lead-datatable tbody td:first-child {
+        display: none;
+    }
+}

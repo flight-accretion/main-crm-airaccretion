@@ -1,0 +1,7 @@
+*
+!.gitignore
+/vendor
+composer.lock
+.env
+composer.json
+package.json

@@ -1,0 +1,175 @@
+.select2-container {
+    margin-top: 0 !important;
+}
+.select2-container--default .select2-selection--multiple,
+.select2-container--default .select2-selection--single {
+    border-radius: 0.25rem !important;
+}
+.dataTables_length select {
+    width: auto !important;
+    min-width: 60px;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+.dataTables_length {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.dataTables_wrapper .dataTables_length,
+.dataTables_wrapper .dataTables_filter {
+    margin-bottom: 1rem;
+}
+
+.dataTables_length label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.view-client-filters .form-select,
+.add-user-roles .form-select {
+    line-height: 1.6;
+    border-radius: 0.35rem;
+}
+.search-filter-btn {
+    margin-top: 1.5rem;
+    margin-bottom: 0;
+}
+.dataTables_filter input {
+    padding: 4px 6px;
+    font-size: 12px;
+    height: 30px;
+    width: 150px;
+}
+.dataTables_length select {
+    padding: 2px 5px;
+    font-size: 11px;
+    height: 30px;
+    width: auto;
+}
+
+.dataTables_length label {
+    font-size: 13px;
+}
+.iti {
+    width: 100%;
+}
+.ti-switch {
+    display: block;
+}
+
+#editor {
+    height: auto;
+}
+.iti input {
+    padding-left: 48px;
+}
+
+.intl-phone-input {
+    padding-left: 80px !important;
+    /* height: 38px; */
+}
+
+.iti {
+    width: 100%;
+}
+  .iti--separate-dial-code input {
+      padding-left: 65px !important; /* prevents overlap */
+  }
+
+.iti__flag-container {
+    top: 6px;
+}
+.invoice-titles{
+    position: relative;
+    margin-inline-end: auto;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: rgb(var(--default-text-color));
+}
+.leads-tableshow{
+    display: flex;
+}
+.follow-history{
+    padding-left: 50px;
+}
+.followup-history{
+    height: 150px;
+    overflow: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #999 #f1f1f1;
+    padding-right: 15px;
+}
+.total-sales{
+    height: 100%;
+}
+.total-sales .box{
+    height: 100%;
+}
+.list-none.daily-task-card li:last-child{
+    margin-bottom: 1.25rem;
+}
+.ti-offcanvas .ti-offcanvas-body{
+    padding: 15px 15px 5rem;
+}
+.ti-offcanvas .ti-offcanvas-header{
+    display: block;
+}
+.ti-offcanvas .ti-offcanvas-header .avatar i{
+    font-size: 20px;
+    color: #fff;
+}
+.hs-accordion-group .avatar i{
+    font-size: 20px;
+    color: #fff;
+}
+.ti-btn-dark-full {
+  background-color: rgb(var(--dark));
+  --tw-text-opacity: 1;
+  color: rgb(255 255 255 / var(--tw-text-opacity));
+}
+/* Custom style for DataTables control column */
+table.dataTable.dtr-column > tbody > tr > td.control:before,
+table.dataTable.dtr-column > tbody > tr > th.control:before {
+  background-color: rgb(var(--primary));  /* Change to your primary color */
+  color: #fff !important;                /* Text color */
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 16px;
+  content: "+" !important;    /* Customize the symbol */
+  display: inline-block;
+  text-align: center;
+  box-shadow: 0 0 5px rgba(0,0,0,0.2); /* Optional: soft shadow */
+}
+
+/* When row is shown, change the icon */
+table.dataTable.dtr-column > tbody > tr.parent > td.control:before,
+table.dataTable.dtr-column > tbody > tr.parent > th.control:before {
+  content: "−" !important;   /* Use minus symbol or custom icon */
+}
+/* Target the header of DataTable for rounded top corners */
+table.dataTable thead {
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+  overflow: hidden; /* Ensures the radius works */
+}
+
+/* Also, target the scrollable container if you're using horizontal scrolling */
+.dataTables_scrollHeadInner, 
+.dataTables_scrollHead {
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+  overflow: hidden;
+}
+table.dataTable thead>tr>th.sorting{
+    padding: 20px;
+}
+/* sabhi grid/columns ke andar text wrap ho */
+[class*="col-span"] {
+  word-break: break-word;       /* old support */
+  overflow-wrap: anywhere;      /* modern support */
+  white-space: normal;          /* nowrap hata do */
+}
+.overflow-y-height{
+    max-height: 80vh;
+}
