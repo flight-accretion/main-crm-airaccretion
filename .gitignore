@@ -14,25 +14,6 @@ yarn-error.log
 /.idea
 /.vscode
 public/css/
-config/app.php
-config/auth.php
-config/broadcasting.php
-config/cache.php
-config/cors.php
-config/database.php
-config/filesystems.php
-config/dompdf.php
-config/hashing.php
-config/logging.php
-config/sanctum.php
-config/mail.php
-config/queue.php
-config/session.php
-config/view.php
 
 public/js/
 public/mix-manifest.json
-package-lock.json
-composer.json
-composer.lock
-
