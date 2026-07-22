@@ -1,0 +1,66 @@
+name: Deploy Main CRM
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+      - name: Build and push app image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./main-crm-airaccretion
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/main-crm:latest
+            ${{ secrets.DOCKER_USERNAME }}/main-crm:${{ github.sha }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Copy public + nginx config to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "main-crm-airaccretion/public,main-crm-airaccretion/nginx"
+          target: "/root/main-crm/app-code"
+          strip_components: 1
+
+      - name: Deploy on VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /root/main-crm
+            if [ ! -f .env ]; then
+              echo ".env missing on server! Create it manually first."
+              exit 1
+            fi
+            docker pull ${{ secrets.DOCKER_USERNAME }}/main-crm:latest
+            docker compose -f docker-compose.prod.yml up -d --force-recreate
+            sleep 8
+            docker exec main-crm-app php artisan migrate --force
+            docker exec main-crm-app php artisan config:cache
+            docker exec main-crm-app php artisan route:cache
+            docker exec main-crm-app php artisan view:cache
+            docker exec main-crm-app php artisan storage:link || true
+            docker image prune -f
