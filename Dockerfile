@@ -1,6 +1,6 @@
 # ⚠️ CONFIRM: check your composer.json -> "require": { "php": "^X.X" }
 # and change the tag below to match (e.g. 8.1-fpm, 8.2-fpm, 8.3-fpm)
-FROM php:8.2-fpm
+FROM php:8.0-fpm
 
 WORKDIR /var/www/html
 
