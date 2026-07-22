@@ -20,7 +20,7 @@ jobs:
       - name: Build and push app image
         uses: docker/build-push-action@v5
         with:
-          context: ./main-crm-airaccretion
+          context: .
           push: true
           tags: |
             ${{ secrets.DOCKER_USERNAME }}/main-crm:latest
@@ -39,9 +39,8 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "main-crm-airaccretion/public,main-crm-airaccretion/nginx"
+          source: "public,nginx"
           target: "/root/main-crm/app-code"
-          strip_components: 1
 
       - name: Deploy on VPS
         uses: appleboy/ssh-action@v1.0.3
