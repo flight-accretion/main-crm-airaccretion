@@ -1,39 +1,57 @@
-# ⚠️ CONFIRM: check your composer.json -> "require": { "php": "^X.X" }
-# and change the tag below to match (e.g. 8.1-fpm, 8.2-fpm, 8.3-fpm)
+
 FROM php:8.0-fpm
 
 WORKDIR /var/www/html
 
-# System dependencies
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
-  git \
-  unzip \
-  libpng-dev \
-  libonig-dev \
-  libxml2-dev \
-  libzip-dev \
-  libjpeg-dev \
-  libfreetype6-dev \
-  libpq-dev \
-  postgresql-client \
-  && rm -rf /var/lib/apt/lists/*
+    git \
+    unzip \
+    curl \
+    libpng-dev \
+    libjpeg-dev \
+    libfreetype6-dev \
+    libonig-dev \
+    libxml2-dev \
+    libzip-dev \
+    libpq-dev \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
 
-# PHP extensions commonly needed by Laravel CRMs
+# Install PHP extensions
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-  && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip
+    && docker-php-ext-install \
+        pdo_mysql \
+        pdo_pgsql \
+        mbstring \
+        exif \
+        pcntl \
+        bcmath \
+        gd \
+        zip
 
-# Composer
+# Install Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Copy application code
+# Copy application files
 COPY . .
 
-# Install PHP dependencies (production, no dev)
-RUN composer install --no-dev --optimize-autoloader --no-interaction
+# Install dependencies
+RUN composer install \
+    --no-dev \
+    --optimize-autoloader \
+    --no-interaction
 
-# Permissions for Laravel writable dirs
-RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache \
-  && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
+# Laravel permissions
+RUN mkdir -p storage/framework/cache \
+    storage/framework/sessions \
+    storage/framework/views \
+    storage/logs \
+    bootstrap/cache && \
+    chown -R www-data:www-data storage bootstrap/cache && \
+    chmod -R 775 storage bootstrap/cache
 
 EXPOSE 9000
+
 CMD ["php-fpm"]
+
