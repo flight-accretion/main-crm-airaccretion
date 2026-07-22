@@ -14,7 +14,8 @@ RUN apt-get update && apt-get install -y \
   libzip-dev \
   libjpeg-dev \
   libfreetype6-dev \
-  default-mysql-client \
+  libpq-dev \
+  postgresql-client \
   && rm -rf /var/lib/apt/lists/*
 
 # PHP extensions commonly needed by Laravel CRMs
