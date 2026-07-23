@@ -22,7 +22,7 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install pdo_mysql pdo_pgsql pgsql mbstring exif pcntl bcmath gd zip
 
 # Increase PHP memory limit for heavy reports/dashboards
-RUN echo "memory_limit = 512M" > /usr/local/etc/php/conf.d/memory-limit.ini
+RUN echo "memory_limit = 1024M" > /usr/local/etc/php/conf.d/memory-limit.ini
 
 # Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
