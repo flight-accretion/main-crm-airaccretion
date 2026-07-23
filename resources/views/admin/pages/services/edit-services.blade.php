@@ -84,6 +84,11 @@
                                             <span class="text-red-500 text-xs">{{ $message }}</span>
                                         @enderror
                                     </div>
+
+                                    @include('admin.pages.services.partials.extra-service-picker', [
+                                        'extraServices' => $extraServices,
+                                        'selectedExtraServiceIds' => old('extra_service_ids', $service->extraServices->pluck('id')->toArray()),
+                                    ])
                                 </div>
                                 <div class="box-footer">
                                     <button type="submit" class="ti-btn ti-btn-primary-full ti-custom-validate-btn">Update
@@ -224,28 +229,30 @@
             let isProcessing = false;
 
             // Single event listener for the container
-            container.addEventListener('click', function(e) {
-                if (isProcessing) return;
-                isProcessing = true;
+            if (container) {
+                container.addEventListener('click', function(e) {
+                    if (isProcessing) return;
+                    isProcessing = true;
 
-                try {
-                    const target = e.target;
+                    try {
+                        const target = e.target;
 
-                    // Handle Add Button
-                    if (target.classList.contains('addBtn')) {
-                        e.preventDefault();
-                        addServiceRow();
+                        // Handle Add Button
+                        if (target.classList.contains('addBtn')) {
+                            e.preventDefault();
+                            addServiceRow();
+                        }
+
+                        // Handle Remove Button
+                        if (target.classList.contains('removeBtn')) {
+                            e.preventDefault();
+                            removeServiceRow(target);
+                        }
+                    } finally {
+                        isProcessing = false;
                     }
-
-                    // Handle Remove Button
-                    if (target.classList.contains('removeBtn')) {
-                        e.preventDefault();
-                        removeServiceRow(target);
-                    }
-                } finally {
-                    isProcessing = false;
-                }
-            });
+                });
+            }
 
             // Handle dropdown changes for extra services
             $(document).on('change', '.extra-service-select', function() {

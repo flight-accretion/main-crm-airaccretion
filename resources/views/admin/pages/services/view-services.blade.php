@@ -95,7 +95,7 @@
             @endif
 
             <!-- Extra Services Section -->
-            {{-- <div class="box">
+            <div class="box">
                 <div class="box-header">
                     <h5 class="box-title">Extra Services ({{ $service->extraServices->count() }})</h5>
                 </div>
@@ -106,7 +106,7 @@
                                 <thead class="bg-gray-50 dark:bg-black/20">
                                     <tr>
                                         <th class="px-6 py-3 text-start">#</th>
-                                        <th class="px-6 py-3 text-start">Service Name</th>
+                                        <th class="px-6 py-3 text-start">Extra Service Name</th>
                                         <th class="px-6 py-3 text-start">Amount</th>
                                         <th class="px-6 py-3 text-start">Description</th>
                                         <th class="px-6 py-3 text-start">Status</th>
@@ -141,7 +141,7 @@
                         <p class="text-gray-500 dark:text-gray-400">No extra services available for this service.</p>
                     @endif
                 </div>
-            </div> --}}
+            </div>
         </div>
     </div>
 @endsection

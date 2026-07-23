@@ -22,7 +22,7 @@
                                 <div class="md:flex block items-center justify-between">
                                     <h5 class="font-semibold mb-0 leading-none text-[1.25rem]">Vendor Payments</h5>
                                     <div class="hs-dropdown ti-dropdown mt-3 md:mt-0">
-                                        <a href="{{ route('admin.account.vendor-payments.export') }}{{ request()->getQueryString() ? '?' . request()->getQueryString() : '' }}"
+                                        <a href="{{ route('admin.account.vendor-payments.export', [], false) }}{{ request()->getQueryString() ? '?' . request()->getQueryString() : '' }}"
                                             class="ti-btn bg-theme ti-btn-primary-full !py-1 !px-2"
                                             aria-expanded="false">
                                             <i class="ri-share-box-fill"></i>
@@ -47,7 +47,7 @@
         </button>
     </div>
     <div class="box-body" id="filter-section">
-        <form method="GET" action="{{ route('admin.account.vendor-payments') }}" id="filter-form">
+        <form method="GET" action="{{ route('admin.account.vendor-payments', [], false) }}" id="filter-form">
             <div class="grid grid-cols-12 gap-4">
                 <div class="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
                     <label class="ti-form-label">Client Name</label>
@@ -529,7 +529,8 @@
 
         function loadVendorPaymentDetails(paymentId) {
             window._currentVendorPaymentId = paymentId;
-            fetch(`{{ route('admin.account.vendor-payments.show', '') }}/${paymentId}`)
+            const detailsUrl = @json(route('admin.account.vendor-payments.show', ['id' => '__PAYMENT_ID__'], false));
+            fetch(detailsUrl.replace('__PAYMENT_ID__', encodeURIComponent(paymentId)))
                 .then(response => response.json())
                 .then(data => {
                     if (data.error) {
@@ -1260,7 +1261,7 @@
                     const _origSuccessModal = window.showSuccessModal;
                     window.showSuccessModal = function() {}; // temporarily disable
 
-                    fetch("{{ route('admin.account.vendor-payments.store') }}", {
+                    fetch(@json(route('admin.account.vendor-payments.store', [], false)), {
                             method: 'POST',
                             body: formData
                         })
@@ -1572,7 +1573,7 @@ if (inline) {
             saveButton.textContent = 'Saving...';
             saveButton.disabled = true;
 
-            fetch("{{ route('admin.account.vendor-payments.store') }}", {
+            fetch(@json(route('admin.account.vendor-payments.store', [], false)), {
                     method: 'POST',
                     body: formData,
                     headers: {
@@ -1864,7 +1865,7 @@ if (reopenId) {
 
         function clearFilters() {
             $('#filter-form')[0].reset();
-            window.location.href = "{{ route('admin.account.vendor-payments') }}";
+            window.location.href = @json(route('admin.account.vendor-payments', [], false));
         }
         function showLoader() {
             document.getElementById('global-loader').style.display = 'flex';

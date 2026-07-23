@@ -75,6 +75,31 @@
     </div>
 
     <!-- Services Table -->
+    <style>
+        #services-table {
+            min-width: 1200px;
+        }
+
+        #services-table th,
+        #services-table td {
+            vertical-align: middle;
+        }
+
+        .services-table-wrapper,
+        .services-table-wrapper .dataTables_scrollBody {
+            overflow-x: auto !important;
+        }
+
+        .service-extra-list {
+            max-width: 520px;
+            min-width: 360px;
+            max-height: 3rem;
+            line-height: 1.5;
+            overflow-y: auto;
+            white-space: normal;
+            word-break: break-word;
+        }
+    </style>
     <div class="grid grid-cols-12 gap-6">
         <div class="xl:col-span-12 col-span-12">
             <div class="box custom-box">
@@ -84,19 +109,19 @@
                     </div>
                 </div>
                 <div class="box-body">
-                    <div class="table-responsive">
-                        <table class="table display responsive nowrap table-datatable" width="100%">
+                    <div class="table-responsive services-table-wrapper">
+                        <table id="services-table" class="table display services-table" width="100%">
                             <thead class="bg-primary text-white">
                                 <tr class="border-b border-defaultborder">
 
-                                    <th>S.No</th>
-                                    <th>Service Name</th>
-                                    <th>Product</th>
-                                    <th>Description</th>
-                                    <th>Amount</th>
-                                    {{-- <th>Extra Services</th> --}}
-                                    <th>Status</th>
-                                    <th>Actions</th>
+                                    <th data-priority="1">S.No</th>
+                                    <th data-priority="2">Service Name</th>
+                                    <th data-priority="7">Product</th>
+                                    <th data-priority="8">Description</th>
+                                    <th data-priority="4">Amount</th>
+                                    <th data-priority="3" class="all">Extra Services</th>
+                                    <th data-priority="5">Status</th>
+                                    <th data-priority="6">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -119,7 +144,18 @@
                                         <td class="text-center">
                                             {{ config('settings.currency_symbol') }}{{ number_format($service->service_amount, 2) }}
                                         </td>
-                                        {{-- <td> {{ $service->extraServices->pluck('extra_service')->join(', ') }}</td> --}}
+                                        <td>
+                                            @php
+                                                $extraServiceNames = $service->extraServices->pluck('extra_service')->filter()->values();
+                                            @endphp
+                                            <div class="service-extra-list">
+                                                @if ($extraServiceNames->isNotEmpty())
+                                                    {{ $extraServiceNames->join(', ') }}
+                                                @else
+                                                    <span class="text-muted">N/A</span>
+                                                @endif
+                                            </div>
+                                        </td>
                                         <td class="text-center">
                                             @if ($service->status == 1)
                                                 <span class="badge bg-success/10 text-success">Active</span>
@@ -222,6 +258,29 @@
                 return;
             }
 
+            const servicesTable = $('#services-table');
+            if ($.fn.DataTable && servicesTable.length && !$.fn.DataTable.isDataTable(servicesTable[0])) {
+                servicesTable.DataTable({
+                    responsive: false,
+                    scrollX: true,
+                    autoWidth: false,
+                    columnDefs: [
+                        { targets: 0, width: '80px' },
+                        { targets: 1, width: '260px' },
+                        { targets: 2, width: '220px' },
+                        { targets: 3, width: '220px' },
+                        { targets: 4, width: '140px' },
+                        { targets: 5, width: '540px' },
+                        { targets: 6, width: '130px' },
+                        { targets: 7, width: '160px', orderable: false }
+                    ]
+                });
+
+                setTimeout(function() {
+                    servicesTable.DataTable().columns.adjust();
+                }, 100);
+            }
+
             let serviceIdToToggle = null;
             let currentStatus = null;
             let serviceIdToDelete = null;
@@ -232,7 +291,7 @@
                 e.preventDefault();
                 serviceIdToToggle = $(this).data('id');
                 currentStatus = $(this).data('status');
-                const serviceName = $(this).closest('tr').find('td:nth-child(3)').text();
+                const serviceName = $(this).closest('tr').find('td:nth-child(2)').text();
 
                 const action = currentStatus ? 'deactivate' : 'activate';
                 $('#status-modal-message').text(
@@ -276,7 +335,7 @@
                             }
 
                             // Update status badge
-                            const statusCell = button.closest('tr').find('td:nth-child(6)');
+                            const statusCell = button.closest('tr').find('td:nth-child(7)');
                             if (newStatus) {
                                 statusCell.html(
                                     '<span class="badge bg-success/10 text-success">Active</span>'

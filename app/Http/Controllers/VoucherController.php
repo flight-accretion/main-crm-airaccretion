@@ -377,8 +377,17 @@ class VoucherController extends Controller
             }
 
             // Get all services and extra services for dropdown
-            $allServices = Service::where('status', 1)->get();
-            $allExtraServices = ExtraService::where('status', 1)->get();
+            $allServices = Service::with(['extraServices' => function ($query) {
+                $query->where('extra_services.status', 1)
+                    ->select('extra_services.id', 'extra_services.extra_service', 'extra_services.extra_service_amount', 'extra_services.status');
+            }])->where('status', 1)->get();
+            $allExtraServices = ExtraService::where(function ($query) use ($selectedExtraServiceIds) {
+                $query->where('status', 1);
+                if (!empty($selectedExtraServiceIds)) {
+                    $query->orWhereIn('id', $selectedExtraServiceIds);
+                }
+            })->get();
+            $serviceExtraServicesMap = $this->serviceExtraServicesMap($allServices);
 
             // Load vendors for dropdown services (assign collections)
             foreach ($allServices as $service) {
@@ -463,6 +472,7 @@ class VoucherController extends Controller
                 'selectedExtraServices',
                 'allServices',
                 'allExtraServices',
+                'serviceExtraServicesMap',
                 'serviceAddresses',
                 'operationTeam',
                 'showHandlerSections',
@@ -876,8 +886,17 @@ class VoucherController extends Controller
             }
 
             // Get all services and extra services for dropdown
-            $allServices = Service::where('status', 1)->get();
-            $allExtraServices = ExtraService::where('status', 1)->get();
+            $allServices = Service::with(['extraServices' => function ($query) {
+                $query->where('extra_services.status', 1)
+                    ->select('extra_services.id', 'extra_services.extra_service', 'extra_services.extra_service_amount', 'extra_services.status');
+            }])->where('status', 1)->get();
+            $allExtraServices = ExtraService::where(function ($query) use ($allExtraServiceIds) {
+                $query->where('status', 1);
+                if (!empty($allExtraServiceIds)) {
+                    $query->orWhereIn('id', $allExtraServiceIds);
+                }
+            })->get();
+            $serviceExtraServicesMap = $this->serviceExtraServicesMap($allServices);
 
             // Load vendors for dropdown services (ensure collections)
             foreach ($allServices as $service) {
@@ -946,6 +965,7 @@ class VoucherController extends Controller
                 'selectedExtraServices',
                 'allServices',
                 'allExtraServices',
+                'serviceExtraServicesMap',
                 'serviceAddresses',
                 'operationTeam',
                 'showHandlerSections',
@@ -1023,7 +1043,7 @@ class VoucherController extends Controller
                 // Passenger document uploads: only images and pdf up to 5MB
                 'passengers.*.front_document' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120',
                 'passengers.*.back_document' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120',
-                'extra_upload' => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png|max:2048',
+                'extra_upload' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
                 'rides' => 'nullable|array',
                 'rides.*.is_tba' => 'nullable|boolean',
                 'rides.*.service_date' => 'nullable|date',
@@ -2916,6 +2936,21 @@ class VoucherController extends Controller
             ]);
             // Don't fail the whole voucher process for follow-up error
         }
+    }
+
+    private function serviceExtraServicesMap($services): array
+    {
+        return $services->mapWithKeys(function ($service) {
+            $extraServiceIds = $service->relationLoaded('extraServices')
+                ? $service->extraServices->pluck('id')
+                : $service->extraServices()
+                    ->where('extra_services.status', 1)
+                    ->pluck('extra_services.id');
+
+            return [
+                $service->id => $extraServiceIds->map(fn ($id) => (string) $id)->values()->all(),
+            ];
+        })->toArray();
     }
 
     /**

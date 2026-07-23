@@ -18,7 +18,7 @@ class ServiceController extends Controller
     // List all services with pagination
     public function index(Request $request)
     {
-        $query = Service::latest();
+        $query = Service::with('extraServices')->latest();
 
         // Apply search filters
         if ($request->filled('service')) {
@@ -43,11 +43,11 @@ class ServiceController extends Controller
     public function create()
     {
         $products = Product::where('status', 1)->get();
-        // $existingExtraServices = ExtraService::where('status', 1)
-        //     ->select('extra_service', 'id', 'description', 'extra_service_amount')
-        //     ->distinct('extra_service_amount')
-        //     ->get();
-        return view('admin.pages.services.add-services', compact('products'));
+        $extraServices = ExtraService::where('status', 1)
+            ->orderBy('extra_service')
+            ->get();
+
+        return view('admin.pages.services.add-services', compact('products', 'extraServices'));
     }
 
     // Store new service
@@ -65,7 +65,13 @@ class ServiceController extends Controller
             'terms_and_conditions' => 'nullable',
             // Accept single selected product from form but store as product_ids array
             'product_id' => 'required|exists:products,id',
-            // 'extra_services' => 'nullable|array',
+            'extra_service_ids' => 'nullable|array',
+            'extra_service_ids.*' => [
+                'string',
+                Rule::exists('extra_services', 'id')->where(function ($query) {
+                    return $query->where('status', 1);
+                }),
+            ],
             // 'extra_services.*.name' => [
             //     function ($attribute, $value, $fail) use ($request) {
             //         $index = explode('.', $attribute)[1];
@@ -92,6 +98,8 @@ class ServiceController extends Controller
             'service_amount.required' => 'The service amount field is required.',
                 'product_id.required' => 'The product field is required.',
                 'product_id.exists' => 'The selected product is invalid.',
+            'extra_service_ids.array' => 'The extra services must be an array.',
+            'extra_service_ids.*.exists' => 'The selected extra service is invalid or inactive.',
             // 'extra_services.array' => 'The extra services must be an array.',
 
             // 'extra_services.*.name.required_without' => 'Service name is required when not selecting an existing service',
@@ -128,6 +136,8 @@ class ServiceController extends Controller
                 'product_ids' => [$request->product_id],
                 'status' => 1
             ]);
+
+            $service->extraServices()->sync($this->uniqueIds($request->input('extra_service_ids', [])));
 
             // if (!empty($request->extra_services)) {
             //     foreach ($request->extra_services as $extra) {
@@ -174,16 +184,13 @@ class ServiceController extends Controller
 
     public function edit(Service $service)
     {
-        // $service->load('extraServices');
+        $service->load('extraServices');
         $products = Product::where('status', 1)->get();
+        $extraServices = ExtraService::where('status', 1)
+            ->orderBy('extra_service')
+            ->get();
 
-        // // Get all existing extra services for dropdown (master list)
-        // $existingExtraServices = ExtraService::where('status', 1)
-        //     ->select('extra_service', 'id', 'description', 'extra_service_amount', 'extra_service_id')
-        //     ->distinct()
-        //     ->get();
-
-        return view('admin.pages.services.edit-services', compact('service', 'products'));
+        return view('admin.pages.services.edit-services', compact('service', 'products', 'extraServices'));
     }
 
     // Update service
@@ -200,7 +207,13 @@ class ServiceController extends Controller
             'service_amount' => 'required|integer|min:0|max:9999999',
             'terms_and_conditions' => 'nullable',
             'product_id' => 'required|exists:products,id',
-            // 'extra_services' => 'nullable|array',
+            'extra_service_ids' => 'nullable|array',
+            'extra_service_ids.*' => [
+                'string',
+                Rule::exists('extra_services', 'id')->where(function ($query) {
+                    return $query->where('status', 1);
+                }),
+            ],
             // 'extra_services.*.name' => [
             //     function ($attribute, $value, $fail) use ($request) {
             //         $index = explode('.', $attribute)[1];
@@ -229,6 +242,8 @@ class ServiceController extends Controller
             'service_amount.required' => 'The service amount field is required.',
             'product_id.required' => 'The product field is required.',
             'product_id.exists' => 'The selected product is invalid.',
+            'extra_service_ids.array' => 'The extra services must be an array.',
+            'extra_service_ids.*.exists' => 'The selected extra service is invalid or inactive.',
             // 'extra_services.array' => 'The extra services must be an array.',
 
             // 'extra_services.*.name.required_without' => 'Service name is required when not selecting an existing service',
@@ -263,6 +278,8 @@ class ServiceController extends Controller
                 'terms_and_conditions' => $request->terms_and_conditions,
                 'product_ids' => [$request->product_id], // Store as array with single product
             ]);
+
+            $service->extraServices()->sync($this->uniqueIds($request->input('extra_service_ids', [])));
 
             // // Handle extra services
             // $processedExtraServiceIds = [];
@@ -364,8 +381,13 @@ class ServiceController extends Controller
 
     public function view($id)
     {
-        $service = Service::findOrFail($id);
+        $service = Service::with('extraServices')->findOrFail($id);
         return view('admin.pages.services.view-services', compact('service'));
+    }
+
+    private function uniqueIds(array $ids): array
+    {
+        return array_values(array_unique(array_filter($ids)));
     }
 
     public function destroy(Service $service)

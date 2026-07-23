@@ -23,10 +23,10 @@ class Service extends Model
         'product_ids' => 'array',
     ];
 
-    
     public function extraServices()
     {
-        return $this->hasMany(ExtraService::class);
+        return $this->belongsToMany(ExtraService::class, 'service_extra_service', 'service_id', 'extra_service_id')
+            ->withTimestamps();
     }
 
     public function vendors()

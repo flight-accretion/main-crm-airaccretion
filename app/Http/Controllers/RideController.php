@@ -1140,8 +1140,20 @@ class RideController extends Controller
                         Log::info("Found service names from followup", ['service_names' => $serviceNames]);
                         // For each service, get related extra services
                         foreach ($serviceIds as $sid) {
-                            $service = Service::find($sid);
+                            $service = Service::with(['extraServices' => function ($query) {
+                                $query->where('extra_services.status', 1)
+                                    ->select('extra_services.id', 'extra_services.extra_service', 'extra_services.extra_service_amount', 'extra_services.status');
+                            }])->find($sid);
                             $relatedExtraServices = [];
+                            $mappedExtraServices = $service
+                                ? $service->extraServices->map(function ($extraService) {
+                                    return [
+                                        'id' => $extraService->id,
+                                        'name' => $extraService->extra_service,
+                                        'amount' => $extraService->extra_service_amount,
+                                    ];
+                                })->values()->all()
+                                : [];
 
                             // Fallback: get extra services from latestFollowup->extra_service_ids
                             if ($latestFollowup->extra_service_ids) {
@@ -1153,7 +1165,8 @@ class RideController extends Controller
 
                             $serviceExtraServices[$sid] = [
                                 'service_name' => $service ? $service->service : '',
-                                'extra_services' => $relatedExtraServices
+                                'extra_services' => $relatedExtraServices,
+                                'mapped_extra_services' => $mappedExtraServices
                             ];
                         }
                     }

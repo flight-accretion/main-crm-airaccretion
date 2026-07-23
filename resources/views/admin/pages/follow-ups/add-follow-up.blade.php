@@ -874,6 +874,7 @@
         const extraServicePrices = @json($extraServicePrices);
         const servicesData = @json($services);
         const extraServicesData = @json($allExtraServices);
+        const serviceExtraServicesMap = @json($serviceExtraServicesMap ?? []);
         // Approved paid sum and pending amount (server-side computed)
         const approvedPaidSum = @json($approvedPaidSum ?? 0);
         const initialPendingAmount = @json($pendingAmount ?? 0);
@@ -902,6 +903,79 @@
         let isManualTotalEdited = false;
         // Store service breakdown data
         let serviceBreakdownData = {};
+        let originalExtraServiceOptions = null;
+
+        function getSelectedValues(selectElement) {
+            if (!selectElement) {
+                return [];
+            }
+
+            return Array.from(selectElement.selectedOptions).map(opt => opt.value).filter(Boolean);
+        }
+
+        function getMappedExtraServiceIds(selectedServiceIds) {
+            const mappedIds = [];
+
+            selectedServiceIds.forEach(serviceId => {
+                (serviceExtraServicesMap[serviceId] || []).forEach(extraServiceId => {
+                    const normalizedId = String(extraServiceId);
+                    if (!mappedIds.includes(normalizedId)) {
+                        mappedIds.push(normalizedId);
+                    }
+                });
+            });
+
+            return mappedIds;
+        }
+
+        function captureOriginalExtraServiceOptions(extraServicesSelect) {
+            if (originalExtraServiceOptions || !extraServicesSelect) {
+                return;
+            }
+
+            originalExtraServiceOptions = Array.from(extraServicesSelect.options).map(option => ({
+                value: option.value,
+                text: option.text,
+            }));
+        }
+
+        function syncExtraServicesForSelectedServices(autoSelectMapped = true) {
+            const servicesSelect = document.getElementById('services');
+            const extraServicesSelect = document.getElementById('extra_services');
+
+            if (!servicesSelect || !extraServicesSelect) {
+                return;
+            }
+
+            captureOriginalExtraServiceOptions(extraServicesSelect);
+
+            const selectedServiceIds = getSelectedValues(servicesSelect);
+            const mappedExtraServiceIds = getMappedExtraServiceIds(selectedServiceIds);
+            const currentSelectedExtraIds = getSelectedValues(extraServicesSelect);
+            const legacySelectedExtraIds = currentSelectedExtraIds.filter(id => !mappedExtraServiceIds.includes(String(id)));
+            const hasServiceFilter = selectedServiceIds.length > 0;
+            const allowedIds = hasServiceFilter
+                ? Array.from(new Set([...mappedExtraServiceIds, ...legacySelectedExtraIds.map(String)]))
+                : originalExtraServiceOptions.map(option => String(option.value));
+            const selectedIds = autoSelectMapped && hasServiceFilter
+                ? Array.from(new Set([...mappedExtraServiceIds, ...legacySelectedExtraIds.map(String)]))
+                : currentSelectedExtraIds.map(String);
+
+            extraServicesSelect.innerHTML = '';
+            originalExtraServiceOptions.forEach(optionData => {
+                const value = String(optionData.value);
+                if (!allowedIds.includes(value)) {
+                    return;
+                }
+
+                const option = new Option(optionData.text, optionData.value, false, selectedIds.includes(value));
+                extraServicesSelect.appendChild(option);
+            });
+
+            if (typeof $ !== 'undefined' && $.fn.select2) {
+                $('#extra_services').trigger('change.select2');
+            }
+        }
 
         // NEW: Build service breakdown table
         function buildServiceBreakdownTable() {
@@ -1211,6 +1285,7 @@
 
         // Function to handle service selection changes
         function handleServiceChange() {
+            syncExtraServicesForSelectedServices(true);
             buildServiceBreakdownTable();
         }
 
@@ -1222,6 +1297,8 @@
         document.addEventListener('DOMContentLoaded', function() {
             const servicesSelect = document.getElementById('services');
             const extraServicesSelect = document.getElementById('extra_services');
+
+            syncExtraServicesForSelectedServices(true);
 
             // Initialize previous service selections
             previousServiceSelections = Array.from(servicesSelect.selectedOptions).map(opt => opt.value);

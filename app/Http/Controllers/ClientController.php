@@ -2572,11 +2572,14 @@ class ClientController extends Controller
             'trip_to' => 'N/A'
         ];
 
-        // Get ALL available services
-        $services = Service::get();
+        // Get ALL available services with active mapped extra services for the follow-up picker
+        $services = Service::with(['extraServices' => function ($query) {
+            $query->where('extra_services.status', 1)
+                ->select('extra_services.id', 'extra_services.extra_service', 'extra_services.extra_service_amount', 'extra_services.status');
+        }])->get();
 
         // Get distinct extra services with their amounts
-        $allExtraServices = ExtraService::select('id', 'extra_service', 'extra_service_amount')
+        $allExtraServices = ExtraService::select('id', 'extra_service', 'extra_service_amount', 'status')
             ->get();
 
         // Get service IDs from this specific lead
@@ -2688,6 +2691,12 @@ class ClientController extends Controller
             $extraServicePrices[$extraService->id] = $extraService->extra_service_amount;
         }
 
+        $serviceExtraServicesMap = $services->mapWithKeys(function ($service) {
+            return [
+                $service->id => $service->extraServices->pluck('id')->values()->all(),
+            ];
+        })->toArray();
+
         // Prepare data for JavaScript to handle amount calculation
         $lastFollowupTotalAmount = $lastFollowupWithAmount ? $lastFollowupWithAmount->total_amount : null;
         $lastFollowupServiceAmount = $lastFollowupWithAmount ? $lastFollowupWithAmount->service_amount : null;
@@ -2724,7 +2733,8 @@ class ClientController extends Controller
             'lastFollowupServiceDetails' => $lastFollowupServiceDetails,
             'lastFollowupServiceIds' => $lastFollowupServiceIds,
             'lastFollowupExtraServiceIds' => $lastFollowupExtraServiceIds,
-            'extraServicePrices' => $extraServicePrices
+            'extraServicePrices' => $extraServicePrices,
+            'serviceExtraServicesMap' => $serviceExtraServicesMap
         ]);
     }
 
@@ -5184,7 +5194,10 @@ class ClientController extends Controller
             }
 
             // Find services that have any of these product ids in their product_ids JSON array
-            $query = Service::query();
+            $query = Service::with(['extraServices' => function ($relationQuery) {
+                $relationQuery->where('extra_services.status', 1)
+                    ->select('extra_services.id', 'extra_services.extra_service', 'extra_services.extra_service_amount', 'extra_services.status');
+            }]);
             $query->where(function ($q) use ($ids) {
                 foreach ($ids as $id) {
                     $q->orWhereJsonContains('product_ids', $id);

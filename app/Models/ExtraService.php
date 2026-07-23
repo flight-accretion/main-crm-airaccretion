@@ -18,10 +18,15 @@ class ExtraService extends Model
         'status'
     ];
 
-    
     public function service()
     {
-        return $this->belongsTo(Service::class);
+        return $this->services();
+    }
+
+    public function services()
+    {
+        return $this->belongsToMany(Service::class, 'service_extra_service', 'extra_service_id', 'service_id')
+            ->withTimestamps();
     }
 
     public function vendors()
