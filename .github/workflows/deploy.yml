@@ -30,16 +30,18 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
+      # Only nginx/default.conf is copied now — it's a tiny file, not the huge public/ folder.
+      # public/ gets extracted directly from the pulled image on the server instead (fast).
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Copy public + nginx config to VPS
+      - name: Copy nginx config to VPS
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "public,nginx"
+          source: "nginx"
           target: "/root/main-crm/app-code"
 
       - name: Deploy on VPS
@@ -55,6 +57,14 @@ jobs:
               exit 1
             fi
             docker pull ${{ secrets.DOCKER_USERNAME }}/main-crm:latest
+
+            # Extract public/ directly from the freshly pulled image — fast, local disk op.
+            docker rm -f main_crm_public_extract 2>/dev/null || true
+            docker create --name main_crm_public_extract ${{ secrets.DOCKER_USERNAME }}/main-crm:latest
+            rm -rf app-code/public
+            docker cp main_crm_public_extract:/var/www/html/public app-code/public
+            docker rm main_crm_public_extract
+
             docker compose -f docker-compose.prod.yml up -d --force-recreate
             sleep 8
             docker exec main-crm-app php artisan migrate --force
