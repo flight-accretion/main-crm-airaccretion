@@ -51,13 +51,28 @@ class UserTypeController extends Controller
         return redirect()->route('admin.user-types.create')->with('success', 'User role created successfully.');
     }
 
-    public function edit(string $id)
+    public function edit(Request $request, string $id)
     {
         if (!Str::isUuid($id)) {
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid ID format.'
+                ], 422);
+            }
+
             return redirect()->back()->with('error', 'Invalid ID format.');
         }
 
         $objFollowUp = UserType::findOrFail($id);
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'userType' => $objFollowUp,
+            ]);
+        }
+
         $arrobjParentUserTypes = UserType::where('status', 1)->get();
         $perPage = min(max((int) request()->input('per_page', 20), 1), 100);
         $arrobjUserTypes = UserType::with('parent')->orderBy('created_at', 'desc')
@@ -70,6 +85,13 @@ class UserTypeController extends Controller
     public function update(Request $request, string $id)
     {
         if (!Str::isUuid($id)) {
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid ID format.'
+                ], 422);
+            }
+
             return back()->with('error', 'Invalid ID format.');
         }
 
@@ -81,11 +103,27 @@ class UserTypeController extends Controller
         ]);
 
         if ($validator->fails()) {
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $validator->errors()->first(),
+                    'errors' => $validator->errors(),
+                ], 422);
+            }
+
             return back()->withErrors($validator)->withInput()->with('error', 'Validation failed.');
         }
 
         $objUserType = UserType::findOrFail($id);
         $objUserType->update($request->only(['user_type', 'description', 'status', 'parent_id']));
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'User role updated successfully.',
+                'userType' => $objUserType,
+            ]);
+        }
 
         return redirect()->route('admin.user-types.create')->with('success', 'User role updated successfully.');
     }

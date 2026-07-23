@@ -4961,13 +4961,13 @@ class ClientController extends Controller
                         $filePath = $followupRecord->file;
                     }
 
-                    // Generate a URL for the file if available. Use Storage::url for storage disk compatibility.
+                    // Generate a controlled URL for the file so missing public symlinks do not break the UI.
                     $fileUrl = null;
                     if (!empty($filePath)) {
                         try {
-                            $fileUrl = \Illuminate\Support\Facades\Storage::url($filePath);
+                            $fileUrl = route('admin.followups.file', ['filename' => basename($filePath)]);
                         } catch (\Exception $e) {
-                            // If Storage::url fails for any reason, fall back to raw path (the view will handle it)
+                            // If URL generation fails for any reason, fall back to raw path (the view will handle it)
                             $fileUrl = $filePath;
                         }
                     }
@@ -5056,7 +5056,7 @@ class ClientController extends Controller
             }
             // Delete old image if it exists
             if ($followup->file) {
-                Storage::delete($followup->file);
+                Storage::disk('public')->delete($followup->file);
             }
 
             // Store new image
@@ -5137,7 +5137,7 @@ class ClientController extends Controller
             // Delete stored file if exists
             try {
                 if ($filePath) {
-                    \Storage::delete($filePath);
+                    \Storage::disk('public')->delete($filePath);
                 }
             } catch (\Throwable $e) {
                 // ignore storage deletion errors

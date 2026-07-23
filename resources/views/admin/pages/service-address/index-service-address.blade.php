@@ -551,37 +551,6 @@
         </div>
     </div>
 
-    <div id="edit-service-address" class="edit-service-address hs-overlay hidden ti-offcanvas ti-offcanvas-right"
-        tabindex="-1">
-        <div class="ti-offcanvas-header">
-            <div class="flex items-center">
-                <div class="me-4 gap-0">
-                    <span class="avatar avatar-sm !rounded-full bg-theme m-0">
-                        <i class="ri-map-pin-line"></i>
-                    </span>
-                </div>
-                <div class="flex-grow">
-                    <div class="flex items-center justify-between">
-                        <h5 class="font-semibold mb-0 leading-none text-[1.25rem]">Edit Service Address</h5>
-                        <div class="text-danger font-semibold">
-                            <button type="button"
-                                class="ti-btn p-0 text-gray-500 hover:text-gray-700 dark:text-[#8c9097] dark:hover:text-white/80"
-                                data-hs-overlay="#edit-service-address">
-                                <span class="sr-only">Close modal</span>
-                                <svg class="w-3.5 h-3.5" width="8" height="8" viewBox="0 0 8 8" fill="none"
-                                    xmlns="http://www.w3.org/2000/svg">
-                                    <path
-                                        d="M0.26 1.01C0.35 0.91 0.48 0.86 0.61 0.86C0.74 0.86 0.87 0.91 0.97 1.01L3.61 3.65L6.26 1.01C6.36 0.91 6.55 0.85 6.71 0.89C6.87 0.92 7.02 1.05 7.08 1.16C7.11 1.23 7.12 1.29 7.12 1.36C7.12 1.42 7.1 1.49 7.08 1.55C7.05 1.61 7.01 1.67 6.96 1.71L4.32 4.36L6.96 7.01C7.06 7.1 7.11 7.23 7.11 7.36C7.1 7.49 7.05 7.61 6.96 7.71C6.87 7.8 6.74 7.85 6.61 7.85C6.48 7.85 6.35 7.8 6.26 7.71L3.61 5.07L0.97 7.71C0.87 7.8 0.74 7.85 0.61 7.85C0.48 7.85 0.36 7.8 0.26 7.71C0.17 7.61 0.12 7.49 0.12 7.36C0.12 7.23 0.17 7.1 0.26 7.01L2.9 4.36L0.26 1.71C0.17 1.61 0.12 1.49 0.12 1.36C0.12 1.23 0.17 1.1 0.26 1.01Z"
-                                        fill="currentColor" />
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- View Service Address Modal -->
     <div id="view-service-address" class="hs-overlay hidden ti-offcanvas ti-offcanvas-right" tabindex="-1">
         <div class="ti-offcanvas-header">
@@ -829,19 +798,75 @@
     <!-- ======================================================= -->
     <!-- == Script for EDIT FORM  == -->
     <!-- ======================================================= -->
+    <script>
+        function removeServiceAddressOverlayBackdrop(overlaySelector) {
+            const overlayId = overlaySelector.replace(/^#/, '');
+            $(`#${overlayId}-backdrop`).remove();
+        }
+
+        function restoreServiceAddressPageScroll() {
+            $('html, body').removeClass('overflow-hidden');
+            $('body').removeClass('ti-offcanvas-open');
+
+            document.documentElement.style.overflow = '';
+            document.documentElement.style.paddingRight = '';
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
+        }
+
+        function cleanupServiceAddressOverlay(overlaySelector) {
+            const cleanup = function() {
+                removeServiceAddressOverlayBackdrop(overlaySelector);
+
+                const hasOpenOverlay = $('.hs-overlay').filter(function() {
+                    return !this.classList.contains('hidden') || this.classList.contains('open');
+                }).length > 0;
+
+                if (!hasOpenOverlay) {
+                    restoreServiceAddressPageScroll();
+                }
+            };
+
+            window.setTimeout(cleanup, 100);
+            window.setTimeout(cleanup, 350);
+        }
+
+        function openServiceAddressOverlay(overlaySelector) {
+            removeServiceAddressOverlayBackdrop(overlaySelector);
+
+            if (window.HSOverlay) {
+                try {
+                    window.HSOverlay.open(overlaySelector);
+                } catch (error) {
+                    window.HSOverlay.open(document.querySelector(overlaySelector));
+                }
+            } else {
+                $(overlaySelector).removeClass('hidden').addClass('open');
+                $('body').addClass('ti-offcanvas-open');
+            }
+        }
+
+        function closeServiceAddressOverlay(overlaySelector) {
+            if (window.HSOverlay) {
+                try {
+                    window.HSOverlay.close(overlaySelector);
+                } catch (error) {
+                    window.HSOverlay.close(document.querySelector(overlaySelector));
+                }
+            }
+
+            $(overlaySelector).addClass('hidden').removeClass('open');
+            cleanupServiceAddressOverlay(overlaySelector);
+        }
+    </script>
     @if ($errors->edit->any())
         <script>
             document.addEventListener('DOMContentLoaded', function() {
-                if (window.HSOverlay) {
-                    window.HSOverlay.open('#edit-service-address');
-                } else {
-                    // Fallback: show modal by removing 'hidden' class
-                    document.getElementById('edit-service-address').classList.remove('hidden');
-                    $('.edit-service-address-body select').select2({
-                        width: '100%',
-                        dropdownParent: $('#edit-service-address')
-                    });
-                }
+                openServiceAddressOverlay('#edit-service-address');
+                $('.edit-service-address-body select').select2({
+                    width: '100%',
+                    dropdownParent: $('#edit-service-address')
+                });
             });
         </script>
     @endif
@@ -916,12 +941,7 @@
                             initialCityId = response.data.serviceAddress.city_id;
                             populateEditForm(response.data);
                             // Open overlay/modal after population
-                            if (window.HSOverlay) {
-                                window.HSOverlay.open('#edit-service-address');
-                            } else {
-                                $('#edit-service-address').removeClass('hidden').addClass('open');
-                                $('body').addClass('ti-offcanvas-open');
-                            }
+                            openServiceAddressOverlay('#edit-service-address');
                         } else {
                             showToast('error', response.message || 'Failed to load address details');
                         }
@@ -986,7 +1006,7 @@
                 serviceSelect.val(serviceAddress.service_id).trigger('change');
                 $('#edit_contact_person_name').val(serviceAddress.contact_person_name);
                 $('#edit_contact_country_code').val(countryCode.replace('+', ''));
-                $('#edit_contact_number').val(contact_number);
+                $('#edit_contact_number').val(nationalNumber);
                 $('#edit_address').val(serviceAddress.address);
                 $('#edit_map_link').val(serviceAddress.map_link || '');
 
@@ -1137,13 +1157,7 @@
                 `);
 
             // Open modal using HSOverlay or fallback
-            if (window.HSOverlay) {
-                window.HSOverlay.open('#view-service-address');
-            } else {
-                // Fallback: show modal by removing 'hidden' class and adding 'open'
-                $('#view-service-address').removeClass('hidden').addClass('open');
-                $('body').addClass('ti-offcanvas-open');
-            }
+            openServiceAddressOverlay('#view-service-address');
 
             // Fetch address details
             $.ajax({
@@ -1245,9 +1259,13 @@
         }
 
         // Close view modal handler
-        $(document).on('click', '[data-hs-overlay="#view-service-address"]', function() {
-            $('#view-service-address').addClass('hidden').removeClass('open');
-            $('body').removeClass('ti-offcanvas-open');
+        $(document).on('click', '[data-hs-overlay="#edit-service-address"], [data-hs-overlay="#view-service-address"], #edit-service-address-backdrop, #view-service-address-backdrop', function(e) {
+            const target = e.currentTarget.id === 'edit-service-address-backdrop' || $(e.currentTarget).attr('data-hs-overlay') === '#edit-service-address'
+                ? '#edit-service-address'
+                : '#view-service-address';
+
+            e.preventDefault();
+            closeServiceAddressOverlay(target);
         });
     </script>
 

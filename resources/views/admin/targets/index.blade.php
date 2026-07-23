@@ -516,6 +516,66 @@
         $(document).ready(function() {
             // Use the global DataTable initialization from header.blade.php
             // No need to initialize manually as it's already handled by $('.table-datatable').DataTable()
+
+            function removeOverlayBackdrop(overlaySelector) {
+                const overlayId = overlaySelector.replace(/^#/, '');
+                $(`#${overlayId}-backdrop`).remove();
+            }
+
+            function restorePageScroll() {
+                $('html, body').removeClass('overflow-hidden');
+                $('body').removeClass('ti-offcanvas-open');
+
+                document.documentElement.style.overflow = '';
+                document.documentElement.style.paddingRight = '';
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+            }
+
+            function cleanupClosedOverlay(overlaySelector) {
+                const cleanup = function() {
+                    removeOverlayBackdrop(overlaySelector);
+
+                    const hasOpenOverlay = $('.hs-overlay').filter(function() {
+                        return !this.classList.contains('hidden') || this.classList.contains('open');
+                    }).length > 0;
+
+                    if (!hasOpenOverlay) {
+                        restorePageScroll();
+                    }
+                };
+
+                window.setTimeout(cleanup, 100);
+                window.setTimeout(cleanup, 350);
+            }
+
+            function openOverlay(overlaySelector) {
+                removeOverlayBackdrop(overlaySelector);
+
+                if (window.HSOverlay) {
+                    try {
+                        window.HSOverlay.open(overlaySelector);
+                    } catch (error) {
+                        window.HSOverlay.open(document.querySelector(overlaySelector));
+                    }
+                } else {
+                    $(overlaySelector).removeClass('hidden').addClass('open');
+                    $('body').addClass('ti-offcanvas-open');
+                }
+            }
+
+            function closeOverlay(overlaySelector) {
+                if (window.HSOverlay) {
+                    try {
+                        window.HSOverlay.close(overlaySelector);
+                    } catch (error) {
+                        window.HSOverlay.close(document.querySelector(overlaySelector));
+                    }
+                }
+
+                $(overlaySelector).addClass('hidden').removeClass('open');
+                cleanupClosedOverlay(overlaySelector);
+            }
             
             // Helper to populate a select element with assignable staff list
             function populateAssignableSelect(selectEl, list, selectedId) {
@@ -577,12 +637,7 @@
                                     populateEditForm(response);
 
                                     // Open off-canvas after population
-                                    if (window.HSOverlay) {
-                                        window.HSOverlay.open('#edit-target');
-                                    } else {
-                                        $('#edit-target').removeClass('hidden').addClass('open');
-                                        $('body').addClass('ti-offcanvas-open');
-                                    }
+                                    openOverlay('#edit-target');
                                 } else {
                                     console.error('Target data not found in response');
                                 }
@@ -628,12 +683,7 @@
                     success: function(response) {
                         if (response.success) {
                             // Close off-canvas
-                            if (window.HSOverlay) {
-                                window.HSOverlay.close('#edit-target');
-                            } else {
-                                $('#edit-target').addClass('hidden').removeClass('open');
-                                $('body').removeClass('ti-offcanvas-open');
-                            }
+                            closeOverlay('#edit-target');
                             
                             // Show success message and reload page
                             showAlert('success', 'Target updated successfully!');
@@ -701,9 +751,9 @@
             }
 
             // Close off-canvas handler
-            $(document).on('click', '[data-hs-overlay="#edit-target"]', function() {
-                $('#edit-target').addClass('hidden').removeClass('open');
-                $('body').removeClass('ti-offcanvas-open');
+            $(document).on('click', '[data-hs-overlay="#edit-target"], #edit-target-backdrop', function(e) {
+                e.preventDefault();
+                closeOverlay('#edit-target');
             });
         });
     </script>

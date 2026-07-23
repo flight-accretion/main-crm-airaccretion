@@ -259,7 +259,7 @@
                                             <p class="text-sm text-gray-700">
                                                 <strong>By:</strong> {{ $followup->followedBy->name ?? 'System' }}
                                                 @if ($followup->file)
-                                                <a href="{{ Storage::url($followup->file) }}" target="_blank"
+                                                <a href="{{ route('admin.followups.file', ['filename' => basename($followup->file)]) }}" target="_blank"
                                                     class="text-blue-500 ml-2">
                                                     <i class="ri-image-line"></i> View
                                                 </a>
@@ -294,7 +294,7 @@
                                                     <td>
                                                         {{ $followup->followedBy->name ?? 'System' }}
                                                         @if ($followup->file)
-                                                        <a href="{{ Storage::url($followup->file) }}" target="_blank"
+                                                        <a href="{{ route('admin.followups.file', ['filename' => basename($followup->file)]) }}" target="_blank"
                                                             class="text-blue-500 ml-2">
                                                             <i class="ri-image-line"></i> View
                                                         </a>

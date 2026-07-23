@@ -10,6 +10,7 @@ use App\Http\Controllers\TargetController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\RefundController;
 use App\Http\Controllers\VendorController;
+use App\Http\Controllers\FollowupFileController;
 use function App\Helpers\getCitiesByState;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\ProductController;
@@ -80,6 +81,9 @@ Route::get('/download-log', [UserController::class, 'downloadLog'])->name('log.d
 
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [UserController::class, 'logout'])->name('logout');
+    Route::get('/storage/followups/{filename}', [FollowupFileController::class, 'show'])
+        ->where('filename', '[^/]+')
+        ->name('admin.followups.storage-fallback');
 
     // Sales Dashboard
     Route::get('/sales-dashboard', [DashboardController::class, 'getSalesDashboard'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard');
@@ -159,6 +163,9 @@ Route::middleware('auth')->group(function () {
 
     // Separate follow-ups group
     Route::prefix('admin/followups')->group(function () {
+        Route::get('files/{filename}', [FollowupFileController::class, 'show'])
+            ->where('filename', '[^/]+')
+            ->name('admin.followups.file');
         Route::put('{followup}/update-image', [ClientController::class, 'updateImage'])
             ->name('admin.followups.update-image');
         // Allow super-admin to delete payment-related followups (partial/full) via a dedicated endpoint

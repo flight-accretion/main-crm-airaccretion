@@ -529,7 +529,7 @@
                                                 <div class="xl:col-span-12 col-span-12">
                                                     <div class="grid grid-cols-12 gap-3">
                                                         <div class="xl:col-span-2 col-span-12">
-                                                            <a href="{{ Storage::url($followup->file) }}" target="_blank"
+                                                            <a href="{{ route('admin.followups.file', ['filename' => basename($followup->file)]) }}" target="_blank"
                                                                 class="me-2 text-primary">
                                                                 <i class="ri-image-line"></i> View Image
                                                             </a>
@@ -757,7 +757,7 @@
                                                         Image</h4>
                                                     @if ($followup->file)
                                                         <div class="mb-4 text-center">
-                                                            <img src="{{ Storage::url($followup->file) }}"
+                                                            <img src="{{ route('admin.followups.file', ['filename' => basename($followup->file)]) }}"
                                                                 alt="Current Image"
                                                                 class="h-24 w-auto rounded border mx-auto shadow">
                                                             <div class="text-xs text-gray-500 mt-1">Current Image</div>
