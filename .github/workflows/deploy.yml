@@ -65,6 +65,11 @@ jobs:
             docker cp main_crm_public_extract:/var/www/html/public app-code/public
             docker rm main_crm_public_extract
 
+            # Recreate the storage symlink on the host copy too — nginx serves
+            # this public/ dir directly, so it needs its own /storage symlink
+            # pointing at the shared app_storage volume (mounted as ../storage here).
+            ln -sfn ../storage/app/public app-code/public/storage
+
             docker compose -f docker-compose.prod.yml up -d --force-recreate
             sleep 8
             docker exec main-crm-app php artisan migrate --force
