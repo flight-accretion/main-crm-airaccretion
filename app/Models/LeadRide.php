@@ -35,4 +35,8 @@ class LeadRide extends Model
     {
         return $this->belongsTo(ServiceAddress::class, 'service_address_id');
     }
+    public function lead()
+{
+    return $this->belongsTo(Lead::class, 'lead_id');
+}
 }

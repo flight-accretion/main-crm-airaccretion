@@ -939,7 +939,7 @@
             }));
         }
 
-        function syncExtraServicesForSelectedServices(autoSelectMapped = true) {
+        function syncExtraServicesForSelectedServices(preserveSelected = true) {
             const servicesSelect = document.getElementById('services');
             const extraServicesSelect = document.getElementById('extra_services');
 
@@ -952,14 +952,13 @@
             const selectedServiceIds = getSelectedValues(servicesSelect);
             const mappedExtraServiceIds = getMappedExtraServiceIds(selectedServiceIds);
             const currentSelectedExtraIds = getSelectedValues(extraServicesSelect);
-            const legacySelectedExtraIds = currentSelectedExtraIds.filter(id => !mappedExtraServiceIds.includes(String(id)));
             const hasServiceFilter = selectedServiceIds.length > 0;
             const allowedIds = hasServiceFilter
-                ? Array.from(new Set([...mappedExtraServiceIds, ...legacySelectedExtraIds.map(String)]))
-                : originalExtraServiceOptions.map(option => String(option.value));
-            const selectedIds = autoSelectMapped && hasServiceFilter
-                ? Array.from(new Set([...mappedExtraServiceIds, ...legacySelectedExtraIds.map(String)]))
-                : currentSelectedExtraIds.map(String);
+                ? Array.from(new Set(mappedExtraServiceIds.map(String)))
+                : [];
+            const selectedIds = preserveSelected
+                ? currentSelectedExtraIds.filter(id => allowedIds.includes(id))
+                : [];
 
             extraServicesSelect.innerHTML = '';
             originalExtraServiceOptions.forEach(optionData => {

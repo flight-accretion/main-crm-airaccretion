@@ -2275,6 +2275,24 @@ class ClientController extends Controller
             $services = $request->services ? array_filter($request->services) : [];
             $extraServices = $request->extra_services ? array_filter($request->extra_services) : [];
 
+            // Validate that any selected extra services belong to selected services
+            if (!empty($extraServices)) {
+                $mappedExtraServiceIds = Service::whereIn('id', $services)
+                    ->with('extraServices:id')
+                    ->get()
+                    ->flatMap(function ($service) {
+                        return $service->extraServices->pluck('id');
+                    })
+                    ->unique()
+                    ->values()
+                    ->all();
+
+                $invalidExtraIds = array_diff($extraServices, $mappedExtraServiceIds);
+                if (!empty($invalidExtraIds)) {
+                    throw new \Exception('Selected extra service(s) are not valid for the chosen service(s).');
+                }
+            }
+
             if (!empty($services)) {
                 $lead->update([
                     'service_ids' => json_encode(array_values($services)),
@@ -2666,6 +2684,26 @@ class ClientController extends Controller
         // Ensure selectedServices contains valid service IDs
         $selectedServices = array_values(array_filter($selectedServices));
         $selectedExtraServices = array_values(array_filter($selectedExtraServices));
+
+        $mappedExtraServiceIds = [];
+        if (!empty($leadServiceIds)) {
+            $mappedExtraServiceIds = Service::whereIn('id', $leadServiceIds)
+                ->with('extraServices:id')
+                ->get()
+                ->flatMap(function ($service) {
+                    return $service->extraServices->pluck('id');
+                })
+                ->unique()
+                ->values()
+                ->all();
+        }
+
+        $allowedExtraServiceIds = array_unique(array_merge($mappedExtraServiceIds, $selectedExtraServices));
+        if (!empty($allowedExtraServiceIds)) {
+            $allExtraServices = $allExtraServices->whereIn('id', $allowedExtraServiceIds);
+        } else {
+            $allExtraServices = collect();
+        }
 
         // Debug log the final selections
         Log::info('Final service selections for lead follow-up:', [

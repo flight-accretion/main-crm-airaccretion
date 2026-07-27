@@ -200,9 +200,9 @@
                                 <td></td>
                                 <td class="text-center">
                                     {{ $leads->firstItem() ? $leads->firstItem() + $key : $key + 1 }}</td>
-                                <td>{{ $enquiry->client->name }}</td>
-                                <td>{{ $enquiry->client->email }}</td>
-                                <td class="text-center">{{ $enquiry->client->contact_number }}</td>
+                                <td>{{ optional($enquiry->client)->name ?? 'N/A' }}</td>
+                                <td>{{ optional($enquiry->client)->email ?? 'N/A' }}</td>
+                                <td class="text-center">{{ optional($enquiry->client)->contact_number ?? 'N/A' }}</td>
                                 <td class="text-center">
                                     @if (isset($latestFollowups[$enquiry->id]) &&
                                     $latestFollowups[$enquiry->id]->next_followup_date)
@@ -242,7 +242,7 @@
                                     N/A
                                     @endif
                                 </td>
-                                <td>{{ $enquiry->updated_at->format('d-m-Y H:i:s') }}</td>
+                                <td>{{ optional($enquiry->updated_at)->format('d-m-Y H:i:s') ?? 'N/A' }}</td>
                                 <td>
                                     {{-- <div class="followup-history grid gap-2">
                                         @forelse($enquiry->leadFollowups->sortByDesc('next_followup_date') as $followup)

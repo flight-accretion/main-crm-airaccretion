@@ -41,10 +41,12 @@ return [
     'msg91' => [
         'auth_key'            => env('MSG91_AUTH_KEY'),
         'whatsapp_integrated' => env('MSG91_WHATSAPP_INTEGRATED_NUMBER'),
+        'booking_email_template' => env('MSG91_BOOKING_EMAIL_TEMPLATE', 'extra_service_template'),
     ],
     'whatscrm' => [
-        'api_url'   => env('WHATSCRM_API_URL'),
-        'api_token' => env('WHATSCRM_API_TOKEN'),
+        'api_url'                   => env('WHATSCRM_API_URL'),
+        'api_token'                 => env('WHATSCRM_API_TOKEN'),
+        'booking_whatsapp_template' => env('WHATSCRM_BOOKING_WHATSAPP_TEMPLATE', 'extra_service_template'),
     ],
 
     // ═══════════════════════════════════════════════════════════════════════

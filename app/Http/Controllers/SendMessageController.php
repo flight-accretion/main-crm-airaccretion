@@ -89,15 +89,37 @@ class SendMessageController extends Controller
         ]);
 
         $response = curl_exec($curl);
+        $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
         $err      = curl_error($curl);
         curl_close($curl);
 
         if ($err) {
-            Log::error('SENDING WHATSAPP MESSAGE ERROR: ' . $err);
+            Log::error('SENDING WHATSAPP MESSAGE ERROR', [
+                'error'       => $err,
+                'to'          => ($code ?? '') . ($phone ?? ''),
+                'countryCode' => $code ?? null,
+                'phone'       => $phone ?? null,
+            ]);
             return ['error' => 'Unable to send message', 'details' => $err];
         }
 
-        return json_decode($response, true);
+        $result = json_decode($response, true);
+
+        Log::info('INTERAKT WHATSAPP: Response', [
+            'to'        => ($code ?? '') . ($phone ?? ''),
+            'http_code' => $httpCode,
+            'response'  => $result,
+        ]);
+
+        if ($httpCode !== 200) {
+            Log::warning('INTERAKT WHATSAPP: Non-200 response', [
+                'to'        => ($code ?? '') . ($phone ?? ''),
+                'http_code' => $httpCode,
+                'response'  => $result,
+            ]);
+        }
+
+        return $result;
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -106,7 +128,13 @@ class SendMessageController extends Controller
     public function sendMsg91Email($templateId, $toEmail, $toName, array $variables)
     {
         $url     = "https://control.msg91.com/api/v5/email/send";
-        $authKey = "auth_key";
+        $authKey = config('services.msg91.auth_key') ?: env('MSG91_AUTH_KEY');
+
+        if (empty($authKey)) {
+            Log::error('MSG91 EMAIL: auth key is missing; check MSG91_AUTH_KEY in .env');
+            return ['status' => 'fail', 'hasError' => true, 'errors' => 'MSG91 auth key missing'];
+        }
+
         $payload = [
             "recipients" => [
                 [
@@ -162,6 +190,83 @@ class SendMessageController extends Controller
             'to'       => $toEmail,
             'result'   => $result,
         ]);
+        return $result;
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // WhatsApp via WhatsCRM — Generic template sender
+    // Example: any registered WhatsCRM templet with dynamic body values
+    public function sendWhatsCrmTemplateMessage(
+        string $toNumber,
+        string $templateName,
+        array  $bodyValues
+    ) {
+        $apiUrl   = config('services.whatscrm.api_url');
+        $apiToken = config('services.whatscrm.api_token');
+
+        $toNumber = '+' . preg_replace('/[^0-9]/', '', $toNumber);
+
+        $payload = [
+            'sendTo'      => $toNumber,
+            'templetName' => $templateName,
+            'exampleArr'  => array_map('strval', $bodyValues),
+            'token'       => $apiToken,
+            'mediaUri'    => '',
+        ];
+
+        Log::info('WHATSCRM TEMPLATE ► SENDING', [
+            'Template' => $templateName,
+            'To'       => $toNumber,
+            'Values'   => $bodyValues,
+        ]);
+
+        $curl = curl_init();
+        curl_setopt_array($curl, [
+            CURLOPT_URL            => $apiUrl,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_ENCODING       => '',
+            CURLOPT_MAXREDIRS      => 10,
+            CURLOPT_TIMEOUT        => 30,
+            CURLOPT_HTTP_VERSION   => CURL_HTTP_VERSION_1_1,
+            CURLOPT_CUSTOMREQUEST  => 'POST',
+            CURLOPT_POSTFIELDS     => json_encode($payload),
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_SSL_VERIFYHOST => 0,
+            CURLOPT_SSL_VERIFYPEER => 0,
+            CURLOPT_HTTPHEADER     => [
+                'Content-Type: application/json',
+                "Authorization: Bearer {$apiToken}",
+            ],
+        ]);
+
+        $response = curl_exec($curl);
+        $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        $err      = curl_error($curl);
+        curl_close($curl);
+
+        if ($err) {
+            Log::error('WHATSCRM TEMPLATE ► cURL error', [
+                'to'       => $toNumber,
+                'template' => $templateName,
+                'error'    => $err,
+            ]);
+            return ['success' => false, 'error' => $err];
+        }
+
+        $result = json_decode($response, true);
+        $statusMsg = ($result['success'] ?? false) ? '✓ SUCCESS' : '✗ FAILED';
+        $details   = $result['metaResponse']['messages'][0]['message_status'] ?? ($result['error'] ?? 'unknown');
+        $msgId     = $result['metaResponse']['messages'][0]['id'] ?? 'N/A';
+
+        Log::info('WHATSCRM TEMPLATE ► RESULT', [
+            'Status'   => $statusMsg,
+            'Template' => $templateName,
+            'To'       => $toNumber,
+            'HTTP'     => $httpCode,
+            'MsgID'    => $msgId,
+            'Details'  => $details,
+        ]);
+
         return $result;
     }
 
@@ -998,7 +1103,7 @@ class SendMessageController extends Controller
         // WhatsCRM expects + prefix e.g. +919405059038
         $toNumber = '+' . preg_replace('/[^0-9]/', '', $toNumber);
 
-        $template = 'whatsapp_reminder';
+        $template = config('services.whatscrm.booking_whatsapp_template', 'whatsapp_reminder');
 
         // Template variables: {{1}} name, {{2}} service, {{3}} time, {{4}} location, {{5}} extra, {{6}} service_date
         $name         = $bodyValues[0] ?? '';

@@ -14,6 +14,7 @@ use App\Models\LeadFollowup;
 use App\Models\LeadRefund;
 use App\Models\PaymentAuditTrail;
 use App\Models\UserType;
+use App\Models\SalesExecutiveAssignment;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
@@ -24,9 +25,315 @@ use Illuminate\Support\Facades\Mail;
 use App\Models\NotificationMaster;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\RideStatusExport;
+use Illuminate\Support\Facades\Schema;
+
 
 class RideController extends Controller
 {
+
+public function sendRideReminders($minutes = null, $leadId = null)
+{
+    if ($minutes !== null) {
+        $this->sendReminder(now(), (int) $minutes, (int) $minutes, $leadId);
+        return;
+    }
+
+    foreach ([5,3,1] as $days) {
+
+        $this->sendReminder(
+            Carbon::today()->addDays($days),
+            $days,
+            null,
+            $leadId
+        );
+
+    }
+
+    // DON'T write $this->info() here
+}
+
+public  function sendReminder($date, $days, $minutes = null, $leadId = null)
+{
+    $query = LeadRide::with([
+         'enquiry.client',
+        'enquiry.vouchers',
+        'serviceAddress'
+    ])
+    ->whereHas('enquiry.vouchers', function ($q) {
+        $q->where('status', 1);
+    });
+
+    if ($minutes !== null) {
+        $start = now()->addMinute();
+        $end = now()->addMinutes($minutes);
+        Log::info('Booking reminder test window', [
+            'lead_id' => $leadId,
+            'minutes' => $minutes,
+            'from' => $start->toDateTimeString(),
+            'to' => $end->toDateTimeString(),
+        ]);
+        $query->whereBetween('from_date', [$start, $end]);
+    } else {
+        $query->whereDate('from_date', $date->toDateString());
+    }
+
+    if ($leadId) {
+        $query->where('lead_id', $leadId);
+    }
+
+    $rides = $query->get()->groupBy('lead_id');
+
+    Log::info('Booking reminder ride match count', [
+        'lead_id' => $leadId,
+        'matched_leads' => $rides->count(),
+        'mode' => $minutes !== null ? 'minutes_test' : 'day_based',
+    ]);
+
+    foreach ($rides as $leadId => $leadRides) {
+
+        $ride = $leadRides->first();
+
+        if (!$ride->enquiry  || !$ride->enquiry ->client) {
+            continue;
+        }
+
+        // Get Approved Voucher
+        $voucher = $ride->enquiry->vouchers()
+            ->where('status', 1)
+            ->latest()
+            ->first();
+
+        if (!$voucher) {
+            continue;
+        }
+
+        $client = $ride->enquiry->client;
+
+        /*
+        |--------------------------------------------------------------------------
+        | Skip if already sent today
+        |--------------------------------------------------------------------------
+        */
+        // $alreadySent = NotificationMaster::where('lead_id', $leadId)
+        //     ->where('notification_type', 'Ride Reminder')
+        //     ->where('notification_sub_type', $days . '_day')
+        //     ->whereDate('created_at', today())
+        //     ->exists();
+
+        // if ($alreadySent) {
+        //     continue;
+        // }
+
+        /*
+        |--------------------------------------------------------------------------
+        | WhatsApp
+        |--------------------------------------------------------------------------
+        */
+        $templateName = config('services.whatscrm.booking_whatsapp_template', 'extra_service_template');
+
+        $serviceLines = $this->buildReminderServiceLines($ride->enquiry, $ride);
+        $salesData = $this->buildReminderSalesData($ride->enquiry);
+
+        $message = array_merge(
+            [$client->name],
+            $serviceLines,
+            [
+                $salesData['sales_name'],
+                $salesData['sales_phone'],
+                $salesData['manager_name'],
+                $salesData['manager_phone'],
+            ]
+        );
+
+        Log::info('Ride Reminder - WhatsApp payload', [
+            'lead_id' => $leadId,
+            'ride_id' => $ride->id,
+            'days' => $days,
+            'template' => $templateName,
+            'to' => $client->contact_number,
+            'body_values' => $message,
+        ]);
+
+        $smc = app(SendMessageController::class);
+        try {
+            $interaktResp = $smc->sendWhatsAppMessage(3, $templateName, $message, $client->contact_number);
+            $interaktFailed = !is_array($interaktResp) || (isset($interaktResp['result']) && $interaktResp['result'] === false) || (isset($interaktResp['message']) && stripos((string)$interaktResp['message'], 'not supported') !== false);
+
+            if ($interaktFailed) {
+                $cleanedNumber = preg_replace('/^(\+91[-\s]?|91[-\s]?)/', '', $client->contact_number);
+                $countryCode = $client->whatsapp_country_code ?? '+91';
+                if (!str_starts_with($countryCode, '+')) {
+                    $countryCode = '+' . $countryCode;
+                }
+                $payloadNumber = $countryCode . '-' . $cleanedNumber;
+                try {
+                    $smc->sendWhatsCrmTemplateMessage($payloadNumber, $templateName, $message);
+                    Log::warning('Interakt failed — sent via WhatsCRM', ['ride' => $ride->id, 'lead' => $leadId, 'to' => $payloadNumber, 'interakt' => $interaktResp]);
+                } catch (\Exception $e) {
+                    Log::error('Fallback to WhatsCRM failed', ['ride' => $ride->id, 'error' => $e->getMessage()]);
+                }
+            } else {
+                Log::info('Interakt WhatsApp send result', ['ride' => $ride->id, 'lead' => $leadId, 'response' => $interaktResp]);
+            }
+        } catch (\Exception $e) {
+            $cleanedNumber = preg_replace('/^(\+91[-\s]?|91[-\s]?)/', '', $client->contact_number);
+            $countryCode = $client->whatsapp_country_code ?? '+91';
+            if (!str_starts_with($countryCode, '+')) {
+                $countryCode = '+' . $countryCode;
+            }
+            $payloadNumber = $countryCode . '-' . $cleanedNumber;
+            try {
+                $smc->sendWhatsCrmTemplateMessage($payloadNumber, $templateName, $message);
+                Log::error('Interakt exception — sent via WhatsCRM', ['ride' => $ride->id, 'lead' => $leadId, 'error' => $e->getMessage()]);
+            } catch (\Exception $ee) {
+                Log::error('Fallback to WhatsCRM also failed', ['ride' => $ride->id, 'error' => $ee->getMessage()]);
+            }
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Email
+        |--------------------------------------------------------------------------
+        */
+
+        if (!empty($client->email)) {
+
+            $emailTemplate = config('services.msg91.booking_email_template', 'extra_service_template');
+            $emailVariables = $this->buildMsg91EmailVariables(
+                $client->name,
+                $serviceLines,
+                $salesData
+            );
+
+            Log::info('Ride Reminder - Email payload', [
+                'lead_id' => $leadId,
+                'ride_id' => $ride->id,
+                'days' => $days,
+                'template' => $emailTemplate,
+                'to' => $client->email,
+                'variables' => $emailVariables,
+            ]);
+
+            app(SendMessageController::class)
+                ->sendMsg91Email(
+                    $emailTemplate,
+                    $client->email,
+                    $client->name,
+                    $emailVariables
+                );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Save Notification History
+        |--------------------------------------------------------------------------
+        */
+        // NotificationMaster::create([
+        //     'lead_id'               => $leadId,
+        //     'notification_type'     => 'Ride Reminder',
+        //     'notification_sub_type' => $days . '_day',
+        //     'mobile_number'         => $client->contact_number,
+        //     'email_id'              => $client->email,
+        //     'status'                => 1,
+        //     'created_at'            => now(),
+        //     'updated_at'            => now(),
+        // ]);
+
+        NotificationMaster::create([
+    'mobile_number' => $client->contact_number,
+    'email_id'      => $client->email,
+    'status'        => 1,
+]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Log
+        |--------------------------------------------------------------------------
+        */
+        Log::info('Ride Reminder Sent', [
+            'lead_id'    => $leadId,
+            'voucher_id' => $voucher->id,
+            'ride_id'    => $ride->id,
+            'days'       => $days,
+            'mobile'     => $client->contact_number,
+            'email'      => $client->email,
+        ]);
+    }
+}
+
+    private function buildReminderServiceLines($lead, $ride)
+    {
+        $latestFollowup = $lead->latestFollowup()->first();
+        $selectedExtraIds = [];
+
+        if ($latestFollowup && !empty($latestFollowup->extra_service_ids)) {
+            $selectedExtraIds = is_array($latestFollowup->extra_service_ids)
+                ? $latestFollowup->extra_service_ids
+                : json_decode($latestFollowup->extra_service_ids, true);
+        }
+
+        if (!is_array($selectedExtraIds)) {
+            $selectedExtraIds = [];
+        }
+
+        $selectedExtraIds = array_filter($selectedExtraIds, fn($id) => !empty($id));
+
+        $extraServiceNames = ExtraService::where('status', 1)
+            ->when(!empty($selectedExtraIds), function ($query) use ($selectedExtraIds) {
+                $query->whereNotIn('id', $selectedExtraIds);
+            })
+            ->pluck('extra_service')
+            ->map(fn($name) => trim($name))
+            ->filter()
+            ->toArray();
+
+        return array_pad(array_values($extraServiceNames), 13, '');
+    }
+
+    private function buildReminderSalesData($lead)
+    {
+        $salesName = $lead->representative->name ?? 'Sales Representative';
+        $salesPhone = $lead->representative->contact_number ?? 'N/A';
+
+        $managerName = 'Manager';
+        $managerPhone = 'N/A';
+
+        if (!empty($lead->representative->id)) {
+            $assignment = SalesExecutiveAssignment::where('sales_executive_id', $lead->representative->id)
+                ->where('status', 1)
+                ->with('manager')
+                ->latest('assigned_date')
+                ->first();
+
+            if ($assignment && $assignment->manager) {
+                $managerName = $assignment->manager->name ?? $managerName;
+                $managerPhone = $assignment->manager->contact_number ?? $managerPhone;
+            }
+        }
+
+        return [
+            'sales_name' => $salesName,
+            'sales_phone' => $salesPhone,
+            'manager_name' => $managerName,
+            'manager_phone' => $managerPhone,
+        ];
+    }
+
+    private function buildMsg91EmailVariables($customerName, $serviceLines, $salesData)
+    {
+        $vars = ['VAR1' => $customerName];
+
+        foreach ($serviceLines as $index => $line) {
+            $vars['VAR' . ($index + 2)] = $line;
+        }
+
+        $vars['VAR15'] = $salesData['sales_name'];
+        $vars['VAR16'] = $salesData['sales_phone'];
+        $vars['VAR17'] = $salesData['manager_name'];
+        $vars['VAR18'] = $salesData['manager_phone'];
+
+        return $vars;
+    }
 
     private function formatRideTime($from, $to)
     {
@@ -52,6 +359,8 @@ class RideController extends Controller
 
         return $fromStr . ' - ' . $toStr;
     }
+
+
     private function isTba($from, $to)
     {
         if (!$from || !$to) {

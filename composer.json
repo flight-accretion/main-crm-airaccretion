@@ -19,7 +19,7 @@
         "maatwebsite/excel": "^3.1",
         "propaganistas/laravel-phone": "^4.4",
         "ramsey/uuid": "^4.8",
-        "setasign/fpdf": "^1.8",
+        "setasign/fpdf": "^1.9",
         "setasign/fpdi": "^2.6"
     },
     "require-dev": {

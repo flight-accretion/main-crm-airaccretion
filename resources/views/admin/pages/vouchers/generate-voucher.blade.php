@@ -523,8 +523,7 @@
                                                             <option value="{{ $availableService->id }}"
                                                                 {{ (isset($oldService['service_id']) && $oldService['service_id'] == $availableService->id) || old('services.' . $index . '.service_id') == $availableService->id ? 'selected' : '' }}
                                                                 data-vendors='@json($availableService->vendors->pluck('name', 'id'))'
-                                                                data-amount="{{ $availableService->service_amount }}"
-                                                                data-extra-services='@json($availableService->extraServices->pluck('id')->values())'>
+                                                                data-amount="{{ $availableService->service_amount }}">
                                                                 {{ $availableService->service_name ?? $availableService->service }}
                                                             </option>
                                                         @endforeach
@@ -591,8 +590,7 @@
                                                             <option value="{{ $availableService->id }}"
                                                                 {{ old('services.' . $index . '.service_id') == $availableService->id || $service->id == $availableService->id ? 'selected' : '' }}
                                                                 data-vendors='@json($availableService->vendors->pluck('name', 'id'))'
-                                                                data-amount="{{ $availableService->service_amount }}"
-                                                                data-extra-services='@json($availableService->extraServices->pluck('id')->values())'>
+                                                                data-amount="{{ $availableService->service_amount }}">
                                                                 {{ $availableService->service_name ?? $availableService->service }}
                                                             </option>
                                                         @endforeach
@@ -1194,7 +1192,7 @@
                                 <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Upload</label>
                                 <input type="file" name="extra_upload"
                                     class="ti-form-input rounded-sm form-control-sm"
-                                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png">
+                                    accept=".pdf,.jpg,.jpeg,.png">
                                 <small class="text-muted">Allowed formats: JPG, JPEG, PNG, PDF | Max size: 2MB</small>
                                 @if (isset($voucher) && $voucher->extra_upload)
                                     <div class="flex items-center gap-3">
@@ -1347,8 +1345,6 @@
 @push('scripts')
     <script>
         $(document).ready(function() {
-            const serviceExtraServicesMap = @json($serviceExtraServicesMap ?? []);
-
             // Client-side validation for client_name: only letters and spaces
             const clientNameInput = $('input[name="client_name"]');
 
@@ -1863,119 +1859,6 @@
                 $('input[name="contact_number"]').val(contactNumber);
             });
 
-            function getMappedExtraServiceIdsFromSelectedServices() {
-                const mappedIds = [];
-
-                $('.service-select').each(function() {
-                    const serviceId = $(this).val();
-                    if (!serviceId) {
-                        return;
-                    }
-
-                    let extraServiceIds = serviceExtraServicesMap[serviceId] || [];
-                    const selectedOptionMap = $(this).find(':selected').attr('data-extra-services');
-
-                    if (selectedOptionMap) {
-                        try {
-                            extraServiceIds = JSON.parse(selectedOptionMap);
-                        } catch (e) {
-                            extraServiceIds = serviceExtraServicesMap[serviceId] || [];
-                        }
-                    }
-
-                    extraServiceIds.forEach(extraServiceId => {
-                        const normalizedId = String(extraServiceId);
-                        if (normalizedId && !mappedIds.includes(normalizedId)) {
-                            mappedIds.push(normalizedId);
-                        }
-                    });
-                });
-
-                return mappedIds;
-            }
-
-            function getSelectedExtraServiceRowIds() {
-                return $('.extra-service-select').map(function() {
-                    return String($(this).val() || '');
-                }).get().filter(Boolean);
-            }
-
-            function appendExtraServiceVendorRow(selectedExtraServiceId = '', isAutoMapped = false) {
-                $('.no-extra-services-message').remove();
-
-                const template = `
-            <tr class="extra-service-vendor-item border-b border-defaultborder" data-index="${extraServiceIndex}" data-auto-mapped="${isAutoMapped ? '1' : '0'}">
-                <td>${$('#extra-service-vendor-container tr:not(.no-extra-services-message)').length + 1}</td>
-                <td>
-                    <select name="extra_services[${extraServiceIndex}][extra_service_id]" class="js-example-basic-single w-full form-control-sm extra-service-select" required>
-                        <option value="">Select Extra Service</option>
-                        @foreach ($allExtraServices as $availableExtraService)
-                            <option value="{{ $availableExtraService->id }}"
-                                    data-vendors='@json($availableExtraService->vendors->pluck('name', 'id'))'
-                                    data-amount="{{ $availableExtraService->extra_service_amount }}">
-                                {{ $availableExtraService->extra_service }}
-                            </option>
-                        @endforeach
-                    </select>
-                </td>
-                <td>
-                    <input type="number" name="extra_services[${extraServiceIndex}][amount]"
-                           class="ti-form-input rounded-sm form-control-sm extra-service-amount" step="0.01" required>
-                </td>
-                <td>
-                    <select name="extra_services[${extraServiceIndex}][vendor_id]" class="js-example-basic-single w-full form-control-sm extra-vendor-select" required>
-                        <option value="">Select Vendor</option>
-                    </select>
-                </td>
-                <td>
-                    <input type="number" name="extra_services[${extraServiceIndex}][vendor_amount]"
-                           class="ti-form-input rounded-sm form-control-sm extra-vendor-amount" step="0.01">
-                </td>
-                <td>
-                    <button type="button" class="ti-btn ti-btn-danger ti-btn-sm remove-extra-service" title="Remove Extra Service">
-                        <i class="ri-delete-bin-line"></i>
-                    </button>
-                </td>
-            </tr>
-        `;
-
-                $('#extra-service-vendor-container').append(template);
-
-                const newRow = $('#extra-service-vendor-container tr:last');
-                newRow.find('.js-example-basic-single').select2({
-                    width: '100%',
-                    placeholder: 'Select...'
-                });
-
-                if (selectedExtraServiceId) {
-                    newRow.find('.extra-service-select').val(selectedExtraServiceId).trigger('change');
-                }
-
-                extraServiceIndex++;
-                updateRowNumbers('#extra-service-vendor-container');
-            }
-
-            function syncMappedExtraServiceRows() {
-                const mappedIds = getMappedExtraServiceIdsFromSelectedServices();
-
-                $('.extra-service-vendor-item[data-auto-mapped="1"]').each(function() {
-                    const selectedExtraServiceId = String($(this).find('.extra-service-select').val() || '');
-                    if (!selectedExtraServiceId || !mappedIds.includes(selectedExtraServiceId)) {
-                        $(this).remove();
-                    }
-                });
-
-                const selectedExtraServiceIds = getSelectedExtraServiceRowIds();
-                mappedIds.forEach(extraServiceId => {
-                    if (!selectedExtraServiceIds.includes(extraServiceId)) {
-                        appendExtraServiceVendorRow(extraServiceId, true);
-                        selectedExtraServiceIds.push(extraServiceId);
-                    }
-                });
-
-                updateRowNumbers('#extra-service-vendor-container');
-            }
-
             // Service selection change handler
             $(document).on('change', '.service-select', function() {
                 const row = $(this).closest('tr');
@@ -2013,7 +1896,6 @@
 
                 // Update service address dropdowns
                 updateServiceAddressDropdowns();
-                syncMappedExtraServiceRows();
             });
 
             // Extra service selection change handler
@@ -2147,8 +2029,7 @@
                         @foreach ($allServices as $availableService)
                             <option value="{{ $availableService->id }}" 
                                     data-vendors='@json($availableService->vendors->pluck('name', 'id'))'
-                                    data-amount="{{ $availableService->service_amount }}"
-                                    data-extra-services='@json($availableService->extraServices->pluck('id')->values())'>
+                                    data-amount="{{ $availableService->service_amount }}">
                                 {{ $availableService->service_name ?? $availableService->service }}
                             </option>
                         @endforeach
@@ -2194,10 +2075,53 @@
                         : 0),
             ) !!};
             $('#add-extra-service-vendor').click(function() {
-                appendExtraServiceVendorRow('', false);
-            });
+                $('.no-extra-services-message').remove();
 
-            syncMappedExtraServiceRows();
+                const template = `
+            <tr class="extra-service-vendor-item border-b border-defaultborder" data-index="${extraServiceIndex}">
+                <td>${$('#extra-service-vendor-container tr:not(.no-extra-services-message)').length + 1}</td>
+                <td>
+                    <select name="extra_services[${extraServiceIndex}][extra_service_id]" class="js-example-basic-single w-full form-control-sm extra-service-select" required>
+                        <option value="">Select Extra Service</option>
+                        @foreach ($allExtraServices as $availableExtraService)
+                            <option value="{{ $availableExtraService->id }}" 
+                                    data-vendors='@json($availableExtraService->vendors->pluck('name', 'id'))'
+                                    data-amount="{{ $availableExtraService->extra_service_amount }}">
+                                {{ $availableExtraService->extra_service }}
+                            </option>
+                        @endforeach
+                    </select>
+                </td>
+                <td>
+                    <input type="number" name="extra_services[${extraServiceIndex}][amount]" 
+                           class="ti-form-input rounded-sm form-control-sm extra-service-amount" step="0.01" required>
+                </td>
+                <td>
+                    <select name="extra_services[${extraServiceIndex}][vendor_id]" class="js-example-basic-single w-full form-control-sm extra-vendor-select" required>
+                        <option value="">Select Vendor</option>
+                    </select>
+                </td>
+                <td>
+                    <input type="number" name="extra_services[${extraServiceIndex}][vendor_amount]" 
+                           class="ti-form-input rounded-sm form-control-sm extra-vendor-amount" step="0.01">
+                </td>
+                <td>
+                    <button type="button" class="ti-btn ti-btn-danger ti-btn-sm remove-extra-service" title="Remove Extra Service">
+                        <i class="ri-delete-bin-line"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+                $('#extra-service-vendor-container').append(template);
+
+                // Reinitialize Select2 for the newly added row
+                $('#extra-service-vendor-container tr:last').find('.js-example-basic-single').select2({
+                    width: '100%',
+                    placeholder: 'Select...'
+                });
+
+                extraServiceIndex++;
+            });
 
             // Remove handlers
             $(document).on('click', '.remove-service', function() {
@@ -2213,7 +2137,6 @@
                 </tr>
             `);
                 }
-                syncMappedExtraServiceRows();
             });
 
             $(document).on('click', '.remove-extra-service', function() {

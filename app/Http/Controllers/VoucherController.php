@@ -1110,7 +1110,7 @@ class VoucherController extends Controller
 
                 // File Upload Messages
                 'extra_upload.file' => 'Extra upload must be a file.',
-                'extra_upload.mimes' => 'Extra upload must be a PDF, DOC, DOCX, JPG, JPEG, or PNG file.',
+                'extra_upload.mimes' => 'Extra upload must be a PDF, JPG, JPEG, or PNG file.',
                 'extra_upload.max' => 'Extra upload file size cannot exceed 2MB.',
                 // Passenger document messages (generic)
                 'passengers.*.front_document.file' => 'Passenger front document must be a file.',
@@ -1346,21 +1346,77 @@ class VoucherController extends Controller
                 ]);
 
                 // Handle extra upload for new voucher
-                if ($request->hasFile('extra_upload')) {
-                    $file = $request->file('extra_upload');
-                    $filename = time() . '_' . $file->getClientOriginalName();
-                    $path = $file->storeAs('vouchers/uploads', $filename, 'public');
-                    $voucher->update(['extra_upload' => $path]);
+                // if ($request->hasFile('extra_upload')) {
+                //     $file = $request->file('extra_upload');
+                //     $filename = time() . '_' . $file->getClientOriginalName();
+                //     $path = $file->storeAs('vouchers/uploads', $filename, 'public');
+                //     $voucher->update(['extra_upload' => $path]);
 
-                    // DEBUG: write stored path for new voucher
-                    try {
-                        $debugPath = storage_path('logs/voucher-debug.txt');
-                        $line = 'New voucher extra_upload saved: ' . ($path ?? 'null') . ' | exists_on_disk=' . (Storage::disk('public')->exists($path) ? 'yes' : 'no') . ' | time=' . date('c') . "\n";
-                        @file_put_contents($debugPath, $line, FILE_APPEND | LOCK_EX);
-                    } catch (\Throwable $e) {
-                        @file_put_contents('php://stderr', 'storeVoucher new file write failed: ' . $e->getMessage() . "\n");
-                    }
-                }
+                //     try {
+                //         $debugPath = storage_path('logs/voucher-debug.txt');
+                //         $line = 'New voucher extra_upload saved: ' . ($path ?? 'null') . ' | exists_on_disk=' . (Storage::disk('public')->exists($path) ? 'yes' : 'no') . ' | time=' . date('c') . "\n";
+                //         @file_put_contents($debugPath, $line, FILE_APPEND | LOCK_EX);
+                //     } catch (\Throwable $e) {
+                //         @file_put_contents('php://stderr', 'storeVoucher new file write failed: ' . $e->getMessage() . "\n");
+                //     }
+                // }
+
+                if ($request->hasFile('extra_upload')) {
+
+    $file = $request->file('extra_upload');
+    $extension = strtolower($file->getClientOriginalExtension());
+
+    if ($extension === 'pdf') {
+
+        // Store PDF directly
+        $filename = time() . '.pdf';
+        $path = $file->storeAs('vouchers/uploads', $filename, 'public');
+
+    } else {
+
+        // Convert image to PDF
+        $image = imagecreatefromstring(file_get_contents($file->getRealPath()));
+
+        if (!$image) {
+            throw new \Exception('Unable to read uploaded image.');
+        }
+
+        $width  = imagesx($image);
+        $height = imagesy($image);
+
+        $orientation = $width > $height ? 'L' : 'P';
+
+        $pdf = new \setasign\Fpdi\Fpdi($orientation, 'pt', [$width, $height]);
+
+        $pdf->AddPage();
+
+        $tempImage = storage_path('app/temp_' . uniqid() . '.jpg');
+
+        imagejpeg($image, $tempImage, 100);
+        imagedestroy($image);
+
+        $pdf->Image($tempImage, 0, 0, $width, $height);
+
+        $filename = time() . '.pdf';
+
+        $relativePath = 'vouchers/uploads/' . $filename;
+        $absolutePath = storage_path('app/public/' . $relativePath);
+
+        if (!file_exists(dirname($absolutePath))) {
+            mkdir(dirname($absolutePath), 0777, true);
+        }
+
+        $pdf->Output('F', $absolutePath);
+
+        unlink($tempImage);
+
+        $path = $relativePath;
+    }
+
+    $voucher->update([
+        'extra_upload' => $path
+    ]);
+}
             }
 
             // Process all passengers from form: update existing ones (with IDs) and create new ones (without IDs)
@@ -1675,12 +1731,30 @@ class VoucherController extends Controller
                     $candidate = storage_path('app/public/' . ltrim($extra, '/'));
                 }
 
+                // if (isset($candidate) && file_exists($candidate)) {
+                //     $extraPdfPath = $candidate;
+                // } else {
+                //     $extraPdfPath = null;
+                //     Log::warning('Extra PDF path could not be resolved to a local file: ' . $voucher->extra_upload);
+                // }
                 if (isset($candidate) && file_exists($candidate)) {
+
+             // Verify it is really a PDF
+                $fp = fopen($candidate, 'rb');
+                $header = fread($fp, 5);
+                fclose($fp);
+
+                if ($header === '%PDF-') {
                     $extraPdfPath = $candidate;
                 } else {
+                    Log::warning('extra_upload is not a valid PDF: ' . $candidate);
                     $extraPdfPath = null;
-                    Log::warning('Extra PDF path could not be resolved to a local file: ' . $voucher->extra_upload);
                 }
+
+            } else {
+
+                $extraPdfPath = null;
+            }
             }
 
             // Decide response disposition: preview (inline) when ?preview=1 is present
