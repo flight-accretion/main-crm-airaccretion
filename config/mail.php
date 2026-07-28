@@ -52,7 +52,7 @@ return [
             'encryption' =>  'ssl',
             'username' => 'confirm@accretionaviation.com',
             'password' => 'Accretion@786',
-            'timeout' => null,
+            'timeout' => 15,
             'local_domain' => env('MAIL_EHLO_DOMAIN'),
         ],
         'ses' => [

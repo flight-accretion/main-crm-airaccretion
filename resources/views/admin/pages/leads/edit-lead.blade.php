@@ -368,10 +368,9 @@
                             </div>
                             <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
                                 <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Staff
-                                    Representative<span class="text-danger">*</span></label>
-                                <select name="representative_user_id" class="js-example-basic-single w-full form-control-sm"
-                                    required >
-                                    <option value="">Select Representative</option>
+                                    Representative</label>
+                                <select name="representative_user_id" class="js-example-basic-single w-full form-control-sm">
+                                    <option value="">Leave blank for auto allocation</option>
                                     @foreach ($staff as $user)
                                         <option value="{{ $user->id }}"
                                             {{ old('representative_user_id', $latestLead->representative_user_id ?? '') == $user->id ? 'selected' : '' }}>

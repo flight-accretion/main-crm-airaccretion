@@ -38,6 +38,12 @@ class Kernel extends ConsoleKernel
             ->dailyAt('10:30')
             ->withoutOverlapping()
             ->appendOutputTo(storage_path('logs/booking-reminders.log'));
+
+        // Auto allocate queued leads every 5 minutes during office hours
+        $schedule->command('lead:process-allocation')
+            ->everyFiveMinutes()
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/lead-allocation.log'));
     }
 
     /**

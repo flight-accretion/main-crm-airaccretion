@@ -541,7 +541,13 @@ if (window.jQuery && $.fn.DataTable) {
   $(".table-datatable").not(".server-paginated").each(function () {
     if (!$.fn.DataTable.isDataTable(this)) {
       $(this).DataTable({
-        responsive: true
+        responsive: false,
+        scrollX: true,
+        autoWidth: false,
+        columnDefs: [{
+          orderable: false,
+          targets: 0
+        }]
       });
     }
   });

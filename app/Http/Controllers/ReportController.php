@@ -9,6 +9,7 @@ use App\Models\PaymentAuditTrail;
 use App\Models\Service;
 use App\Models\Lead;
 use App\Models\User;
+use App\Models\UserType;
 use App\Models\ExtraService;
 use App\Models\Product;
 use App\Models\Target;
@@ -93,6 +94,7 @@ class ReportController extends Controller
             return redirect()->route('login');
         }
         $currentUser = auth()->user();
+        $hidePaymentColumns = in_array($currentUser->userType->user_type ?? '', UserType::SALES_ROLES, true);
 
         $representatives = getRepresentativeIds($currentUser);
 
@@ -273,7 +275,7 @@ class ReportController extends Controller
                 $staff = null;
             }
         }
-        return view('admin.report.admin_report', compact('payments', 'services', 'products', 'serviceDate', 'serviceName', 'status', 'fromDate', 'toDate', 'representatives', 'staff', 'statusArray'));
+        return view('admin.report.admin_report', compact('payments', 'services', 'products', 'serviceDate', 'serviceName', 'status', 'fromDate', 'toDate', 'representatives', 'staff', 'statusArray', 'hidePaymentColumns'));
     }
 
     /**

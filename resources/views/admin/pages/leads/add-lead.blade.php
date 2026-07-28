@@ -328,9 +328,9 @@
                                             @enderror
                                         </div>
                                         <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Staff Representative<span class="text-danger">*</span></label>
-                                                <select id="staffDropdown" name="representative_user_id" class="ti-form-select rounded-sm form-control-sm" required>
-                                                <option value="">Select Representative</option>
+                                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Staff Representative</label>
+                                                <select id="staffDropdown" name="representative_user_id" class="ti-form-select rounded-sm form-control-sm">
+                                                <option value="">Leave blank for auto allocation</option>
                                                 @php
                                                     // Priority: old input -> authenticated user (if present in staff list) -> single staff fallback
                                                     $defaultSelected = old('representative_user_id');

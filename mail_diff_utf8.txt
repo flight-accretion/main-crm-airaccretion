@@ -1,0 +1,13 @@
+﻿diff --git a/config/mail.php b/config/mail.php
+index 514d36bd..13dd2afc 100644
+--- a/config/mail.php
++++ b/config/mail.php
+@@ -52,7 +52,7 @@
+             'encryption' =>  'ssl',
+             'username' => 'confirm@accretionaviation.com',
+             'password' => 'Accretion@786',
+-            'timeout' => null,
++            'timeout' => 15,
+             'local_domain' => env('MAIL_EHLO_DOMAIN'),
+         ],
+         'ses' => [

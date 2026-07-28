@@ -691,258 +691,187 @@ class VendorPaymentController extends Controller
 
             DB::commit();
 
-            // ════════════════════════════════════════════════════════════════════
-            // NOTIFICATIONS — Blade Email + MSG91 WhatsApp to Vendor
-            // ════════════════════════════════════════════════════════════════════
-            try {
-                // Extend execution time for notifications (WhatsApp + SMTP emails)
-                set_time_limit(120);
-                $leadVendorPayment->load(['vendor', 'lead.client', 'paymentDetails.service']);
-
-                $vendor  = $leadVendorPayment->vendor;
-                $lead    = $leadVendorPayment->lead;
-                $client  = $lead->client;
-
-                // Service name
-                $firstDetail = $leadVendorPayment->paymentDetails->first();
-                $serviceObj  = $firstDetail ? ($firstDetail->service ?? null) : null;
-                $serviceName = $serviceObj->service ?? $serviceObj->service_name ?? 'N/A';
-
-                // Service date from latest ride
-                $pickup_date = 'N/A';
-                $ride = \App\Models\LeadRide::where('lead_id', $lead->id)->latest()->first();
-                if ($ride && !empty($ride->from_date)) {
-                    try {
-                        $pickup_date = \Carbon\Carbon::parse($ride->from_date)->format('jS F, Y');
-                    } catch (\Throwable $e) {}
-                }
-
-                // Payment date
-                $paymentDate = 'N/A';
+            // Schedule notifications after the response is sent.
+            app()->terminating(function () use ($leadVendorPayment, $request, $receiptPath) {
                 try {
-                    if (!empty($request->paid_date)) {
-                        $paymentDate = \Carbon\Carbon::parse($request->paid_date)->format('jS F, Y');
-                    }
-                } catch (\Throwable $e) {}
+                    set_time_limit(300);
+                    $leadVendorPayment->load(['vendor', 'lead.client', 'paymentDetails.service']);
 
-                // Amounts
-                $totalPaidNow  = VendorPayment::where('lead_vendor_payment_id', $leadVendorPayment->id)->sum('paid_amount');
-                $totalCost     = floatval($leadVendorPayment->total_vendor_service_amount ?? 0);
-                $paidAmount    = floatval($request->paid_amount);
-                $pendingAmount = max(0, $totalCost - $totalPaidNow);
-                $balanceAmount = $pendingAmount;
+                    $vendor  = $leadVendorPayment->vendor;
+                    $lead    = $leadVendorPayment->lead;
+                    $client  = $lead->client;
 
-                $vendorName  = $vendor->name  ?? 'Vendor';
-                $clientName  = $client->name  ?? 'Customer';
-                $vendorPhone = $vendor->whatsapp_number ?? $vendor->alternate_number ?? $vendor->contact_number ?? $vendor->phone ?? null;
-                $vendorEmail = $vendor->email ?? null;
+                    // Service name
+                    $firstDetail = $leadVendorPayment->paymentDetails->first();
+                    $serviceObj  = $firstDetail ? ($firstDetail->service ?? null) : null;
+                    $serviceName = $serviceObj->service ?? $serviceObj->service_name ?? 'N/A';
 
-                // Receipt file paths
-                $waFileUrl        = $receiptPath
-                    ? rtrim(config('app.url'), '/') . '/storage/' . $receiptPath
-                    : null;
-                $receiptLocalPath = $receiptPath
-                    ? storage_path('app/public/' . $receiptPath)
-                    : null;
-
-                // Receipt filename for WhatsApp document header
-                $receiptFilename = $receiptPath ? basename($receiptPath) : 'receipt.pdf';
-
-                // $smc = new SendMessageController();
-
-                // // ── MSG91 WhatsApp — vendor_payment template (7 body variables + document header) ──
-                // $waTemplate = 'vendor_payment';
-                // $waBodyData = [
-                //     $vendorName,                          // body_1: Vendor Name
-                //     $clientName,                          // body_2: Customer Name
-                //     $serviceName,                         // body_3: Service
-                //     $pickup_date,                         // body_4: Service Date
-                //     number_format($totalPaidNow, 2),      // body_5: Amount Paid
-                //     $paymentDate,                         // body_6: Payment Date
-                //     $request->payment_method ?? 'N/A',    // body_7: Payment Method
-                // ];
-
-                // if (!empty($vendorPhone) && $waFileUrl) {
-                //     Log::info('storePayment: sending vendor MSG91 WhatsApp', [ 
-                //         'template' => $waTemplate,
-                //         'number'   => $vendorPhone,
-                //         'file'     => $waFileUrl,
-                //         'data'     => $waBodyData,
-                //     ]);
-
-                //     // Clean vendor phone — remove country code prefix separator if present
-                //     $cleanVendorPhone = str_replace(['+', '-', ' '], '', $vendorPhone);
-
-                //     $waResult = $smc->sendWhatsAppMsg91Message(
-                //         $cleanVendorPhone,
-                //         $waTemplate,
-                //         $waBodyData,
-                //         $waFileUrl,
-                //         $receiptFilename
-                //     );
-
-                //     Log::info('storePayment: vendor MSG91 WhatsApp sent', [
-                //         'number' => $vendorPhone,
-                //         'result' => $waResult,
-                //     ]);
-                // } elseif (empty($vendorPhone)) {
-                //     Log::warning('storePayment: vendor WhatsApp number missing', ['vendor' => $vendorName]);
-                // } elseif (!$waFileUrl) {
-                //     Log::warning('storePayment: no receipt URL — WhatsApp skipped');
-                // }
-
-                $smc = new SendMessageController();
-
-                // ── WhatsCRM WhatsApp — auto picks vendor_payment or vendor_payment_img ──
-                $waBodyData = [
-                    $vendorName,                          // {{1}} Vendor Name
-                    $clientName,                          // {{2}} Customer Name
-                    $serviceName,                         // {{3}} Service
-                    $pickup_date,                         // {{4}} Service Date
-                    number_format($totalPaidNow, 2),      // {{5}} Amount Paid
-                    $paymentDate,                         // {{6}} Payment Date
-                    $request->payment_method ?? 'N/A',    // {{7}} Payment Method
-                ];
-
-                if (!empty($vendorPhone) && $waFileUrl) {
-                    $cleanVendorPhone = preg_replace('/[^0-9]/', '', $vendorPhone);
-
-                    $waResult = $smc->sendWhatsCrmMessage(
-                        $cleanVendorPhone,
-                        $waBodyData,
-                        $waFileUrl,
-                        $receiptFilename
-                    );
-
-                    // Log::info('storePayment: vendor WhatsCRM WhatsApp sent', [
-                    //     'number' => $vendorPhone,
-                    //     'result' => $waResult,
-                    // ]);
-                    Log::info('VENDOR PAYMENT ► Vendor WhatsApp', [
-                        'To'     => $vendorPhone,
-                        'Status' => ($waResult['success'] ?? false) ? '✓ Sent' : '✗ Failed',
-                    ]);
-                } elseif (empty($vendorPhone)) {
-                    Log::warning('storePayment: vendor WhatsApp number missing', ['vendor' => $vendorName]);
-                } elseif (!$waFileUrl) {
-                    Log::warning('storePayment: no receipt URL — WhatsApp skipped');
-                }
-
-                // ── Blade Email — vendor (UNCHANGED) ────────────────────────────────
-                $vendorEmailData = [
-                    'vendor_name'    => $vendorName,
-                    'client_name'    => $clientName,
-                    'service'        => $serviceName,
-                    'service_date'   => $pickup_date,
-                    'paid_amount'    => $totalPaidNow,
-                    'pending_amount' => $pendingAmount,
-                    'balance_amount' => $balanceAmount,
-                    'refund_date'    => $paymentDate,
-                    'refund_type'    => $request->payment_method ?? 'N/A',
-                    'refund_reason'  => '',
-                ];
-
-                if (!empty($vendorEmail) && filter_var($vendorEmail, FILTER_VALIDATE_EMAIL)) {
-                    try {
-                        \Illuminate\Support\Facades\Mail::to($vendorEmail)->send(new \App\Mail\RefundMail(
-                            'emails.refund-vendor',
-                            'Payment Notification – ' . $clientName . ' – ' . $serviceName,
-                            $vendorEmailData,
-                            $receiptLocalPath
-                        ));
-                        Log::info('storePayment: vendor blade email sent', ['to' => $vendorEmail]);
-                    } catch (\Exception $e) {
-                        Log::error('storePayment: vendor email failed (continuing to NM notifications)', [
-                            'to'    => $vendorEmail,
-                            'error' => $e->getMessage(),
-                        ]);
-                    }
-                } else {
-                    Log::warning('storePayment: vendor email missing/invalid', [
-                        'vendor' => $vendorName,
-                        'email'  => $vendorEmail,
-                    ]);
-                }
-
-                // ── Notification Masters — MSG91 WhatsApp + Email (UNCHANGED email) ──
-                $notificationMasters = \App\Models\NotificationMaster::where('status', 1)->get();
-                Log::info('storePayment: notification masters', ['count' => $notificationMasters->count()]);
-
-                foreach ($notificationMasters as $nm) {
-                    // Blade Email to NM (UNCHANGED)
-                    $nmEmail = $nm->email_id ?? null;
-                    if (!empty($nmEmail) && filter_var($nmEmail, FILTER_VALIDATE_EMAIL)) {
+                    // Service date from latest ride
+                    $pickup_date = 'N/A';
+                    $ride = \App\Models\LeadRide::where('lead_id', $lead->id)->latest()->first();
+                    if ($ride && !empty($ride->from_date)) {
                         try {
-                            \Illuminate\Support\Facades\Mail::to($nmEmail)->send(new \App\Mail\RefundMail(
+                            $pickup_date = \Carbon\Carbon::parse($ride->from_date)->format('jS F, Y');
+                        } catch (\Throwable $e) {}
+                    }
+
+                    // Payment date
+                    $paymentDate = 'N/A';
+                    try {
+                        if (!empty($request->paid_date)) {
+                            $paymentDate = \Carbon\Carbon::parse($request->paid_date)->format('jS F, Y');
+                        }
+                    } catch (\Throwable $e) {}
+
+                    // Amounts
+                    $totalPaidNow  = VendorPayment::where('lead_vendor_payment_id', $leadVendorPayment->id)->sum('paid_amount');
+                    $totalCost     = floatval($leadVendorPayment->total_vendor_service_amount ?? 0);
+                    $paidAmount    = floatval($request->paid_amount);
+                    $pendingAmount = max(0, $totalCost - $totalPaidNow);
+                    $balanceAmount = $pendingAmount;
+
+                    $vendorName  = $vendor->name  ?? 'Vendor';
+                    $clientName  = $client->name  ?? 'Customer';
+                    $vendorPhone = $vendor->whatsapp_number ?? $vendor->alternate_number ?? $vendor->contact_number ?? $vendor->phone ?? null;
+                    $vendorEmail = $vendor->email ?? null;
+
+                    // Receipt file paths
+                    $waFileUrl        = $receiptPath
+                        ? rtrim(config('app.url'), '/') . '/storage/' . $receiptPath
+                        : null;
+                    $receiptLocalPath = $receiptPath
+                        ? storage_path('app/public/' . $receiptPath)
+                        : null;
+
+                    // Receipt filename for WhatsApp document header
+                    $receiptFilename = $receiptPath ? basename($receiptPath) : 'receipt.pdf';
+
+                    $smc = new SendMessageController();
+
+                    $waBodyData = [
+                        $vendorName,
+                        $clientName,
+                        $serviceName,
+                        $pickup_date,
+                        number_format($totalPaidNow, 2),
+                        $paymentDate,
+                        $request->payment_method ?? 'N/A',
+                    ];
+
+                    if (!empty($vendorPhone) && $waFileUrl) {
+                        $cleanVendorPhone = preg_replace('/[^0-9]/', '', $vendorPhone);
+
+                        $waResult = $smc->sendWhatsCrmMessage(
+                            $cleanVendorPhone,
+                            $waBodyData,
+                            $waFileUrl,
+                            $receiptFilename
+                        );
+
+                        Log::info('VENDOR PAYMENT ► Vendor WhatsApp', [
+                            'To'     => $vendorPhone,
+                            'Status' => ($waResult['success'] ?? false) ? '✓ Sent' : '✗ Failed',
+                        ]);
+                    } elseif (empty($vendorPhone)) {
+                        Log::warning('storePayment: vendor WhatsApp number missing', ['vendor' => $vendorName]);
+                    } elseif (!$waFileUrl) {
+                        Log::warning('storePayment: no receipt URL — WhatsApp skipped');
+                    }
+
+                    $vendorEmailData = [
+                        'vendor_name'    => $vendorName,
+                        'client_name'    => $clientName,
+                        'service'        => $serviceName,
+                        'service_date'   => $pickup_date,
+                        'paid_amount'    => $totalPaidNow,
+                        'pending_amount' => $pendingAmount,
+                        'balance_amount' => $balanceAmount,
+                        'refund_date'    => $paymentDate,
+                        'refund_type'    => $request->payment_method ?? 'N/A',
+                        'refund_reason'  => '',
+                    ];
+
+                    if (!empty($vendorEmail) && filter_var($vendorEmail, FILTER_VALIDATE_EMAIL)) {
+                        try {
+                            \Illuminate\Support\Facades\Mail::to($vendorEmail)->send(new \App\Mail\RefundMail(
                                 'emails.refund-vendor',
-                                'Vendor Payment Notification – ' . $clientName . ' – ' . $serviceName,
+                                'Payment Notification – ' . $clientName . ' – ' . $serviceName,
                                 $vendorEmailData,
                                 $receiptLocalPath
                             ));
-                            Log::info('storePayment: NM blade email sent', ['to' => $nmEmail, 'nm_id' => $nm->id]);
-                        } catch (\Exception $e) {
-                            Log::error('storePayment: NM email failed', [
-                                'nm_id' => $nm->id,
+                            Log::info('storePayment: vendor blade email sent', ['to' => $vendorEmail]);
+                        } catch (\Throwable $e) {
+                            Log::error('storePayment: vendor email failed (continuing to NM notifications)', [
+                                'to'    => $vendorEmail,
                                 'error' => $e->getMessage(),
                             ]);
                         }
-                    }
-
-                    // MSG91 WhatsApp to NM
-                    $nmPhone = !empty($nm->contact_country_code)
-                        ? $nm->contact_country_code . $nm->mobile_number
-                        : $nm->mobile_number;
-
-                    if (empty($nm->mobile_number)) {
-                        Log::warning('storePayment: NM phone missing', ['nm_id' => $nm->id]);
-                    } elseif (!$waFileUrl) {
-                        Log::warning('storePayment: NM WhatsApp skipped — no receipt URL', ['nm_id' => $nm->id]);
                     } else {
-                        try {
-                            // $cleanNmPhone = preg_replace('/[^0-9]/', '', $nmPhone);
-                            // $nmWaResult = $smc->sendWhatsAppMsg91Message(
-                            //     $cleanNmPhone,
-                            //     $waTemplate,
-                            //     $waBodyData,
-                            //     $waFileUrl,
-                            //     $receiptFilename
-                            // );
-                            // Log::info('storePayment: NM MSG91 WhatsApp sent', [
-                            //     'nm_id'  => $nm->id,
-                            //     'result' => $nmWaResult,
-                            // ]);
+                        Log::warning('storePayment: vendor email missing/invalid', [
+                            'vendor' => $vendorName,
+                            'email'  => $vendorEmail,
+                        ]);
+                    }
 
-                            $cleanNmPhone = preg_replace('/[^0-9]/', '', $nmPhone);
-                            $nmWaResult = $smc->sendWhatsCrmMessage(
-                                $cleanNmPhone,
-                                $waBodyData,
-                                $waFileUrl,
-                                $receiptFilename
-                            );
-                            // Log::info('storePayment: NM WhatsCRM WhatsApp sent', [
-                            //     'nm_id'  => $nm->id,
-                            //     'result' => $nmWaResult,
-                            // ]);
+                    $notificationMasters = \App\Models\NotificationMaster::where('status', 1)->get();
+                    Log::info('storePayment: notification masters', ['count' => $notificationMasters->count()]);
 
-                            Log::info('VENDOR PAYMENT ► NM WhatsApp', [
-                                'NM_ID'  => $nm->id,
-                                'To'     => $nmPhone,
-                                'Status' => ($nmWaResult['success'] ?? false) ? '✓ Sent' : '✗ Failed',
-                            ]);
-                        } catch (\Exception $e) {
-                            Log::error('storePayment: NM WhatsApp exception', [
-                                'nm_id' => $nm->id,
-                                'error' => $e->getMessage(),
-                            ]);
+                    foreach ($notificationMasters as $nm) {
+                        $nmEmail = $nm->email_id ?? null;
+                        if (!empty($nmEmail) && filter_var($nmEmail, FILTER_VALIDATE_EMAIL)) {
+                            try {
+                                \Illuminate\Support\Facades\Mail::to($nmEmail)->send(new \App\Mail\RefundMail(
+                                    'emails.refund-vendor',
+                                    'Vendor Payment Notification – ' . $clientName . ' – ' . $serviceName,
+                                    $vendorEmailData,
+                                    $receiptLocalPath
+                                ));
+                                Log::info('storePayment: NM blade email sent', ['to' => $nmEmail, 'nm_id' => $nm->id]);
+                            } catch (\Throwable $e) {
+                                Log::error('storePayment: NM email failed', [
+                                    'nm_id' => $nm->id,
+                                    'error' => $e->getMessage(),
+                                ]);
+                            }
+                        }
+
+                        $nmPhone = !empty($nm->contact_country_code)
+                            ? $nm->contact_country_code . $nm->mobile_number
+                            : $nm->mobile_number;
+
+                        if (empty($nm->mobile_number)) {
+                            Log::warning('storePayment: NM phone missing', ['nm_id' => $nm->id]);
+                        } elseif (!$waFileUrl) {
+                            Log::warning('storePayment: NM WhatsApp skipped — no receipt URL', ['nm_id' => $nm->id]);
+                        } else {
+                            try {
+                                $cleanNmPhone = preg_replace('/[^0-9]/', '', $nmPhone);
+                                $nmWaResult = $smc->sendWhatsCrmMessage(
+                                    $cleanNmPhone,
+                                    $waBodyData,
+                                    $waFileUrl,
+                                    $receiptFilename
+                                );
+                                Log::info('VENDOR PAYMENT ► NM WhatsApp', [
+                                    'NM_ID'  => $nm->id,
+                                    'To'     => $nmPhone,
+                                    'Status' => ($nmWaResult['success'] ?? false) ? '✓ Sent' : '✗ Failed',
+                                ]);
+                            } catch (\Throwable $e) {
+                                Log::error('storePayment: NM WhatsApp exception', [
+                                    'nm_id' => $nm->id,
+                                    'error' => $e->getMessage(),
+                                ]);
+                            }
                         }
                     }
+                } catch (\Throwable $e) {
+                    Log::warning('storePayment: vendor notification failed (payment still saved)', [
+                        'error' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString(),
+                    ]);
                 }
-
-            } catch (\Exception $e) {
-                Log::warning('storePayment: vendor notification failed (payment still saved)', [
-                    'error' => $e->getMessage(),
-                ]);
-            }
+            });
 
             return response()->json([
                 'success'     => true,
@@ -951,9 +880,9 @@ class VendorPaymentController extends Controller
                 'receipt_url' => $receiptPath ? Storage::url($receiptPath) : null,
             ]);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollback();
-            Log::error('Error storing vendor payment: ' . $e->getMessage());
+            Log::error('Error storing vendor payment: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
             return response()->json(['error' => 'Error saving payment'], 500);
         }
     }

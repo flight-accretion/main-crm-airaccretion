@@ -12,6 +12,8 @@ use App\Models\LeadRide;
 use App\Models\UserType;
 use App\Models\LeadFollowup;
 use App\Models\PaymentAuditTrail;
+use App\Services\LeadAllocationService;
+use App\Models\SalesDailyUpdate;
 use Illuminate\Http\Request;
 use function App\Helpers\getRepresentativeIds;
 
@@ -570,7 +572,87 @@ $adminPaidLeadIds = $adminFirstPaymentPerLead->filter(function ($first) use ($ad
             'dataByCreatedDate' => $dataByCreatedDate
         ];
 
-        return view('admin.pages.dashboards.sales-dashboard', compact('currentMonth', 'leads', 'todayFollowUps', 'todayFollowUpsCount', 'services', 'dnpLeads', 'nextWeekDnpLeads', 'productSummary', 'currentMonthTarget', 'targetProgress', 'assignedExecutives', 'teamTargetProgress', 'assignedExecutivesAll', 'assignedExecutivesToday'));
+        if ($currentUser->userType && in_array($currentUser->userType->user_type, [UserType::SALES_EXECUTIVE, UserType::SALES_MANAGER, UserType::SENIOR_SALES_MANAGER])) {
+            $currentUser->forceFill(['last_login' => now()])->save();
+        }
+
+        $popupData = app(LeadAllocationService::class)->getPopupData($currentUser, now());
+
+        $dailyUpdate = null;
+        $managerUpdates = collect();
+        $manager = null;
+
+        if ($currentUser->userType && in_array($currentUser->userType->user_type, [UserType::SALES_EXECUTIVE])) {
+            $dailyUpdate = SalesDailyUpdate::where('user_id', $currentUser->id)
+                ->whereDate('update_date', Carbon::today())
+                ->first();
+
+            $manager = $currentUser->assignedManagers()->first();
+        }
+
+        if ($currentUser->userType && in_array($currentUser->userType->user_type, [UserType::SALES_MANAGER, UserType::SENIOR_SALES_MANAGER])) {
+            $managerUpdates = SalesDailyUpdate::with('user')
+                ->whereDate('update_date', Carbon::today())
+                ->where('manager_id', $currentUser->id)
+                ->orderByDesc('created_at')
+                ->get();
+        }
+
+        return view('admin.pages.dashboards.sales-dashboard', compact('currentMonth', 'leads', 'todayFollowUps', 'todayFollowUpsCount', 'services', 'dnpLeads', 'nextWeekDnpLeads', 'productSummary', 'currentMonthTarget', 'targetProgress', 'assignedExecutives', 'teamTargetProgress', 'assignedExecutivesAll', 'assignedExecutivesToday', 'popupData', 'dailyUpdate', 'managerUpdates', 'manager'));
+    }
+
+    public function acceptPopup(Request $request)
+    {
+        $user = auth()->user();
+        if (!$user) {
+            abort(403);
+        }
+
+        app(LeadAllocationService::class)->acceptPopup($user);
+
+        return redirect()->route('admin.sales-dashboard')->with('success', 'Availability updated.');
+    }
+
+    public function declinePopup(Request $request)
+    {
+        $user = auth()->user();
+        if (!$user) {
+            abort(403);
+        }
+
+        app(LeadAllocationService::class)->declinePopup($user);
+
+        return redirect()->route('admin.sales-dashboard')->with('success', 'Availability updated.');
+    }
+
+    public function storeDailyUpdate(Request $request)
+    {
+        $user = auth()->user();
+        if (!$user) {
+            abort(403);
+        }
+
+        $request->validate([
+            'task_summary' => 'required|string|max:2000',
+            'work_hours' => 'required|numeric|min:0|max:24',
+        ]);
+
+        $manager = $user->assignedManagers()->first();
+
+        SalesDailyUpdate::updateOrCreate(
+            [
+                'user_id' => $user->id,
+                'update_date' => Carbon::today()->toDateString(),
+            ],
+            [
+                'manager_id' => $manager?->id,
+                'task_summary' => $request->input('task_summary'),
+                'work_hours' => round((float) $request->input('work_hours'), 2),
+                'status' => 'submitted',
+            ]
+        );
+
+        return redirect()->route('admin.sales-dashboard')->with('success', 'Your daily update has been sent to your manager.');
     }
 
     /**

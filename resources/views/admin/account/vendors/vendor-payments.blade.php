@@ -1263,6 +1263,9 @@
 
                     fetch(@json(route('admin.account.vendor-payments.store', [], false)), {
                             method: 'POST',
+                            headers: {
+                                'Accept': 'application/json'
+                            },
                             body: formData
                         })
                         .then(response => {
@@ -1575,10 +1578,11 @@ if (inline) {
 
             fetch(@json(route('admin.account.vendor-payments.store', [], false)), {
                     method: 'POST',
-                    body: formData,
                     headers: {
+                        'Accept': 'application/json',
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                    }
+                    },
+                    body: formData
                 })
                 .then(response => {
                     if (response.status === 422) {

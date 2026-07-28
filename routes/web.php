@@ -90,6 +90,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/sales-dashboard/target-progress', [DashboardController::class, 'getTargetProgressData'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard.target-progress');
     Route::get('/sales-dashboard/product-summary', [DashboardController::class, 'getProductSummaryData'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard.product-summary');
     Route::get('/sales-dashboard/today-followups', [DashboardController::class, 'getTodayFollowUpsData'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard.today-followups');
+    Route::post('/sales-dashboard/popup/accept', [DashboardController::class, 'acceptPopup'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard.popup.accept');
+    Route::post('/sales-dashboard/popup/decline', [DashboardController::class, 'declinePopup'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard.popup.decline');
+    Route::post('/sales-dashboard/daily-update', [DashboardController::class, 'storeDailyUpdate'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard.daily-update.store');
 
 
     Route::prefix('admin/lead')->group(function () {

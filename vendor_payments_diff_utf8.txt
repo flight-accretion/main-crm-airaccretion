@@ -1,0 +1,28 @@
+﻿diff --git a/resources/views/admin/account/vendors/vendor-payments.blade.php b/resources/views/admin/account/vendors/vendor-payments.blade.php
+index 48057e19..c1f35d97 100644
+--- a/resources/views/admin/account/vendors/vendor-payments.blade.php
++++ b/resources/views/admin/account/vendors/vendor-payments.blade.php
+@@ -1263,6 +1263,9 @@ function showFieldError(el, msg) {
+ 
+                     fetch(@json(route('admin.account.vendor-payments.store', [], false)), {
+                             method: 'POST',
++                            headers: {
++                                'Accept': 'application/json'
++                            },
+                             body: formData
+                         })
+                         .then(response => {
+@@ -1575,10 +1578,11 @@ function saveVendorPayment() {
+ 
+             fetch(@json(route('admin.account.vendor-payments.store', [], false)), {
+                     method: 'POST',
+-                    body: formData,
+                     headers: {
++                        'Accept': 'application/json',
+                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+-                    }
++                    },
++                    body: formData
+                 })
+                 .then(response => {
+                     if (response.status === 422) {

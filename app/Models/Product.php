@@ -18,7 +18,12 @@ class Product extends Model
         'vendor_id',
         'is_private',
         'is_airambulance',
-        'status'
+        'status',
+        'user_ids'
+    ];
+
+    protected $casts = [
+        'user_ids' => 'array',
     ];
 
     public function leads()
@@ -35,9 +40,20 @@ class Product extends Model
     {
         return Service::whereJsonContains('product_ids', $this->id)->get();
     }
-     // Accessor for services attribute
-    public function getServicesAttribute()//temporary fix for voucher page
+
+    // Accessor for services attribute
+    public function getServicesAttribute() // temporary fix for voucher page
     {
         return Service::whereJsonContains('product_ids', $this->id)->get();
+    }
+
+    public function getUserIdsArrayAttribute()
+    {
+        $userIds = $this->user_ids;
+        if (is_string($userIds)) {
+            $userIds = json_decode($userIds, true) ?? [];
+        }
+
+        return is_array($userIds) ? $userIds : [];
     }
 }

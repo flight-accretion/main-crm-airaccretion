@@ -1117,6 +1117,7 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
             $salesRepFilter = $request->input('representative_user_id');
             $statusFilter = $request->input('status');
 
+            $searchFilter  = $request->input('search');
             $nameFilter    = $request->input('name');
             $phoneFilter   = $request->input('phone');
             $productFilter = $request->input('product_id');
@@ -1152,6 +1153,27 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                 // default behaviour: include a broad set of statuses
                 $ridesQuery->whereHas('enquiry.leadFollowups', function ($q) {
                     $q->whereIn('status', [1, 2, 3, 4, 5, 6, 7]);
+                });
+            }
+
+            if ($searchFilter) {
+                $ridesQuery->where(function ($q) use ($searchFilter) {
+                    $q->whereHas('enquiry.client', function ($q2) use ($searchFilter) {
+                        $q2->where('name', 'ilike', '%' . $searchFilter . '%')
+                           ->orWhere('contact_number', 'ilike', '%' . $searchFilter . '%')
+                           ->orWhere('alternate_number', 'ilike', '%' . $searchFilter . '%');
+                    })
+                    ->orWhereHas('enquiry.representative', function ($q2) use ($searchFilter) {
+                        $q2->where('name', 'ilike', '%' . $searchFilter . '%');
+                    })
+                    ->orWhereHas('enquiry.vouchers.invoice', function ($q2) use ($searchFilter) {
+                        $q2->where('invoice_id', 'ilike', '%' . $searchFilter . '%');
+                    })
+                    ->orWhereHas('enquiry.leadFollowups', function ($q2) use ($searchFilter) {
+                        $q2->where('service_ids', 'like', '%' . $searchFilter . '%')
+                           ->orWhere('extra_service_ids', 'like', '%' . $searchFilter . '%')
+                           ->orWhere('notes', 'ilike', '%' . $searchFilter . '%');
+                    });
                 });
             }
 
@@ -1356,10 +1378,11 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                 'from_date' => $fromDate,
                 'to_date' => $toDate,
                 'status' => $statusFilter,
-                'name'       => $nameFilter,       // ADD
-                'phone'      => $phoneFilter,      // ADD
-                'product_id' => $productFilter,    // ADD
-                'service_id' => $serviceFilter,    // ADD
+                'search' => $searchFilter,
+                'name'       => $nameFilter,
+                'phone'      => $phoneFilter,
+                'product_id' => $productFilter,
+                'service_id' => $serviceFilter,
             ];
             $products = Product::where('status', 1)->orderBy('product')->get();   // ADD
             $services = Service::where('status', 1)->orderBy('service')->get();   // ADD

@@ -1,0 +1,26 @@
+﻿diff --git a/resources/views/admin/report/admin_report.blade.php b/resources/views/admin/report/admin_report.blade.php
+index 997f8eb0..a86397b7 100644
+--- a/resources/views/admin/report/admin_report.blade.php
++++ b/resources/views/admin/report/admin_report.blade.php
+@@ -166,8 +166,10 @@ class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Representative</label>
+                 <th data-priority="10">Status</th>
+                 <th data-priority="11">Products</th>
+                 <th data-priority="12">Last Update</th>
++                @if(empty($hidePaymentColumns))
+                 <th data-priority="13">Pending Amount</th>
+                 <th data-priority="14">Amount</th>
++                @endif
+               </tr>
+             </thead>
+             <tbody>
+@@ -253,8 +255,10 @@ class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Representative</label>
+                 $received = (float) $payment->received_amount;
+                 $total = (float) $payment->total_amount;
+                 @endphp
++                @if(empty($hidePaymentColumns))
+                 <td>{{ isset($received) ? number_format($received,2) : 0}}</td>
+                 <td>{{ isset($total) ? number_format($total,2) : 0}}</td>
++                @endif
+               </tr>
+               @endforeach
+             </tbody>

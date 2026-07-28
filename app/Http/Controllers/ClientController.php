@@ -32,6 +32,7 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use App\Services\AirpointsIntegrationService;
+use App\Services\LeadAllocationService;
 use function App\Helpers\getRepresentativeIds;
 
 class ClientController extends Controller
@@ -444,7 +445,7 @@ class ClientController extends Controller
                     $fail('Invalid date format for next follow-up.');
                 }
             }],
-            'representative_user_id' => 'required|uuid|exists:users,id',
+            'representative_user_id' => 'nullable|uuid|exists:users,id',
             // Call Notes: require at least one letter and allow only letters, numbers and spaces
             'requirement_description' => ['nullable', 'string', 'max:1000'],
             // Status validation
@@ -515,7 +516,6 @@ class ClientController extends Controller
             'service_ids.required' => 'At least one service must be selected.',
             'product_ids.required' => 'At least one product must be selected.',
             //'product_ids.*.exists' => 'One or more selected products are invalid.',
-            'representative_user_id.required' => 'A staff representative is required.',
             'email.unique' => 'This email is already associated with another client.',
             'contact_country_code.required' => 'Country code is required',
             'contact_country_code.max' => 'Country code cannot exceed 5 characters',
@@ -540,9 +540,6 @@ class ClientController extends Controller
             'contact_number.regex' => 'Phone number must contain only digits and be 5 to 20 characters long.',
 
             'alternate_number.regex' => 'Alternate phone number must contain only digits and be 5 to 20 characters long.',
-
-            'contact_country_code.required' => 'Country code is required.',
-            'contact_country_code.regex' => 'Country code must be in the format +XXX.',
 
             'address.regex' => 'Address must contain letters and may only include letters, numbers and spaces',
             'address.max' => 'Address cannot exceed 500 characters.',
@@ -614,16 +611,22 @@ class ClientController extends Controller
                 $leadProductIds = is_array($leadProductIds) ? array_values($leadProductIds) : null;
             }
 
+            $manualRepresentativeId = $request->input('representative_user_id');
+
             $enquiry = Lead::create([
                 'id' => Str::uuid(),
                 'client_id' => $client->id,
-                'representative_user_id' => $request->representative_user_id,
+                'representative_user_id' => $manualRepresentativeId,
                 'product_ids' => !empty($leadProductIds) ? json_encode($leadProductIds) : null,
                 'service_ids' => json_encode($request->service_ids),
                 'number_of_passengers' => $request->number_of_passengers,
                 'description' => $request->requirement_description,
                 'occasion' => $request->occasion,
             ]);
+
+            if (empty($manualRepresentativeId)) {
+                app(LeadAllocationService::class)->queueLead($enquiry, 'new_lead');
+            }
 
             // Create trip segments if provided (may be omitted for Call Not Connected)
             if (!empty($request->trips) && is_array($request->trips)) {
@@ -4669,7 +4672,7 @@ class ClientController extends Controller
 
             // Follow-up Validation
             'next_followup_date' => 'nullable|date_format:Y-m-d H:i',
-            'representative_user_id' => 'required|uuid|exists:users,id',
+            'representative_user_id' => 'nullable|uuid|exists:users,id',
             'requirement_description' => 'nullable|string',
             'date_of_birth.date' => 'Please enter a valid date',
             'date_of_birth.before_or_equal' => 'Date of birth cannot be in the future',
@@ -4687,7 +4690,6 @@ class ClientController extends Controller
             'trips.*.to_place.regex' => 'To Place should contain only letters and spaces.',
             'service_ids.required' => 'At least one service must be selected.',
             'product_ids.required' => 'At least one product must be selected.',
-            'representative_user_id.required' => 'A staff representative is required.',
             'contact_number.required' => 'Primary contact number is required',
             'contact_number.numeric' => 'Primary contact must contain only numbers',
             'contact_number.digits_between' => 'Primary contact must be 5-20 digits long',
@@ -4736,14 +4738,20 @@ class ClientController extends Controller
             // capture old representative for audit
             $oldRep = $lead->representative_user_id;
 
+            $manualRepresentativeId = $request->input('representative_user_id');
+
             $lead->fill([
-                'representative_user_id' => $request->representative_user_id,
+                'representative_user_id' => $manualRepresentativeId,
                 'product_ids' => !empty($leadProductIds) ? json_encode($leadProductIds) : null,
                 'service_ids' => json_encode($request->service_ids),
                 'number_of_passengers' => $request->number_of_passengers,
                 'description' => $request->requirement_description,
                 'occasion' => $request->occasion,
             ])->save();
+
+            if (empty($manualRepresentativeId) && empty($lead->representative_user_id)) {
+                app(LeadAllocationService::class)->queueLead($lead, 'updated_lead');
+            }
 
             // If staff representative changed, record an audit trail
             try {

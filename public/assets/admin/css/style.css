@@ -62182,6 +62182,10 @@ input[type=time]:where([dir=rtl], [dir=rtl] *)::-webkit-calendar-picker-indicato
   display: block;
   width: 100%;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.table-responsive table {
+  min-width: 100%;
 }
 .ti-custom-table {
   min-width: 100%;

@@ -121,20 +121,33 @@
 <div class="grid grid-cols-12 gap-6">
     <div class="xl:col-span-12 col-span-12">
         <div class="box custom-box">
-            <div class="box-header justify-between flex">
-                <div class="box-title">
-                    All Rides
-                </div>
-                {{-- <div class="export-buttons flex gap-2 mb-3">
-                    <button type="button" class="ti-btn ti-btn-success-full ti-btn-sm export-excel-btn"
-                        title="Export to Excel">
-                        <i class="ri-file-excel-line"></i>
-                    </button>
-                    <button type="button" class="ti-btn ti-btn-info-full ti-btn-sm export-csv-btn"
-                        title="Export to CSV">
-                        <i class="ri-file-text-line"></i>
-                    </button>
-                </div> --}}
+            <div class="box-header justify-between flex flex-wrap gap-3">
+                <div class="box-title">All Rides</div>
+                <form id="ride-status-controls-form" method="GET" action="{{ route('admin.rides.ride-status') }}" class="flex flex-wrap items-center gap-3">
+                    <div class="flex items-center gap-2">
+                        <label for="per-page-select" class="text-sm whitespace-nowrap">Show</label>
+                        <select id="per-page-select" name="per_page" class="ti-form-select rounded-sm form-control-sm" style="width: 80px;">
+                            <option value="10" {{ request('per_page', 20)==10 ? 'selected' : '' }}>10</option>
+                            <option value="25" {{ request('per_page', 20)==25 ? 'selected' : '' }}>25</option>
+                            <option value="50" {{ request('per_page', 20)==50 ? 'selected' : '' }}>50</option>
+                            <option value="100" {{ request('per_page', 20)==100 ? 'selected' : '' }}>100</option>
+                        </select>
+                        <label class="text-sm whitespace-nowrap">entries</label>
+                    </div>
+
+                    <div class="search-container">
+                        <input type="text" id="global-search" name="search" class="ti-form-input rounded-sm form-control-sm"
+                            placeholder="Search" value="{{ $currentFilters['search'] ?? '' }}" style="min-width: 250px;">
+                    </div>
+
+                    <input type="hidden" name="from_date" value="{{ $currentFilters['from_date'] ?? '' }}">
+                    <input type="hidden" name="to_date" value="{{ $currentFilters['to_date'] ?? '' }}">
+                    <input type="hidden" name="status" value="{{ $currentFilters['status'] ?? '' }}">
+                    <input type="hidden" name="name" value="{{ $currentFilters['name'] ?? '' }}">
+                    <input type="hidden" name="phone" value="{{ $currentFilters['phone'] ?? '' }}">
+                    <input type="hidden" name="product_id" value="{{ $currentFilters['product_id'] ?? '' }}">
+                    <input type="hidden" name="service_id" value="{{ $currentFilters['service_id'] ?? '' }}">
+                </form>
             </div>
             <div class="box-body">
 
@@ -758,11 +771,18 @@
                 }, 500);
             }
 
+            // Persist the search value in the input on page reload
+            const urlSearchParams = new URLSearchParams(window.location.search);
+            const persistedSearch = urlSearchParams.get('search');
+            if (persistedSearch !== null && $('#global-search').length) {
+                $('#global-search').val(persistedSearch);
+            }
+
             // Helper: collect current filter values from the form inputs
             function getFilterParams() {
                 var params = new URLSearchParams();
-                // Gather all form inputs that have a value
-                $('#filter-form').find('input, select').each(function() {
+                // Gather all filter inputs from both the main filter form and the top controls form
+                $('#filter-form, #ride-status-controls-form').find('input, select').each(function() {
                     var name = $(this).attr('name');
                     var val = $(this).val();
                     if (name && val && val !== '') {
@@ -771,6 +791,34 @@
                 });
                 return params;
             }
+
+            function navigateRideStatus() {
+                const params = getFilterParams();
+                const url = '{{ route("admin.rides.ride-status") }}';
+                const query = params.toString();
+                window.location.href = query ? url + '?' + query : url;
+            }
+
+            // Search and entries controls
+            $('#per-page-select').on('change', function() {
+                navigateRideStatus();
+            });
+
+            let rideSearchTimeout;
+            $('#global-search').on('keyup', function() {
+                clearTimeout(rideSearchTimeout);
+                rideSearchTimeout = setTimeout(function() {
+                    navigateRideStatus();
+                }, 500);
+            });
+
+            $('#global-search').on('keypress', function(event) {
+                if (event.which === 13) {
+                    event.preventDefault();
+                    clearTimeout(rideSearchTimeout);
+                    navigateRideStatus();
+                }
+            });
 
             // Export handlers - export using current filter form values
             $('.export-excel-btn').on('click', function() {

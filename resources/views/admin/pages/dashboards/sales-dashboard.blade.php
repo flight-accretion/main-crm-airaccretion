@@ -28,6 +28,154 @@
         </div>
     </div>
 </div>
+<div id="lead-allocation-popup" class="hs-overlay hidden ti-modal" style="z-index: 9999;">
+    <div class="hs-overlay-open:mt-7 ti-modal-box mt-0 ease-out min-h-[calc(100%-3.5rem)] flex items-center">
+        <div class="ti-modal-content w-full max-w-lg mx-auto" style="background-color: gainsboro;">
+            <div class="ti-modal-header flex items-center justify-between px-6 py-4 border-b border-defaultborder">
+                <div>
+                    <h6 class="modal-title text-[1rem] font-semibold text-gray-800">Receive more leads</h6>
+                    <p class="mb-0 text-sm text-gray-800">During working hours, this reminder appears every 2 hours.</p>
+                </div>
+                <button type="button" class="ti-modal-close-btn text-gray-500 hover:text-gray-700" data-hs-overlay="#lead-allocation-popup" aria-label="Close">
+                    <i class="bx bx-x text-[1.2rem]"></i>
+                </button>
+            </div>
+            <div class="ti-modal-body px-6 py-5">
+                <div class="mb-4 flex items-start gap-3 rounded-lg border border-primary/20 p-3 bg-gray-50">
+                    <div class="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                        <i class="bx bx-bell text-[1.15rem]"></i>
+                    </div>
+                    <div>
+                        <h6 class="font-semibold text-gray-800">{{ $popupData['queue_count'] ?? 0 }} lead(s) are waiting</h6>
+                        <p class="mb-0 text-sm text-gray-600">If you click Yes, new leads will be assigned to you automatically.</p>
+                    </div>
+                </div>
+                <div class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+                    Leads are only processed during working hours. After working hours, they stay queued and will be assigned the next working day.
+                </div>
+            </div>
+            <div class="ti-modal-footer flex justify-end gap-2 border-t border-defaultborder px-6 py-4">
+                <form method="POST" action="{{ route('admin.sales-dashboard.popup.decline') }}">
+                    @csrf
+                    <button type="submit" class="ti-btn" style="width:170px; padding: 1.2rem 1rem;background-color: #17b9f7; color: white !important;">No, skip for now</button>
+                </form>
+                <form method="POST" action="{{ route('admin.sales-dashboard.popup.accept') }}">
+                    @csrf
+                    <button type="submit" class="ti-btn bg-primary text-white">Yes, assign me more leads</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if(($popupData['show_popup'] ?? false))
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var modal = document.getElementById('lead-allocation-popup');
+        if (!modal) return;
+
+        try {
+            modal.classList.remove('hidden');
+            modal.classList.add('open');
+            modal.setAttribute('aria-hidden', 'false');
+            modal.style.display = 'block';
+
+            if (window.HSOverlay && typeof window.HSOverlay.open === 'function') {
+                try {
+                    var instance = null;
+                    if (window.HSOverlay.getInstance) {
+                        try {
+                            instance = window.HSOverlay.getInstance('#lead-allocation-popup');
+                        } catch (e) {
+                            instance = null;
+                        }
+                    }
+                    if (!instance && window.HSOverlay.autoInit) {
+                        try {
+                            window.HSOverlay.autoInit();
+                            instance = window.HSOverlay.getInstance ? window.HSOverlay.getInstance('#lead-allocation-popup') : null;
+                        } catch (e) {
+                            instance = null;
+                        }
+                    }
+                    if (instance) {
+                        window.HSOverlay.open('#lead-allocation-popup');
+                        return;
+                    }
+                } catch (e) {
+                    console.error('[sales-dashboard] HSOverlay.open failed', e);
+                }
+            }
+
+            var inner = modal.querySelector('.ti-modal-content');
+            if (inner) inner.classList.remove('hidden');
+        } catch (e) {
+            console.error('[sales-dashboard] popup fallback failed', e);
+        }
+    });
+</script>
+@endif
+
+@if(Auth::user()->userType && in_array(Auth::user()->userType->user_type, [\App\Models\UserType::SALES_EXECUTIVE]))
+<div class="mb-6 rounded-lg border border-defaultborder bg-white p-4 shadow-sm">
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+            <h6 class="text-[1rem] font-semibold text-gray-800">Today's work update</h6>
+            <p class="mb-0 text-sm text-gray-600">Share your today's tasks and time with your manager.</p>
+        </div>
+        <div class="rounded-lg bg-primary/5 px-3 py-2 text-sm text-primary">
+            Manager: {{ $manager?->name ?? 'Not assigned' }}
+        </div>
+    </div>
+
+    <form method="POST" action="{{ route('admin.sales-dashboard.daily-update.store') }}" class="mt-4 space-y-4">
+        @csrf
+        <div class="grid grid-cols-12 gap-4">
+            <div class="col-span-12 lg:col-span-8">
+                <label class="mb-1 block text-sm font-medium text-gray-700">Today's tasks</label>
+                <textarea name="task_summary" rows="4" class="ti-form-input w-full" placeholder="Write your tasks, follow-ups, calls, meetings, and progress..." required>{{ old('task_summary', $dailyUpdate->task_summary ?? '') }}</textarea>
+            </div>
+            <div class="col-span-12 lg:col-span-4">
+                <label class="mb-1 block text-sm font-medium text-gray-700">Work hours</label>
+                <input type="number" step="0.25" min="0" max="24" name="work_hours" class="ti-form-input w-full" value="{{ old('work_hours', $dailyUpdate->work_hours ?? '') }}" required>
+            </div>
+        </div>
+        <div class="flex justify-end">
+            <button type="submit" class="ti-btn bg-primary text-white">Submit update</button>
+        </div>
+    </form>
+</div>
+@endif
+
+@if(Auth::user()->userType && in_array(Auth::user()->userType->user_type, [\App\Models\UserType::SALES_MANAGER, \App\Models\UserType::SENIOR_SALES_MANAGER]))
+<div class="mb-6 rounded-lg border border-defaultborder bg-white p-4 shadow-sm">
+    <div class="mb-3 flex items-center justify-between">
+        <div>
+            <h6 class="text-[1rem] font-semibold text-gray-800">Today's updates from your team</h6>
+            <p class="mb-0 text-sm text-gray-600">View the work updates submitted by your sales executives.</p>
+        </div>
+    </div>
+    @if($managerUpdates->isEmpty())
+        <div class="rounded-lg bg-gray-50 p-3 text-sm text-gray-600">No updates submitted today yet.</div>
+    @else
+        <div class="space-y-3">
+            @foreach($managerUpdates as $update)
+                <div class="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                    <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <div>
+                            <h6 class="font-semibold text-gray-800">{{ $update->user->name ?? 'Sales Executive' }}</h6>
+                            <p class="mb-0 text-sm text-gray-600">Work hours: {{ number_format((float) $update->work_hours, 2) }}</p>
+                        </div>
+                        <div class="text-sm text-gray-500">{{ $update->created_at->format('h:i A') }}</div>
+                    </div>
+                    <div class="mt-2 whitespace-pre-line text-sm text-gray-700">{{ $update->task_summary }}</div>
+                </div>
+            @endforeach
+        </div>
+    @endif
+</div>
+@endif
+
 <div class="grid grid-cols-12 gap-x-6">
     <div class="xxl:col-span-9 col-span-12">
         <div class="grid grid-cols-12 gap-x-6">
@@ -867,6 +1015,11 @@
     </div>
     <script>
         (function(){
+            var leadPopupModal = document.getElementById('lead-allocation-popup');
+            if (leadPopupModal && leadPopupModal.classList.contains('hidden')) {
+                leadPopupModal.classList.remove('hidden');
+            }
+
             // Product summary filter: fetch and replace product x status tables based on selected representative/team
             (function(){
                 var url = "{{ route('admin.sales-dashboard.product-summary') }}";
