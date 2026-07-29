@@ -2290,14 +2290,21 @@ class VoucherController extends Controller
             $data = ['registration_link' => $link, 'client_name' => $voucher->lead->client->name];
 
             $recipientEmail = $voucher->lead->client->email ?? null;
+            $whatsAppNumber = !empty($voucher->lead->client->alternate_number)
+                ? $voucher->lead->client->alternate_number
+                : $voucher->lead->client->contact_number;
+
+            Log::info('Resend registration link request', [
+                'voucher' => $voucher->id,
+                'email' => $recipientEmail,
+                'whatsapp_number' => $whatsAppNumber,
+                'link' => $link,
+            ]);
+
             if (empty($recipientEmail) || !filter_var($recipientEmail, FILTER_VALIDATE_EMAIL)) {
                 Log::warning('Invalid or missing recipient email for resend registration link', ['voucher' => $voucher->id, 'email' => $recipientEmail]);
                 return response()->json(['success' => false, 'message' => 'Client email is not available or invalid. Cannot resend registration link.'], 400);
             }
-            // Determine WhatsApp number and defer email and WhatsApp sends to after response
-            $whatsAppNumber = !empty($voucher->lead->client->alternate_number)
-                ? $voucher->lead->client->alternate_number
-                : $voucher->lead->client->contact_number;
             // Defer email and WhatsApp sends to after response
             app()->terminating(function () use ($recipientEmail, $emailTemplate, $subject, $data, $whatsAppNumber, $link, $voucher) {
                 try {
@@ -2341,6 +2348,12 @@ class VoucherController extends Controller
 
             $clientName = $voucher->lead->client->name ?? 'Customer';
             $whatsAppNumber = !empty($voucher->lead->client->alternate_number) ? $voucher->lead->client->alternate_number : $voucher->lead->client->contact_number;
+
+            Log::info('Send registration link via WhatsApp-only request', [
+                'voucher' => $voucher->id,
+                'whatsapp_number' => $whatsAppNumber,
+                'link' => $link,
+            ]);
 
             if (empty($whatsAppNumber)) {
                 return response()->json(['success' => false, 'message' => 'Client WhatsApp number is not available'], 400);
