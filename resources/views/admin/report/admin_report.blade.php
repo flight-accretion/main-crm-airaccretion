@@ -124,6 +124,7 @@
     <div class="box custom-box">
       <div class="box-header flex justify-between items-center">
         <div class="box-title">Report</div>
+        @if(empty($hidePaymentColumns))
         <div class="export-buttons flex gap-2 mb-3">
           <button type="button" class="ti-btn ti-btn-success-full ti-btn-sm export-excel-btn" title="Export to Excel">
             <i class="ri-file-excel-line"></i>
@@ -132,6 +133,7 @@
             <i class="ri-file-text-line"></i>
           </button>
         </div>
+        @endif
       </div>
       <div class="box-body">
         @php
@@ -163,7 +165,9 @@
                 <th data-priority="7">Next Follow Up</th>
                 <th data-priority="8">Created Date</th>
                 <th data-priority="9">Service Date</th>
+                @if(empty($hidePaymentColumns))
                 <th data-priority="10">Status</th>
+                 @endif
                 <th data-priority="11">Products</th>
                 <th data-priority="12">Last Update</th>
                 @if(empty($hidePaymentColumns))
@@ -213,6 +217,7 @@
                   N/A
                   @endif
                 </td>
+                 @if(empty($hidePaymentColumns))
                 <td class="text-center">
                   @php $status = $payment->status ?? null; @endphp
                   @if ($status === 0)
@@ -239,6 +244,7 @@
                   <span class="badge bg-default/10 text-default">N/A</span>
                   @endif
                 </td>
+                 @endif
                 <td>
                   @php $productNames = $enquiry->product_names ?? []; @endphp
                   @if (!empty($productNames) && is_array($productNames))
