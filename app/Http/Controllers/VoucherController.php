@@ -1966,20 +1966,26 @@ class VoucherController extends Controller
                 Log::warning('Invalid or missing recipient email for voucher send', ['voucher' => $voucher->id, 'email' => $recipientEmail]);
                 return redirect()->back()->with('error', 'Client email is not available or invalid. Cannot send voucher email.');
             }
-            Mail::to($recipientEmail)->send(new VoucherMail($emailTemplate, $subject, $data, $filePath));
+            // Defer mail and WhatsApp sends to after the response is sent
+            app()->terminating(function () use ($recipientEmail, $emailTemplate, $subject, $data, $filePath, $type, $whatsAppTemplate, $whatsAppdata, $whatsAppNumber) {
+                try {
+                    Mail::to($recipientEmail)->send(new VoucherMail($emailTemplate, $subject, $data, $filePath));
+                } catch (\Throwable $e) {
+                    Log::error('Deferred voucher email failed: ' . $e->getMessage());
+                }
 
-            // Send WhatsApp
-            $message = $this->sendMessageController->sendWhatsAppMessage($type, $whatsAppTemplate, $whatsAppdata, $whatsAppNumber, $filePath);
+                try {
+                    $message = $this->sendMessageController->sendWhatsAppMessage($type, $whatsAppTemplate, $whatsAppdata, $whatsAppNumber, $filePath);
+                    if (isset($message['result']) && $message['result'] == false) {
+                        Log::warning('Deferred WhatsApp failed for voucher: ' . ($message['message'] ?? 'unknown'));
+                    }
+                } catch (\Throwable $e) {
+                    Log::error('Deferred WhatsApp failed: ' . $e->getMessage());
+                }
+            });
 
-            if ($message['result'] == false) {
-                return redirect()->back()->with('error', 'Error sending voucher PDF: ' . $message['message']);
-            }
-
-            // NOTE: do not delete the file immediately. The WhatsApp/SMS provider
-            // may fetch the file asynchronously after we return. Removing it here
-            // caused 404s when the provider attempted to retrieve the file.
-            // Consider scheduling a cleanup job to remove old vouchers later.
-            return redirect()->back()->with('success', 'Voucher generated and sent successfully!', $message['message']);
+            // Return immediately; actual sending happens in terminating callback
+            return redirect()->back()->with('success', 'Voucher generated and queued for sending.');
         } catch (\Exception $e) {
             Log::error('Error generating and sending voucher PDF: ' . $e->getMessage());
             return redirect()->back()->with('error', 'Error generating PDF: ' . $e->getMessage());
@@ -2073,34 +2079,19 @@ class VoucherController extends Controller
                 // Optionally schedule cleanup of old voucher files.
                 return response()->json(['success' => false, 'message' => 'Client email is not available or invalid. Cannot send voucher email.'], 400);
             }
-            Mail::to($recipientEmail)->send(new VoucherMail($emailTemplate, $subject, $data, $fileUrl));
-
-            // Check for transport-level failures (SMTP). This returns an array of failed recipients.
-            try {
-                $failures = Mail::failures();
-            } catch (\Throwable $ex) {
-                $failures = [];
-            }
-
-            if (!empty($failures)) {
-                Log::warning('Voucher email reported failures', ['voucher' => $voucher->id, 'failures' => $failures]);
-                // Delete generated file
-                // Do not unlink immediately; external providers may still fetch the file.
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Mail transporter reported failures',
-                    'failures' => $failures
-                ], 500);
-            }
-
-            Log::info('Voucher email sent', ['voucher' => $voucher->id, 'to' => $voucher->lead->client->email]);
-
-            // Keep the generated file for a short retention period. Cleanup
-            // should be handled by a scheduled job or manual process.
+            // Defer the actual email send to after response to avoid blocking
+            app()->terminating(function () use ($recipientEmail, $emailTemplate, $subject, $data, $fileUrl, $voucher) {
+                try {
+                    Mail::to($recipientEmail)->send(new VoucherMail($emailTemplate, $subject, $data, $fileUrl));
+                    Log::info('Deferred voucher email sent', ['voucher' => $voucher->id, 'to' => $recipientEmail]);
+                } catch (\Throwable $e) {
+                    Log::error('Deferred voucher email failed: ' . $e->getMessage(), ['voucher' => $voucher->id]);
+                }
+            });
 
             return response()->json([
                 'success' => true,
-                'message' => 'Voucher emailed successfully'
+                'message' => 'Voucher email has been queued for sending'
             ]);
         } catch (\Exception $e) {
             Log::error('Error sending voucher: ' . $e->getMessage());
@@ -2225,25 +2216,23 @@ class VoucherController extends Controller
             ]);
 
             // NEW: Use dedicated WhatsCRM Vouchers method with separate account
-            $message = $this->sendMessageController->sendWhatsCrmVoucherMessage(
-                $whatsAppNumber,      // Phone number (WhatsCRM handles +91 format)
-                $whatsAppdata,        // Template body variables (10 parameters)
-                $filePath,            // PDF file URL
-                $filename,            // Filename (e.g., voucher-123.pdf)
-                'customer_whatsapp_msg_ke'  // Template name
-            );
+            // Defer WhatsApp send so request isn't blocked; respond immediately
+            app()->terminating(function () use ($whatsAppNumber, $whatsAppdata, $filePath, $filename, $voucher) {
+                try {
+                    $message = $this->sendMessageController->sendWhatsCrmVoucherMessage(
+                        $whatsAppNumber,
+                        $whatsAppdata,
+                        $filePath,
+                        $filename,
+                        'customer_whatsapp_msg_ke'
+                    );
+                    Log::info('Deferred WhatsCRM Vouchers API response', ['voucher' => $voucher->id, 'response' => $message]);
+                } catch (\Throwable $e) {
+                    Log::error('Deferred WhatsApp send failed: ' . $e->getMessage(), ['voucher' => $voucher->id]);
+                }
+            });
 
-            // Log response for debugging
-            Log::info('WhatsCRM Vouchers API response', ['voucher' => $voucher->id, 'response' => $message]);
-
-            // Keep the temporary file available briefly; don't unlink immediately.
-            // Consider a scheduled cleanup to remove old voucher files.
-
-            if (!($message['success'] ?? false)) {
-                return response()->json(['success' => false, 'message' => $message['message'] ?? 'WhatsApp send failed'], 500);
-            }
-
-            return response()->json(['success' => true, 'message' => 'WhatsApp sent successfully via WhatsCRM Vouchers Account']);
+            return response()->json(['success' => true, 'message' => 'WhatsApp send queued']);
         } catch (\Exception $e) {
             Log::error('Error sending voucher via WhatsApp: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Error: ' . $e->getMessage()], 500);
@@ -2305,23 +2294,33 @@ class VoucherController extends Controller
                 Log::warning('Invalid or missing recipient email for resend registration link', ['voucher' => $voucher->id, 'email' => $recipientEmail]);
                 return response()->json(['success' => false, 'message' => 'Client email is not available or invalid. Cannot resend registration link.'], 400);
             }
-            Mail::to($recipientEmail)->send(new VoucherMail($emailTemplate, $subject, $data, null));
-
-            // Send WhatsApp with Registration Link template via WhatsCRM
-            $whatsAppNumber = !empty($voucher->lead->client->alternate_number) ? $voucher->lead->client->alternate_number : $voucher->lead->client->contact_number;
-            if (!empty($whatsAppNumber)) {
-                $whatsAppData = [$voucher->lead->client->name, $link]; // {{1}} = name, {{2}} = link
+            // Determine WhatsApp number and defer email and WhatsApp sends to after response
+            $whatsAppNumber = !empty($voucher->lead->client->alternate_number)
+                ? $voucher->lead->client->alternate_number
+                : $voucher->lead->client->contact_number;
+            // Defer email and WhatsApp sends to after response
+            app()->terminating(function () use ($recipientEmail, $emailTemplate, $subject, $data, $whatsAppNumber, $link, $voucher) {
                 try {
-                    $message = $this->sendMessageController->sendWhatsCrmRegistrationLinkMessage($whatsAppNumber, $whatsAppData);
-                    if (!($message['success'] ?? false)) {
-                        Log::warning('WhatsApp registration link sending failed', ['voucher' => $voucher->id, 'error' => $message['error'] ?? 'Unknown error']);
-                    }
-                } catch (\Exception $e) {
-                    Log::error('Error sending WhatsApp registration link', ['voucher' => $voucher->id, 'error' => $e->getMessage()]);
+                    Mail::to($recipientEmail)->send(new VoucherMail($emailTemplate, $subject, $data, null));
+                } catch (\Throwable $e) {
+                    Log::error('Deferred registration email failed: ' . $e->getMessage(), ['voucher' => $voucher->id]);
                 }
-            }
 
-            return response()->json(['success' => true, 'message' => 'Registration link resent via email and WhatsApp']);
+                if (!empty($whatsAppNumber)) {
+                    $whatsAppData = [$voucher->lead->client->name, $link];
+                    try {
+                        $message = $this->sendMessageController->sendWhatsCrmRegistrationLinkMessage($whatsAppNumber, $whatsAppData);
+                        Log::info('Deferred WhatsApp registration send response', ['voucher' => $voucher->id, 'response' => $message]);
+                        if (!($message['success'] ?? false)) {
+                            Log::warning('Deferred WhatsApp registration link failed', ['voucher' => $voucher->id, 'error' => $message['error'] ?? 'Unknown error']);
+                        }
+                    } catch (\Throwable $e) {
+                        Log::error('Deferred WhatsApp registration send failed', ['voucher' => $voucher->id, 'error' => $e->getMessage()]);
+                    }
+                }
+            });
+
+            return response()->json(['success' => true, 'message' => 'Registration link queued for sending']);
         } catch (\Exception $e) {
             Log::error('Error resending registration link: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Error: ' . $e->getMessage()], 500);
@@ -2348,14 +2347,22 @@ class VoucherController extends Controller
             }
 
             // Send WhatsApp with Registration Link template via WhatsCRM
-            $whatsAppData = [$clientName, $link]; // {{1}} = name, {{2}} = link
+            // Body values expected by sendWhatsCrmRegistrationLinkMessage: [client_name, full_link]
+            $whatsAppData = [$clientName, $link];
 
             try {
-                $message = $this->sendMessageController->sendWhatsCrmRegistrationLinkMessage($whatsAppNumber, $whatsAppData);
-                if (!($message['success'] ?? false)) {
-                    Log::warning('WhatsApp registration link sending failed', ['voucher' => $voucher->id, 'error' => $message['error'] ?? 'Unknown error']);
-                    return response()->json(['success' => false, 'message' => 'Failed to send WhatsApp message: ' . ($message['error'] ?? 'Unknown error')], 400);
-                }
+                // Defer WhatsApp send and return immediately
+                app()->terminating(function () use ($whatsAppNumber, $whatsAppData, $voucher) {
+                    try {
+                        $message = $this->sendMessageController->sendWhatsCrmRegistrationLinkMessage($whatsAppNumber, $whatsAppData);
+                        Log::info('Deferred WhatsApp registration send response', ['voucher' => $voucher->id, 'response' => $message]);
+                        if (!($message['success'] ?? false)) {
+                            Log::warning('Deferred WhatsApp registration link sending failed', ['voucher' => $voucher->id, 'error' => $message['error'] ?? 'Unknown error']);
+                        }
+                    } catch (\Throwable $e) {
+                        Log::error('Deferred WhatsApp registration send failed', ['voucher' => $voucher->id, 'error' => $e->getMessage()]);
+                    }
+                });
             } catch (\Exception $e) {
                 Log::error('Error sending WhatsApp registration link', ['voucher' => $voucher->id, 'error' => $e->getMessage()]);
                 return response()->json(['success' => false, 'message' => 'Error: ' . $e->getMessage()], 500);
