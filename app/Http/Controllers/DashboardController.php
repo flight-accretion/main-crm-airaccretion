@@ -19,6 +19,150 @@ use function App\Helpers\getRepresentativeIds;
 
 class DashboardController extends Controller
 {
+    private function resolveRepresentativeIds(User $currentUser, ?string $userId = null)
+    {
+        $userType = $currentUser->userType->user_type;
+
+        if ($userId) {
+            $targetUser = User::with('userType')->find($userId);
+            if (!$targetUser) {
+                return null;
+            }
+
+            $targetType = $targetUser->userType->user_type ?? null;
+
+            if (in_array($userType, [UserType::SALES_MANAGER, UserType::SENIOR_SALES_MANAGER])) {
+                if ($targetType === UserType::SALES_EXECUTIVE) {
+                    if (!\App\Models\SalesExecutiveAssignment::isAssigned($currentUser->id, $userId)) {
+                        return false;
+                    }
+                } elseif (in_array($targetType, [UserType::SALES_MANAGER, UserType::SENIOR_SALES_MANAGER])) {
+                    if ($userId != $currentUser->id) {
+                        return false;
+                    }
+                }
+            }
+
+            return [$userId];
+        }
+
+        if (in_array($userType, [UserType::SALES_MANAGER, UserType::SENIOR_SALES_MANAGER])) {
+            $assigned = \App\Models\SalesExecutiveAssignment::getSalesExecutivesForManager($currentUser->id);
+            $ids = $assigned->pluck('id')->toArray();
+            $ids = array_unique(array_merge($ids, [$currentUser->id]));
+            return $ids ?: [$currentUser->id];
+        }
+
+        if (in_array($userType, [UserType::SUPER_ADMIN, UserType::ADMIN])) {
+            $managerTypes = UserType::whereIn('user_type', [UserType::SALES_MANAGER, UserType::SENIOR_SALES_MANAGER])->pluck('id')->toArray();
+            $execType = UserType::where('user_type', UserType::SALES_EXECUTIVE)->first();
+            $execTypeId = $execType ? $execType->id : null;
+
+            $allTypes = array_merge($managerTypes, $execTypeId ? [$execTypeId] : []);
+            $ids = !empty($allTypes) ? User::whereIn('user_type_id', $allTypes)->where('status', 1)->pluck('id')->toArray() : [];
+            return $ids ?: [];
+        }
+
+        return [$currentUser->id];
+    }
+
+    private function calculateTargetProgressForUser(User $user, ?int $year = null, ?int $month = null): array
+    {
+        $year = $year ?? date('Y');
+        $month = $month ?? date('n');
+
+        $target = Target::where('sales_executive_id', $user->id)
+            ->where('year', $year)
+            ->where('month', $month)
+            ->where('status', 'active')
+            ->first();
+
+        if (!$target) {
+            return [
+                'achievement_percentage' => 0,
+                'remaining_amount' => 0,
+                'target_amount' => 0,
+                'achieved_amount' => 0,
+                'sales_amount' => 0,
+                'month_name' => Carbon::create($year, $month, 1)->format('F'),
+                'year' => $year,
+                'user_name' => $user->name,
+            ];
+        }
+
+        $paidFollowupIds = \App\Models\PaymentAuditTrail::where('payment_status', 1)
+            ->whereYear('paid_date', $year)
+            ->whereMonth('paid_date', $month)
+            ->pluck('lead_followup_id')->unique();
+
+        $candidateLeadIds = \App\Models\LeadFollowup::whereIn('id', $paidFollowupIds)
+            ->whereHas('enquiry', function ($query) use ($user) {
+                $query->where('representative_user_id', $user->id);
+            })
+            ->pluck('lead_id')->unique();
+
+        $allFollowupIdsByLead = \App\Models\LeadFollowup::whereIn('lead_id', $candidateLeadIds)
+            ->get(['id', 'lead_id'])
+            ->groupBy('lead_id')
+            ->map(fn($g) => $g->pluck('id'));
+
+        $allFollowupIdsFlat = $allFollowupIdsByLead->flatten()->unique();
+
+        $firstPaymentPerLead = \App\Models\PaymentAuditTrail::whereIn('lead_followup_id', $allFollowupIdsFlat)
+            ->where('payment_status', 1)
+            ->orderBy('paid_date')
+            ->get()
+            ->groupBy(function ($p) use ($allFollowupIdsByLead) {
+                foreach ($allFollowupIdsByLead as $leadId => $fids) {
+                    if ($fids->contains($p->lead_followup_id)) {
+                        return $leadId;
+                    }
+                }
+                return null;
+            })
+            ->map(fn($payments) => $payments->sortBy('paid_date')->first());
+
+        $paidLeadIds = $firstPaymentPerLead->filter(function ($first) use ($year, $month) {
+            if (!$first || empty($first->paid_date)) {
+                return false;
+            }
+            $d = Carbon::parse($first->paid_date);
+            return $d->year === (int) $year && $d->month === (int) $month;
+        })->keys();
+
+        $allFollowups = \App\Models\LeadFollowup::whereIn('lead_id', $paidLeadIds)
+            ->whereHas('enquiry', function ($query) use ($user) {
+                $query->where('representative_user_id', $user->id);
+            })
+            ->get();
+
+        $achievedAmount = $allFollowups->groupBy('lead_id')->map(function ($group) {
+            $qualifying = $group->filter(function ($f) {
+                return in_array($f->status, [2, 5, 7, 8]);
+            });
+            return $qualifying->sortByDesc('created_at')->first();
+        })->filter()->sum(function ($f) {
+            $allFollowupIdsForLead = \App\Models\LeadFollowup::where('lead_id', $f->lead_id)->pluck('id');
+            $refund = \App\Models\LeadRefund::whereIn('lead_followup_id', $allFollowupIdsForLead)
+                ->whereIn('status', [1, 2])->sum('refund_amount');
+            return max(0, (float) $f->total_amount - $refund);
+        });
+
+        $achievementPercentage = $target->target_amount > 0 ? round(($achievedAmount / $target->target_amount) * 100, 2) : 0;
+        $remainingAmount = max(0, $target->target_amount - $achievedAmount);
+
+        return [
+            'achievement_percentage' => $achievementPercentage,
+            'remaining_amount' => $remainingAmount,
+            'target_amount' => (float) $target->target_amount,
+            'achieved_amount' => max(0, $achievedAmount),
+            'sales_amount' => max(0, $achievedAmount),
+            'month_name' => Carbon::create($year, $month, 1)->format('F'),
+            'year' => $year,
+            'user_name' => $user->name,
+        ];
+    }
+
     public function getSalesDashboard(Request $request)
     {
 
@@ -39,185 +183,46 @@ class DashboardController extends Controller
                 ->first();
 
             if ($currentMonthTarget) {
-                // Achieved = Sum(Total Amount of LATEST followup per lead) - Sum(Refund Amount)
-                // Only count leads that have approved payments with paid_date in the current month/year
-                // // Find leads with approved payments in the current month/year (based on paid_date)
-                // $paidFollowupIds = \App\Models\PaymentAuditTrail::where('payment_status', 1)
-                //     ->whereYear('paid_date', $currentYear)
-                //     ->whereMonth('paid_date', $currentMonth)
-                //     ->pluck('lead_followup_id')->unique();
-                // $paidLeadIds = \App\Models\LeadFollowup::whereIn('id', $paidFollowupIds)
-                //     ->whereHas('enquiry', function ($query) use ($currentUser) {
-                //         $query->where('representative_user_id', $currentUser->id);
-                //     })
-                //     ->pluck('lead_id')->unique();
-
-                // Get candidate leads that had ANY approved payment this month
-$paidFollowupIds = \App\Models\PaymentAuditTrail::where('payment_status', 1)
-    ->whereYear('paid_date', $currentYear)
-    ->whereMonth('paid_date', $currentMonth)
-    ->pluck('lead_followup_id')->unique();
-
-$candidateLeadIds = \App\Models\LeadFollowup::whereIn('id', $paidFollowupIds)
-    ->whereHas('enquiry', function ($query) use ($currentUser) {
-        $query->where('representative_user_id', $currentUser->id);
-    })
-    ->pluck('lead_id')->unique();
-
-// Only keep leads whose FIRST EVER approved payment paid_date is in this month
-$allFollowupIdsByLead = \App\Models\LeadFollowup::whereIn('lead_id', $candidateLeadIds)
-    ->get(['id', 'lead_id'])
-    ->groupBy('lead_id')
-    ->map(fn($g) => $g->pluck('id'));
-
-$allFollowupIdsFlat = $allFollowupIdsByLead->flatten()->unique();
-
-$firstPaymentPerLead = \App\Models\PaymentAuditTrail::whereIn('lead_followup_id', $allFollowupIdsFlat)
-    ->where('payment_status', 1)
-    ->orderBy('paid_date')
-    ->get()
-    ->groupBy(function ($p) use ($allFollowupIdsByLead) {
-        foreach ($allFollowupIdsByLead as $leadId => $fids) {
-            if ($fids->contains($p->lead_followup_id)) return $leadId;
-        }
-        return null;
-    })
-    ->map(fn($payments) => $payments->sortBy('paid_date')->first());
-
-$paidLeadIds = $firstPaymentPerLead->filter(function ($first) use ($currentYear, $currentMonth) {
-    if (!$first || empty($first->paid_date)) return false;
-    $d = \Carbon\Carbon::parse($first->paid_date);
-    return $d->year === (int) $currentYear && $d->month === (int) $currentMonth;
-})->keys();
-
-                // Get ALL followups for those paid leads
-                $allFollowups = \App\Models\LeadFollowup::whereIn('lead_id', $paidLeadIds)
-                    ->whereHas('enquiry', function ($query) use ($currentUser) {
-                        $query->where('representative_user_id', $currentUser->id);
-                    })
-                    ->get();
-
-                // Calculate per-lead: Sales Amount = max(0, Total Amount - Refund Amount)
-                // Filter to qualifying statuses FIRST, then take latest (matches Sales Report)
-                $achievedAmount = $allFollowups->groupBy('lead_id')->map(function ($group) {
-                    $qualifying = $group->filter(function ($f) {
-                        return in_array($f->status, [2, 5, 7, 8]);
-                    });
-                    return $qualifying->sortByDesc('created_at')->first();
-                })->filter()->sum(function ($f) {
-                    $allFollowupIdsForLead = \App\Models\LeadFollowup::where('lead_id', $f->lead_id)->pluck('id');
-                    $refund = \App\Models\LeadRefund::whereIn('lead_followup_id', $allFollowupIdsForLead)
-                        ->whereIn('status', [1, 2])->sum('refund_amount');
-                    return max(0, (float) $f->total_amount - $refund);
-                });
-
-                // Update the target's achieved amount for real-time tracking
-                $currentMonthTarget->update(['achieved_amount' => $achievedAmount]);
-
-                // Refresh the model to get updated achieved_amount
-                $currentMonthTarget = $currentMonthTarget->fresh();
-
-                $achievementPercentage = $currentMonthTarget->target_amount > 0
-                    ? round(($achievedAmount / $currentMonthTarget->target_amount) * 100, 2)
-                    : 0;
-
-                $remainingAmount = $currentMonthTarget->target_amount - $achievedAmount;
-
+                $targetProgressData = $this->calculateTargetProgressForUser($currentUser, $currentYear, $currentMonth);
                 $targetProgress = [
-                    'achievement_percentage' => $achievementPercentage,
-                    'remaining_amount' => max(0, $remainingAmount),
-                    'target_amount' => $currentMonthTarget->target_amount,
-                    'achieved_amount' => $achievedAmount,
-                    'sales_amount' => $achievedAmount,
+                    'achievement_percentage' => $targetProgressData['achievement_percentage'],
+                    'remaining_amount' => $targetProgressData['remaining_amount'],
+                    'target_amount' => $targetProgressData['target_amount'],
+                    'achieved_amount' => $targetProgressData['achieved_amount'],
+                    'sales_amount' => $targetProgressData['sales_amount'],
                 ];
+
+                $currentMonthTarget->update(['achieved_amount' => $targetProgressData['achieved_amount']]);
+                $currentMonthTarget = $currentMonthTarget->fresh();
             }
         }
 
         // If current user is a Sales Manager (or Senior), prepare assigned executives and team progress
         $assignedExecutives = collect();
         $teamTargetProgress = null;
+        $teamMemberProgress = collect();
         if (in_array($userType, [UserType::SALES_MANAGER, UserType::SENIOR_SALES_MANAGER])) {
             $assignedExecutives = \App\Models\SalesExecutiveAssignment::getSalesExecutivesForManager($currentUser->id);
 
             $assignedIds = $assignedExecutives->pluck('id')->toArray();
-            // Include the manager's own id so the team total includes the manager's target/achieved if they have one
             $ids = array_unique(array_merge($assignedIds, [$currentUser->id]));
             if (!empty($ids)) {
-                // Sum targets for the assigned executives for current month
                 $teamTargetAmount = Target::whereIn('sales_executive_id', $ids)
                     ->where('year', date('Y'))
                     ->where('month', date('n'))
                     ->where('status', 'active')
                     ->sum('target_amount');
 
-                // Find leads with approved payments in current month/year (based on paid_date)
-                // $teamPaidFollowupIds = \App\Models\PaymentAuditTrail::where('payment_status', 1)
-                //     ->whereYear('paid_date', date('Y'))
-                //     ->whereMonth('paid_date', date('n'))
-                //     ->pluck('lead_followup_id')->unique();
-                // $teamPaidLeadIds = \App\Models\LeadFollowup::whereIn('id', $teamPaidFollowupIds)
-                //     ->whereHas('enquiry', function ($q) use ($ids) {
-                //         $q->whereIn('representative_user_id', $ids);
-                //     })
-                //     ->pluck('lead_id')->unique();
-
-                $currentYear = date('Y');
-                $currentMonth = date('n');
-                
-                $teamPaidFollowupIds = \App\Models\PaymentAuditTrail::where('payment_status', 1)
-    ->whereYear('paid_date', $currentYear)
-    ->whereMonth('paid_date', $currentMonth)
-    ->pluck('lead_followup_id')->unique();
-
-$teamCandidateLeadIds = \App\Models\LeadFollowup::whereIn('id', $teamPaidFollowupIds)
-    ->whereHas('enquiry', function ($q) use ($ids) {
-        $q->whereIn('representative_user_id', $ids);
-    })
-    ->pluck('lead_id')->unique();
-
-$teamAllFollowupIdsByLead = \App\Models\LeadFollowup::whereIn('lead_id', $teamCandidateLeadIds)
-    ->get(['id', 'lead_id'])
-    ->groupBy('lead_id')
-    ->map(fn($g) => $g->pluck('id'));
-
-$teamAllFollowupIdsFlat = $teamAllFollowupIdsByLead->flatten()->unique();
-
-$teamFirstPaymentPerLead = \App\Models\PaymentAuditTrail::whereIn('lead_followup_id', $teamAllFollowupIdsFlat)
-    ->where('payment_status', 1)
-    ->orderBy('paid_date')
-    ->get()
-    ->groupBy(function ($p) use ($teamAllFollowupIdsByLead) {
-        foreach ($teamAllFollowupIdsByLead as $leadId => $fids) {
-            if ($fids->contains($p->lead_followup_id)) return $leadId;
-        }
-        return null;
-    })
-    ->map(fn($payments) => $payments->sortBy('paid_date')->first());
-
-$teamPaidLeadIds = $teamFirstPaymentPerLead->filter(function ($first) use ($currentYear, $currentMonth) {
-    if (!$first || empty($first->paid_date)) return false;
-    $d = \Carbon\Carbon::parse($first->paid_date);
-    return $d->year === (int) $currentYear && $d->month === (int) $currentMonth;
-})->keys();
-
-                $teamAllFollowups = \App\Models\LeadFollowup::whereIn('lead_id', $teamPaidLeadIds)
-                    ->whereHas('enquiry', function ($q) use ($ids) {
-                        $q->whereIn('representative_user_id', $ids);
-                    })
-                    ->get();
-
-                // Calculate per-lead: Sales Amount = max(0, Total Amount - Refund Amount)
-                $teamAchievedAmount = $teamAllFollowups->groupBy('lead_id')->map(function ($group) {
-                    $qualifying = $group->filter(function ($f) {
-                        return in_array($f->status, [2, 5, 7, 8]);
-                    });
-                    return $qualifying->sortByDesc('created_at')->first();
-                })->filter()->sum(function ($f) {
-                    $allFollowupIdsForLead = \App\Models\LeadFollowup::where('lead_id', $f->lead_id)->pluck('id');
-                    $refund = \App\Models\LeadRefund::whereIn('lead_followup_id', $allFollowupIdsForLead)
-                        ->whereIn('status', [1, 2])->sum('refund_amount');
-                    return max(0, (float) $f->total_amount - $refund);
-                });
+                $teamAchievedAmount = 0;
+                foreach ($ids as $memberId) {
+                    $memberUser = User::find($memberId);
+                    if (!$memberUser) {
+                        continue;
+                    }
+                    $memberProgress = $this->calculateTargetProgressForUser($memberUser, date('Y'), date('n'));
+                    $teamMemberProgress->push($memberProgress);
+                    $teamAchievedAmount += $memberProgress['achieved_amount'];
+                }
 
                 $teamRemaining = $teamTargetAmount - $teamAchievedAmount;
                 $teamAchievementPercentage = $teamTargetAmount > 0 ? round(($teamAchievedAmount / $teamTargetAmount) * 100, 2) : 0;
@@ -230,7 +235,6 @@ $teamPaidLeadIds = $teamFirstPaymentPerLead->filter(function ($first) use ($curr
                     'sales_amount' => max(0, $teamAchievedAmount),
                 ];
             } else {
-                // No assigned executives — zero values
                 $teamTargetProgress = [
                     'achievement_percentage' => 0,
                     'remaining_amount' => 0,
@@ -598,7 +602,7 @@ $adminPaidLeadIds = $adminFirstPaymentPerLead->filter(function ($first) use ($ad
                 ->get();
         }
 
-        return view('admin.pages.dashboards.sales-dashboard', compact('currentMonth', 'leads', 'todayFollowUps', 'todayFollowUpsCount', 'services', 'dnpLeads', 'nextWeekDnpLeads', 'productSummary', 'currentMonthTarget', 'targetProgress', 'assignedExecutives', 'teamTargetProgress', 'assignedExecutivesAll', 'assignedExecutivesToday', 'popupData', 'dailyUpdate', 'managerUpdates', 'manager'));
+        return view('admin.pages.dashboards.sales-dashboard', compact('currentMonth', 'leads', 'todayFollowUps', 'todayFollowUpsCount', 'services', 'dnpLeads', 'nextWeekDnpLeads', 'productSummary', 'currentMonthTarget', 'targetProgress', 'assignedExecutives', 'teamTargetProgress', 'teamMemberProgress', 'assignedExecutivesAll', 'assignedExecutivesToday', 'popupData', 'dailyUpdate', 'managerUpdates', 'manager'));
     }
 
     public function acceptPopup(Request $request)
@@ -772,6 +776,217 @@ $adminPaidLeadIds = $adminFirstPaymentPerLead->filter(function ($first) use ($ad
      * AJAX: Return today's follow-ups (including missed) filtered by representative/team.
      * Accepts optional `user_id` query param. Authorization mirrors target-progress rules.
      */
+    public function getSalesDashboardOverviewData(Request $request)
+    {
+        $currentUser = auth()->user();
+        if (!$currentUser) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $userId = $request->get('user_id');
+        $repIds = $this->resolveRepresentativeIds($currentUser, $userId);
+        if ($repIds === null) {
+            return response()->json(['error' => 'Not found'], 404);
+        }
+        if ($repIds === false) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $currentDate = Carbon::now()->toDateString();
+        $currentMonthStart = Carbon::now()->startOfMonth()->toDateString();
+        $currentMonthEnd = Carbon::now()->endOfMonth()->endOfDay();
+        $nextMonthStart = Carbon::now()->addMonth()->startOfMonth()->toDateString();
+        $previousMonthStart = Carbon::now()->subMonth()->startOfMonth()->toDateString();
+
+        $leadQuery = Lead::with(['client', 'representative', 'rideSegments', 'leadFollowups.followedBy']);
+        if (!empty($repIds)) {
+            $leadQuery->whereIn('representative_user_id', $repIds);
+        }
+
+        $dnpService = Service::where('service', 'Call Not Connected')->first();
+        $dnpServiceId = $dnpService ? $dnpService->id : null;
+
+        $previousMonthCount = (clone $leadQuery)
+            ->whereDate('created_at', '>=', $previousMonthStart)
+            ->whereDate('created_at', '<=', $currentMonthStart)
+            ->count();
+
+        $currentMonthCount = (clone $leadQuery)
+            ->whereDate('created_at', '>=', $currentMonthStart)
+            ->whereDate('created_at', '<=', $nextMonthStart)
+            ->count();
+
+        $percentageChange = $previousMonthCount == 0
+            ? ($currentMonthCount > 0 ? 100 : 0)
+            : (($currentMonthCount - $previousMonthCount) / $previousMonthCount) * 100;
+
+        $followUpQuery = LeadFollowup::with(['enquiry', 'enquiry.representative', 'enquiry.client']);
+        if (!empty($repIds)) {
+            $followUpQuery->whereHas('enquiry', function ($q) use ($repIds) {
+                $q->whereIn('representative_user_id', $repIds);
+            });
+        }
+
+        $todayLeadIds = (clone $followUpQuery)
+            ->whereDate('next_followup_date', '=', $currentDate)
+            ->whereNotIn('status', [2, 5])
+            ->pluck('lead_id')
+            ->unique();
+
+        $missedLeadIds = (clone $followUpQuery)
+            ->whereDate('next_followup_date', '<', $currentDate)
+            ->whereIn('status', [0, 1, 4])
+            ->pluck('lead_id')
+            ->unique();
+
+        $allLeadIds = $todayLeadIds->merge($missedLeadIds)->unique()->values();
+        $latestFollowups = collect();
+        if ($allLeadIds->isNotEmpty()) {
+            $allFollowupsForLeads = LeadFollowup::with(['enquiry', 'enquiry.representative', 'enquiry.client'])
+                ->whereIn('lead_id', $allLeadIds)
+                ->orderByDesc('next_followup_date')
+                ->orderByDesc('created_at')
+                ->get()
+                ->groupBy('lead_id')
+                ->map(fn($group) => $group->first());
+
+            foreach ($allFollowupsForLeads as $latest) {
+                if (in_array($latest->status, [2, 5])) continue;
+                if (!$latest->next_followup_date) continue;
+
+                $latestDate = $latest->next_followup_date->toDateString();
+                if ($latestDate === $currentDate) {
+                    $latest->is_missed = false;
+                    $latestFollowups->push($latest);
+                } elseif ($latestDate < $currentDate && in_array($latest->status, [0, 1, 4])) {
+                    $latest->is_missed = true;
+                    $latestFollowups->push($latest);
+                }
+            }
+        }
+
+        $notMissed = $latestFollowups->filter(fn($f) => !$f->is_missed)->sortBy(fn($f) => $f->next_followup_date?->timestamp ?? PHP_INT_MAX);
+        $missed = $latestFollowups->filter(fn($f) => $f->is_missed)->sortByDesc(fn($f) => $f->next_followup_date?->timestamp ?? PHP_INT_MIN);
+        $allSorted = $notMissed->values()->merge($missed->values());
+
+        $todayFollowUpsCount = $allSorted->count();
+        $todayFollowUps = $allSorted->take(5)->values();
+
+        $dnpLeads = [];
+        $nextWeekDnpLeads = [];
+        if ($dnpServiceId) {
+            $dnpQuery = Lead::with(['client', 'representative'])
+                ->where(function ($query) use ($dnpServiceId) {
+                    $query->where('service_ids', 'like', '%' . $dnpServiceId . '%')
+                        ->orWhere('service_ids', 'like', '%"' . $dnpServiceId . '"%');
+                })
+                ->whereDate('updated_at', '>=', $currentMonthStart)
+                ->whereDate('updated_at', '<=', $nextMonthStart)
+                ->orderby('updated_at', 'desc');
+
+            if (!empty($repIds)) {
+                $dnpQuery->whereIn('representative_user_id', $repIds);
+            }
+
+            $dnpLeads = (clone $dnpQuery)->get();
+            $nextWeekDnpLeads = (clone $dnpQuery)->limit(7)->get();
+        }
+
+        $targetProgress = null;
+        $targetMonthName = null;
+        $targetMonthYear = null;
+        if ($currentUser->userType && $currentUser->userType->user_type === UserType::SALES_EXECUTIVE) {
+            $targetProgressData = $this->calculateTargetProgressForUser($currentUser, date('Y'), date('n'));
+            $targetProgress = [
+                'achievement_percentage' => $targetProgressData['achievement_percentage'],
+                'remaining_amount' => $targetProgressData['remaining_amount'],
+                'target_amount' => $targetProgressData['target_amount'],
+                'achieved_amount' => $targetProgressData['achieved_amount'],
+                'sales_amount' => $targetProgressData['sales_amount'],
+            ];
+            $targetMonthName = $targetProgressData['month_name'];
+            $targetMonthYear = $targetProgressData['year'];
+        }
+
+        $followupProductQuery = LeadFollowup::with(['enquiry.representative', 'enquiry.rideSegments'])
+            ->whereIn('status', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+
+        if (!empty($repIds)) {
+            $followupProductQuery->whereHas('enquiry', function ($q) use ($repIds) {
+                $q->whereIn('representative_user_id', $repIds);
+            });
+        }
+
+        $byServiceDateFollowups = (clone $followupProductQuery)
+            ->whereHas('enquiry.rideSegments', function ($q) use ($currentMonthStart, $currentMonthEnd) {
+                $q->where('from_date', '>=', $currentMonthStart)
+                    ->where('to_date', '<=', $currentMonthEnd);
+            })
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $byCreatedDateFollowups = (clone $followupProductQuery)
+            ->whereHas('enquiry', function ($q) use ($currentMonthStart, $nextMonthStart) {
+                $q->where('created_at', '>=', $currentMonthStart)
+                    ->where('created_at', '<', $nextMonthStart);
+            })
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $dataByServiceDate = $this->buildProductSummaryFromFollowups($byServiceDateFollowups);
+        $dataByCreatedDate = $this->buildProductSummaryFromFollowups($byCreatedDateFollowups);
+
+        $todayRows = [];
+        foreach ($todayFollowUps as $row) {
+            $enq = $row->enquiry;
+            $serviceNames = $enq->service_names ?? [];
+            $serviceText = is_array($serviceNames) ? implode(', ', $serviceNames) : ($serviceNames ?: 'N/A');
+            $todayRows[] = [
+                'sno' => count($todayRows) + 1,
+                'client_name' => $enq->client->name ?? 'N/A',
+                'contact_number' => $enq->client->contact_number ?? 'N/A',
+                'representative_name' => $enq->representative->name ?? '--',
+                'service_text' => $serviceText,
+                'next_followup' => $row->next_followup_date ? $row->next_followup_date->format('d M, H:i') : '--',
+                'followup_route' => route('admin.leads.follow-up.create', $enq->id ?? 0),
+            ];
+        }
+
+        $dnpRows = [];
+        foreach ($nextWeekDnpLeads as $index => $lead) {
+            $serviceNames = $lead->service_names ?? [];
+            $serviceText = is_array($serviceNames) ? implode(', ', $serviceNames) : ($serviceNames ?: 'N/A');
+            $dnpRows[] = [
+                'sno' => $index + 1,
+                'name' => $lead->client->name ?? 'N/A',
+                'number' => $lead->client->contact_number ?? 'N/A',
+                'service_text' => $serviceText,
+                'last_followup' => $lead->updated_at ? $lead->updated_at->format('d M, H:i') : '--',
+                'representative_name' => $lead->representative->name ?? 'N/A',
+                'view_route' => route('admin.clients.view', $lead->client->id),
+                'edit_route' => route('admin.clients.edit', $lead->client->id),
+            ];
+        }
+
+        return response()->json([
+            'data' => [
+                'leads_count' => $currentMonthCount,
+                'percentage_change' => round($percentageChange, 1),
+                'today_followups_count' => $todayFollowUpsCount,
+                'dnp_count' => count($dnpLeads),
+                'target_progress' => $targetProgress,
+                'target_month_name' => $targetMonthName,
+                'target_month_year' => $targetMonthYear,
+                'product_summary' => [
+                    'dataByProductDate' => $dataByServiceDate,
+                    'dataByCreatedDate' => $dataByCreatedDate,
+                ],
+                'today_followups' => $todayRows,
+                'dnp_leads' => $dnpRows,
+            ]
+        ]);
+    }
+
     public function getTodayFollowUpsData(Request $request)
     {
         $currentUser = auth()->user();
@@ -1024,10 +1239,10 @@ $adminPaidLeadIds = $adminFirstPaymentPerLead->filter(function ($first) use ($ad
 
     /**
      * Build product x status summary from a collection of followups.
-     * Uses the same logic as the KPI export:
-     *   Active = latest followup status [1]
-     *   Cancelled = latest followup status [2]
-     *   Completed = latest followup status [3,4,5,7,8]
+     * Uses the same logic as the KPI export and client status text mapping:
+     *   Active = latest followup status [0,1,6]
+     *   Cancelled = latest followup status [2,9]
+     *   Confirmed/Complete = latest followup status [3,4,5,7,8]
      * Groups by product (from enquiry.product_ids) and counts per unique lead.
      */
     private function buildProductSummaryFromFollowups($followups): array
@@ -1062,12 +1277,12 @@ $adminPaidLeadIds = $adminFirstPaymentPerLead->filter(function ($first) use ($ad
 
             $activeCount = $byLead->map(function ($leadGroup) {
                 $latest = $leadGroup->sortByDesc('created_at')->first();
-                return in_array($latest->status, [1]) ? 1 : 0;
+                return in_array($latest->status, [0, 1, 6]) ? 1 : 0;
             })->sum();
 
             $cancelledCount = $byLead->map(function ($leadGroup) {
                 $latest = $leadGroup->sortByDesc('created_at')->first();
-                return $latest->status == 2 ? 1 : 0;
+                return in_array($latest->status, [2, 9]) ? 1 : 0;
             })->sum();
 
             $completedCount = $byLead->map(function ($leadGroup) {
@@ -1075,10 +1290,27 @@ $adminPaidLeadIds = $adminFirstPaymentPerLead->filter(function ($first) use ($ad
                 return in_array($latest->status, [3, 4, 5, 7, 8]) ? 1 : 0;
             })->sum();
 
+            $otherCount = $byLead->map(function ($leadGroup) {
+                $latest = $leadGroup->sortByDesc('created_at')->first();
+                $status = $latest->status;
+                if (in_array($status, [0, 1, 6])) {
+                    return 0;
+                }
+                if (in_array($status, [2, 9])) {
+                    return 0;
+                }
+                if (in_array($status, [3, 4, 5, 7, 8])) {
+                    return 0;
+                }
+                return 1;
+            })->sum();
+
             $data[$productName] = [
                 'Active' => $activeCount,
                 'Cancelled' => $cancelledCount,
                 'Confirmed/Complete' => $completedCount,
+                'Other' => $otherCount,
+                'Total' => $byLead->count(),
             ];
         }
 

@@ -118,6 +118,14 @@
                             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Date - Place To</label>
                             <p class="text-gray-800 dark:text-white">{{ $clientInfo['trip_to'] }}</p>
                         </div>
+                        <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
+                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Number OF Passengers</label>
+                            <p class="text-gray-800 dark:text-white">{{ $clientInfo['passengers'] }}</p>
+                        </div>
+                        <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
+                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Occasion</label>
+                            <p class="text-gray-800 dark:text-white">{{ $clientInfo['occasion'] }}</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -159,6 +167,22 @@
                             <div class="xl:col-span-6 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
                                 <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Products</label>
                                 <p class="text-gray-800 dark:text-white">{{ $clientInfo['products'] ?? 'N/A' }}</p>
+                            </div>
+                            <div class="xl:col-span-6 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
+                                <label for="number_of_passengers" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Number OF Passengers</label>
+                                <input type="number" min="1" name="number_of_passengers" id="number_of_passengers"
+                                    class="ti-form-input rounded-sm form-control-sm" value="{{ old('number_of_passengers', $clientInfo['passengers'] === 'N/A' ? '' : $clientInfo['passengers']) }}">
+                                @error('number_of_passengers')
+                                    <p class="text-danger mt-1">{{ $message }}</p>
+                                @enderror
+                            </div>
+                            <div class="xl:col-span-6 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
+                                <label for="occasion" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Occasion</label>
+                                <input type="text" name="occasion" id="occasion"
+                                    class="ti-form-input rounded-sm form-control-sm" value="{{ old('occasion', $clientInfo['occasion'] === 'N/A' ? '' : $clientInfo['occasion']) }}">
+                                @error('occasion')
+                                    <p class="text-danger mt-1">{{ $message }}</p>
+                                @enderror
                             </div>
                             <div class="xl:col-span-6 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
                                 <label for="services"
@@ -939,42 +963,63 @@
             }));
         }
 
-        function syncExtraServicesForSelectedServices(preserveSelected = true) {
-            const servicesSelect = document.getElementById('services');
-            const extraServicesSelect = document.getElementById('extra_services');
+      function syncExtraServicesForSelectedServices(preserveSelected = true) {
+    const servicesSelect = document.getElementById('services');
+    const extraServicesSelect = document.getElementById('extra_services');
 
-            if (!servicesSelect || !extraServicesSelect) {
-                return;
-            }
+    if (!servicesSelect || !extraServicesSelect) {
+        return;
+    }
 
-            captureOriginalExtraServiceOptions(extraServicesSelect);
+    captureOriginalExtraServiceOptions(extraServicesSelect);
 
-            const selectedServiceIds = getSelectedValues(servicesSelect);
-            const mappedExtraServiceIds = getMappedExtraServiceIds(selectedServiceIds);
-            const currentSelectedExtraIds = getSelectedValues(extraServicesSelect);
-            const hasServiceFilter = selectedServiceIds.length > 0;
-            const allowedIds = hasServiceFilter
-                ? Array.from(new Set(mappedExtraServiceIds.map(String)))
-                : [];
-            const selectedIds = preserveSelected
-                ? currentSelectedExtraIds.filter(id => allowedIds.includes(id))
-                : [];
+    const selectedServiceIds = getSelectedValues(servicesSelect);
+    const mappedExtraServiceIds = getMappedExtraServiceIds(selectedServiceIds);
+    const currentSelectedExtraIds = getSelectedValues(extraServicesSelect);
 
-            extraServicesSelect.innerHTML = '';
-            originalExtraServiceOptions.forEach(optionData => {
-                const value = String(optionData.value);
-                if (!allowedIds.includes(value)) {
-                    return;
-                }
+    const allowedIds = selectedServiceIds.length > 0
+        ? Array.from(new Set(mappedExtraServiceIds.map(String)))
+        : [];
 
-                const option = new Option(optionData.text, optionData.value, false, selectedIds.includes(value));
-                extraServicesSelect.appendChild(option);
-            });
+    // Preserve selected mapped extras
+    const preservedSelectedIds = preserveSelected
+        ? currentSelectedExtraIds.filter(id =>
+            allowedIds.includes(String(id))
+        )
+        : [];
 
-            if (typeof $ !== 'undefined' && $.fn.select2) {
-                $('#extra_services').trigger('change.select2');
-            }
+    // Automatically select all mapped extra services
+    const selectedIds = Array.from(
+        new Set([
+            ...preservedSelectedIds.map(String),
+            ...allowedIds
+        ])
+    );
+
+    extraServicesSelect.innerHTML = '';
+
+    originalExtraServiceOptions.forEach(optionData => {
+        const value = String(optionData.value);
+
+        if (!allowedIds.includes(value)) {
+            return;
         }
+
+        const option = new Option(
+            optionData.text,
+            optionData.value,
+            false,
+            selectedIds.includes(value)
+        );
+
+        extraServicesSelect.appendChild(option);
+    });
+
+    // Refresh Select2 display without triggering recursive change
+    if (typeof $ !== 'undefined' && $.fn.select2) {
+        $('#extra_services').trigger('change.select2');
+    }
+}
 
         // NEW: Build service breakdown table
         function buildServiceBreakdownTable() {

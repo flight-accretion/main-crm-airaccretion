@@ -88,6 +88,7 @@ Route::middleware('auth')->group(function () {
     // Sales Dashboard
     Route::get('/sales-dashboard', [DashboardController::class, 'getSalesDashboard'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard');
     Route::get('/sales-dashboard/target-progress', [DashboardController::class, 'getTargetProgressData'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard.target-progress');
+    Route::get('/sales-dashboard/overview-data', [DashboardController::class, 'getSalesDashboardOverviewData'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard.overview-data');
     Route::get('/sales-dashboard/product-summary', [DashboardController::class, 'getProductSummaryData'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard.product-summary');
     Route::get('/sales-dashboard/today-followups', [DashboardController::class, 'getTodayFollowUpsData'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard.today-followups');
     Route::post('/sales-dashboard/popup/accept', [DashboardController::class, 'acceptPopup'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard.popup.accept');

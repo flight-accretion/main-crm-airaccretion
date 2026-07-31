@@ -187,7 +187,7 @@
                                 <div class="flex-grow">
                                     <span class="font-semibold text-[#8c9097] dark:text-white/50 block mb-1">Total
                                         Leads</span>
-                                    <h5 class="font-semibold mb-1 text-[1.25rem]">{{ $leads['leadsCount'] }}</h5>
+                                    <h5 id="total_leads_count" class="font-semibold mb-1 text-[1.25rem]">{{ $leads['leadsCount'] }}</h5>
                                 </div>
                                 <div class="flex">
                                     <span
@@ -198,7 +198,7 @@
                             </div>
                             <div class="text-[0.75rem] mb-0 text-primary">
                                 <div class="flex items-start justify-between">
-                                    <div class="text-warning text-[0.85rem]">
+                                    <div id="total_leads_percentage" class="text-warning text-[0.85rem]">
                                         <i
                                             class="bx {{ $leads['percentageChange'] > 0 ? 'bx-trending-up' : 'bx-trending-down' }} text-[1rem]"></i>
                                         {{ $leads['percentageChange'] > 0 ? '+' . $leads['percentageChange'] . '%' :
@@ -223,7 +223,7 @@
                                 <div class="flex-grow">
                                     <span class="font-semibold text-[#8c9097] dark:text-white/50 block mb-1">Today's
                                         Follow-up</span>
-                                    <h5 class="font-semibold mb-1 text-[1.25rem]">{{ $todayFollowUpsCount ?? count($todayFollowUps) }}</h5>
+                                    <h5 id="today_followups_count" class="font-semibold mb-1 text-[1.25rem]">{{ $todayFollowUpsCount ?? count($todayFollowUps) }}</h5>
                                 </div>
                                 <div class="flex">
                                     <span
@@ -254,7 +254,7 @@
                                 <div class="flex-grow">
                                     <span class="font-semibold text-[#8c9097] dark:text-white/50 block mb-1">DNP
                                         Report</span>
-                                    <h5 class="font-semibold mb-1 text-[1.25rem]">{{ count($dnpLeads) }}</h5>
+                                    <h5 id="dnp_report_count" class="font-semibold mb-1 text-[1.25rem]">{{ count($dnpLeads) }}</h5>
                                 </div>
                                 <div class="flex">
                                     <span
@@ -442,13 +442,11 @@
                         <h5 class="font-semibold mb-0 leading-none text-[1.25rem]">Total Completed Sales vs Target</h5>
                     </div>
                 </div>
-                <div class="hs-dropdown ti-dropdown ms-4">
+                <div class="ms-4">
                     <div class="relative inline-block">
-                        <select id="manager_exec_select"
+                        <select id="dashboard_common_select"
                             class="appearance-none form-control-sm py-2 pr-8 pl-2 border rounded-md text-sm">
                             <option value="">Team (All)</option>
-                            {{-- If logged-in user is a sales manager, include themselves as an explicit option so they
-                            can view their individual totals --}}
                             @if(in_array(Auth::user()->userType->user_type, [\App\Models\UserType::SALES_MANAGER,
                             \App\Models\UserType::SENIOR_SALES_MANAGER]))
                             <option value="{{ Auth::id() }}">{{ Auth::user()->name }} (You)</option>
@@ -459,12 +457,8 @@
                             </option>
                             @endforeach
                         </select>
-                        <!-- @if(in_array(Auth::user()->userType->user_type, [\App\Models\UserType::ADMIN, \App\Models\UserType::SUPER_ADMIN]))
-                                                <div class="text-[0.75rem] text-gray-500 mt-1">Team (All) includes all Sales Managers and Sales Executives and aggregates their targets and achieved amounts.</div>
-                                            @endif -->
-                        <span id="manager_loading_spinner" class="hidden ms-2 text-sm text-muted" aria-hidden="true"
+                        <span id="dashboard_loading_spinner" class="hidden ms-2 text-sm text-muted" aria-hidden="true"
                             style="display:none;">
-                            <!-- simple inline spinner -->
                             <svg class="inline-block" width="16" height="16" viewBox="0 0 24 24" fill="none"
                                 xmlns="http://www.w3.org/2000/svg">
                                 <circle cx="12" cy="12" r="10" stroke="#6b7280" stroke-opacity="0.25" stroke-width="4">
@@ -611,41 +605,6 @@
                                     </span>
                                 </div>
                                 <h5 class="font-semibold mb-0 leading-none text-[1.25rem]">Today's Follow-up</h5>
-                                <div class="hs-dropdown ti-dropdown">
-                                    <div class="relative inline-block d-flex">
-                                        @if(!in_array(Auth::user()->userType->user_type,
-                                        [\App\Models\UserType::SALES_EXECUTIVE]))
-                                        <select id="today_rep_select"
-                                            class="appearance-none w-full form-control-sm py-2 pr-8 pl-2 border rounded-md text-sm">
-                                            <option value="">Team (All)</option>
-                                            @if(in_array(Auth::user()->userType->user_type,
-                                            [\App\Models\UserType::SALES_MANAGER,
-                                            \App\Models\UserType::SENIOR_SALES_MANAGER]))
-                                            <option value="{{ Auth::id() }}">{{ Auth::user()->name }} (You)</option>
-                                            @endif
-                                            @foreach(($assignedExecutivesToday ?? $assignedExecutives ?? collect()) as $exec)
-                                            @php $typeLabel = $exec->userType->user_type ?? ''; @endphp
-                                            <option value="{{ $exec->id }}">{{ $exec->name }} @if($typeLabel) ({{
-                                                $typeLabel }}) @endif</option>
-                                            @endforeach
-                                        </select>
-                                        @endif
-                                        <span id="today_loading_spinner" class="hidden ms-2 text-sm text-muted"
-                                            aria-hidden="true" style="display:none;">
-                                            <svg class="inline-block" width="16" height="16" viewBox="0 0 24 24"
-                                                fill="none" xmlns="http://www.w3.org/2000/svg">
-                                                <circle cx="12" cy="12" r="10" stroke="#6b7280" stroke-opacity="0.25"
-                                                    stroke-width="4"></circle>
-                                                <path d="M22 12a10 10 0 0 0-10-10" stroke="#3b82f6" stroke-width="4"
-                                                    stroke-linecap="round">
-                                                    <animateTransform attributeName="transform" type="rotate"
-                                                        from="0 12 12" to="360 12 12" dur="0.9s"
-                                                        repeatCount="indefinite" />
-                                                </path>
-                                            </svg>
-                                        </span>
-                                    </div>
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -753,7 +712,7 @@
                     </div>
                     <div class="box-body">
                         <div class="table-responsive">
-                            <table class="table whitespace-nowrap min-w-full caption-bottom">
+                            <table id="dnp-report-table" class="table whitespace-nowrap min-w-full caption-bottom">
                                 <thead>
                                     <tr class="border-b border-defaultborder">
                                         <th scope="col" class="text-start">S.No.</th>
@@ -839,38 +798,6 @@
                         <h5 class="font-semibold mb-0 leading-none text-[1.25rem]">Product x Status Summary</h5>
                     </div>
                 </div>
-                <div class="ms-4">
-                    <div class="relative inline-block">
-                        @if(!in_array(Auth::user()->userType->user_type, [\App\Models\UserType::SALES_EXECUTIVE]))
-                        <select id="product_rep_select"
-                            class="appearance-none form-control-sm py-2 pr-8 pl-2 border rounded-md text-sm">
-                            <option value="">Team (All)</option>
-                            @if(in_array(Auth::user()->userType->user_type, [\App\Models\UserType::SALES_MANAGER,
-                            \App\Models\UserType::SENIOR_SALES_MANAGER]))
-                            <option value="{{ Auth::id() }}">{{ Auth::user()->name }} (You)</option>
-                            @endif
-                            @foreach(($assignedExecutivesAll ?? $assignedExecutives ?? collect()) as $exec)
-                            @php $typeLabel = $exec->userType->user_type ?? ''; @endphp
-                            <option value="{{ $exec->id }}">{{ $exec->name }} @if($typeLabel) ({{ $typeLabel }}) @endif
-                            </option>
-                            @endforeach
-                        </select>
-                        @endif
-                        <span id="product_loading_spinner" class="hidden ms-2 text-sm text-muted" aria-hidden="true"
-                            style="display:none;">
-                            <svg class="inline-block" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                                xmlns="http://www.w3.org/2000/svg">
-                                <circle cx="12" cy="12" r="10" stroke="#6b7280" stroke-opacity="0.25" stroke-width="4">
-                                </circle>
-                                <path d="M22 12a10 10 0 0 0-10-10" stroke="#3b82f6" stroke-width="4"
-                                    stroke-linecap="round">
-                                    <animateTransform attributeName="transform" type="rotate" from="0 12 12"
-                                        to="360 12 12" dur="0.9s" repeatCount="indefinite" />
-                                </path>
-                            </svg>
-                        </span>
-                    </div>
-                </div>
             </div>
             <div class="box-body">
                 <nav class="tab-style-1 sm:flex bg-light p-[0.65rem] rounded-sm" aria-label="Tabs" role="tablist">
@@ -906,6 +833,9 @@
                                                 <th scope="col" class="text-center text-danger">Cancelled</th>
                                                 <th scope="col" class="text-center text-success">Lead Complete
                                                 </th>
+                                                <!-- <th scope="col" class="text-center text-warning">Other</th> -->
+                                                <th scope="col" class="text-center">Total Leads
+                                                </th>
                                             </tr>
                                         </thead>
                                         <tbody id="product_by_service_tbody">
@@ -920,6 +850,12 @@
                                                 </td>
                                                 <td class="text-center"><span class="badge !rounded-full bg-black/10">{{
                                                         $service['Confirmed/Complete'] }}</span>
+                                                </td>
+                                                <!-- <td class="text-center"><span class="badge !rounded-full bg-black/10">{{
+                                                        $service['Other'] ?? 0 }}</span> -->
+                                                </td>
+                                                <td class="text-center"><span class="badge !rounded-full bg-black/10">{{
+                                                        $service['Total'] }}</span>
                                                 </td>
                                             </tr>
                                             @empty
@@ -976,6 +912,9 @@
                                                 <th scope="col" class="text-center text-danger">Cancelled</th>
                                                 <th scope="col" class="text-center text-success">Lead Complete
                                                 </th>
+                                                <!-- <th scope="col" class="text-center text-warning">Other</th> -->
+                                                <th scope="col" class="text-center">Total Leads
+                                                </th>
                                             </tr>
                                         </thead>
                                         <tbody id="product_by_created_tbody">
@@ -990,6 +929,12 @@
                                                 </td>
                                                 <td class="text-center"><span class="badge !rounded-full bg-black/10">{{
                                                         $service['Confirmed/Complete'] }}</span>
+                                                </td>
+                                                <!-- <td class="text-center"><span class="badge !rounded-full bg-black/10">{{
+                                                        $service['Other'] ?? 0 }}</span>
+                                                </td> -->
+                                                <td class="text-center"><span class="badge !rounded-full bg-black/10">{{
+                                                        $service['Total'] }}</span>
                                                 </td>
                                             </tr>
                                             @empty
@@ -1020,78 +965,31 @@
                 leadPopupModal.classList.remove('hidden');
             }
 
-            // Product summary filter: fetch and replace product x status tables based on selected representative/team
-            (function(){
-                var url = "{{ route('admin.sales-dashboard.product-summary') }}";
-                var select = document.getElementById('product_rep_select');
-                var spinner = document.getElementById('product_loading_spinner');
+            var commonSelect = document.getElementById('dashboard_common_select');
+            var spinner = document.getElementById('dashboard_loading_spinner');
+            var overviewUrl = "{{ route('admin.sales-dashboard.overview-data') }}";
 
-                function escapeHtml(text){
-                    var map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
-                    return String(text).replace(/[&<>\"']/g, function(m){ return map[m]; });
-                }
+            function escapeHtml(text){
+                var map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+                return String(text).replace(/[&<>\"']/g, function(m){ return map[m]; });
+            }
 
-                function buildRows(dataObj){
-                    var html = '';
-                    if (!dataObj || Object.keys(dataObj).length === 0) {
-                        html += '<tr><td colspan="9" class="text-center">No Data Available</td></tr>';
-                        return html;
-                    }
-                    Object.keys(dataObj).forEach(function(product){
-                        var item = dataObj[product] || {Active:0, Cancelled:0, 'Confirmed/Complete':0};
-                        html += '<tr class="border-b border-defaultborder">';
-                        html += '<th scope="row" class="text-start">' + escapeHtml(product) + '</th>';
-                        html += '<td class="text-center"><span class="badge !rounded-full bg-black/10">' + (item['Active'] || 0) + '</span></td>';
-                        html += '<td class="text-center"><span class="badge !rounded-full bg-black/10">' + (item['Cancelled'] || 0) + '</span></td>';
-                        html += '<td class="text-center"><span class="badge !rounded-full bg-black/10">' + (item['Confirmed/Complete'] || 0) + '</span></td>';
-                        html += '</tr>';
-                    });
-                    return html;
-                }
+            function formatCurrency(value){
+                var amount = Number(value || 0);
+                return '₹' + amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            }
 
-                if (select) {
-                    select.addEventListener('change', function(e){
-                        var val = e.target.value;
-                        var query = val ? ('?user_id=' + encodeURIComponent(val)) : '';
-                        try { select.disabled = true; } catch (err) {}
-                        if (spinner) { spinner.style.display = 'inline-block'; spinner.classList.remove('hidden'); }
-
-                        fetch(url + query, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-                        .then(function(resp){ if (!resp.ok) throw resp; return resp.json(); })
-                        .then(function(json){
-                            var d = (json.data || {});
-                            var byService = d.dataByProductDate || {};
-                            var byCreated = d.dataByCreatedDate || {};
-
-                            var serviceBody = document.getElementById('product_by_service_tbody');
-                            var createdBody = document.getElementById('product_by_created_tbody');
-                            if (serviceBody) serviceBody.innerHTML = buildRows(byService);
-                            if (createdBody) createdBody.innerHTML = buildRows(byCreated);
-                        }).catch(function(err){
-                            console.error('Failed to load product summary', err);
-                        }).finally(function(){
-                            try { select.disabled = false; } catch (err) {}
-                            if (spinner) { spinner.style.display = 'none'; spinner.classList.add('hidden'); }
-                        });
-                    });
-                }
-            })();
-
-            var url = "{{ route('admin.sales-dashboard.target-progress') }}";
-
-            function updateManagerDisplay(data) {
-                var d = data.data || {};
-                var pct = d.achievement_percentage || 0;
-                var achieved = d.achieved_amount || 0;
-                var target = d.target_amount || 0;
-                var remaining = d.remaining_amount || 0;
+            function updateManagerDisplay(data){
+                var pct = Number(data && data.achievement_percentage ? data.achievement_percentage : 0);
+                var achieved = Number(data && data.achieved_amount ? data.achieved_amount : 0);
+                var target = Number(data && data.target_amount ? data.target_amount : 0);
+                var remaining = Number(data && data.remaining_amount ? data.remaining_amount : 0);
 
                 var pctEl = document.getElementById('manager_progress_percent');
                 if (pctEl) pctEl.innerText = pct + '%';
 
                 var bar = document.getElementById('manager_progress_bar');
                 if (bar) {
-                    // Set width via cssText to avoid template + percent parsing issues in some linters
                     bar.style.cssText = 'width: ' + pct + '%';
                     bar.setAttribute('aria-valuenow', pct);
                 }
@@ -1100,70 +998,40 @@
                 var elT = document.getElementById('manager_target');
                 var elS = document.getElementById('manager_sales');
                 var elR = document.getElementById('manager_remaining');
-                if (elA) elA.innerText = '₹' + Number(achieved).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
-                if (elS) elS.innerText = '₹' + Number(d.sales_amount || d.achieved_amount || 0).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
-                if (elT) elT.innerText = '₹' + Number(target).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
-                if (elR) elR.innerText = '₹' + Number(remaining).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+                var monthEl = document.getElementById('manager_target_month');
+                if (elA) elA.innerText = formatCurrency(achieved);
+                if (elS) elS.innerText = formatCurrency(data.sales_amount || achieved || 0);
+                if (elT) elT.innerText = formatCurrency(target);
+                if (elR) elR.innerText = formatCurrency(remaining);
+                if (monthEl) monthEl.innerText = (data.month_name || '') + ' ' + (data.year || '');
             }
 
-            var select = document.getElementById('manager_exec_select');
-            var spinner = document.getElementById('manager_loading_spinner');
-            // initialize progress bar width from server-rendered data-percent if present
-            (function setInitialBar(){
-                var bar = document.getElementById('manager_progress_bar');
-                var pctEl = document.getElementById('manager_progress_percent');
-                if (bar) {
-                    var pct = bar.getAttribute('data-percent');
-                    if ((!pct || pct === 'undefined') && pctEl) {
-                        pct = pctEl.innerText.replace('%','') || 0;
-                    }
-                    try { bar.style.cssText = 'width: ' + (pct || 0) + '%'; bar.setAttribute('aria-valuenow', pct || 0); } catch(err) {}
+            function updateSummaryCards(data){
+                var totalCountEl = document.getElementById('total_leads_count');
+                if (totalCountEl) totalCountEl.innerText = data.leads_count ?? 0;
+
+                var changeEl = document.getElementById('total_leads_percentage');
+                if (changeEl) {
+                    var change = Number(data.percentage_change || 0);
+                    var icon = change > 0 ? 'bx-trending-up' : 'bx-trending-down';
+                    changeEl.innerHTML = '<i class="bx ' + icon + ' text-[1rem]"></i> ' + (change > 0 ? '+' : '') + change + '% vs last month';
+                    changeEl.classList.remove('text-warning', 'text-danger', 'text-success');
+                    changeEl.classList.add(change >= 0 ? 'text-warning' : 'text-danger');
                 }
-            })();
-            if (select) {
-                select.addEventListener('change', function(e){
-                    var val = e.target.value;
-                    var query = val ? ('?user_id=' + encodeURIComponent(val)) : '';
 
-                    // UI: disable select and show spinner
-                    try { select.disabled = true; } catch (err) {}
-                    if (spinner) { spinner.style.display = 'inline-block'; spinner.classList.remove('hidden'); }
-                    var pctEl = document.getElementById('manager_progress_percent');
-                    if (pctEl) pctEl.innerText = '...';
+                var todayCountEl = document.getElementById('today_followups_count');
+                if (todayCountEl) todayCountEl.innerText = data.today_followups_count ?? 0;
 
-                    fetch(url + query, {
-                        credentials: 'same-origin',
-                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
-                    }).then(function(resp){
-                        if (!resp.ok) throw resp;
-                        return resp.json();
-                    }).then(function(json){
-                        updateManagerDisplay(json);
-                    }).catch(function(err){
-                        console.error('Failed to load target progress', err);
-                        updateManagerDisplay({ data: { achievement_percentage: 0, achieved_amount: 0, target_amount: 0, remaining_amount: 0 } });
-                    }).finally(function(){
-                        try { select.disabled = false; } catch (err) {}
-                        if (spinner) { spinner.style.display = 'none'; spinner.classList.add('hidden'); }
-                    });
-                });
-            }
-        })();
-    </script>
-    <script>
-        (function(){
-            var url = "{{ route('admin.sales-dashboard.today-followups') }}";
-            var select = document.getElementById('today_rep_select');
-            var spinner = document.getElementById('today_loading_spinner');
-
-            function escapeHtml(text){
-                var map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
-                return String(text).replace(/[&<>\"']/g, function(m){ return map[m]; });
+                var dnpCountEl = document.getElementById('dnp_report_count');
+                if (dnpCountEl) dnpCountEl.innerText = data.dnp_count ?? 0;
             }
 
-            function buildRows(items){
+            function renderTodayRows(items){
+                var tbody = document.getElementById('today_followups_tbody');
+                if (!tbody) return;
                 if (!items || items.length === 0) {
-                    return '<tr><td colspan="7" class="text-center">No Data Available</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="7" class="text-center">No Data Available</td></tr>';
+                    return;
                 }
                 var html = '';
                 items.forEach(function(it, idx){
@@ -1177,30 +1045,100 @@
                     html += '<td>' + (it.followup_route ? ('<a aria-label="anchor" href="' + escapeHtml(it.followup_route) + '" class="ti-btn ti-btn-icon ti-btn-sm ti-btn-primary-full" target="_blank" title="View"><i class="ri-eye-line"></i></a>') : '') + '</td>';
                     html += '</tr>';
                 });
+                tbody.innerHTML = html;
+            }
+
+            function renderDnpRows(items){
+                var tbody = document.querySelector('#dnp-report-table tbody');
+                if (!tbody) return;
+                if (!items || items.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="text-center">No Data Available</td></tr>';
+                    return;
+                }
+                var html = '';
+                items.forEach(function(it, idx){
+                    html += '<tr class="border-b border-defaultborder">';
+                    html += '<td scope="row">' + (idx + 1) + '</td>';
+                    html += '<td>' + escapeHtml(it.name) + '</td>';
+                    html += '<td>' + escapeHtml(it.number) + '</td>';
+                    html += '<td>' + escapeHtml(it.service_text) + '</td>';
+                    html += '<td class="text-center">' + escapeHtml(it.last_followup) + '</td>';
+                    html += '<td>' + escapeHtml(it.representative_name) + '</td>';
+                    html += '<td>' + (it.view_route ? '<a aria-label="anchor" href="' + escapeHtml(it.view_route) + '" class="ti-btn ti-btn-icon ti-btn-sm ti-btn-primary-full" title="View"><i class="ri-eye-line"></i></a>' : '') + (it.edit_route ? '<a aria-label="anchor" href="' + escapeHtml(it.edit_route) + '" class="ti-btn ti-btn-icon ti-btn-sm ti-btn-info-full" title="Edit"><i class="ri-edit-line"></i></a>' : '') + '</td>';
+                    html += '</tr>';
+                });
+                tbody.innerHTML = html;
+            }
+
+            function renderProductRows(byService, byCreated){
+                var serviceBody = document.getElementById('product_by_service_tbody');
+                var createdBody = document.getElementById('product_by_created_tbody');
+                if (serviceBody) serviceBody.innerHTML = buildProductRows(byService);
+                if (createdBody) createdBody.innerHTML = buildProductRows(byCreated);
+            }
+
+            function buildProductRows(dataObj){
+                var html = '';
+                if (!dataObj || Object.keys(dataObj).length === 0) {
+                    return '<tr><td colspan="5" class="text-center">No Data Available</td></tr>';
+                }
+                Object.keys(dataObj).forEach(function(product){
+                    var item = dataObj[product] || { Active: 0, Cancelled: 0, 'Confirmed/Complete': 0, Total: 0 };
+                    html += '<tr class="border-b border-defaultborder">';
+                    html += '<th scope="row" class="text-start">' + escapeHtml(product) + '</th>';
+                    html += '<td class="text-center"><span class="badge !rounded-full bg-black/10">' + (item['Active'] || 0) + '</span></td>';
+                    html += '<td class="text-center"><span class="badge !rounded-full bg-black/10">' + (item['Cancelled'] || 0) + '</span></td>';
+                    html += '<td class="text-center"><span class="badge !rounded-full bg-black/10">' + (item['Confirmed/Complete'] || 0) + '</span></td>';
+                    html += '<td class="text-center"><span class="badge !rounded-full bg-black/10">' + (item['Total'] || 0) + '</span></td>';
+                    html += '</tr>';
+                });
                 return html;
             }
 
-            if (select) {
-                select.addEventListener('change', function(e){
-                    var val = e.target.value;
-                    var query = val ? ('?user_id=' + encodeURIComponent(val)) : '';
-                    try { select.disabled = true; } catch (err) {}
-                    if (spinner) { spinner.style.display = 'inline-block'; spinner.classList.remove('hidden'); }
+            function refreshDashboard(userId){
+                var query = userId ? ('?user_id=' + encodeURIComponent(userId)) : '';
+                try { commonSelect.disabled = true; } catch (err) {}
+                if (spinner) { spinner.style.display = 'inline-block'; spinner.classList.remove('hidden'); }
+                var pctEl = document.getElementById('manager_progress_percent');
+                if (pctEl) pctEl.innerText = '...';
 
-                    fetch(url + query, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                fetch(overviewUrl + query, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
                     .then(function(resp){ if (!resp.ok) throw resp; return resp.json(); })
                     .then(function(json){
-                        var items = json.data || [];
-                        var tbody = document.getElementById('today_followups_tbody');
-                        if (tbody) tbody.innerHTML = buildRows(items);
+                        var data = json.data || {};
+                        updateSummaryCards(data);
+                        if (data.target_progress) {
+                            updateManagerDisplay(Object.assign({}, data.target_progress, {
+                                month_name: data.target_month_name || '',
+                                year: data.target_month_year || ''
+                            }));
+                        }
+                        renderTodayRows(data.today_followups || []);
+                        renderDnpRows(data.dnp_leads || []);
+                        renderProductRows(data.product_summary && data.product_summary.dataByProductDate ? data.product_summary.dataByProductDate : {}, data.product_summary && data.product_summary.dataByCreatedDate ? data.product_summary.dataByCreatedDate : {});
                     }).catch(function(err){
-                        console.error('Failed to load today followups', err);
+                        console.error('Failed to load dashboard overview', err);
                     }).finally(function(){
-                        try { select.disabled = false; } catch (err) {}
+                        try { commonSelect.disabled = false; } catch (err) {}
                         if (spinner) { spinner.style.display = 'none'; spinner.classList.add('hidden'); }
                     });
-                });
             }
+
+            if (commonSelect) {
+                commonSelect.addEventListener('change', function(e){ refreshDashboard(e.target.value); });
+            }
+
+            (function setInitialBar(){
+                var bar = document.getElementById('manager_progress_bar');
+                var pctEl = document.getElementById('manager_progress_percent');
+                if (bar) {
+                    var pct = bar.getAttribute('data-percent');
+                    if ((!pct || pct === 'undefined') && pctEl) {
+                        pct = pctEl.innerText.replace('%','') || 0;
+                    }
+                    try { bar.style.cssText = 'width: ' + (pct || 0) + '%'; bar.setAttribute('aria-valuenow', pct || 0); } catch(err) {}
+                }
+            })();
         })();
     </script>
 @stop

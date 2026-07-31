@@ -173,12 +173,6 @@ class ClientController extends Controller
             $query->whereIn('representative_user_id', $representatives);
         }
 
-        if ($dnpServiceId && !$request->filled('service_ids')) {
-            $pattern = '%' . addcslashes($dnpServiceId, '%_') . '%';
-            $quoted = DB::getPdo()->quote($pattern);
-            $query->whereRaw("replace(trim(both '\"' from service_ids::text), E'\\\\', '') NOT LIKE $quoted");
-        }
-
         // Service Date filters
         if ($request->filled('from_date')) {
             $fromDate = Carbon::parse($request->from_date)->startOfDay();
@@ -284,6 +278,11 @@ class ClientController extends Controller
                 ->select('id', 'service', 'status')
                 ->get();
         });
+
+        $dnpService = Service::whereRaw("LOWER(service) = ?", ['call not connected'])->first();
+        if ($dnpService && !$services->contains('id', $dnpService->id)) {
+            $services->push($dnpService);
+        }
 
         $products = \Illuminate\Support\Facades\Cache::remember('active_products', 3600, function () {
             return Product::where('status', 1)
@@ -2160,6 +2159,8 @@ class ClientController extends Controller
                 'services.*' => 'exists:services,id',
                 'extra_services' => 'nullable|array',
                 'extra_services.*' => 'exists:extra_services,id',
+                'number_of_passengers' => 'nullable|integer|min:1|max:100',
+                'occasion' => 'nullable|string|max:255',
             ]);
 
             if ($validator->fails()) {
@@ -2294,6 +2295,21 @@ class ClientController extends Controller
                 if (!empty($invalidExtraIds)) {
                     throw new \Exception('Selected extra service(s) are not valid for the chosen service(s).');
                 }
+            }
+
+            $leadUpdates = [];
+            if ($request->has('number_of_passengers')) {
+                $passengerInput = $request->input('number_of_passengers');
+                $leadUpdates['number_of_passengers'] = $passengerInput !== null && $passengerInput !== ''
+                    ? (int) $passengerInput
+                    : null;
+            }
+            if ($request->has('occasion')) {
+                $occasionInput = trim((string) $request->input('occasion'));
+                $leadUpdates['occasion'] = $occasionInput !== '' ? $occasionInput : null;
+            }
+            if (!empty($leadUpdates)) {
+                $lead->update(array_merge($leadUpdates, ['updated_at' => now()]));
             }
 
             if (!empty($services)) {
@@ -2590,7 +2606,9 @@ class ClientController extends Controller
             'phone' => $lead->client->contact_number,
             'services' => 'N/A', // Default value
             'trip_from' => 'N/A',
-            'trip_to' => 'N/A'
+            'trip_to' => 'N/A',
+            'passengers' => $lead->number_of_passengers ?? 'N/A',
+            'occasion' => $lead->occasion ?? 'N/A',
         ];
 
         // Get ALL available services with active mapped extra services for the follow-up picker

@@ -102,7 +102,7 @@
                 <select name="service_ids" class="js-example-basic-single w-full form-control-sm" id="service-filter">
                     <option value="">Select Service</option>
                     @foreach ($services as $service)
-                        <option value="{{ $service->id }}" {{ request('service_ids') == $service->id ? 'selected' : '' }}>{{ $service->service }}</option>
+                        <option value="{{ $service->id }}" {{ request('service_ids') == $service->id ? 'selected' : '' }}>{{ str_contains(strtolower($service->service), 'call not connected') ? 'DNP' : $service->service }}</option>
                     @endforeach
                 </select>
             </div>
