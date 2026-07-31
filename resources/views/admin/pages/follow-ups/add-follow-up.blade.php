@@ -896,8 +896,8 @@
         // Service and extra service pricing data
         const servicePrices = @json($servicePrices);
         const extraServicePrices = @json($extraServicePrices);
-        const servicesData = @json($services);
-        const extraServicesData = @json($allExtraServices);
+        const servicesData = Object.values(@json($services));
+        const extraServicesData = Object.values(@json($allExtraServices));
         const serviceExtraServicesMap = @json($serviceExtraServicesMap ?? []);
         // Approved paid sum and pending amount (server-side computed)
         const approvedPaidSum = @json($approvedPaidSum ?? 0);
@@ -963,63 +963,42 @@
             }));
         }
 
-      function syncExtraServicesForSelectedServices(preserveSelected = true) {
-    const servicesSelect = document.getElementById('services');
-    const extraServicesSelect = document.getElementById('extra_services');
+        function syncExtraServicesForSelectedServices(preserveSelected = true) {
+            const servicesSelect = document.getElementById('services');
+            const extraServicesSelect = document.getElementById('extra_services');
 
-    if (!servicesSelect || !extraServicesSelect) {
-        return;
-    }
+            if (!servicesSelect || !extraServicesSelect) {
+                return;
+            }
 
-    captureOriginalExtraServiceOptions(extraServicesSelect);
+            captureOriginalExtraServiceOptions(extraServicesSelect);
 
-    const selectedServiceIds = getSelectedValues(servicesSelect);
-    const mappedExtraServiceIds = getMappedExtraServiceIds(selectedServiceIds);
-    const currentSelectedExtraIds = getSelectedValues(extraServicesSelect);
+            const selectedServiceIds = getSelectedValues(servicesSelect);
+            const mappedExtraServiceIds = getMappedExtraServiceIds(selectedServiceIds);
+            const currentSelectedExtraIds = getSelectedValues(extraServicesSelect);
+            const hasServiceFilter = selectedServiceIds.length > 0;
+            const allowedIds = hasServiceFilter
+                ? Array.from(new Set(mappedExtraServiceIds.map(String)))
+                : [];
+            const selectedIds = preserveSelected
+                ? currentSelectedExtraIds.filter(id => allowedIds.includes(id))
+                : [];
 
-    const allowedIds = selectedServiceIds.length > 0
-        ? Array.from(new Set(mappedExtraServiceIds.map(String)))
-        : [];
+            extraServicesSelect.innerHTML = '';
+            originalExtraServiceOptions.forEach(optionData => {
+                const value = String(optionData.value);
+                if (!allowedIds.includes(value)) {
+                    return;
+                }
 
-    // Preserve selected mapped extras
-    const preservedSelectedIds = preserveSelected
-        ? currentSelectedExtraIds.filter(id =>
-            allowedIds.includes(String(id))
-        )
-        : [];
+                const option = new Option(optionData.text, optionData.value, false, selectedIds.includes(value));
+                extraServicesSelect.appendChild(option);
+            });
 
-    // Automatically select all mapped extra services
-    const selectedIds = Array.from(
-        new Set([
-            ...preservedSelectedIds.map(String),
-            ...allowedIds
-        ])
-    );
-
-    extraServicesSelect.innerHTML = '';
-
-    originalExtraServiceOptions.forEach(optionData => {
-        const value = String(optionData.value);
-
-        if (!allowedIds.includes(value)) {
-            return;
+            if (typeof $ !== 'undefined' && $.fn.select2) {
+                $('#extra_services').trigger('change.select2');
+            }
         }
-
-        const option = new Option(
-            optionData.text,
-            optionData.value,
-            false,
-            selectedIds.includes(value)
-        );
-
-        extraServicesSelect.appendChild(option);
-    });
-
-    // Refresh Select2 display without triggering recursive change
-    if (typeof $ !== 'undefined' && $.fn.select2) {
-        $('#extra_services').trigger('change.select2');
-    }
-}
 
         // NEW: Build service breakdown table
         function buildServiceBreakdownTable() {

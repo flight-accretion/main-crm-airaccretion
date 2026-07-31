@@ -2721,7 +2721,7 @@ class ClientController extends Controller
 
         $allowedExtraServiceIds = array_unique(array_merge($mappedExtraServiceIds, $selectedExtraServices));
         if (!empty($allowedExtraServiceIds)) {
-            $allExtraServices = $allExtraServices->whereIn('id', $allowedExtraServiceIds);
+            $allExtraServices = $allExtraServices->whereIn('id', $allowedExtraServiceIds)->values();
         } else {
             $allExtraServices = collect();
         }
