@@ -34,6 +34,9 @@ return [
     'airpoints' => [
         'base_url' => env('AIRPOINTS_API_URL', 'https://airpoints.airaccretion.com/'),
     ],
+    'lead_api' => [
+        'key' => env('LEAD_API_KEY'),
+    ],
     'meta_whatsapp' => [
         'token' => env('META_WHATSAPP_TOKEN'),
         'phone_number_id' => env('META_WHATSAPP_PHONE_NUMBER_ID'),

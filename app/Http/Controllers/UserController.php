@@ -135,19 +135,15 @@ class UserController extends Controller
     }
     public function downloadLog()
     {
-        $today = now()->format('Y-m-d');
-        $filePath = storage_path("logs/laravel-{$today}.log");
+        abort_unless(auth()->check() && auth()->user()->isSuperAdmin(), 403);
 
-        // Check if file exists
-        if (!file_exists($filePath)) {
-            return response()->json([
-                'status' => 'error',
-                'message' => "Log file for {$today} not found."
-            ], 404);
-        }
+        $filePath = storage_path('logs/laravel.log');
 
-        // Download file
-        return response()->download($filePath);
+        abort_unless(is_file($filePath), 404, 'Log file not found.');
+
+        return response()->download($filePath, 'laravel.log', [
+            'Content-Type' => 'text/plain; charset=UTF-8',
+        ]);
     }
     public function showChangePasswordForm()
     {
@@ -655,6 +651,32 @@ class UserController extends Controller
     public function show(User $user)
     {
         return view('admin.pages.staff.view-staff', compact('user'));
+    }
+
+    public function destroy(User $user)
+    {
+        abort_unless(auth()->check() && auth()->user()->isSuperAdmin(), 403);
+
+        if ($user->id === auth()->id()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You cannot delete your own user account.'
+            ], 422);
+        }
+
+        try {
+            $user->update(['status' => 0]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'User deactivated successfully.'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to deactivate user.'
+            ], 500);
+        }
     }
 
     /**

@@ -257,4 +257,23 @@ class UpcomingFollowUpController extends Controller
 
         return response()->json($objFollowUpStatus);
     }
+
+    public function toggleStatus(Request $request): RedirectResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'id' => ['required', 'uuid', 'exists:lead_followups,id'],
+        ]);
+
+        if ($validator->fails()) {
+            return redirect()->route('admin.upcoming-follow-up.index')
+                ->with('error', $validator->errors()->first());
+        }
+
+        $followup = LeadFollowup::findOrFail($request->id);
+        $followup->status = (int) $followup->status === 1 ? 0 : 1;
+        $followup->save();
+
+        return redirect()->route('admin.upcoming-follow-up.index')
+            ->with('success', 'Follow-up status updated successfully.');
+    }
 }

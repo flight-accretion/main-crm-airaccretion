@@ -34,15 +34,10 @@ class Kernel extends ConsoleKernel
                  ->appendOutputTo(storage_path('logs/sales-update-cron.log'));
 
         // Booking Reminders - run daily at 10:30 AM for 5, 3, and 1 day reminders
-        // $schedule->command('booking:send-update')
-        //     ->dailyAt('10:30')
-        //     ->withoutOverlapping()
-        //     ->appendOutputTo(storage_path('logs/booking-reminders.log'));
-
-        $schedule->command('booking:send-update --minutes=2')
-    ->everyMinute()
-    ->withoutOverlapping()
-    ->appendOutputTo(storage_path('logs/booking-reminders.log'));
+        $schedule->command('booking:send-update')
+            ->dailyAt('10:30')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/booking-reminders.log'));
 
         // Auto allocate queued leads every 5 minutes during office hours
         $schedule->command('lead:process-allocation')

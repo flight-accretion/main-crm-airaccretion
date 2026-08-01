@@ -77,10 +77,12 @@ Route::post('/forgot-password', [UserController::class, 'sendResetLink'])->name(
 Route::get('/reset-password/{token}', [UserController::class, 'showResetForm'])->name('password.reset');
 Route::post('/reset-password', [UserController::class, 'resetPassword'])->name('password.update');
 Route::get('/forgot-password', [UserController::class, 'showForgotPasswordForm'])->name('password.request');
-Route::get('/download-log', [UserController::class, 'downloadLog'])->name('log.download');
 
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [UserController::class, 'logout'])->name('logout');
+    Route::get('/download-log', [UserController::class, 'downloadLog'])
+        ->middleware('role:ADMIN_ROLES')
+        ->name('log.download');
     Route::get('/storage/followups/{filename}', [FollowupFileController::class, 'show'])
         ->where('filename', '[^/]+')
         ->name('admin.followups.storage-fallback');
@@ -243,7 +245,6 @@ Route::middleware('auth')->group(function () {
     Route::prefix('admin/account')->group(function () {
         // Exceptional Dashboard
         Route::get('/exceptional', [ExceptionalController::class, 'index'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')->name('admin.account.exceptional');
-        Route::get('/exceptional/{followupId}/edit-total', [ExceptionalController::class, 'editTotal'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')->name('admin.account.exceptional.edit-total');
         Route::post('/exceptional/{followupId}/update-total', [ExceptionalController::class, 'updateTotal'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')->name('admin.account.exceptional.update-total');
         Route::post('/exceptional/create-refund-note', [ExceptionalController::class, 'createRefundNote'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')->name('admin.account.exceptional.create-refund-note');
         Route::post('/exceptional/{followupId}/add-to-sales', [ExceptionalController::class, 'addToSales'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')->name('admin.account.exceptional.add-to-sales');
@@ -273,10 +274,6 @@ Route::middleware('auth')->group(function () {
         Route::get('/invoices/{id}/pdf', [InvoiceController::class, 'generatePDF'])->name('admin.account.invoices.pdf');
         Route::get('/invoices/{id}/download', [InvoiceController::class, 'downloadPDF'])->name('admin.account.invoices.download');
         Route::get('/invoices/{id}/preview', [InvoiceController::class, 'previewHTML'])->name('admin.account.invoices.preview');
-    });
-
-    Route::get('/private-jet-pdf', function () {
-        return view('admin.pages.pdf.private-jet-pdf');
     });
 
     Route::prefix('admin/services')->group(function () {
@@ -335,18 +332,7 @@ Route::middleware('auth')->group(function () {
     // ===============================
     Route::prefix('admin/upcoming-follow-up')->group(function () {
         Route::get('/', [UpcomingFollowUpController::class, 'index'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.upcoming-follow-up.index');
-        Route::post('/store', [UpcomingFollowUpController::class, 'store'])->name('admin.upcoming-follow-up.store');
-        Route::get('/{id}/edit', [UpcomingFollowUpController::class, 'edit'])->name('admin.upcoming-follow-up.edit');
-        Route::post('/{id}/update', [UpcomingFollowUpController::class, 'update'])->name('admin.upcoming-follow-up.update');
-        Route::post('/toggle', [UpcomingFollowUpController::class, 'toggleStatus'])->name('admin.upcoming-follow-up.toggle');
-    });
-
-    Route::prefix('admin/upcoming-follow-up')->group(function () {
-        Route::get('/', [UpcomingFollowUpController::class, 'index'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.upcoming-follow-up.index');
-        Route::post('/store', [UpcomingFollowUpController::class, 'store'])->name('admin.upcoming-follow-up.store');
-        Route::get('/{id}/edit', [UpcomingFollowUpController::class, 'edit'])->name('admin.upcoming-follow-up.edit');
-        Route::post('/{id}/update', [UpcomingFollowUpController::class, 'update'])->name('admin.upcoming-follow-up.update');
-        Route::post('/toggle', [UpcomingFollowUpController::class, 'toggleStatus'])->name('admin.upcoming-follow-up.toggle');
+        Route::post('/toggle', [UpcomingFollowUpController::class, 'toggleStatus'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.upcoming-follow-up.toggle');
     });
 
 
@@ -434,11 +420,13 @@ Route::middleware('auth')->group(function () {
         Route::get('/', [ServiceAddressController::class, 'index'])->name('admin.service-addresses.index');
         Route::get('/create', [ServiceAddressController::class, 'create'])->name('admin.service-addresses.create');
         Route::post('/', [ServiceAddressController::class, 'store'])->name('admin.service-addresses.store');
+        Route::get('/get-services-by-product/{productId}', [ServiceAddressController::class, 'getServicesByProduct'])
+            ->whereUuid('productId')
+            ->name('admin.service-addresses.services-by-product');
         Route::get('/{id}/edit', [ServiceAddressController::class, 'edit'])->name('admin.service-addresses.edit');
         Route::put('/{id}', [ServiceAddressController::class, 'update'])->name('admin.service-addresses.update');
         Route::get('/{address}', [ServiceAddressController::class, 'show'])->name('admin.service-addresses.view');
         Route::patch('/{address}/toggle-status', [ServiceAddressController::class, 'toggleStatus'])->name('admin.service-addresses.toggle-status');
-        Route::get('/get-services-by-product/{productId}', [ServiceAddressController::class, 'getServicesByProduct']);
         Route::get('/states/{countryId}', [ServiceAddressController::class, 'getStatesByCountry']);
         Route::get('/cities/{stateId}', [ServiceAddressController::class, 'getCitiesByState']);
         Route::get('/{id}/view-modal', [ServiceAddressController::class, 'viewModal']);
@@ -468,14 +456,17 @@ Route::middleware('auth')->group(function () {
         Route::get('/upcoming-ride', [RideController::class, 'upcomingRides'])->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,SALES_ROLES')->name('admin.rides.upcoming');
         Route::get('/api/calendar-events', [RideController::class, 'getCalendarEvents'])->name('admin.rides.calendar.events');
         Route::get('/api/ride-details/{rideId}', [RideController::class, 'getRideDetails'])->name('admin.rides.details');
-        Route::get('/debug/test-data', [RideController::class, 'debugTestData'])->name('admin.rides.debug');
+        if (app()->environment('local')) {
+            Route::get('/debug/test-data', [RideController::class, 'debugTestData'])
+                ->middleware('role:ADMIN_ROLES')
+                ->name('admin.rides.debug');
+        }
 
         // Ride Status Routes
         Route::get('/ride-status', [RideController::class, 'rideStatus'])->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES')->name('admin.rides.ride-status');
         Route::get('/ride-status/export', [RideController::class, 'exportRideStatus'])->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES')->name('admin.rides.ride-status.export');
         Route::get('/ride-status/{rideId}/details', [RideController::class, 'getRideStatusDetails'])->name('admin.rides.ride-status.details');
         Route::post('/ride-status/{rideId}/update-status', [RideController::class, 'updateRideStatus'])->name('admin.rides.ride-status.update-status');
-        Route::post('/ride-status/{rideId}/test-status', [RideController::class, 'testStatusUpdate'])->name('admin.rides.ride-status.test-status');
         Route::post('/ride-status/{rideId}/update-dates', [RideController::class, 'updateRideDates'])->name('admin.rides.ride-status.update-dates');
         Route::post('/ride-status/{rideId}/generate-invoice', [RideController::class, 'generateInvoice'])->name('admin.rides.ride-status.generate-invoice');
         Route::post('/ride-status/{rideId}/generate-refund', [RideController::class, 'generateRefundNote'])->name('admin.rides.ride-status.generate-refund');

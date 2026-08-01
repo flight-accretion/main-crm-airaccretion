@@ -60,6 +60,57 @@ class ServiceAddressController extends Controller
         return view('admin.pages.service-address.add-service-address', compact('products', 'services', 'countries', 'states', 'cities'));
     }
 
+    public function edit($id)
+    {
+        $serviceAddress = ServiceAddress::with('city.state.country')->findOrFail($id);
+
+        $products = Product::where('status', 1)->orderBy('product')->get();
+        $services = Service::where('status', 1)
+            ->whereJsonContains('product_ids', $serviceAddress->product_id)
+            ->orderBy('service')
+            ->get();
+
+        $countryId = optional(optional($serviceAddress->city)->state)->country_id;
+        $stateId = optional($serviceAddress->city)->state_id;
+
+        $countries = Country::all();
+        $states = $countryId
+            ? State::where('country_id', $countryId)->where('status', 1)->get()
+            : collect();
+        $cities = $stateId
+            ? City::where('state_id', $stateId)->where('status', 1)->get()
+            : collect();
+
+        $parts = explode('-', (string) $serviceAddress->contact_number, 2);
+        if (count($parts) === 2) {
+            $serviceAddress->setAttribute('contact_country_code', $parts[0]);
+            $serviceAddress->setAttribute('contact_number', $parts[1]);
+        }
+
+        return view('admin.pages.service-address.edit-service-address', compact(
+            'serviceAddress',
+            'products',
+            'services',
+            'countries',
+            'states',
+            'cities'
+        ));
+    }
+
+    public function getServicesByProduct($productId)
+    {
+        if (!Str::isUuid($productId)) {
+            return response()->json(['message' => 'Invalid product ID.'], 400);
+        }
+
+        $services = Service::where('status', 1)
+            ->whereJsonContains('product_ids', $productId)
+            ->orderBy('service')
+            ->get(['id', 'service']);
+
+        return response()->json($services);
+    }
+
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [

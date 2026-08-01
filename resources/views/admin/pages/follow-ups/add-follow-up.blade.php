@@ -1358,16 +1358,6 @@
                 isInitialLoad = false;
             }, 500);
 
-            // Initialize event listeners
-            servicesSelect.addEventListener('change', function() {
-                isManualTotalEdited = false;
-                handleServiceChange();
-            });
-            extraServicesSelect.addEventListener('change', function() {
-                isManualTotalEdited = false;
-                handleExtraServiceChange();
-            });
-
             // Edit Total Amount button
             if (editTotalBtn) {
                 editTotalBtn.addEventListener('click', function() {
@@ -1497,9 +1487,23 @@
                     width: '100%'
                 });
 
-                // Handle select2 change events
-                $('#services').on('change', handleServiceChange);
-                $('#extra_services').on('change', handleExtraServiceChange);
+                $('#services').on('change', function() {
+                    isManualTotalEdited = false;
+                    handleServiceChange();
+                });
+                $('#extra_services').on('change', function() {
+                    isManualTotalEdited = false;
+                    handleExtraServiceChange();
+                });
+            } else {
+                servicesSelect.addEventListener('change', function() {
+                    isManualTotalEdited = false;
+                    handleServiceChange();
+                });
+                extraServicesSelect.addEventListener('change', function() {
+                    isManualTotalEdited = false;
+                    handleExtraServiceChange();
+                });
             }
 
             // Handle status change to show/hide payment fields

@@ -33,6 +33,11 @@ class NotificationMasterController extends Controller
         return view('admin.notification_master.index', compact('masters'));
     }
 
+    public function create()
+    {
+        return redirect()->route('admin.notification-master.index');
+    }
+
     public function store(Request $request)
     {
         // country_iso comes from the hidden field populated by intl-tel-input (e.g. "us", "in", "gb")

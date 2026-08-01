@@ -38,6 +38,11 @@ class ExtraServiceController extends Controller
         ]);
     }
 
+    public function create()
+    {
+        return redirect()->route('admin.extra-services.index');
+    }
+
     // Create Extra Service
     public function store(Request $request)
     {
@@ -113,6 +118,30 @@ class ExtraServiceController extends Controller
                 'message' => 'Failed to fetch extra service details.'
             ], 500);
         }
+    }
+
+    public function edit(ExtraService $extraService)
+    {
+        if (request()->ajax() || request()->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'extraService' => $extraService,
+            ]);
+        }
+
+        return redirect()->route('admin.extra-services.index');
+    }
+
+    public function view(ExtraService $extraService)
+    {
+        if (request()->ajax() || request()->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'extraService' => $extraService,
+            ]);
+        }
+
+        return redirect()->route('admin.extra-services.index');
     }
 
     // Update extra service

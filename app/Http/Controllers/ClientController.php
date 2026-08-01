@@ -1201,6 +1201,36 @@ class ClientController extends Controller
             ], 500);
         }
     }
+
+    public function update(Request $request, Client $client)
+    {
+        return $this->updateClient($request, $client);
+    }
+
+    public function createFollowUp(Client $client)
+    {
+        $lead = $client->latestLead;
+
+        if (!$lead) {
+            return redirect()->route('admin.clients.view', $client->id)
+                ->with('error', 'No lead found for this client.');
+        }
+
+        return $this->createLeadFollowUp($lead);
+    }
+
+    public function storeFollowUp(Request $request, Client $client)
+    {
+        $lead = $client->latestLead;
+
+        if (!$lead) {
+            return redirect()->route('admin.clients.view', $client->id)
+                ->with('error', 'No lead found for this client.');
+        }
+
+        return $this->storeLeadFollowUp($request, $lead);
+    }
+
     // public function createFollowUp(Client $client)
     // {
     //     // Load the latest lead with its relationships

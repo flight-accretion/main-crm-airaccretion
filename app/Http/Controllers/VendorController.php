@@ -63,6 +63,11 @@ class VendorController extends Controller
         return view('admin.pages.vendors.index-vendor', compact('vendors', 'countries', 'allProducts', 'allServices', 'allExtraServices'));
     }
 
+    public function create()
+    {
+        return redirect()->route('admin.vendors.index');
+    }
+
     // public function create()
     // {
     //     $countries = Country::all();
@@ -693,6 +698,15 @@ class VendorController extends Controller
         return back()->withInput()->with('error', 'Error updating vendor: ' . $e->getMessage());
     }
 }
+
+    public function view(Vendor $vendor)
+    {
+        if (request()->ajax() || request()->wantsJson()) {
+            return $this->viewModal($vendor);
+        }
+
+        return redirect()->route('admin.vendors.index');
+    }
 
     // public function view(Vendor $vendor)
     // {

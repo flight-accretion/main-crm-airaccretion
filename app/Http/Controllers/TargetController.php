@@ -95,8 +95,10 @@ class TargetController extends Controller
         $year = $request->get('year', date('Y'));
         $month = $request->get('month', date('n'));
 
-        // There is no separate create blade; index holds the add form. Keep compatibility.
-        return view('admin.targets.create', compact('assignableStaff', 'year', 'month'));
+        return redirect()->route('admin.targets.index', [
+            'year' => $year,
+            'month' => $month,
+        ]);
     }
 
     /**
@@ -173,6 +175,25 @@ class TargetController extends Controller
     /**
      * Show the form for editing the specified target
      */
+    public function show(Request $request, $id)
+    {
+        $target = Target::with(['salesExecutive', 'assignedBy'])->findOrFail($id);
+        $assignableStaff = $this->getAssignableStaff(Auth::user());
+
+        if (!$assignableStaff->contains('id', $target->sales_executive_id)) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        if ($request->ajax()) {
+            return response()->json(['target' => $target]);
+        }
+
+        return redirect()->route('admin.targets.index', [
+            'year' => $target->year,
+            'month' => $target->month,
+        ]);
+    }
+
     public function edit(Request $request, $id)
     {
         $target = Target::with(['salesExecutive', 'assignedBy'])->findOrFail($id);
@@ -186,24 +207,19 @@ class TargetController extends Controller
             abort(403, 'Unauthorized action.');
         }
 
-        if ($request->ajax()) {
-            // Return a lightweight DTO for assignable staff to avoid sending nested relation objects
-            $assignable = $assignableStaff->map(function($s) {
-                return [
-                    'id' => $s->id,
-                    'name' => $s->name,
-                    'user_type_id' => $s->user_type_id ?? null,
-                    'user_type' => optional($s->userType)->user_type ?? null,
-                ];
-            })->values();
+        $assignable = $assignableStaff->map(function($s) {
+            return [
+                'id' => $s->id,
+                'name' => $s->name,
+                'user_type_id' => $s->user_type_id ?? null,
+                'user_type' => optional($s->userType)->user_type ?? null,
+            ];
+        })->values();
 
-            return response()->json([
-                'target' => $target,
-                'assignableStaff' => $assignable
-            ]);
-        }
-
-        return view('admin.targets.edit', compact('target', 'assignableStaff'));
+        return response()->json([
+            'target' => $target,
+            'assignableStaff' => $assignable
+        ]);
     }
 
     /**
@@ -271,9 +287,9 @@ class TargetController extends Controller
             abort(403, 'Only Super Admin can delete targets.');
         }
         
-        $salesExecutives = $this->getSalesExecutives($user);
-        
-        if (!$salesExecutives->contains('id', $target->sales_executive_id)) {
+        $assignableStaff = $this->getAssignableStaff($user);
+
+        if (!$assignableStaff->contains('id', $target->sales_executive_id)) {
             abort(403, 'Unauthorized action.');
         }
 
