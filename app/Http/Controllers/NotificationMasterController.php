@@ -18,8 +18,7 @@ class NotificationMasterController extends Controller
             $query->where(function ($q) use ($search) {
                 $q->where('mobile_number', 'ilike', '%' . $search . '%')
                     ->orWhere('contact_country_code', 'ilike', '%' . $search . '%')
-                    ->orWhere('email_id', 'ilike', '%' . $search . '%')
-                    ->orWhere('country_iso', 'ilike', '%' . $search . '%');
+                    ->orWhere('email_id', 'ilike', '%' . $search . '%');
             });
         }
 
@@ -74,7 +73,7 @@ class NotificationMasterController extends Controller
             'contact_country_code' => $request->input('contact_country_code'),
             'mobile_number'        => $request->input('contact_number'),
             'email_id'             => $request->input('email'),
-            'country_iso'          => strtolower($countryIso),
+            'country_id'           => null,
             'status'               => 1,
         ]);
 
@@ -111,7 +110,7 @@ class NotificationMasterController extends Controller
             'contact_country_code' => $request->contact_country_code,
             'mobile_number'        => $request->mobile_number,
             'email_id'             => $request->email_id,
-            'country_iso'          => strtolower($countryIso),
+            'country_id'           => null,
             'status'               => $request->input('status') === 'active' ? 1 : 0,
         ]);
 
