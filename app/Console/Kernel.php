@@ -36,6 +36,7 @@ class Kernel extends ConsoleKernel
         // Booking Reminders - run daily at 10:30 AM for 5, 3, and 1 day reminders
         $schedule->command('booking:send-update')
             ->dailyAt('10:30')
+            ->timezone('Asia/Kolkata')
             ->withoutOverlapping()
             ->appendOutputTo(storage_path('logs/booking-reminders.log'));
 

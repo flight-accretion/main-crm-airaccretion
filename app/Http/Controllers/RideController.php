@@ -22,7 +22,6 @@ use Illuminate\Support\Str;
 use App\Services\AirpointsIntegrationService;
 use App\Mail\RefundMail;
 use Illuminate\Support\Facades\Mail;
-use App\Models\NotificationMaster;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\RideStatusExport;
 use Illuminate\Support\Facades\Schema;
@@ -54,8 +53,10 @@ public function sendRideReminders($minutes = null, $leadId = null)
 
 public  function sendReminder($date, $days, $minutes = null, $leadId = null)
 {
+    $allowedFollowupStatuses = [1, 8]; // 1 = active, 8 = approved
+
     $query = LeadRide::with([
-         'enquiry.client',
+        'enquiry.client',
         'enquiry.vouchers',
         'serviceAddress'
     ])
@@ -82,11 +83,21 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
     }
 
     $rides = $query->get()->groupBy('lead_id');
+    $latestFollowups = $rides->isEmpty()
+        ? collect()
+        : LeadFollowup::whereIn('lead_id', $rides->keys()->all())
+            ->orderByDesc('created_at')
+            ->get()
+            ->unique('lead_id')
+            ->keyBy('lead_id');
+    $shouldTrackReminderLogs = $minutes === null && Schema::hasTable('ride_reminder_logs');
 
     Log::info('Booking reminder ride match count', [
         'lead_id' => $leadId,
         'matched_leads' => $rides->count(),
         'mode' => $minutes !== null ? 'minutes_test' : 'day_based',
+        'target_date' => $minutes !== null ? null : $date->toDateString(),
+        'allowed_followup_statuses' => $allowedFollowupStatuses,
     ]);
 
     foreach ($rides as $leadId => $leadRides) {
@@ -104,6 +115,19 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
             ->first();
 
         if (!$voucher) {
+            continue;
+        }
+
+        $latestFollowup = $latestFollowups->get($leadId);
+
+        if (!$latestFollowup || !in_array((int) $latestFollowup->status, $allowedFollowupStatuses, true)) {
+            Log::info('Booking reminder skipped - latest followup status is not active/approved', [
+                'lead_id' => $leadId,
+                'ride_id' => $ride->id,
+                'followup_id' => $latestFollowup?->id,
+                'followup_status' => $latestFollowup?->status,
+                'allowed_followup_statuses' => $allowedFollowupStatuses,
+            ]);
             continue;
         }
 
@@ -130,6 +154,23 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
         |--------------------------------------------------------------------------
         */
         $templateName = config('services.whatscrm.booking_whatsapp_template', 'extra_service_template');
+
+        if ($shouldTrackReminderLogs) {
+            $alreadySent = DB::table('ride_reminder_logs')
+                ->where('ride_id', $ride->id)
+                ->where('reminder_type', (int) $days)
+                ->whereNull('deleted_at')
+                ->exists();
+
+            if ($alreadySent) {
+                Log::info('Booking reminder skipped - reminder already sent', [
+                    'lead_id' => $leadId,
+                    'ride_id' => $ride->id,
+                    'days' => $days,
+                ]);
+                continue;
+            }
+        }
 
         $serviceLines = $this->buildReminderServiceLines($ride->enquiry, $ride);
         $salesData = $this->buildReminderSalesData($ride->enquiry);
@@ -223,27 +264,29 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                 );
         }
 
-        /*
-        |--------------------------------------------------------------------------
-        | Save Notification History
-        |--------------------------------------------------------------------------
-        */
-        // NotificationMaster::create([
-        //     'lead_id'               => $leadId,
-        //     'notification_type'     => 'Ride Reminder',
-        //     'notification_sub_type' => $days . '_day',
-        //     'mobile_number'         => $client->contact_number,
-        //     'email_id'              => $client->email,
-        //     'status'                => 1,
-        //     'created_at'            => now(),
-        //     'updated_at'            => now(),
-        // ]);
+        if ($shouldTrackReminderLogs) {
+            try {
+                $now = now();
 
-        NotificationMaster::create([
-    'mobile_number' => $client->contact_number,
-    'email_id'      => $client->email,
-    'status'        => 1,
-]);
+                DB::table('ride_reminder_logs')->insert([
+                    'id' => (string) Str::uuid(),
+                    'ride_id' => $ride->id,
+                    'lead_id' => $leadId,
+                    'reminder_type' => (int) $days,
+                    'template_name' => $templateName,
+                    'sent_at' => $now,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
+            } catch (\Exception $e) {
+                Log::warning('Booking reminder log insert failed', [
+                    'lead_id' => $leadId,
+                    'ride_id' => $ride->id,
+                    'days' => $days,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
 
         /*
         |--------------------------------------------------------------------------
@@ -255,6 +298,7 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
             'voucher_id' => $voucher->id,
             'ride_id'    => $ride->id,
             'days'       => $days,
+            'followup_status' => $latestFollowup->status,
             'mobile'     => $client->contact_number,
             'email'      => $client->email,
         ]);
@@ -2958,7 +3002,7 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
             ];
 
             // ── 9. Notification masters ──────────────────────────────────────────
-            $notificationMasters = \App\Models\NotificationMaster::where('status', 1)->get();
+            $notificationMasters = \App\Models\NotificationMaster::activeInternalRecipients();
             Log::info('sendRefundEmail: notification masters', ['count' => $notificationMasters->count()]);
 
             $smc    = new SendMessageController();

@@ -813,7 +813,7 @@ class VendorPaymentController extends Controller
                         ]);
                     }
 
-                    $notificationMasters = \App\Models\NotificationMaster::where('status', 1)->get();
+                    $notificationMasters = \App\Models\NotificationMaster::activeInternalRecipients();
                     Log::info('storePayment: notification masters', ['count' => $notificationMasters->count()]);
 
                     foreach ($notificationMasters as $nm) {
