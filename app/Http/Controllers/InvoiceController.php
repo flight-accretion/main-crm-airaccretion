@@ -92,6 +92,41 @@ class InvoiceController extends Controller
                 });
             }
 
+            if ($request->filled('search')) {
+                $search = trim($request->input('search'));
+                $query->where(function ($q) use ($search) {
+                    $q->where('naration', 'ilike', '%' . $search . '%')
+                        ->orWhereHas('invoice', function ($invoiceQuery) use ($search) {
+                            $invoiceQuery->where('invoice_id', 'ilike', '%' . $search . '%');
+                        })
+                        ->orWhereHas('lead', function ($leadQuery) use ($search) {
+                            $leadQuery->where('description', 'ilike', '%' . $search . '%')
+                                ->orWhere('occasion', 'ilike', '%' . $search . '%')
+                                ->orWhereHas('client', function ($clientQuery) use ($search) {
+                                    $clientQuery->where('name', 'ilike', '%' . $search . '%')
+                                        ->orWhere('email', 'ilike', '%' . $search . '%')
+                                        ->orWhere('contact_number', 'ilike', '%' . $search . '%')
+                                        ->orWhere('alternate_number', 'ilike', '%' . $search . '%');
+                                })
+                                ->orWhereHas('rideSegments', function ($rideQuery) use ($search) {
+                                    $rideQuery->where('from_place', 'ilike', '%' . $search . '%')
+                                        ->orWhere('to_place', 'ilike', '%' . $search . '%');
+                                });
+                        })
+                        ->orWhereHas('paymentDetails.service', function ($serviceQuery) use ($search) {
+                            $serviceQuery->where('service', 'ilike', '%' . $search . '%');
+                        })
+                        ->orWhereHas('paymentDetails.extraService', function ($extraServiceQuery) use ($search) {
+                            $extraServiceQuery->where('extra_service', 'ilike', '%' . $search . '%');
+                        })
+                        ->orWhereHas('vendorPayments.vendor', function ($vendorQuery) use ($search) {
+                            $vendorQuery->where('name', 'ilike', '%' . $search . '%')
+                                ->orWhere('email', 'ilike', '%' . $search . '%')
+                                ->orWhere('contact_number', 'ilike', '%' . $search . '%');
+                        });
+                });
+            }
+
             // Service filter
             if ($serviceName) {
                 $query->whereHas('lead', function ($q) use ($serviceName) {

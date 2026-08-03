@@ -552,3 +552,87 @@ if (window.jQuery && $.fn.DataTable) {
     }
   });
 }
+
+if (window.jQuery) {
+  $(function () {
+    function updateServerTableSearch(value) {
+      var params = new URLSearchParams(window.location.search);
+      var trimmedValue = (value || "").trim();
+
+      if (trimmedValue) {
+        params.set("search", trimmedValue);
+      } else {
+        params.delete("search");
+      }
+
+      params.delete("page");
+
+      var queryString = params.toString();
+      window.location.href = window.location.pathname + (queryString ? "?" + queryString : "") + window.location.hash;
+    }
+
+    $(".table-datatable.server-paginated").each(function () {
+      var $table = $(this);
+
+      if ($table.data("serverSearchBound")) {
+        return;
+      }
+
+      var $box = $table.closest(".box, .custom-box").first();
+      if (!$box.length) {
+        return;
+      }
+
+      var $header = $box.children(".box-header").first();
+      if (!$header.length) {
+        $header = $('<div class="box-header server-table-search-header"></div>');
+        $box.prepend($header);
+      }
+
+      if ($header.find("#global-search, .server-table-search").length) {
+        $table.data("serverSearchBound", true);
+        return;
+      }
+
+      $header.addClass("server-table-search-header");
+      if ($header.find(".box-title").length) {
+        $header.addClass("has-table-title");
+      }
+
+      var currentSearch = new URLSearchParams(window.location.search).get("search") || "";
+      var $toolbar = $header.children(".server-table-toolbar").first();
+
+      if (!$toolbar.length) {
+        $toolbar = $('<div class="server-table-toolbar"></div>');
+        $header.append($toolbar);
+      }
+
+      var $input = $("<input>", {
+        type: "text",
+        name: "search",
+        placeholder: "Search",
+        "aria-label": "Search table"
+      })
+        .addClass("ti-form-input rounded-sm form-control-sm server-table-search")
+        .val(currentSearch);
+
+      $toolbar.prepend($('<div class="search-container"></div>').append($input));
+
+      var searchTimer = null;
+      $input.on("keyup", function (event) {
+        clearTimeout(searchTimer);
+
+        if (event.key === "Enter") {
+          updateServerTableSearch(this.value);
+          return;
+        }
+
+        searchTimer = setTimeout(function () {
+          updateServerTableSearch($input.val());
+        }, 500);
+      });
+
+      $table.data("serverSearchBound", true);
+    });
+  });
+}

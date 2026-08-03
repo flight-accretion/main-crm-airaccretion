@@ -25,6 +25,25 @@ class VendorController extends Controller
         $perPage = min(max((int) $request->input('per_page', 20), 1), 100);
 
         // Search filters
+        if ($request->filled('search')) {
+            $search = trim($request->input('search'));
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'ilike', '%' . $search . '%')
+                    ->orWhere('email', 'ilike', '%' . $search . '%')
+                    ->orWhere('contact_number', 'ilike', '%' . $search . '%')
+                    ->orWhere('address', 'ilike', '%' . $search . '%')
+                    ->orWhereHas('city', function ($cityQuery) use ($search) {
+                        $cityQuery->where('name', 'ilike', '%' . $search . '%')
+                            ->orWhereHas('state', function ($stateQuery) use ($search) {
+                                $stateQuery->where('name', 'ilike', '%' . $search . '%')
+                                    ->orWhereHas('country', function ($countryQuery) use ($search) {
+                                        $countryQuery->where('name', 'ilike', '%' . $search . '%');
+                                    });
+                            });
+                    });
+            });
+        }
+
         if ($request->filled('vendor_name')) {
             $query->where('name', 'like', '%' . $request->input('vendor_name') . '%');
         }

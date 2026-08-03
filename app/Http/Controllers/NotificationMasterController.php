@@ -13,6 +13,16 @@ class NotificationMasterController extends Controller
         $query = NotificationMaster::query();
         $perPage = min(max((int) $request->input('per_page', 20), 1), 100);
 
+        if ($request->filled('search')) {
+            $search = trim($request->input('search'));
+            $query->where(function ($q) use ($search) {
+                $q->where('mobile_number', 'ilike', '%' . $search . '%')
+                    ->orWhere('contact_country_code', 'ilike', '%' . $search . '%')
+                    ->orWhere('email_id', 'ilike', '%' . $search . '%')
+                    ->orWhere('country_iso', 'ilike', '%' . $search . '%');
+            });
+        }
+
         if ($request->filled('contact_number')) {
             $query->where('mobile_number', 'like', '%' . $request->contact_number . '%');
         }

@@ -18,13 +18,26 @@ class UserTypeController extends Controller
         return response()->json($arrobjUserTypes);
     }
 
-    public function create()
+    public function create(Request $request)
     {
         $arrobjParentUserTypes = UserType::where('status', 1)->get();
-        $perPage = min(max((int) request()->input('per_page', 20), 1), 100);
-        $arrobjUserTypes = UserType::with('parent')->orderBy('created_at', 'desc')
+        $perPage = min(max((int) $request->input('per_page', 20), 1), 100);
+        $query = UserType::with('parent');
+
+        if ($request->filled('search')) {
+            $search = trim($request->input('search'));
+            $query->where(function ($q) use ($search) {
+                $q->where('user_type', 'ilike', '%' . $search . '%')
+                    ->orWhere('description', 'ilike', '%' . $search . '%')
+                    ->orWhereHas('parent', function ($parentQuery) use ($search) {
+                        $parentQuery->where('user_type', 'ilike', '%' . $search . '%');
+                    });
+            });
+        }
+
+        $arrobjUserTypes = $query->orderBy('created_at', 'desc')
             ->paginate($perPage)
-            ->appends(request()->query());
+            ->appends($request->query());
         return view('admin.pages.user-types.add-user-type', compact('arrobjParentUserTypes', 'arrobjUserTypes'));
     }
 
@@ -74,10 +87,23 @@ class UserTypeController extends Controller
         }
 
         $arrobjParentUserTypes = UserType::where('status', 1)->get();
-        $perPage = min(max((int) request()->input('per_page', 20), 1), 100);
-        $arrobjUserTypes = UserType::with('parent')->orderBy('created_at', 'desc')
+        $perPage = min(max((int) $request->input('per_page', 20), 1), 100);
+        $query = UserType::with('parent');
+
+        if ($request->filled('search')) {
+            $search = trim($request->input('search'));
+            $query->where(function ($q) use ($search) {
+                $q->where('user_type', 'ilike', '%' . $search . '%')
+                    ->orWhere('description', 'ilike', '%' . $search . '%')
+                    ->orWhereHas('parent', function ($parentQuery) use ($search) {
+                        $parentQuery->where('user_type', 'ilike', '%' . $search . '%');
+                    });
+            });
+        }
+
+        $arrobjUserTypes = $query->orderBy('created_at', 'desc')
             ->paginate($perPage)
-            ->appends(request()->query());
+            ->appends($request->query());
 
         return view('admin.pages.user-types.add-user-type', compact('objFollowUp', 'arrobjParentUserTypes', 'arrobjUserTypes'));
     }

@@ -800,18 +800,23 @@
                 </div>
             </div>
             <div class="box-body">
-                <nav class="tab-style-1 sm:flex bg-light p-[0.65rem] rounded-sm" aria-label="Tabs" role="tablist">
+                <nav id="product-status-summary-tabs"
+                    class="tab-style-1 sm:flex bg-light p-[0.65rem] rounded-sm --prevent-on-load-init"
+                    aria-label="Product status summary tabs" role="tablist">
                     <a class="hs-tab-active:bg-primary hs-tab-active:text-white text-defaulttextcolor py-[0.35rem] px-4 flex-grow block text-sm font-medium text-center rounded-md hover:text-primary active"
-                        id="product-date" data-hs-tab="#product-date2" aria-controls="product-date2">
+                        id="product-date" href="javascript:void(0);" data-hs-tab="#product-date2" aria-controls="product-date2"
+                        aria-selected="true" role="tab" tabindex="0">
                         By Service Date
                     </a>
                     <a class="hs-tab-active:bg-primary hs-tab-active:text-white text-defaulttextcolor py-[0.35rem] px-4 text-sm flex-grow block font-medium text-center  rounded-md hover:text-primary "
-                        id="created-date" data-hs-tab="#created-date2" aria-controls="created-date2">
+                        id="created-date" href="javascript:void(0);" data-hs-tab="#created-date2" aria-controls="created-date2"
+                        aria-selected="false" role="tab" tabindex="-1">
                         By Created Date
                     </a>
                 </nav>
                 <div class="tab-content">
-                    <div class="tab-pane !border-0 show active !p-0" id="product-date2" role="tabpanel">
+                    <div class="tab-pane !border-0 show active !p-0" id="product-date2" role="tabpanel"
+                        aria-labelledby="product-date">
                         <div class="box">
                             <div class="box-header">
                                 <div class="flex-grow">
@@ -958,6 +963,43 @@
             </div>
         </div>
     </div>
+    <script>
+        (function() {
+            var tabList = document.getElementById('product-status-summary-tabs');
+            if (!tabList) return;
+
+            var tabs = Array.prototype.slice.call(tabList.querySelectorAll('[data-hs-tab]'));
+            if (!tabs.length) return;
+
+            function activateProductStatusTab(activeTab) {
+                tabs.forEach(function(tab) {
+                    var isActive = tab === activeTab;
+                    var pane = document.querySelector(tab.getAttribute('data-hs-tab'));
+
+                    tab.classList.toggle('active', isActive);
+                    tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                    tab.setAttribute('tabindex', isActive ? '0' : '-1');
+
+                    if (pane) {
+                        pane.classList.toggle('hidden', !isActive);
+                        pane.classList.toggle('show', isActive);
+                        pane.classList.toggle('active', isActive);
+                    }
+                });
+            }
+
+            tabs.forEach(function(tab) {
+                tab.addEventListener('click', function(event) {
+                    event.preventDefault();
+                    activateProductStatusTab(tab);
+                });
+            });
+
+            activateProductStatusTab(tabs.find(function(tab) {
+                return tab.classList.contains('active');
+            }) || tabs[0]);
+        })();
+    </script>
     <script>
         (function(){
             var leadPopupModal = document.getElementById('lead-allocation-popup');

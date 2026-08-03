@@ -1604,7 +1604,26 @@ class ClientController extends Controller
     public function indexClient(Request $request)
     {
         $perPage = min(max((int) $request->input('per_page', 20), 1), 100);
-        $clients = Client::with(['city', 'country'])->orderBy('created_at', 'desc')
+        $query = Client::with(['city', 'country']);
+
+        if ($request->filled('search')) {
+            $search = trim($request->input('search'));
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'ilike', '%' . $search . '%')
+                    ->orWhere('email', 'ilike', '%' . $search . '%')
+                    ->orWhere('contact_number', 'ilike', '%' . $search . '%')
+                    ->orWhere('alternate_number', 'ilike', '%' . $search . '%')
+                    ->orWhere('address', 'ilike', '%' . $search . '%')
+                    ->orWhereHas('city', function ($cityQuery) use ($search) {
+                        $cityQuery->where('name', 'ilike', '%' . $search . '%');
+                    })
+                    ->orWhereHas('country', function ($countryQuery) use ($search) {
+                        $countryQuery->where('name', 'ilike', '%' . $search . '%');
+                    });
+            });
+        }
+
+        $clients = $query->orderBy('created_at', 'desc')
             ->paginate($perPage)
             ->appends($request->query());
         $countries = Country::all();

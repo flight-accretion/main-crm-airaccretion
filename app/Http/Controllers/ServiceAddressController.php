@@ -18,7 +18,34 @@ class ServiceAddressController extends Controller
     public function index(Request $request)
     {
         $perPage = min(max((int) $request->input('per_page', 20), 1), 100);
-        $addresses = ServiceAddress::with(['product', 'service', 'city'])->latest()
+        $query = ServiceAddress::with(['product', 'service', 'city.state.country']);
+
+        if ($request->filled('search')) {
+            $search = trim($request->input('search'));
+            $query->where(function ($q) use ($search) {
+                $q->where('contact_person_name', 'ilike', '%' . $search . '%')
+                    ->orWhere('contact_number', 'ilike', '%' . $search . '%')
+                    ->orWhere('address', 'ilike', '%' . $search . '%')
+                    ->orWhere('map_link', 'ilike', '%' . $search . '%')
+                    ->orWhereHas('product', function ($productQuery) use ($search) {
+                        $productQuery->where('product', 'ilike', '%' . $search . '%');
+                    })
+                    ->orWhereHas('service', function ($serviceQuery) use ($search) {
+                        $serviceQuery->where('service', 'ilike', '%' . $search . '%');
+                    })
+                    ->orWhereHas('city', function ($cityQuery) use ($search) {
+                        $cityQuery->where('name', 'ilike', '%' . $search . '%')
+                            ->orWhereHas('state', function ($stateQuery) use ($search) {
+                                $stateQuery->where('name', 'ilike', '%' . $search . '%')
+                                    ->orWhereHas('country', function ($countryQuery) use ($search) {
+                                        $countryQuery->where('name', 'ilike', '%' . $search . '%');
+                                    });
+                            });
+                    });
+            });
+        }
+
+        $addresses = $query->latest()
             ->paginate($perPage)
             ->appends($request->query());
         $products = Product::where('status', 1)->get();

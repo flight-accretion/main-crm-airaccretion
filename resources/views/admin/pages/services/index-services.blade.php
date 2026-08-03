@@ -110,7 +110,7 @@
                 </div>
                 <div class="box-body">
                     <div class="table-responsive services-table-wrapper">
-                        <table id="services-table" class="table display services-table" width="100%">
+                        <table id="services-table" class="table display services-table table-datatable" width="100%">
                             <thead class="bg-primary text-white">
                                 <tr class="border-b border-defaultborder">
 

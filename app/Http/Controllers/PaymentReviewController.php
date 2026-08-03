@@ -59,6 +59,35 @@ class PaymentReviewController extends Controller
             } elseif ($toDate) {
                 $query->where('created_at', '<=', Carbon::parse($toDate)->endOfDay());
             }
+
+            if ($request->filled('search')) {
+                $search = trim($request->input('search'));
+                $serviceIds = Service::where('service', 'ilike', '%' . $search . '%')->pluck('id')->all();
+                $extraServiceIds = ExtraService::where('extra_service', 'ilike', '%' . $search . '%')->pluck('id')->all();
+
+                $query->where(function ($q) use ($search, $serviceIds, $extraServiceIds) {
+                    $q->where('followup_note', 'ilike', '%' . $search . '%')
+                        ->orWhere('payment_method', 'ilike', '%' . $search . '%')
+                        ->orWhereHas('enquiry.client', function ($clientQuery) use ($search) {
+                            $clientQuery->where('name', 'ilike', '%' . $search . '%')
+                                ->orWhere('email', 'ilike', '%' . $search . '%')
+                                ->orWhere('contact_number', 'ilike', '%' . $search . '%')
+                                ->orWhere('alternate_number', 'ilike', '%' . $search . '%');
+                        })
+                        ->orWhereHas('enquiry.rideSegments', function ($rideQuery) use ($search) {
+                            $rideQuery->where('from_place', 'ilike', '%' . $search . '%')
+                                ->orWhere('to_place', 'ilike', '%' . $search . '%');
+                        });
+
+                    foreach ($serviceIds as $serviceId) {
+                        $q->orWhereRaw('service_ids::text ILIKE ?', ['%' . $serviceId . '%']);
+                    }
+
+                    foreach ($extraServiceIds as $extraServiceId) {
+                        $q->orWhereRaw('extra_service_ids::text ILIKE ?', ['%' . $extraServiceId . '%']);
+                    }
+                });
+            }
             // Apply service date filter
             if ($serviceDate) {
                 $query->whereHas('enquiry.rideSegments', function ($q) use ($serviceDate) {

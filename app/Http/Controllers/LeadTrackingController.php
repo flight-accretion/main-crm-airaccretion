@@ -33,7 +33,8 @@ class LeadTrackingController extends Controller
                           $request->filled('invoice_number') ||
                           $request->filled('name') ||
                           $request->filled('email') ||
-                          $request->filled('phone');
+                          $request->filled('phone') ||
+                          $request->filled('search');
 
             // Initialize empty collection - only load data when filters are applied
             $leads = collect();
@@ -68,6 +69,27 @@ class LeadTrackingController extends Controller
 
                 if ($request->filled('representative_user_id')) {
                     $query->where('representative_user_id', $request->representative_user_id);
+                }
+
+                if ($request->filled('search')) {
+                    $search = trim($request->input('search'));
+                    $query->where(function ($q) use ($search) {
+                        $q->where('description', 'ilike', '%' . $search . '%')
+                            ->orWhere('occasion', 'ilike', '%' . $search . '%')
+                            ->orWhereHas('client', function ($clientQuery) use ($search) {
+                                $clientQuery->where('name', 'ilike', '%' . $search . '%')
+                                    ->orWhere('email', 'ilike', '%' . $search . '%')
+                                    ->orWhere('contact_number', 'ilike', '%' . $search . '%')
+                                    ->orWhere('alternate_number', 'ilike', '%' . $search . '%');
+                            })
+                            ->orWhereHas('representative', function ($representativeQuery) use ($search) {
+                                $representativeQuery->where('name', 'ilike', '%' . $search . '%')
+                                    ->orWhere('email', 'ilike', '%' . $search . '%');
+                            })
+                            ->orWhereHas('vouchers.invoice', function ($invoiceQuery) use ($search) {
+                                $invoiceQuery->where('invoice_id', 'ilike', '%' . $search . '%');
+                            });
+                    });
                 }
 
                 if ($request->filled('from_date')) {

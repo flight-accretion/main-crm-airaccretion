@@ -16,7 +16,7 @@
     <!-- Style Css -->
     <link rel="stylesheet" href="/assets/admin/css/style.css?v=1.4">
     <link rel="stylesheet" href="/assets/admin/css/responsive.css?v=1.1">
-    <link rel="stylesheet" href="/assets/admin/css/custom.css?v=2.1">
+    <link rel="stylesheet" href="/assets/admin/css/custom.css?v=2.2">
 
     <!-- Simplebar Css -->
     <link rel="stylesheet" href="/assets/admin/libs/simplebar/simplebar.min.css">
@@ -1691,7 +1691,7 @@
     <script src="/assets/admin/js/main.js"></script>
 
     <!-- Custom JS -->
-    <script src="/assets/admin/js/custom.js"></script>
+    <script src="/assets/admin/js/custom.js?v=2.2"></script>
 
     <script>
         $(document).ready(function() {
