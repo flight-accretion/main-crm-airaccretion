@@ -50,6 +50,7 @@ class RideStatusExport implements FromCollection, WithHeadings, WithMapping, Wit
         $fromDate = !empty($this->filters['from_date']) ? $this->filters['from_date'] : null;
         $toDate = !empty($this->filters['to_date']) ? $this->filters['to_date'] : null;
         $statusFilter = !empty($this->filters['status']) ? $this->filters['status'] : null;
+        $searchFilter = !empty($this->filters['search']) ? $this->filters['search'] : null;
         $nameFilter = !empty($this->filters['name']) ? $this->filters['name'] : null;
         $phoneFilter = !empty($this->filters['phone']) ? $this->filters['phone'] : null;
         $productFilter = !empty($this->filters['product_id']) ? $this->filters['product_id'] : null;
@@ -73,6 +74,33 @@ class RideStatusExport implements FromCollection, WithHeadings, WithMapping, Wit
             // Default: include common statuses
             $ridesQuery->whereHas('enquiry.leadFollowups', function ($q) {
                 $q->whereIn('status', [1, 2, 3, 4, 5, 6, 7]);
+            });
+        }
+
+        // Apply global table search
+        if ($searchFilter) {
+            $ridesQuery->where(function ($q) use ($searchFilter) {
+                $q->whereHas('enquiry.client', function ($q2) use ($searchFilter) {
+                    $q2->where('name', 'ilike', '%' . $searchFilter . '%')
+                        ->orWhere('contact_number', 'ilike', '%' . $searchFilter . '%')
+                        ->orWhere('alternate_number', 'ilike', '%' . $searchFilter . '%');
+                })
+                ->orWhereHas('enquiry.representative', function ($q2) use ($searchFilter) {
+                    $q2->where('name', 'ilike', '%' . $searchFilter . '%');
+                })
+                ->orWhereHas('enquiry.vouchers.invoice', function ($q2) use ($searchFilter) {
+                    $q2->where('invoice_id', 'ilike', '%' . $searchFilter . '%');
+                })
+                ->orWhereHas('enquiry.leadVendorPayments.vendor', function ($q2) use ($searchFilter) {
+                    $q2->where('name', 'ilike', '%' . $searchFilter . '%')
+                        ->orWhere('email', 'ilike', '%' . $searchFilter . '%')
+                        ->orWhere('contact_number', 'ilike', '%' . $searchFilter . '%');
+                })
+                ->orWhereHas('enquiry.leadFollowups', function ($q2) use ($searchFilter) {
+                    $q2->where('service_ids', 'like', '%' . $searchFilter . '%')
+                        ->orWhere('extra_service_ids', 'like', '%' . $searchFilter . '%')
+                        ->orWhere('followup_note', 'ilike', '%' . $searchFilter . '%');
+                });
             });
         }
 

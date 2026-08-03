@@ -1213,10 +1213,15 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                     ->orWhereHas('enquiry.vouchers.invoice', function ($q2) use ($searchFilter) {
                         $q2->where('invoice_id', 'ilike', '%' . $searchFilter . '%');
                     })
+                    ->orWhereHas('enquiry.leadVendorPayments.vendor', function ($q2) use ($searchFilter) {
+                        $q2->where('name', 'ilike', '%' . $searchFilter . '%')
+                           ->orWhere('email', 'ilike', '%' . $searchFilter . '%')
+                           ->orWhere('contact_number', 'ilike', '%' . $searchFilter . '%');
+                    })
                     ->orWhereHas('enquiry.leadFollowups', function ($q2) use ($searchFilter) {
                         $q2->where('service_ids', 'like', '%' . $searchFilter . '%')
                            ->orWhere('extra_service_ids', 'like', '%' . $searchFilter . '%')
-                           ->orWhere('notes', 'ilike', '%' . $searchFilter . '%');
+                           ->orWhere('followup_note', 'ilike', '%' . $searchFilter . '%');
                     });
                 });
             }
