@@ -895,6 +895,7 @@
 
         // Service and extra service pricing data
         const servicePrices = @json($servicePrices);
+        const serviceFeePercents = @json($serviceFeePercents ?? []);
         const extraServicePrices = @json($extraServicePrices);
         const servicesData = Object.values(@json($services));
         const extraServicesData = Object.values(@json($allExtraServices));
@@ -950,6 +951,47 @@
             });
 
             return mappedIds;
+        }
+
+        function normalizeFeePercent(value) {
+            const parsed = parseFloat(value || 0);
+            if (Number.isNaN(parsed)) {
+                return 0;
+            }
+
+            return Math.min(100, Math.max(0, parsed));
+        }
+
+        function calculateFeeAmount(amount, feePercent) {
+            const grossAmount = Math.max(0, parseFloat(amount || 0) || 0);
+            return parseFloat(((grossAmount * normalizeFeePercent(feePercent)) / 100).toFixed(2));
+        }
+
+        function calculateAmountAfterFees(amount, feePercent) {
+            const grossAmount = Math.max(0, parseFloat(amount || 0) || 0);
+            return parseFloat(Math.max(0, grossAmount - calculateFeeAmount(grossAmount, feePercent)).toFixed(2));
+        }
+
+        function getServiceFeePercent(serviceId) {
+            return normalizeFeePercent(serviceFeePercents[String(serviceId)] ?? serviceFeePercents[serviceId] ?? 0);
+        }
+
+        function getExtraServiceParentServiceId(extraServiceId, selectedServiceIds) {
+            const normalizedExtraId = String(extraServiceId);
+            return selectedServiceIds.find(serviceId => {
+                return (serviceExtraServicesMap[serviceId] || []).map(String).includes(normalizedExtraId);
+            }) || '';
+        }
+
+        function resolveStoredOrCurrentFeePercent(prevDetail, fallbackPercent) {
+            if (prevDetail && prevDetail.fees_percent !== undefined && prevDetail.fees_percent !== null) {
+                return normalizeFeePercent(prevDetail.fees_percent);
+            }
+            if (prevDetail && prevDetail.gst_percent !== undefined && prevDetail.gst_percent !== null) {
+                return normalizeFeePercent(prevDetail.gst_percent);
+            }
+
+            return normalizeFeePercent(fallbackPercent);
         }
 
         function captureOriginalExtraServiceOptions(extraServicesSelect) {
@@ -1026,10 +1068,13 @@
                     // Check if we have previous values for this service (original amount or discount)
                     let previousDiscount = 0;
                     let previousOriginal = null;
+                    let previousFeePercent = getServiceFeePercent(serviceId);
 
                     const currentKey = `service_${serviceId}`;
                     if (previousBreakdownData[currentKey]) {
                         previousDiscount = parseFloat(previousBreakdownData[currentKey].discount_amount || 0);
+                        previousFeePercent = resolveStoredOrCurrentFeePercent(previousBreakdownData[currentKey],
+                            previousFeePercent);
                         // allow previousBreakdown to override original amount (for editable zero-amount cases)
                         if (previousBreakdownData[currentKey].original_amount !== undefined &&
                             previousBreakdownData[currentKey].original_amount !== null) {
@@ -1040,18 +1085,25 @@
                             'service');
                         if (prevDetail) {
                             previousDiscount = parseFloat(prevDetail.discount_amount || 0);
+                            previousFeePercent = resolveStoredOrCurrentFeePercent(prevDetail, previousFeePercent);
                             if (prevDetail.original_amount !== undefined && prevDetail.original_amount !== null) {
                                 previousOriginal = parseFloat(prevDetail.original_amount) || 0;
                             }
                         }
                     }
 
+                    const serviceOriginalAmount = previousOriginal !== null ? previousOriginal : originalAmount;
+                    const serviceFinalAmount = Math.max(0, serviceOriginalAmount - previousDiscount);
                     serviceBreakdownData[`service_${serviceId}`] = {
                         id: serviceId,
                         type: 'service',
                         name: service.service,
-                        original_amount: previousOriginal !== null ? previousOriginal : originalAmount,
-                        discount_amount: previousDiscount
+                        original_amount: serviceOriginalAmount,
+                        discount_amount: previousDiscount,
+                        fees_percent: previousFeePercent,
+                        fees_amount: calculateFeeAmount(serviceFinalAmount, previousFeePercent),
+                        amount_after_fees: calculateAmountAfterFees(serviceFinalAmount, previousFeePercent),
+                        final_amount: serviceFinalAmount
                     };
                 }
             });
@@ -1065,9 +1117,14 @@
                     // Check if we have previous values for this extra service
                     let previousDiscount = 0;
                     let previousOriginal = null;
+                    let parentServiceId = getExtraServiceParentServiceId(extraServiceId, selectedServices);
+                    let previousFeePercent = parentServiceId ? getServiceFeePercent(parentServiceId) : 0;
                     const currentKey = `extra_${extraServiceId}`;
                     if (previousBreakdownData[currentKey]) {
                         previousDiscount = parseFloat(previousBreakdownData[currentKey].discount_amount || 0);
+                        parentServiceId = previousBreakdownData[currentKey].parent_service_id || parentServiceId;
+                        previousFeePercent = resolveStoredOrCurrentFeePercent(previousBreakdownData[currentKey],
+                            parentServiceId ? getServiceFeePercent(parentServiceId) : previousFeePercent);
                         if (previousBreakdownData[currentKey].original_amount !== undefined &&
                             previousBreakdownData[currentKey].original_amount !== null) {
                             previousOriginal = parseFloat(previousBreakdownData[currentKey].original_amount) || 0;
@@ -1077,18 +1134,28 @@
                             'extra_service');
                         if (prevDetail) {
                             previousDiscount = parseFloat(prevDetail.discount_amount || 0);
+                            parentServiceId = prevDetail.parent_service_id || parentServiceId;
+                            previousFeePercent = resolveStoredOrCurrentFeePercent(prevDetail,
+                                parentServiceId ? getServiceFeePercent(parentServiceId) : previousFeePercent);
                             if (prevDetail.original_amount !== undefined && prevDetail.original_amount !== null) {
                                 previousOriginal = parseFloat(prevDetail.original_amount) || 0;
                             }
                         }
                     }
 
+                    const extraOriginalAmount = previousOriginal !== null ? previousOriginal : originalAmount;
+                    const extraFinalAmount = Math.max(0, extraOriginalAmount - previousDiscount);
                     serviceBreakdownData[`extra_${extraServiceId}`] = {
                         id: extraServiceId,
                         type: 'extra_service',
+                        parent_service_id: parentServiceId,
                         name: extraService.extra_service,
-                        original_amount: previousOriginal !== null ? previousOriginal : originalAmount,
-                        discount_amount: previousDiscount
+                        original_amount: extraOriginalAmount,
+                        discount_amount: previousDiscount,
+                        fees_percent: previousFeePercent,
+                        fees_amount: calculateFeeAmount(extraFinalAmount, previousFeePercent),
+                        amount_after_fees: calculateAmountAfterFees(extraFinalAmount, previousFeePercent),
+                        final_amount: extraFinalAmount
                     };
                 }
             });
@@ -1266,7 +1333,15 @@
             Object.values(serviceBreakdownData).forEach(item => {
                 totalOriginal += item.original_amount;
                 totalDiscount += item.discount_amount;
-                totalFinal += (item.original_amount - item.discount_amount);
+                const finalAmount = Math.max(0, item.original_amount - item.discount_amount);
+                item.final_amount = parseFloat(finalAmount.toFixed(2));
+                item.fees_percent = normalizeFeePercent(item.fees_percent ?? item.gst_percent ?? 0);
+                item.fees_amount = calculateFeeAmount(finalAmount, item.fees_percent);
+                item.amount_after_fees = calculateAmountAfterFees(finalAmount, item.fees_percent);
+                delete item.gst_percent;
+                delete item.gst_amount;
+                delete item.amount_after_gst;
+                totalFinal += finalAmount;
             });
 
             // Update footer totals

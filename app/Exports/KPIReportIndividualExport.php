@@ -6,6 +6,7 @@ use App\Models\LeadFollowup;
 use App\Models\User;
 use App\Models\Product;
 use App\Models\Target;
+use App\Services\SalesAmountCalculator;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
@@ -129,7 +130,7 @@ class KPIReportIndividualExport implements FromCollection, WithHeadings, WithMap
             $allFollowupIdsForLead = LeadFollowup::where('lead_id', $f->lead_id)->pluck('id');
             $refund = \App\Models\LeadRefund::whereIn('lead_followup_id', $allFollowupIdsForLead)
                 ->whereIn('status', [1, 2])->sum('refund_amount');
-            return max(0, (float) $f->total_amount - $refund);
+            return SalesAmountCalculator::salesAmountForFollowup($f, (float) $refund);
         });
 
         $remainingAmount = max(0, (float) $targetAmount - (float) $achievedAmount);

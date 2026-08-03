@@ -8,6 +8,7 @@ use App\Models\Service;
 use App\Models\ExtraService;
 use App\Models\Product;
 use App\Models\User;
+use App\Services\SalesAmountCalculator;
 use function App\Helpers\extractPhoneWithoutCountryCode;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
@@ -178,8 +179,8 @@ class SalesReportExport implements FromCollection, WithHeadings, WithMapping, Wi
                 ->whereIn('status', [1, 2]) // 1=processed, 2=completed
                 ->sum('refund_amount');
 
-            // Sales Amount = Total Amount - Refund Amount
-            $salesAmount = max(0, $totalAmount - $refundAmount);
+            // Sales Amount = Total Amount minus service fees and processed refunds.
+            $salesAmount = SalesAmountCalculator::salesAmountForFollowup($latest, (float) $refundAmount);
 
             // Get approved payments scoped to the filtered month/year
             // so paid_date shown matches the selected filter period

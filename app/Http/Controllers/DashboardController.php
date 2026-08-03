@@ -13,6 +13,7 @@ use App\Models\UserType;
 use App\Models\LeadFollowup;
 use App\Models\PaymentAuditTrail;
 use App\Services\LeadAllocationService;
+use App\Services\SalesAmountCalculator;
 use App\Models\SalesDailyUpdate;
 use Illuminate\Http\Request;
 use function App\Helpers\getRepresentativeIds;
@@ -214,7 +215,7 @@ class DashboardController extends Controller
                 ->whereIn('status', [1, 2])
                 ->sum('refund_amount');
 
-            return max(0, (float) $followup->total_amount - $refund);
+            return SalesAmountCalculator::salesAmountForFollowup($followup, (float) $refund);
         });
     }
 

@@ -17,6 +17,7 @@ use function App\Helpers\extractPhoneWithoutCountryCode;
 use Carbon\Carbon;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\SalesReportExport;
+use App\Services\SalesAmountCalculator;
 use Illuminate\Support\Facades\Log;
 
 class ReportController extends Controller
@@ -725,9 +726,8 @@ class ReportController extends Controller
                     ->whereIn('status', [1, 2]) // 1=processed, 2=completed
                     ->sum('refund_amount');
 
-                // Sales Amount = Total Amount - Refund Amount
-                // This matches the dashboard's Achieved Amount calculation
-                $salesAmount = max(0, $totalAmount - $refundAmount);
+                // Sales Amount = Total Amount minus service fees and processed refunds.
+                $salesAmount = SalesAmountCalculator::salesAmountForFollowup($latest, (float) $refundAmount);
 
                 // Get approved payments scoped to the filtered month/year
                 // so paid_date shown matches the selected filter period
@@ -1797,7 +1797,7 @@ class ReportController extends Controller
                 return $refundsByFollowupId->get($fid, collect())->sum('refund_amount');
             });
 
-            return max(0, (float) $latest->total_amount - $refund);
+            return SalesAmountCalculator::salesAmountForFollowup($latest, (float) $refund);
         })->sum();
 
         $remainingAmount = max(0, (float) $targetAmount - (float) $achievedAmount);

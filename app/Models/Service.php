@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Services\SalesAmountCalculator;
 
 class Service extends Model
 {
@@ -14,6 +15,7 @@ class Service extends Model
         'service',
         'description',
         'service_amount',
+        'fees_percent',
         'terms_and_conditions',
         'product_ids',
         'status'
@@ -21,7 +23,18 @@ class Service extends Model
 
     protected $casts = [
         'product_ids' => 'array',
+        'fees_percent' => 'decimal:2',
     ];
+
+    public function getFeesAmountAttribute(): float
+    {
+        return SalesAmountCalculator::feeAmount((float) $this->service_amount, (float) ($this->fees_percent ?? 0));
+    }
+
+    public function getAmountAfterFeesAttribute(): float
+    {
+        return SalesAmountCalculator::amountAfterFees((float) $this->service_amount, (float) ($this->fees_percent ?? 0));
+    }
 
     public function extraServices()
     {

@@ -33,6 +33,7 @@ use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use App\Services\AirpointsIntegrationService;
 use App\Services\LeadAllocationService;
+use App\Services\SalesAmountCalculator;
 use function App\Helpers\getRepresentativeIds;
 
 class ClientController extends Controller
@@ -2379,12 +2380,54 @@ class ClientController extends Controller
                 $serviceDetails = is_string($request->service_details)
                     ? json_decode($request->service_details, true)
                     : $request->service_details;
+                $serviceDetails = is_array($serviceDetails) ? $serviceDetails : [];
+
+                $detailServiceIds = array_values(array_unique(array_filter(array_merge(
+                    $services,
+                    collect($serviceDetails)->pluck('parent_service_id')->filter()->all(),
+                    collect($serviceDetails)->where('type', 'service')->pluck('id')->filter()->all()
+                ))));
+                $serviceFeePercentsForDetails = !empty($detailServiceIds)
+                    ? Service::whereIn('id', $detailServiceIds)->pluck('fees_percent', 'id')->toArray()
+                    : [];
+                $fallbackFeePercent = count($serviceFeePercentsForDetails) === 1
+                    ? (float) reset($serviceFeePercentsForDetails)
+                    : 0.0;
 
                 // Calculate totals from service details
-                foreach ($serviceDetails as $detail) {
+                foreach ($serviceDetails as &$detail) {
+                    $detailType = $detail['type'] ?? null;
+                    $detailId = (string) ($detail['id'] ?? '');
+                    $parentServiceId = (string) ($detail['parent_service_id'] ?? '');
+                    $hasStoredFeePercent = array_key_exists('fees_percent', $detail) || array_key_exists('gst_percent', $detail);
+                    $feePercent = $hasStoredFeePercent
+                        ? SalesAmountCalculator::normalizePercent($detail['fees_percent'] ?? $detail['gst_percent'] ?? 0)
+                        : 0.0;
+
+                    if (!$hasStoredFeePercent) {
+                        if ($detailType === 'service' && $detailId !== '') {
+                            $feePercent = SalesAmountCalculator::normalizePercent($serviceFeePercentsForDetails[$detailId] ?? 0);
+                        } elseif ($detailType === 'extra_service') {
+                            $feePercent = $parentServiceId !== ''
+                                ? SalesAmountCalculator::normalizePercent($serviceFeePercentsForDetails[$parentServiceId] ?? 0)
+                                : SalesAmountCalculator::normalizePercent($fallbackFeePercent);
+                        }
+                    }
+
+                    $finalAmountForFees = max(
+                        0,
+                        (float) ($detail['original_amount'] ?? 0) - (float) ($detail['discount_amount'] ?? 0)
+                    );
+                    unset($detail['gst_percent'], $detail['gst_amount'], $detail['amount_after_gst']);
+                    $detail['fees_percent'] = $feePercent;
+                    $detail['fees_amount'] = SalesAmountCalculator::feeAmount($finalAmountForFees, $feePercent);
+                    $detail['amount_after_fees'] = SalesAmountCalculator::amountAfterFees($finalAmountForFees, $feePercent);
+                    $detail['final_amount'] = $finalAmountForFees;
+
                     $serviceAmount += floatval($detail['original_amount'] ?? 0);
                     $totalDiscount += floatval($detail['discount_amount'] ?? 0);
                 }
+                unset($detail);
             } else {
                 // Fallback: calculate from services and extra services if service_details not provided
                 if (!empty($services)) {
@@ -2788,10 +2831,12 @@ class ClientController extends Controller
 
         // Create service prices and extra service prices
         $servicePrices = [];
+        $serviceFeePercents = [];
         $extraServicePrices = [];
 
         foreach ($services as $service) {
             $servicePrices[$service->id] = $service->service_amount;
+            $serviceFeePercents[$service->id] = (float) ($service->fees_percent ?? 0);
         }
 
         // Add all extra services to the prices array
@@ -2835,6 +2880,7 @@ class ClientController extends Controller
             'selectedServices' => $selectedServices,
             'selectedExtraServices' => $selectedExtraServices,
             'servicePrices' => $servicePrices,
+            'serviceFeePercents' => $serviceFeePercents,
             'lastFollowupTotalAmount' => $lastFollowupTotalAmount,
             'lastFollowupServiceAmount' => $lastFollowupServiceAmount,
             'lastFollowupDiscountAmount' => $lastFollowupDiscountAmount,

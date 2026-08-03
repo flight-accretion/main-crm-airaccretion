@@ -45,10 +45,21 @@
                                         </div>
                                         <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
                                             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Service Amount<span class="text-danger">*</span></label>
-                                            <input type="number" name="service_amount" class="my-auto ti-form-input rounded-sm form-control-sm" placeholder="Service Amount" value="{{ old('service_amount', $service->service_amount) }}" required>
+                                            <input type="number" name="service_amount" id="service_amount_input" class="my-auto ti-form-input rounded-sm form-control-sm" placeholder="Service Amount" value="{{ old('service_amount', $service->service_amount) }}" required>
                                             @error('service_amount')
                                                 <span class="text-red-500 text-xs">{{ $message }}</span>
                                             @enderror
+                                        </div>
+                                        <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
+                                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Fees %</label>
+                                            <input type="number" step="0.01" min="0" max="100" name="fees_percent" id="fees_percent_input" class="my-auto ti-form-input rounded-sm form-control-sm" placeholder="Fees %" value="{{ old('fees_percent', $service->fees_percent ?? 0) }}">
+                                            @error('fees_percent')
+                                                <span class="text-red-500 text-xs">{{ $message }}</span>
+                                            @enderror
+                                        </div>
+                                        <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
+                                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Original Amount (Fees Minus)</label>
+                                            <input type="text" id="amount_after_fees_preview" class="my-auto ti-form-input rounded-sm form-control-sm" value="{{ number_format($service->amount_after_fees, 2, '.', '') }}" readonly>
                                         </div>
                                         <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
                                             <label for="product_id" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Product <span class="text-danger">*</span></label>
@@ -208,6 +219,23 @@
         document.addEventListener('DOMContentLoaded', function() {
             // Handle editor content syncing for the existing Quill editor
             const termsEditor = document.getElementById('termsEditor');
+            const serviceAmountInput = document.getElementById('service_amount_input');
+            const feesPercentInput = document.getElementById('fees_percent_input');
+            const amountAfterFeesPreview = document.getElementById('amount_after_fees_preview');
+
+            function updateAmountAfterFeesPreview() {
+                const amount = parseFloat(serviceAmountInput?.value || 0) || 0;
+                const feesPercent = Math.min(100, Math.max(0, parseFloat(feesPercentInput?.value || 0) || 0));
+                const amountAfterFees = Math.max(0, amount - ((amount * feesPercent) / 100));
+
+                if (amountAfterFeesPreview) {
+                    amountAfterFeesPreview.value = amountAfterFees.toFixed(2);
+                }
+            }
+
+            serviceAmountInput?.addEventListener('input', updateAmountAfterFeesPreview);
+            feesPercentInput?.addEventListener('input', updateAmountAfterFeesPreview);
+            updateAmountAfterFeesPreview();
 
             // Wait for the global Quill editor to be initialized
             setTimeout(function() {

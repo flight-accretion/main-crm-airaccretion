@@ -116,37 +116,6 @@
 </script>
 @endif
 
-@if(Auth::user()->userType && in_array(Auth::user()->userType->user_type, [\App\Models\UserType::SALES_EXECUTIVE]))
-<div class="mb-6 rounded-lg border border-defaultborder bg-white p-4 shadow-sm">
-    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-            <h6 class="text-[1rem] font-semibold text-gray-800">Today's work update</h6>
-            <p class="mb-0 text-sm text-gray-600">Share your today's tasks and time with your manager.</p>
-        </div>
-        <div class="rounded-lg bg-primary/5 px-3 py-2 text-sm text-primary">
-            Manager: {{ $manager?->name ?? 'Not assigned' }}
-        </div>
-    </div>
-
-    <form method="POST" action="{{ route('admin.sales-dashboard.daily-update.store') }}" class="mt-4 space-y-4">
-        @csrf
-        <div class="grid grid-cols-12 gap-4">
-            <div class="col-span-12 lg:col-span-8">
-                <label class="mb-1 block text-sm font-medium text-gray-700">Today's tasks</label>
-                <textarea name="task_summary" rows="4" class="ti-form-input w-full" placeholder="Write your tasks, follow-ups, calls, meetings, and progress..." required>{{ old('task_summary', $dailyUpdate->task_summary ?? '') }}</textarea>
-            </div>
-            <div class="col-span-12 lg:col-span-4">
-                <label class="mb-1 block text-sm font-medium text-gray-700">Work hours</label>
-                <input type="number" step="0.25" min="0" max="24" name="work_hours" class="ti-form-input w-full" value="{{ old('work_hours', $dailyUpdate->work_hours ?? '') }}" required>
-            </div>
-        </div>
-        <div class="flex justify-end">
-            <button type="submit" class="ti-btn bg-primary text-white">Submit update</button>
-        </div>
-    </form>
-</div>
-@endif
-
 @if(Auth::user()->userType && in_array(Auth::user()->userType->user_type, [\App\Models\UserType::SALES_MANAGER, \App\Models\UserType::SENIOR_SALES_MANAGER]))
 <div class="mb-6 rounded-lg border border-defaultborder bg-white p-4 shadow-sm">
     <div class="mb-3 flex items-center justify-between">

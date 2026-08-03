@@ -8,6 +8,7 @@ use App\Models\Target;
 use App\Models\UserType;
 use App\Models\LeadFollowup;
 use App\Models\PaymentAuditTrail;
+use App\Services\SalesAmountCalculator;
 use Illuminate\Support\Facades\Log;
 
 class SalesExecutiveNotificationController extends Controller
@@ -191,7 +192,7 @@ class SalesExecutiveNotificationController extends Controller
             $refund = \App\Models\LeadRefund::whereIn('lead_followup_id', $followupIds)
                 ->whereIn('status', [1, 2])
                 ->sum('refund_amount');
-            return max(0, (float) $f->total_amount - $refund);
+            return SalesAmountCalculator::salesAmountForFollowup($f, (float) $refund);
         });
 
         return (float) $achieved;

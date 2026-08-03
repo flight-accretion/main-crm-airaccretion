@@ -41,6 +41,28 @@
     <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.dataTables.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/intl-tel-input@25.3.1/build/css/intlTelInput.css">
 
+    <style>
+        .table-responsive,
+        .dataTables_wrapper {
+            overflow-x: auto;
+        }
+
+        table.table,
+        table.dataTable,
+        table.table-datatable {
+            table-layout: auto !important;
+        }
+
+        table.table thead th,
+        table.dataTable thead th,
+        table.table-datatable thead th {
+            white-space: nowrap !important;
+            word-break: normal !important;
+            overflow-wrap: normal !important;
+            line-height: 1.25;
+            min-width: max-content;
+        }
+    </style>
 
 </head>
 
@@ -1701,6 +1723,7 @@
                 $tables.DataTable({
                     responsive: false, // No plus icon
                     scrollX: true, // Horizontal scroll
+                    autoWidth: false,
                     columnDefs: [{
                         orderable: false,
                         targets: 0 // S.No. column — make non-sortable
@@ -1721,8 +1744,15 @@
                                 .node(); // Set S.No. in first column (index 0)
                             $(cell).html(rowIdx + 1);
                         });
+                    },
+                    initComplete: function() {
+                        this.api().columns.adjust();
                     }
                 });
+
+                setTimeout(function() {
+                    $tables.DataTable().columns.adjust();
+                }, 100);
             }
         });
     </script>

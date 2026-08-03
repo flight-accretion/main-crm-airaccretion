@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Services\SalesAmountCalculator;
 
 class Target extends Model
 {
@@ -124,7 +125,7 @@ class Target extends Model
             $allFollowupIdsForLead = \App\Models\LeadFollowup::where('lead_id', $f->lead_id)->pluck('id');
             $refund = \App\Models\LeadRefund::whereIn('lead_followup_id', $allFollowupIdsForLead)
                 ->whereIn('status', [1, 2])->sum('refund_amount');
-            return max(0, (float) $f->total_amount - $refund);
+            return SalesAmountCalculator::salesAmountForFollowup($f, (float) $refund);
         });
 
         $this->update(['achieved_amount' => $achievedAmount]);

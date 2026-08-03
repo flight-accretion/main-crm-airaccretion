@@ -62,6 +62,7 @@ class ServiceController extends Controller
             ],
             'description' => 'nullable|string|max:255',
             'service_amount' => 'required|integer|min:0|max:9999999',
+            'fees_percent' => 'nullable|numeric|min:0|max:100',
             'terms_and_conditions' => 'nullable',
             // Accept single selected product from form but store as product_ids array
             'product_id' => 'required|exists:products,id',
@@ -131,6 +132,7 @@ class ServiceController extends Controller
                 'service' => $request->service,
                 'description' => $request->description,
                 'service_amount' => $request->service_amount,
+                'fees_percent' => $request->input('fees_percent', 0) ?: 0,
                 'terms_and_conditions' => $request->terms_and_conditions,
                 // Store selected product as single-element array in product_ids
                 'product_ids' => [$request->product_id],
@@ -205,6 +207,7 @@ class ServiceController extends Controller
             ],
             'description' => 'nullable|string|max:255',
             'service_amount' => 'required|integer|min:0|max:9999999',
+            'fees_percent' => 'nullable|numeric|min:0|max:100',
             'terms_and_conditions' => 'nullable',
             'product_id' => 'required|exists:products,id',
             'extra_service_ids' => 'nullable|array',
@@ -275,6 +278,7 @@ class ServiceController extends Controller
                 'service' => $request->service,
                 'description' => $request->description,
                 'service_amount' => $request->service_amount,
+                'fees_percent' => $request->input('fees_percent', 0) ?: 0,
                 'terms_and_conditions' => $request->terms_and_conditions,
                 'product_ids' => [$request->product_id], // Store as array with single product
             ]);

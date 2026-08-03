@@ -77,12 +77,17 @@
     <!-- Services Table -->
     <style>
         #services-table {
-            min-width: 1200px;
+            min-width: 2200px;
         }
 
         #services-table th,
         #services-table td {
             vertical-align: middle;
+        }
+
+        #services-table thead th {
+            white-space: nowrap;
+            line-height: 1.25;
         }
 
         .services-table-wrapper,
@@ -119,9 +124,11 @@
                                     <th data-priority="7">Product</th>
                                     <th data-priority="8">Description</th>
                                     <th data-priority="4">Amount</th>
+                                    <th data-priority="5">Fees %</th>
+                                    <th data-priority="6">Original Amount (Fees Minus)</th>
                                     <th data-priority="3" class="all">Extra Services</th>
-                                    <th data-priority="5">Status</th>
-                                    <th data-priority="6">Actions</th>
+                                    <th data-priority="7">Status</th>
+                                    <th data-priority="8">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -143,6 +150,12 @@
                                         <td>{{ Str::limit($service->description, 50) }}</td>
                                         <td class="text-center">
                                             {{ config('settings.currency_symbol') }}{{ number_format($service->service_amount, 2) }}
+                                        </td>
+                                        <td class="text-center">
+                                            {{ number_format((float) ($service->fees_percent ?? 0), 2) }}%
+                                        </td>
+                                        <td class="text-center">
+                                            {{ config('settings.currency_symbol') }}{{ number_format($service->amount_after_fees, 2) }}
                                         </td>
                                         <td>
                                             @php
@@ -265,14 +278,16 @@
                     scrollX: true,
                     autoWidth: false,
                     columnDefs: [
-                        { targets: 0, width: '80px' },
-                        { targets: 1, width: '260px' },
-                        { targets: 2, width: '220px' },
-                        { targets: 3, width: '220px' },
-                        { targets: 4, width: '140px' },
-                        { targets: 5, width: '540px' },
-                        { targets: 6, width: '130px' },
-                        { targets: 7, width: '160px', orderable: false }
+                        { targets: 0, width: '90px' },
+                        { targets: 1, width: '300px' },
+                        { targets: 2, width: '300px' },
+                        { targets: 3, width: '300px' },
+                        { targets: 4, width: '160px' },
+                        { targets: 5, width: '120px' },
+                        { targets: 6, width: '260px' },
+                        { targets: 7, width: '620px' },
+                        { targets: 8, width: '130px' },
+                        { targets: 9, width: '160px', orderable: false }
                     ]
                 });
 
@@ -335,7 +350,7 @@
                             }
 
                             // Update status badge
-                            const statusCell = button.closest('tr').find('td:nth-child(7)');
+                            const statusCell = button.closest('tr').find('td:nth-child(9)');
                             if (newStatus) {
                                 statusCell.html(
                                     '<span class="badge bg-success/10 text-success">Active</span>'

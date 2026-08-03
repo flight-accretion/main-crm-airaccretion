@@ -9,6 +9,7 @@ use App\Models\Service;
 use App\Models\Product;
 use App\Models\Target;
 use App\Models\SalesExecutiveAssignment;
+use App\Services\SalesAmountCalculator;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
@@ -160,7 +161,7 @@ trait KpiReportTargetHelper
                 return $refundsByFollowupId->get($fid, collect())->sum('refund_amount');
             });
 
-            return max(0, (float) $latest->total_amount - $refund);
+            return SalesAmountCalculator::salesAmountForFollowup($latest, (float) $refund);
         })->sum();
 
         $remainingAmount = max(0, (float) $targetAmount - (float) $achievedAmount);

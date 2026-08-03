@@ -42,6 +42,14 @@
                             <p class="text-gray-800 dark:text-white">{{ config('settings.currency_symbol') }}{{ number_format($service->service_amount, 2) }}</p>
                         </div>
                         <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
+                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Fees %</label>
+                            <p class="text-gray-800 dark:text-white">{{ number_format((float) ($service->fees_percent ?? 0), 2) }}%</p>
+                        </div>
+                        <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
+                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Original Amount (Fees Minus)</label>
+                            <p class="text-gray-800 dark:text-white">{{ config('settings.currency_symbol') }}{{ number_format($service->amount_after_fees, 2) }}</p>
+                        </div>
+                        <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
                             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Description</label>
                             <p class="text-gray-800 dark:text-white">{{ $service->description ?? 'N/A' }}</p>
                         </div>
