@@ -135,6 +135,24 @@ class SendMessageController extends Controller
             return ['status' => 'fail', 'hasError' => true, 'errors' => 'MSG91 auth key missing'];
         }
 
+        $fromAddress = trim((string) (config('services.msg91.email_from_address') ?: config('mail.from.address')));
+        $fromName = trim((string) (config('services.msg91.email_from_name') ?: config('mail.from.name', 'Accretion Aviation')));
+        $domain = trim((string) config('services.msg91.email_domain'));
+
+        if (empty($fromAddress)) {
+            Log::error('MSG91 EMAIL: from address is missing; check MSG91_EMAIL_FROM_ADDRESS or MAIL_FROM_ADDRESS');
+            return ['status' => 'fail', 'hasError' => true, 'errors' => 'MSG91 from address missing'];
+        }
+
+        if (empty($domain) && str_contains($fromAddress, '@')) {
+            $domain = substr(strrchr($fromAddress, '@'), 1);
+        }
+
+        if (empty($domain)) {
+            Log::error('MSG91 EMAIL: sending domain is missing; check MSG91_EMAIL_DOMAIN');
+            return ['status' => 'fail', 'hasError' => true, 'errors' => 'MSG91 email domain missing'];
+        }
+
         $payload = [
             "recipients" => [
                 [
@@ -143,16 +161,18 @@ class SendMessageController extends Controller
                 ]
             ],
             "from"        => [
-                "email" => "confirm@accretionaviation.com",
-                "name"  => "Accretion Aviation",
+                "email" => $fromAddress,
+                "name"  => $fromName,
             ],
-            "domain"      => "accretion.in",
+            "domain"      => $domain,
             "template_id" => $templateId,
         ];
 
         Log::info('MSG91 EMAIL: sending', [
             'template' => $templateId,
             'to'       => $toEmail,
+            'from'     => $fromAddress,
+            'domain'   => $domain,
             'vars'     => $variables,
         ]);
 
@@ -1090,8 +1110,8 @@ class SendMessageController extends Controller
 
     // ═════════════════════════════════════════════════════════════════════════
     // WhatsApp via WhatsCRM — Ride Reminders
-    // whatsapp_reminder → Template for ride reminders 5 and 1 hour before
-    // exampleArr: [name, service, time, location, extra, service_date] (6 variables)
+    // extra_service_template → Booking reminder template values:
+    // [customer, mapped extra service slots 1-13, sales name, sales phone, manager name, manager phone]
     // ═════════════════════════════════════════════════════════════════════════
     public function sendWhatsCrmRideReminderMessage(
         string $toNumber,
@@ -1105,7 +1125,7 @@ class SendMessageController extends Controller
 
         $template = config('services.whatscrm.booking_whatsapp_template', 'whatsapp_reminder');
 
-        // Template variables: {{1}} name, {{2}} service, {{3}} time, {{4}} location, {{5}} extra, {{6}} service_date
+        // Template variables are passed positionally in exampleArr.
         $name         = $bodyValues[0] ?? '';
         $service      = $bodyValues[1] ?? '';
         $time         = $bodyValues[2] ?? '';

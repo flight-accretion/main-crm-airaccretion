@@ -21,6 +21,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use App\Services\AirpointsIntegrationService;
 use App\Mail\RefundMail;
+use App\Mail\VoucherMail;
 use Illuminate\Support\Facades\Mail;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\RideStatusExport;
@@ -30,10 +31,15 @@ use Illuminate\Support\Facades\Schema;
 class RideController extends Controller
 {
 
-public function sendRideReminders($minutes = null, $leadId = null)
+public function sendRideReminders($minutes = null, $leadId = null, $today = false)
 {
     if ($minutes !== null) {
         $this->sendReminder(now(), (int) $minutes, (int) $minutes, $leadId);
+        return;
+    }
+
+    if ($today) {
+        $this->sendReminder(Carbon::today(), 0, null, $leadId);
         return;
     }
 
@@ -53,7 +59,7 @@ public function sendRideReminders($minutes = null, $leadId = null)
 
 public  function sendReminder($date, $days, $minutes = null, $leadId = null)
 {
-    $allowedFollowupStatuses = [1, 8]; // 1 = active, 8 = approved
+    $allowedFollowupStatuses = [8]; // 8 = approved
 
     $query = LeadRide::with([
         'enquiry.client',
@@ -121,7 +127,7 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
         $latestFollowup = $latestFollowups->get($leadId);
 
         if (!$latestFollowup || !in_array((int) $latestFollowup->status, $allowedFollowupStatuses, true)) {
-            Log::info('Booking reminder skipped - latest followup status is not active/approved', [
+            Log::info('Booking reminder skipped - latest followup status is not approved', [
                 'lead_id' => $leadId,
                 'ride_id' => $ride->id,
                 'followup_id' => $latestFollowup?->id,
@@ -196,9 +202,11 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
         ]);
 
         $smc = app(SendMessageController::class);
+        $whatsappSent = false;
+        $emailSent = false;
         try {
             $interaktResp = $smc->sendWhatsAppMessage(3, $templateName, $message, $client->contact_number);
-            $interaktFailed = !is_array($interaktResp) || (isset($interaktResp['result']) && $interaktResp['result'] === false) || (isset($interaktResp['message']) && stripos((string)$interaktResp['message'], 'not supported') !== false);
+            $interaktFailed = $this->interaktReminderFailed($interaktResp);
 
             if ($interaktFailed) {
                 $cleanedNumber = preg_replace('/^(\+91[-\s]?|91[-\s]?)/', '', $client->contact_number);
@@ -208,12 +216,18 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                 }
                 $payloadNumber = $countryCode . '-' . $cleanedNumber;
                 try {
-                    $smc->sendWhatsCrmTemplateMessage($payloadNumber, $templateName, $message);
-                    Log::warning('Interakt failed — sent via WhatsCRM', ['ride' => $ride->id, 'lead' => $leadId, 'to' => $payloadNumber, 'interakt' => $interaktResp]);
+                    $whatsCrmResp = $smc->sendWhatsCrmRideReminderMessage($payloadNumber, $message);
+                    $whatsappSent = $this->reminderWhatsAppSucceeded($whatsCrmResp);
+                    if ($whatsappSent) {
+                        Log::warning('Interakt failed - sent via WhatsCRM', ['ride' => $ride->id, 'lead' => $leadId, 'to' => $payloadNumber, 'interakt' => $interaktResp]);
+                    } else {
+                        Log::error('Interakt failed - WhatsCRM fallback failed', ['ride' => $ride->id, 'lead' => $leadId, 'to' => $payloadNumber, 'interakt' => $interaktResp, 'whatscrm' => $whatsCrmResp]);
+                    }
                 } catch (\Exception $e) {
                     Log::error('Fallback to WhatsCRM failed', ['ride' => $ride->id, 'error' => $e->getMessage()]);
                 }
             } else {
+                $whatsappSent = true;
                 Log::info('Interakt WhatsApp send result', ['ride' => $ride->id, 'lead' => $leadId, 'response' => $interaktResp]);
             }
         } catch (\Exception $e) {
@@ -224,8 +238,13 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
             }
             $payloadNumber = $countryCode . '-' . $cleanedNumber;
             try {
-                $smc->sendWhatsCrmTemplateMessage($payloadNumber, $templateName, $message);
-                Log::error('Interakt exception — sent via WhatsCRM', ['ride' => $ride->id, 'lead' => $leadId, 'error' => $e->getMessage()]);
+                $whatsCrmResp = $smc->sendWhatsCrmRideReminderMessage($payloadNumber, $message);
+                $whatsappSent = $this->reminderWhatsAppSucceeded($whatsCrmResp);
+                if ($whatsappSent) {
+                    Log::error('Interakt exception - sent via WhatsCRM', ['ride' => $ride->id, 'lead' => $leadId, 'error' => $e->getMessage()]);
+                } else {
+                    Log::error('Interakt exception - WhatsCRM fallback failed', ['ride' => $ride->id, 'lead' => $leadId, 'error' => $e->getMessage(), 'whatscrm' => $whatsCrmResp]);
+                }
             } catch (\Exception $ee) {
                 Log::error('Fallback to WhatsCRM also failed', ['ride' => $ride->id, 'error' => $ee->getMessage()]);
             }
@@ -255,16 +274,51 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                 'variables' => $emailVariables,
             ]);
 
-            app(SendMessageController::class)
+            $emailResp = app(SendMessageController::class)
                 ->sendMsg91Email(
                     $emailTemplate,
                     $client->email,
                     $client->name,
                     $emailVariables
                 );
+            $emailSent = $this->reminderEmailSucceeded($emailResp);
+
+            if (!$emailSent) {
+                Log::warning('Ride Reminder - Email provider failed', [
+                    'lead_id' => $leadId,
+                    'ride_id' => $ride->id,
+                    'template' => $emailTemplate,
+                    'to' => $client->email,
+                    'response' => $emailResp,
+                ]);
+
+                try {
+                    $fallbackSubject = 'Booking reminder - Your ride is scheduled';
+                    $fallbackTemplate = 'emails.ride_reminder';
+                    $fallbackData = $this->buildReminderFallbackEmailData($client, $ride, $serviceLines);
+
+                    Mail::to($client->email)->send(new VoucherMail($fallbackTemplate, $fallbackSubject, $fallbackData));
+                    $emailSent = true;
+
+                    Log::info('Ride Reminder - SMTP fallback email sent', [
+                        'lead_id' => $leadId,
+                        'ride_id' => $ride->id,
+                        'to' => $client->email,
+                    ]);
+                } catch (\Exception $e) {
+                    Log::error('Ride Reminder - SMTP fallback email failed', [
+                        'lead_id' => $leadId,
+                        'ride_id' => $ride->id,
+                        'to' => $client->email,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
         }
 
-        if ($shouldTrackReminderLogs) {
+        $reminderDelivered = $whatsappSent || $emailSent;
+
+        if ($shouldTrackReminderLogs && $reminderDelivered) {
             try {
                 $now = now();
 
@@ -286,6 +340,14 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                     'error' => $e->getMessage(),
                 ]);
             }
+        } elseif ($shouldTrackReminderLogs) {
+            Log::warning('Booking reminder not marked as sent because all channels failed', [
+                'lead_id' => $leadId,
+                'ride_id' => $ride->id,
+                'days' => $days,
+                'whatsapp_sent' => $whatsappSent,
+                'email_sent' => $emailSent,
+            ]);
         }
 
         /*
@@ -293,7 +355,7 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
         | Log
         |--------------------------------------------------------------------------
         */
-        Log::info('Ride Reminder Sent', [
+        $reminderLogContext = [
             'lead_id'    => $leadId,
             'voucher_id' => $voucher->id,
             'ride_id'    => $ride->id,
@@ -301,28 +363,33 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
             'followup_status' => $latestFollowup->status,
             'mobile'     => $client->contact_number,
             'email'      => $client->email,
-        ]);
+            'whatsapp_sent' => $whatsappSent,
+            'email_sent' => $emailSent,
+        ];
+
+        if ($reminderDelivered) {
+            Log::info('Ride Reminder Sent', $reminderLogContext);
+        } else {
+            Log::warning('Ride Reminder Failed', $reminderLogContext);
+        }
     }
 }
 
     private function buildReminderServiceLines($lead, $ride)
     {
         $latestFollowup = $lead->latestFollowup()->first();
-        $selectedExtraIds = [];
 
-        if ($latestFollowup && !empty($latestFollowup->extra_service_ids)) {
-            $selectedExtraIds = is_array($latestFollowup->extra_service_ids)
-                ? $latestFollowup->extra_service_ids
-                : json_decode($latestFollowup->extra_service_ids, true);
+        $selectedServiceIds = $latestFollowup ? $this->cleanReminderIds($latestFollowup->service_ids) : [];
+        if (empty($selectedServiceIds)) {
+            $selectedServiceIds = $this->cleanReminderIds($lead->service_ids ?? []);
         }
 
-        if (!is_array($selectedExtraIds)) {
-            $selectedExtraIds = [];
-        }
+        $selectedExtraIds = $latestFollowup ? $this->cleanReminderIds($latestFollowup->extra_service_ids) : [];
 
-        $selectedExtraIds = array_filter($selectedExtraIds, fn($id) => !empty($id));
-
-        $extraServiceNames = ExtraService::where('status', 1)
+        $extraServiceNames = empty($selectedServiceIds) ? [] : ExtraService::whereHas('services', function ($query) use ($selectedServiceIds) {
+                $query->whereIn('services.id', $selectedServiceIds);
+            })
+            ->where('status', 1)
             ->when(!empty($selectedExtraIds), function ($query) use ($selectedExtraIds) {
                 $query->whereNotIn('id', $selectedExtraIds);
             })
@@ -331,7 +398,88 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
             ->filter()
             ->toArray();
 
-        return array_pad(array_values($extraServiceNames), 13, '');
+        $lines = array_values(array_filter($extraServiceNames));
+
+        return array_pad(array_slice($lines, 0, 13), 13, '');
+    }
+
+    private function cleanReminderIds($ids): array
+    {
+        if (empty($ids)) {
+            return [];
+        }
+
+        if (is_string($ids)) {
+            $decoded = json_decode($ids, true);
+            if (!is_array($decoded)) {
+                $decoded = json_decode(stripslashes($ids), true);
+            }
+            $ids = $decoded;
+        }
+
+        if (!is_array($ids)) {
+            return [];
+        }
+
+        $ids = array_map(function ($id) {
+            return is_string($id) ? trim($id, " \t\n\r\0\x0B\"'") : $id;
+        }, $ids);
+
+        return array_values(array_unique(array_filter($ids, fn($id) => !empty($id))));
+    }
+
+    private function reminderWhatsAppSucceeded($response): bool
+    {
+        if (!is_array($response)) {
+            return false;
+        }
+
+        if (($response['success'] ?? false) === true || ($response['result'] ?? false) === true) {
+            return true;
+        }
+
+        $status = strtolower((string) ($response['metaResponse']['messages'][0]['message_status'] ?? $response['status'] ?? ''));
+
+        return in_array($status, ['accepted', 'queued', 'sent', 'success'], true);
+    }
+
+    private function interaktReminderFailed($response): bool
+    {
+        if (!is_array($response)) {
+            return true;
+        }
+
+        if (array_key_exists('error', $response)) {
+            return true;
+        }
+
+        if (($response['result'] ?? null) === false || ($response['success'] ?? null) === false) {
+            return true;
+        }
+
+        if (strtolower((string) ($response['status'] ?? '')) === 'fail') {
+            return true;
+        }
+
+        $message = strtolower((string) ($response['message'] ?? $response['details'] ?? ''));
+
+        return str_contains($message, 'not supported')
+            || str_contains($message, 'unable to send')
+            || str_contains($message, 'failed to connect')
+            || str_contains($message, "couldn't connect");
+    }
+
+    private function reminderEmailSucceeded($response): bool
+    {
+        if (!is_array($response)) {
+            return false;
+        }
+
+        if (($response['hasError'] ?? false) || array_key_exists('error', $response)) {
+            return false;
+        }
+
+        return strtolower((string) ($response['status'] ?? 'success')) !== 'fail';
     }
 
     private function buildReminderSalesData($lead)
@@ -377,6 +525,26 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
         $vars['VAR18'] = $salesData['manager_phone'];
 
         return $vars;
+    }
+
+    private function buildReminderFallbackEmailData($client, $ride, array $serviceLines): array
+    {
+        $mappedExtraServices = array_values(array_filter($serviceLines));
+        $locationParts = array_values(array_unique(array_filter([
+            $ride->from_place ?? null,
+            $ride->to_place ?? null,
+        ])));
+
+        return [
+            'name' => $client->name ?? 'Customer',
+            'service' => 'ride',
+            'time' => $this->formatRideTime($ride->from_date ?? null, $ride->to_date ?? null),
+            'location' => !empty($locationParts) ? implode(' to ', $locationParts) : 'ride location',
+            'extra' => !empty($mappedExtraServices)
+                ? 'Available extra services: ' . implode(', ', $mappedExtraServices) . '.'
+                : '',
+            'ride' => $ride,
+        ];
     }
 
     private function formatRideTime($from, $to)

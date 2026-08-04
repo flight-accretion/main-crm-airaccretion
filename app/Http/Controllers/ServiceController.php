@@ -16,28 +16,43 @@ use Illuminate\Support\Str;
 class ServiceController extends Controller
 {
     // List all services with pagination
-    public function index(Request $request)
-    {
-        $query = Service::with('extraServices')->latest();
+public function index(Request $request)
+{
+    $query = Service::with('extraServices')
+        ->latest();
 
-        // Apply search filters
-        if ($request->filled('service')) {
-            $query->where('service', 'like', '%' . $request->input('service') . '%');
-        }
+    // Case-insensitive service-name search
+    if ($request->filled('service')) {
+        $serviceName = mb_strtolower(
+            trim($request->input('service')),
+            'UTF-8'
+        );
 
-        if ($request->filled('status') && in_array($request->input('status'), [0, 1])) {
-            $query->where('status', $request->input('status'));
-        }
-
-        // Get all results
-        $services = $query->get();
-        $isSuperAdmin = auth()->user() && auth()->user()->isSuperAdmin();
-
-        return view('admin.pages.services.index-services', [
-            'services' => $services,
-            'isSuperAdmin' => $isSuperAdmin,
-        ]);
+        $query->whereRaw(
+            'LOWER(service) LIKE ?',
+            ['%' . $serviceName . '%']
+        );
     }
+
+    // Status filter
+    if ($request->filled('status')) {
+        $status = (int) $request->input('status');
+
+        if (in_array($status, [0, 1], true)) {
+            $query->where('status', $status);
+        }
+    }
+
+    $services = $query->get();
+
+    $isSuperAdmin = auth()->check()
+        && auth()->user()->isSuperAdmin();
+
+    return view('admin.pages.services.index-services', [
+        'services' => $services,
+        'isSuperAdmin' => $isSuperAdmin,
+    ]);
+}
 
     // Show create form
     public function create()

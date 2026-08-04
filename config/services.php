@@ -45,6 +45,9 @@ return [
         'auth_key'            => env('MSG91_AUTH_KEY'),
         'whatsapp_integrated' => env('MSG91_WHATSAPP_INTEGRATED_NUMBER'),
         'booking_email_template' => env('MSG91_BOOKING_EMAIL_TEMPLATE', 'extra_service_template'),
+        'email_domain'        => env('MSG91_EMAIL_DOMAIN', 'accretion.in'),
+        'email_from_address'  => env('MSG91_EMAIL_FROM_ADDRESS', 'confirm@accretionaviation.com'),
+        'email_from_name'     => env('MSG91_EMAIL_FROM_NAME', 'Accretion Aviation'),
     ],
     'whatscrm' => [
         'api_url'                   => env('WHATSCRM_API_URL'),
