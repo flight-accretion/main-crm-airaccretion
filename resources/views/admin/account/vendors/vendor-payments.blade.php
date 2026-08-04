@@ -463,6 +463,54 @@
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
+    const VENDOR_RECEIPT_MAX_SIZE_BYTES = 2 * 1024 * 1024;
+    const VENDOR_RECEIPT_MAX_SIZE_LABEL = '2MB';
+
+    function validateVendorReceiptFile(receiptInput, showFieldError) {
+        const receiptFile = receiptInput && receiptInput.files && receiptInput.files[0] ? receiptInput.files[0] : null;
+
+        if (!receiptFile) {
+            return true;
+        }
+
+        if (receiptFile.size > VENDOR_RECEIPT_MAX_SIZE_BYTES) {
+            showFieldError(receiptInput, `Receipt file must be ${VENDOR_RECEIPT_MAX_SIZE_LABEL} or smaller.`);
+            receiptInput.value = '';
+            return false;
+        }
+
+        return true;
+    }
+
+    function parseVendorPaymentResponse(response) {
+        if (response.status === 413) {
+            throw new Error(`Receipt file is too large for upload. Please compress it below ${VENDOR_RECEIPT_MAX_SIZE_LABEL} and try again.`);
+        }
+
+        if (response.status === 422) {
+            return response.json().then(json => {
+                throw {
+                    validation: json.errors || {}
+                };
+            });
+        }
+
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+            return response.text().then(() => {
+                throw new Error('Server returned an unexpected response. Please try again with a smaller receipt file.');
+            });
+        }
+
+        return response.json().then(json => {
+            if (!response.ok) {
+                throw new Error(json.error || json.message || `Request failed with status ${response.status}`);
+            }
+
+            return json;
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
 
             // Initialize DataTable with custom drawCallback for vendor payments
@@ -1208,6 +1256,8 @@
                     if (!receiptFile) {
                         showFieldError(receiptInput, 'Receipt is required');
                         hasError = true;
+                    } else if (!validateVendorReceiptFile(receiptInput, showFieldError)) {
+                        hasError = true;
                     }
 
                     if (!paidDate) {
@@ -1268,16 +1318,7 @@
                             },
                             body: formData
                         })
-                        .then(response => {
-                            if (response.status === 422) {
-                                return response.json().then(json => {
-                                    throw {
-                                        validation: json.errors
-                                    };
-                                });
-                            }
-                            return response.json();
-                        })
+                        .then(parseVendorPaymentResponse)
                         .then(data => {
 
                             if (data.success) {
@@ -1508,6 +1549,19 @@ if (inline) {
 
         function saveVendorPayment() {
             const form = document.getElementById('vendor-payment-form');
+            const saveButton = document.getElementById('save-vendor-payment');
+            const originalText = saveButton.textContent;
+            function showModalFieldError(el, msg) {
+                if (!el) return;
+                const existing = el.parentNode.querySelector('.field-error:not(#modal-paid-error)');
+                if (existing) existing.remove();
+                const div = document.createElement('div');
+                div.className = 'field-error text-danger text-sm mt-1';
+                div.textContent = msg;
+                el.parentNode.appendChild(div);
+                el.style.borderColor = '#e3342f';
+                el.setAttribute('aria-invalid', 'true');
+            }
             // clear any old inline errors but preserve the modal's paid-error container
             form.querySelectorAll('.field-error').forEach(e => {
                 if (e.id && e.id === 'modal-paid-error') return; // keep modal paid error element
@@ -1568,11 +1622,15 @@ if (inline) {
                 }
             }
 
+            const modalReceiptInput = form.querySelector('input[name="receipt"]');
+            if (!validateVendorReceiptFile(modalReceiptInput, showModalFieldError)) {
+                if (modalReceiptInput) modalReceiptInput.focus();
+                return;
+            }
+
             const formData = new FormData(form);
 
             // Show loading state
-            const saveButton = document.getElementById('save-vendor-payment');
-            const originalText = saveButton.textContent;
             saveButton.textContent = 'Saving...';
             saveButton.disabled = true;
 
@@ -1584,16 +1642,7 @@ if (inline) {
                     },
                     body: formData
                 })
-                .then(response => {
-                    if (response.status === 422) {
-                        return response.json().then(json => {
-                            throw {
-                                validation: json.errors
-                            };
-                        });
-                    }
-                    return response.json();
-                })
+                .then(parseVendorPaymentResponse)
                 .then(data => {
                     if (data.success) {
                         // hideLoader();
