@@ -189,7 +189,7 @@
                     <td>
                         <label style="color: #8C8C8C; font-size: 14px; display:block; margin-bottom:4px;">Company
                             Name</label>
-                        <div style="color: #303030; font-size: 14px;">{{ $existingInvoice->company_name ?? 'Accretion Aviation' }}</div>
+                        <div style="color: #303030; font-size: 14px;">{{ $existingInvoice->company_name ?? 'N/A' }}</div>
                     </td>
                     <td>
                         <label style="color: #8C8C8C; font-size: 14px; display:block; margin-bottom:4px;">GST

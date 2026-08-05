@@ -89,6 +89,28 @@
                                             @enderror
                                         </div>
 
+                                        <div class="space-y-2">
+                                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Company
+                                                Name</label>
+                                            <input type="text" name="company_name"
+                                                class="ti-form-input rounded-sm form-control-sm"
+                                                value="{{ old('company_name', '') }}">
+                                            @error('company_name', 'add')
+                                                <span class="text-red-500 text-xs">{{ $message }}</span>
+                                            @enderror
+                                        </div>
+
+                                        <div class="space-y-2">
+                                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">GST
+                                                Number</label>
+                                            <input type="text" name="gst_number"
+                                                class="ti-form-input rounded-sm form-control-sm"
+                                                value="{{ old('gst_number', '') }}">
+                                            @error('gst_number', 'add')
+                                                <span class="text-red-500 text-xs">{{ $message }}</span>
+                                            @enderror
+                                        </div>
+
                                         <!-- Phone Number -->
                                         <div class="space-y-2">
                                             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Phone
@@ -203,6 +225,8 @@
                                 <tr class="border-b border-defaultborder">
                                     <th data-priority="1">S.No</th>
                                     <th data-priority="2">Name</th>
+                                    <th data-priority="4">Company Name</th>
+                                    <th data-priority="5">GST Number</th>
                                     <th data-priority="3">Email</th>
                                     <th data-priority="5">Phone</th>
                                     <th data-priority="4">City</th>
@@ -215,6 +239,8 @@
                                     <tr class="border-b border-defaultborder">
                                         <td class="text-center">{{ ($clients->firstItem() ?? 1) + $key }}</td>
                                         <td>{{ $client->name }}</td>
+                                        <td>{{ $client->company_name ?? 'N/A' }}</td>
+                                        <td>{{ $client->gst_number ?? 'N/A' }}</td>
                                         <td>{{ $client->email }}</td>
                                         <td class="text-center">{{ $client->contact_number }}</td>
                                         <td>
@@ -360,6 +386,26 @@
                                             class="ti-form-input rounded-sm form-control-sm"
                                             value="{{ old('email', '') }}" required>
                                         @error('email', 'edit')
+                                            <span class="text-red-500 text-xs">{{ $message }}</span>
+                                        @enderror
+                                    </div>
+                                    <div class="space-y-2">
+                                        <label for="edit_company_name"
+                                            class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Company Name</label>
+                                        <input type="text" id="edit_company_name" name="company_name"
+                                            class="ti-form-input rounded-sm form-control-sm"
+                                            value="{{ old('company_name', '') }}">
+                                        @error('company_name', 'edit')
+                                            <span class="text-red-500 text-xs">{{ $message }}</span>
+                                        @enderror
+                                    </div>
+                                    <div class="space-y-2">
+                                        <label for="edit_gst_number"
+                                            class="ti-form-label dark:text-defaulttextcolor/70 mb-0">GST Number</label>
+                                        <input type="text" id="edit_gst_number" name="gst_number"
+                                            class="ti-form-input rounded-sm form-control-sm"
+                                            value="{{ old('gst_number', '') }}">
+                                        @error('gst_number', 'edit')
                                             <span class="text-red-500 text-xs">{{ $message }}</span>
                                         @enderror
                                     </div>
@@ -805,6 +851,8 @@
                         // Updated field selectors with edit_ prefix
                         $('#edit_name').val(client.name);
                         $('#edit_email').val(client.email);
+                        $('#edit_company_name').val(client.company_name || '');
+                        $('#edit_gst_number').val(client.gst_number || '');
                         $('#edit_date_of_birth').val(client.date_of_birth);
                         $('#edit_address').val(client.address);
 

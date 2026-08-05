@@ -82,6 +82,8 @@ class RideStatusExport implements FromCollection, WithHeadings, WithMapping, Wit
             $ridesQuery->where(function ($q) use ($searchFilter) {
                 $q->whereHas('enquiry.client', function ($q2) use ($searchFilter) {
                     $q2->where('name', 'ilike', '%' . $searchFilter . '%')
+                        ->orWhere('company_name', 'ilike', '%' . $searchFilter . '%')
+                        ->orWhere('gst_number', 'ilike', '%' . $searchFilter . '%')
                         ->orWhere('contact_number', 'ilike', '%' . $searchFilter . '%')
                         ->orWhere('alternate_number', 'ilike', '%' . $searchFilter . '%');
                 })
@@ -239,6 +241,8 @@ class RideStatusExport implements FromCollection, WithHeadings, WithMapping, Wit
                 'assigned_rep' => $assignedRep,
                 'created_date' => $createdDate,
                 'client_name' => $client ? $client->name : 'N/A',
+                'company_name' => $client ? ($client->company_name ?: 'N/A') : 'N/A',
+                'gst_number' => $client ? ($client->gst_number ?: 'N/A') : 'N/A',
                 'contact_number' => $client ? $client->contact_number : 'N/A',
                 'service_date' => $allRides->first()->from_date ? $allRides->first()->from_date->format('d-m-Y') : 'N/A',
                 'service_names' => implode(', ', $serviceNames),
@@ -289,6 +293,8 @@ class RideStatusExport implements FromCollection, WithHeadings, WithMapping, Wit
         return [
             'S.No',
             'Client Name',
+            'Company Name',
+            'GST Number',
             'Phone',
             'Service Date',
             'Services',
@@ -309,6 +315,8 @@ class RideStatusExport implements FromCollection, WithHeadings, WithMapping, Wit
         return [
             $count,
             $row->client_name,
+            $row->company_name,
+            $row->gst_number,
             $row->contact_number,
             $row->service_date,
             $row->service_names,
@@ -346,6 +354,8 @@ class RideStatusExport implements FromCollection, WithHeadings, WithMapping, Wit
                 $event->sheet->getColumnDimension('I')->setWidth(25);
                 $event->sheet->getColumnDimension('J')->setWidth(20);
                 $event->sheet->getColumnDimension('K')->setWidth(18);
+                $event->sheet->getColumnDimension('L')->setWidth(20);
+                $event->sheet->getColumnDimension('M')->setWidth(18);
             },
         ];
     }

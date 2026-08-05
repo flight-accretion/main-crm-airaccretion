@@ -1372,6 +1372,8 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                 $ridesQuery->where(function ($q) use ($searchFilter) {
                     $q->whereHas('enquiry.client', function ($q2) use ($searchFilter) {
                         $q2->where('name', 'ilike', '%' . $searchFilter . '%')
+                           ->orWhere('company_name', 'ilike', '%' . $searchFilter . '%')
+                           ->orWhere('gst_number', 'ilike', '%' . $searchFilter . '%')
                            ->orWhere('contact_number', 'ilike', '%' . $searchFilter . '%')
                            ->orWhere('alternate_number', 'ilike', '%' . $searchFilter . '%');
                     })
@@ -1548,6 +1550,8 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                     'created_date' => $createdDate,
                     'created_date_sortable' => $lead->created_at ? $lead->created_at->format('Y-m-d H:i:s') : '0000-00-00 00:00:00',
                     'client_name' => $client ? $client->name : 'N/A',
+                    'company_name' => $client ? ($client->company_name ?: 'N/A') : 'N/A',
+                    'gst_number' => $client ? ($client->gst_number ?: 'N/A') : 'N/A',
                     'contact_number' => $client ? $client->contact_number : 'N/A',
                     'service_date' => $allRides->first()->from_date ? $allRides->first()->from_date->format('d-m-Y') : 'N/A',
                     'service_date_sortable' => $allRides->first()->from_date ? $allRides->first()->from_date->format('Y-m-d H:i:s') : '0000-00-00 00:00:00',
@@ -1892,6 +1896,8 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                 ],
                 'client' => [
                     'name' => $client ? $client->name : 'N/A',
+                    'company_name' => $client ? ($client->company_name ?: 'N/A') : 'N/A',
+                    'gst_number' => $client ? ($client->gst_number ?: 'N/A') : 'N/A',
                     'email' => $client ? $client->email : 'N/A',
                     'contact_number' => $client ? $client->contact_number : 'N/A',
                     'alternate_number' => $client ? $client->alternate_number : 'N/A',
@@ -2123,7 +2129,8 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                             $newNumber = $lastInvoice ? intval(substr($lastInvoice->invoice_id, -4)) + 1 : 1;
                             $invoiceId = $prefix . str_pad($newNumber, 4, '0', STR_PAD_LEFT);
 
-                            $companyName = optional($lead->client)->name ?: 'Accretion Aviation';
+                            $companyName = optional($lead->client)->company_name ?: null;
+                            $gstNumber = optional($lead->client)->gst_number ?: null;
 
                             // Create invoice directly with status = 1 (active, not finalized)
                             $invoice = \App\Models\Invoice::create([
@@ -2131,7 +2138,7 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                                 'invoice_id' => $invoiceId,
                                 'voucher_id' => $voucher->id,
                                 'company_name' => $companyName,
-                                'gst_number' => null,
+                                'gst_number' => $gstNumber,
                                 'billing_address' => optional($lead->client)->address ?? null,
                                 'status' => 1
                             ]);
@@ -2344,7 +2351,8 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                 $invoiceId = "INV-{$year}-{$month}-" . str_pad($newNumber, 4, '0', STR_PAD_LEFT);
 
                 // Use optional() helper to avoid trying to read properties on null
-                $companyName = optional($lead->client)->name ?: 'Accretion Aviation';
+                $companyName = optional($lead->client)->company_name ?: null;
+                $gstNumber = optional($lead->client)->gst_number ?: null;
 
                 if (!$lead->client) {
                     Log::warning("generateInvoice: Lead {$lead->id} has no client. Using fallback company name and billing address.", ['lead_id' => $lead->id, 'voucher_id' => $voucher->id ?? null]);
@@ -2355,7 +2363,7 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                     'invoice_id' => $invoiceId,
                     'voucher_id' => $voucher->id,
                     'company_name' => $companyName,
-                    'gst_number' => null,
+                    'gst_number' => $gstNumber,
                     'billing_address' => optional($lead->client)->address ?? null,
                     'status' => 1
                 ]);

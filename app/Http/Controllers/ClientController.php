@@ -150,7 +150,7 @@ class ClientController extends Controller
 
         // Base query with selective eager loading
         $query = Lead::with([
-            'client:id,name,email,contact_number,country_id,city_id,status',
+            'client:id,name,company_name,gst_number,email,contact_number,country_id,city_id,status',
             'representative:id,name,email',
             'rideSegments:id,lead_id,from_date,to_date,from_place,to_place'
         ])
@@ -201,6 +201,8 @@ class ClientController extends Controller
                 // Search in client table
                 $q->whereHas('client', function ($clientQuery) use ($searchTerm) {
                     $clientQuery->where('name', 'like', '%' . $searchTerm . '%')
+                        ->orWhere('company_name', 'like', '%' . $searchTerm . '%')
+                        ->orWhere('gst_number', 'like', '%' . $searchTerm . '%')
                         ->orWhere('email', 'like', '%' . $searchTerm . '%')
                         ->orWhere('contact_number', 'like', '%' . $searchTerm . '%');
                 })
@@ -351,6 +353,8 @@ class ClientController extends Controller
                 'id',
                 'name',
                 'email',
+                'company_name',
+                'gst_number',
                 'contact_number',
                 'alternate_number',
                 'date_of_birth',
@@ -459,6 +463,8 @@ class ClientController extends Controller
 
             // Email: optional but if present must be a valid email
             'email' => ['nullable', 'email:rfc,dns', 'max:255'],
+            'company_name' => ['nullable', 'string', 'max:255'],
+            'gst_number' => ['nullable', 'string', 'max:255'],
 
             // Phone numbers: digits only (5-20)
             'contact_number' => ['required', 'string', 'regex:/^[0-9]{5,20}$/'],
@@ -572,6 +578,8 @@ class ClientController extends Controller
 
                 $client->update([
                     'name' => $request->name,
+                    'company_name' => $request->company_name,
+                    'gst_number' => $request->gst_number,
                     'email' => $request->email,
                     'contact_number' => $strContactNumber,
                     'alternate_number' => $strAlternateNumber,
@@ -590,6 +598,8 @@ class ClientController extends Controller
                 $client = Client::create([
                     'id' => Str::uuid(),
                     'name' => $request->name,
+                    'company_name' => $request->company_name,
+                    'gst_number' => $request->gst_number,
                     'email' => $request->email,
                     'contact_number' => $strContactNumber,
                     'alternate_number' => $strAlternateNumber,
@@ -1611,6 +1621,8 @@ class ClientController extends Controller
             $search = trim($request->input('search'));
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'ilike', '%' . $search . '%')
+                    ->orWhere('company_name', 'ilike', '%' . $search . '%')
+                    ->orWhere('gst_number', 'ilike', '%' . $search . '%')
                     ->orWhere('email', 'ilike', '%' . $search . '%')
                     ->orWhere('contact_number', 'ilike', '%' . $search . '%')
                     ->orWhere('alternate_number', 'ilike', '%' . $search . '%')
@@ -1692,6 +1704,8 @@ class ClientController extends Controller
                     }
                 }
             ],
+            'company_name' => ['nullable', 'string', 'max:255'],
+            'gst_number' => ['nullable', 'string', 'max:255'],
             'contact_number' => [
                 'required',
                 'string',
@@ -1852,6 +1866,8 @@ class ClientController extends Controller
             $client = Client::create([
                 'id' => Str::uuid(),
                 'name' => $request->name,
+                'company_name' => $request->company_name,
+                'gst_number' => $request->gst_number,
                 'email' => $request->email,
                 'contact_number' => $strContactNumber,
                 'alternate_number' => $strAlternateNumber,
@@ -1931,6 +1947,8 @@ class ClientController extends Controller
                     }
                 }
             ],
+            'company_name' => ['nullable', 'string', 'max:255'],
+            'gst_number' => ['nullable', 'string', 'max:255'],
             'contact_number' => [
                 'required',
                 'string',
@@ -2088,6 +2106,8 @@ class ClientController extends Controller
             // Update client
             $client->update([
                 'name' => $request->name,
+                'company_name' => $request->company_name,
+                'gst_number' => $request->gst_number,
                 'email' => $request->email,
                 'contact_number' => $formattedContactNumber,
                 'alternate_number' => $formattedAlternateNumber,
@@ -4316,6 +4336,8 @@ class ClientController extends Controller
             $headers = [
                 'S.No',
                 'Full Name',
+                'Company Name',
+                'GST Number',
                 'Email Address',
                 'Phone Number',
                 'WhatsApp Number',
@@ -4404,6 +4426,8 @@ class ClientController extends Controller
                 $rowData = [
                     $index + 1, // S.No
                     $lead->client->name ?? '', // Full Name
+                    $lead->client->company_name ?? '', // Company Name
+                    $lead->client->gst_number ?? '', // GST Number
                     $lead->client->email ?? '', // Email Address
                     $phoneDigits, // Phone Number (digits-only)
                     $altDigits, // WhatsApp Number (digits-only)
@@ -4429,9 +4453,9 @@ class ClientController extends Controller
 
                 // Force phone and whatsapp cells to be stored as strings to avoid Excel scientific notation
                 try {
-                    // Column D = phone, Column E = whatsapp (1-based columns: A=1)
-                    $sheet->setCellValueExplicit('D' . $row, (string)($rowData[3] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-                    $sheet->setCellValueExplicit('E' . $row, (string)($rowData[4] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    // Column F = phone, Column G = whatsapp (1-based columns: A=1)
+                    $sheet->setCellValueExplicit('F' . $row, (string)($rowData[5] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    $sheet->setCellValueExplicit('G' . $row, (string)($rowData[6] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
                 } catch (\Exception $e) {
                     // ignore failures; number-format fallback will still help
                 }
@@ -4442,8 +4466,8 @@ class ClientController extends Controller
             // Ensure phone columns are treated as text in XLSX to avoid scientific notation in Excel
             $highestRow = $row - 1;
             try {
-                $sheet->getStyle('D2:D' . $highestRow)->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
-                $sheet->getStyle('E2:E' . $highestRow)->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
+                $sheet->getStyle('F2:F' . $highestRow)->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
+                $sheet->getStyle('G2:G' . $highestRow)->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
             } catch (\Exception $e) {
                 // ignore if styling fails
             }
@@ -4515,6 +4539,8 @@ class ClientController extends Controller
                     $rowData = [
                         $index + 1,
                         $lead->client->name ?? '',
+                        $lead->client->company_name ?? '',
+                        $lead->client->gst_number ?? '',
                         $lead->client->email ?? '',
                         $csvPhone,
                         $csvAlt,
@@ -4751,6 +4777,8 @@ class ClientController extends Controller
                 }),
             ],
             'address' => ['nullable', 'string', 'max:500'],
+            'company_name' => ['nullable', 'string', 'max:255'],
+            'gst_number' => ['nullable', 'string', 'max:255'],
             'city' => 'nullable|string|max:100',
             'date_of_birth' => [
                 'nullable',
@@ -4830,6 +4858,8 @@ class ClientController extends Controller
 
             $client->update([
                 'name' => $request->name,
+                'company_name' => $request->company_name,
+                'gst_number' => $request->gst_number,
                 'email' => $request->email,
                 'contact_number' => $strContactNumber,
                 'alternate_number' => $strAlternateNumber,

@@ -37,6 +37,14 @@
                             <p class="text-gray-800 dark:text-white">{{ $client->email }}</p>
                         </div>
                         <div class="space-y-2">
+                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Company Name</label>
+                            <p class="text-gray-800 dark:text-white">{{ $client->company_name ?? 'N/A' }}</p>
+                        </div>
+                        <div class="space-y-2">
+                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">GST Number</label>
+                            <p class="text-gray-800 dark:text-white">{{ $client->gst_number ?? 'N/A' }}</p>
+                        </div>
+                        <div class="space-y-2">
                             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Phone Number</label>
                             <p class="text-gray-800 dark:text-white">{{ $client->contact_number }}</p>
                         </div>

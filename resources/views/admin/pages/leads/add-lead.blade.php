@@ -61,8 +61,10 @@
                                             data-dob="{{ $client->date_of_birth }}"
                                             data-country="{{ $client->country_id }}"
                                             data-city="{{ $client->city_id }}"
+                                            data-company-name="{{ $client->company_name }}"
+                                            data-gst-number="{{ $client->gst_number }}"
                                             data-address="{{ $client->address }}"
-                                            data-search-text="{{ $client->name }} {{ $client->email }} {{ $client->contact_number }} {{ $client->alternate_number }}">
+                                            data-search-text="{{ $client->name }} {{ $client->company_name }} {{ $client->gst_number }} {{ $client->email }} {{ $client->contact_number }} {{ $client->alternate_number }}">
                                             {{ $client->name }} | {{ $client->contact_number }} | {{ $client->email }}
                                         </option>
                                     @endforeach
@@ -93,6 +95,20 @@
                                             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Email Address</label>
                                             <input type="email" name="email" class="email-address ti-form-input  rounded-sm form-control-sm" placeholder="your@site.com" value="{{ old('email') }}">
                                             @error('email')
+                                                <span class="text-red-500 text-xs">{{ $message }}</span>
+                                            @enderror
+                                        </div>
+                                        <div class="space-y-2">
+                                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Company Name</label>
+                                            <input type="text" name="company_name" class="ti-form-input rounded-sm form-control-sm" placeholder="Company Name" value="{{ old('company_name') }}">
+                                            @error('company_name')
+                                                <span class="text-red-500 text-xs">{{ $message }}</span>
+                                            @enderror
+                                        </div>
+                                        <div class="space-y-2">
+                                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">GST Number</label>
+                                            <input type="text" name="gst_number" class="ti-form-input rounded-sm form-control-sm" placeholder="GST Number" value="{{ old('gst_number') }}">
+                                            @error('gst_number')
                                                 <span class="text-red-500 text-xs">{{ $message }}</span>
                                             @enderror
                                         </div>
@@ -521,7 +537,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function initClientSelect2() {
         $('#clientSelect').select2({
-            placeholder: 'Search by name, email, or phone number...',
+            placeholder: 'Search by name, company, GST, email, or phone number...',
             allowClear: true,
             width: '100%',
             matcher: function(params, data) {
@@ -651,7 +667,8 @@ document.addEventListener('DOMContentLoaded', function () {
     function handleClientSelectionChange(e) {
         const selected = e.target.options[e.target.selectedIndex];
         const value = e.target.value;
-        const clientFields = ['name', 'email', 'contact_number', 'alternate_number', 'date_of_birth', 'country_id', 'city', 'address'];
+        const clientFields = ['name', 'email', 'company_name', 'gst_number', 'contact_number', 'alternate_number', 'date_of_birth', 'country_id', 'city', 'address'];
+        const optionalClientFields = ['company_name', 'gst_number'];
         const clientIdField = document.getElementById('client_id_field') || (() => {
             const input = document.createElement('input');
             input.type = 'hidden';
@@ -666,7 +683,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 const el = document.querySelector(`[name="${field}"]`);
                 if (el) {
                     el.disabled = false;
-                    el.required = true;
+                    el.required = !optionalClientFields.includes(field);
                     if (!['country_id', 'city'].includes(field)) el.value = '';
                 }
             });
@@ -678,6 +695,8 @@ document.addEventListener('DOMContentLoaded', function () {
             const clientDisplayText = selected.text.split(' | ')[0] || '';
             document.querySelector('input[name="name"]').value = clientDisplayText;
             document.querySelector('input[name="email"]').value = selected.dataset.email || '';
+            document.querySelector('input[name="company_name"]').value = selected.dataset.companyName || '';
+            document.querySelector('input[name="gst_number"]').value = selected.dataset.gstNumber || '';
 
             // Handle phone numbers with proper country code separation
             const phoneNumber = selected.dataset.phone || '';
@@ -835,7 +854,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     // Make field editable
                     el.disabled = false;
                     // Keep validation consistent with the "Add New" behavior for core fields
-                    if (!['country_id', 'city'].includes(field)) {
+                    if (!['country_id', 'city'].includes(field) && !optionalClientFields.includes(field)) {
                         el.required = true;
                     } else {
                         // country and city are managed via selects and may be optional depending on form flow
@@ -850,7 +869,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 const el = document.querySelector(`[name="${field}"]`);
                 if (el) {
                     el.disabled = false;
-                    el.required = true;
+                    el.required = !optionalClientFields.includes(field);
                     if (!['country_id', 'city'].includes(field)) el.value = '';
                 }
             });

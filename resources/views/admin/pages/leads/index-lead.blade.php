@@ -181,8 +181,10 @@
                                 <th></th>
                                 <th data-priority="1">S.No</th>
                                 <th data-priority="2">Client Name</th>
+                                <th data-priority="4">Company Name</th>
+                                <th data-priority="5">GST Number</th>
                                 <th data-priority="3">Email</th>
-                                <th data-priority="5">Phone</th>
+                                <th data-priority="6">Phone</th>
                                 <th data-priority="6">Next Follow Up</th>
                                 <th data-priority="7">Created Date</th>
                                 <th data-priority="8">Assigned:</th>
@@ -201,6 +203,8 @@
                                 <td class="text-center">
                                     {{ $leads->firstItem() ? $leads->firstItem() + $key : $key + 1 }}</td>
                                 <td>{{ optional($enquiry->client)->name ?? 'N/A' }}</td>
+                                <td>{{ optional($enquiry->client)->company_name ?? 'N/A' }}</td>
+                                <td>{{ optional($enquiry->client)->gst_number ?? 'N/A' }}</td>
                                 <td>{{ optional($enquiry->client)->email ?? 'N/A' }}</td>
                                 <td class="text-center">{{ optional($enquiry->client)->contact_number ?? 'N/A' }}</td>
                                 <td class="text-center">
@@ -1028,14 +1032,14 @@
                             return `
                         <div class="leads-tableshow">
                             <div class="p-3 ml-5 text-sm text-gray-700">
-                                <div class="mb-4"><strong>Assigned:</strong> ${columns[6] ? columns[6].data : 'N/A'}</div>
+                                <div class="mb-4"><strong>Assigned:</strong> ${columns[9] ? columns[9].data : 'N/A'}</div>
                                 <div class="mb-4">
-                                    <strong>Service Date:</strong> ${columns[7] ? columns[7].data : 'N/A'}
+                                    <strong>Service Date:</strong> ${columns[10] ? columns[10].data : 'N/A'}
                                 </div>
-                                <div class="mb-4"><strong>Service:</strong> ${columns[8] ? columns[8].data : 'N/A'} </div>
-                                <div class="mb-4"><strong>Last Update:</strong> ${columns[9] ? columns[9].data : 'N/A'} </div>
+                                <div class="mb-4"><strong>Service:</strong> ${columns[11] ? columns[11].data : 'N/A'} </div>
+                                <div class="mb-4"><strong>Last Update:</strong> ${columns[12] ? columns[12].data : 'N/A'} </div>
                             </div>
-                            <div class="follow-history p-3 ml-5 text-sm text-gray-700"><div class="mb-4"><strong>Follow-up History:</strong></div> ${columns[10] ? columns[10].data : 'No history'} </div>
+                            <div class="follow-history p-3 ml-5 text-sm text-gray-700"><div class="mb-4"><strong>Follow-up History:</strong></div> ${columns[13] ? columns[13].data : 'No history'} </div>
                         </div>
                         `;
                         }
@@ -1068,14 +1072,14 @@
                 buttons: [{
                         extend: 'excel',
                         exportOptions: {
-                            columns: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+                            columns: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
                             format: {
                                 body: function(data, row, column, node) {
                                     var tempDiv = document.createElement('div');
                                     tempDiv.innerHTML = data;
                                     var plainText = tempDiv.textContent || tempDiv.innerText || '';
 
-                                    if (column === 9) { // Status column
+                                    if (column === 14) { // Status column
                                         if (plainText.includes('Active')) return 'Active';
                                         if (plainText.includes('Pending')) return 'Pending';
                                         if (plainText.includes('Cancelled')) return 'Cancelled';
@@ -1083,8 +1087,8 @@
                                         return 'N/A';
                                     }
 
-                                    // Phone column (index 4) - wrap in ="..." so Excel preserves leading + and formatting when opening CSV
-                                    if (column === 4) {
+                                    // Phone column - wrap in ="..." so Excel preserves leading + and formatting when opening CSV
+                                    if (column === 6) {
                                         var cleaned = plainText.trim();
                                         // escape any double quotes inside the value
                                         cleaned = cleaned.replace(/"/g, '""');
@@ -1100,14 +1104,14 @@
                     {
                         extend: 'csv',
                         exportOptions: {
-                            columns: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+                            columns: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
                             format: {
                                 body: function(data, row, column, node) {
                                     var tempDiv = document.createElement('div');
                                     tempDiv.innerHTML = data;
                                     var plainText = tempDiv.textContent || tempDiv.innerText || '';
 
-                                    if (column === 9) { // Status column
+                                    if (column === 14) { // Status column
                                         if (plainText.includes('Active')) return 'Active';
                                         if (plainText.includes('Pending')) return 'Pending';
                                         if (plainText.includes('Cancelled')) return 'Cancelled';
@@ -1115,8 +1119,8 @@
                                         return 'N/A';
                                     }
 
-                                    // Phone column (index 4) - wrap in ="..." so Excel preserves leading + and formatting when opening CSV
-                                    if (column === 4) {
+                                    // Phone column - preserve as text when opening CSV
+                                    if (column === 6) {
                                         var cleaned = plainText.trim();
                                         // escape any double quotes inside the value
                                         cleaned = cleaned.replace(/"/g, '""');
@@ -1135,14 +1139,14 @@
                         orientation: 'landscape',
                         pageSize: 'A4',
                         exportOptions: {
-                            columns: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+                            columns: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
                             format: {
                                 body: function(data, row, column, node) {
                                     var tempDiv = document.createElement('div');
                                     tempDiv.innerHTML = data;
                                     var plainText = tempDiv.textContent || tempDiv.innerText || '';
 
-                                    if (column === 9) { // Status column
+                                    if (column === 14) { // Status column
                                         if (plainText.includes('Active')) return 'Active';
                                         if (plainText.includes('Pending')) return 'Pending';
                                         if (plainText.includes('Cancelled')) return 'Cancelled';
@@ -1165,14 +1169,14 @@
                     {
                         extend: 'print',
                         exportOptions: {
-                            columns: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+                            columns: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
                             format: {
                                 body: function(data, row, column, node) {
                                     var tempDiv = document.createElement('div');
                                     tempDiv.innerHTML = data;
                                     var plainText = tempDiv.textContent || tempDiv.innerText || '';
 
-                                    if (column === 9) { // Status column
+                                    if (column === 14) { // Status column
                                         if (plainText.includes('Active')) return 'Active';
                                         if (plainText.includes('Pending')) return 'Pending';
                                         if (plainText.includes('Cancelled')) return 'Cancelled';

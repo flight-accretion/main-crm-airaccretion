@@ -41,6 +41,7 @@ class InvoiceController extends Controller
                 'invoice',
                 'lead.client.country',
                 'lead.client.city',
+                'lead.representative',
                 'lead.rideSegments',
                 'lead.leadFollowups' => function($q) {
                     $q->whereNotNull('received_amount')
@@ -104,9 +105,14 @@ class InvoiceController extends Controller
                                 ->orWhere('occasion', 'ilike', '%' . $search . '%')
                                 ->orWhereHas('client', function ($clientQuery) use ($search) {
                                     $clientQuery->where('name', 'ilike', '%' . $search . '%')
+                                        ->orWhere('company_name', 'ilike', '%' . $search . '%')
+                                        ->orWhere('gst_number', 'ilike', '%' . $search . '%')
                                         ->orWhere('email', 'ilike', '%' . $search . '%')
                                         ->orWhere('contact_number', 'ilike', '%' . $search . '%')
                                         ->orWhere('alternate_number', 'ilike', '%' . $search . '%');
+                                })
+                                ->orWhereHas('representative', function ($repQuery) use ($search) {
+                                    $repQuery->where('name', 'ilike', '%' . $search . '%');
                                 })
                                 ->orWhereHas('rideSegments', function ($rideQuery) use ($search) {
                                     $rideQuery->where('from_place', 'ilike', '%' . $search . '%')
@@ -207,11 +213,16 @@ class InvoiceController extends Controller
                 $profitLoss = $totalReceived - $vendorInfo['totalVendorCost'];
                 $rideInfo = $this->getRideInformation($lead);
                 $allRides = $this->getAllRideSegments($lead);
+                $existingInvoiceModel = Invoice::where('voucher_id', $voucher->id)->first();
+                $displayCompanyName = $existingInvoiceModel?->company_name ?: ($client->company_name ?: 'N/A');
+                $displayGstNumber = $existingInvoiceModel?->gst_number ?: ($client->gst_number ?: 'N/A');
 
                 $invoiceData = [
                     'id' => $voucher->id,
                     'client' => [
                         'name' => $client->name,
+                        'company_name' => $client->company_name,
+                        'gst_number' => $client->gst_number,
                         'email' => $client->email,
                         'phone' => $client->contact_number,
                         'whatsapp' => $client->alternate_number ?? $client->alternate_number,
@@ -219,6 +230,9 @@ class InvoiceController extends Controller
                         'city' => $client->city->city ?? 'N/A',
                         'address' => $client->address ?? 'N/A'
                     ],
+                    'invoice_company_name' => $displayCompanyName,
+                    'invoice_gst_number' => $displayGstNumber,
+                    'sales_person_name' => $lead->representative->name ?? 'N/A',
                     'service' => $serviceInfo,
                     'ride' => $rideInfo,
                     'all_rides' => $allRides,
@@ -236,7 +250,6 @@ class InvoiceController extends Controller
                 ];
 
                 // Attach existing invoice metadata so view can disable quick-generate button
-                $existingInvoiceModel = Invoice::where('voucher_id', $voucher->id)->first();
                 $invoiceData['existing_invoice'] = $existingInvoiceModel ? true : false;
                 $invoiceData['existing_invoice_id'] = $existingInvoiceModel->invoice_id ?? null;
 
@@ -330,7 +343,7 @@ class InvoiceController extends Controller
         try {
             DB::beginTransaction();
 
-            $voucher = Voucher::findOrFail($voucherId);
+            $voucher = Voucher::with('lead.client')->findOrFail($voucherId);
             
             // Check if invoice already exists -> return existing invoice instead of treating as error
             $existingInvoice = Invoice::where('voucher_id', $voucher->id)->first();
@@ -353,11 +366,21 @@ class InvoiceController extends Controller
                 'billing_address' => 'nullable|string'
             ]);
 
-            // Default company name to client name when not provided
-            $clientName = $voucher->lead && $voucher->lead->client ? ($voucher->lead->client->name ?? null) : null;
+            // Default company/GST to the linked client when present; company remains nullable.
+            $client = $voucher->lead?->client;
             $companyName = $invoiceData['company_name'] ?? null;
-            if (empty($companyName) && !empty($clientName)) {
-                $companyName = $clientName;
+            if (is_string($companyName)) {
+                $companyName = trim($companyName);
+            }
+            if ($companyName === '') {
+                $companyName = null;
+            }
+            if ($companyName === null && !empty($client?->company_name)) {
+                $companyName = $client->company_name;
+            }
+            $gstNumber = $invoiceData['gst_number'] ?? null;
+            if (empty($gstNumber)) {
+                $gstNumber = $client?->gst_number;
             }
 
             // Create invoice using direct assignment to ensure required fields (like voucher_id)
@@ -367,8 +390,8 @@ class InvoiceController extends Controller
             $invoice->invoice_id = $invoiceId;
             $invoice->voucher_id = $voucher->id;
             $invoice->company_name = $companyName;
-            $invoice->gst_number = $invoiceData['gst_number'] ?? null;
-            $invoice->billing_address = $invoiceData['billing_address'] ?? null;
+            $invoice->gst_number = $gstNumber;
+            $invoice->billing_address = $invoiceData['billing_address'] ?? ($client?->address);
             $invoice->status = 1;
             $invoice->save();
 
@@ -400,7 +423,7 @@ class InvoiceController extends Controller
             $voucher = Voucher::findOrFail($voucherId);
             // Validate input and return structured JSON errors for AJAX callers
             $rules = [
-                'company_name' => 'required|string|max:255',
+                'company_name' => 'nullable|string|max:255',
                 'gst_number' => 'nullable|string|max:50',
                 'billing_address' => 'nullable|string'
             ];
@@ -423,7 +446,7 @@ class InvoiceController extends Controller
                     'id' => Str::uuid(),
                     'invoice_id' => $this->generateInvoiceId(),
                     'voucher_id' => $voucher->id,
-                    'company_name' => $validatedData['company_name'],
+                    'company_name' => $validatedData['company_name'] ?? null,
                     'gst_number' => $validatedData['gst_number'] ?? null,
                     'billing_address' => $validatedData['billing_address'] ?? null,
                     'status' => 1

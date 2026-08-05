@@ -114,12 +114,15 @@
                                 <tr class="border-b border-defaultborder">
                                     <th data-priority="1">S.No</th>
                                     <th data-priority="2">Name</th>
-                                    <th data-priority="3">Phone</th>
-                                    <th data-priority="4">Service Date</th>
-                                    <th data-priority="5">Service</th>
-                                    <th data-priority="6">Amount</th>
-                                    <th data-priority="7">Profit/Loss</th>
-                                    <th data-priority="8">Actions</th>
+                                    <th data-priority="3">Company Name</th>
+                                    <th data-priority="4">GST Number</th>
+                                    <th data-priority="5">Sales Person</th>
+                                    <th data-priority="6">Phone</th>
+                                    <th data-priority="7">Service Date</th>
+                                    <th data-priority="8">Service</th>
+                                    <th data-priority="9">Amount</th>
+                                    <th data-priority="10">Profit/Loss</th>
+                                    <th data-priority="11">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -127,6 +130,9 @@
                                     <tr>
                                         <td class="text-center">{{ (isset($vouchers) && $vouchers->firstItem() ? $vouchers->firstItem() : 1) + $index }}</td>
                                         <td>{{ $invoice['client']['name'] ?? 'N/A' }}</td>
+                                        <td>{{ $invoice['invoice_company_name'] ?? 'N/A' }}</td>
+                                        <td>{{ $invoice['invoice_gst_number'] ?? 'N/A' }}</td>
+                                        <td>{{ $invoice['sales_person_name'] ?? 'N/A' }}</td>
                                         <td class="text-center">{{ $invoice['client']['phone'] ?? 'N/A' }}</td>
                                         <td class="text-center">
                                             {{ $invoice['ride']['from_date'] ? \Carbon\Carbon::parse($invoice['ride']['from_date'])->format('d-m-Y') : '-' }}
@@ -157,11 +163,13 @@
                                                 title="Invoice Options">
                                                 <i class="ri-file-text-line"></i>
                                             </button>
-                                            <!-- Quick generate invoice button: will save client name as company_name if provided -->
+                                            <!-- Quick generate invoice button -->
                                             <button type="button"
                                                 class="ti-btn ti-btn-icon ti-btn-sm ti-btn-secondary generate-invoice-btn {{ !empty($invoice['existing_invoice']) ? 'opacity-50 cursor-not-allowed' : '' }}"
                                                 data-invoice-id="{{ $invoice['id'] }}"
                                                 data-client-name="{{ $invoice['client']['name'] ?? '' }}"
+                                                data-company-name="{{ $invoice['client']['company_name'] ?? '' }}"
+                                                data-gst-number="{{ $invoice['client']['gst_number'] ?? '' }}"
                                                 data-existing-invoice="{{ $invoice['existing_invoice'] ? '1' : '0' }}"
                                                 title="{{ !empty($invoice['existing_invoice']) ? 'Invoice already generated' : 'Generate Invoice' }}"
                                                 {{ !empty($invoice['existing_invoice']) ? 'disabled' : '' }}>
@@ -313,13 +321,13 @@
                                                                                                                             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Company Name</label>
                                                                                                                             <input type="text" name="company_name"
                                                                                                                                 class="ti-form-input rounded-sm form-control-sm" value=""
-                                                                                                                                placeholder="Accretion Aviation" required>
+                                                                                                                                placeholder="Company Name">
                                                                                                                         </div>
                                                                                                                         <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
                                                                                                                             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">GST Number</label>
                                                                                                                             <input type="number" name="gst_number"
                                                                                                                                 class="ti-form-input rounded-sm form-control-sm" value=""
-                                                                                                                                placeholder="ABCDE1234F" required>
+                                                                                                                                placeholder="ABCDE1234F">
                                                                                                                         </div>
                                                                                                                         <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
                                                                                                                             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Billing Address</label>
@@ -509,9 +517,10 @@
                 btn.addEventListener('click', function() {
                     const id = this.getAttribute('data-invoice-id');
                     if (!id) return;
-                    // Pass client name so controller can save it as company_name
                     const clientName = this.getAttribute('data-client-name') || '';
-                    generateInvoice(id, clientName);
+                    const companyName = this.getAttribute('data-company-name') || '';
+                    const gstNumber = this.getAttribute('data-gst-number') || '';
+                    generateInvoice(id, clientName, companyName, gstNumber);
                 });
             });
 
@@ -764,9 +773,8 @@
         }
 
         function renderGstInfo(invoice, existingInvoice, client, voucher) {
-            // Prefill company name: prefer existing saved invoice -> fall back to client name -> invoice payload
-            const company = existingInvoice?.company_name || client?.name || invoice?.company_name || '';
-            const gst = existingInvoice?.gst_number || invoice?.gst_number || '';
+            const company = existingInvoice?.company_name || client?.company_name || invoice?.company_name || '';
+            const gst = existingInvoice?.gst_number || client?.gst_number || invoice?.gst_number || '';
             const billing = existingInvoice?.billing_address || invoice?.billing_address || client.address || '';
 
             const html = `
@@ -1228,7 +1236,7 @@
             container.innerHTML = html;
         }
 
-        function generateInvoice(voucherId, clientName = '') {
+        function generateInvoice(voucherId, clientName = '', companyName = '', gstNumber = '') {
             showConfirmationModal('Generate Invoice', 'Generate invoice for this voucher?', function() {
                 fetch(`{{ url('admin/account/invoices') }}/${voucherId}/generate`, {
                     method: 'POST',
@@ -1239,8 +1247,8 @@
                         'Accept': 'application/json'
                     },
                     body: JSON.stringify({
-                        company_name: clientName || '',
-                        gst_number: '',
+                        company_name: companyName || '',
+                        gst_number: gstNumber || '',
                         billing_address: ''
                     }),
                     credentials: 'same-origin'

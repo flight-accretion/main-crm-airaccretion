@@ -51,6 +51,18 @@
                             </div>
 
                             <div class="space-y-2">
+                                <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Company Name</label>
+                                <input type="text" name="company_name" class="ti-form-input rounded-sm form-control-sm" value="{{ old('company_name', $client->company_name) }}" placeholder="Company Name">
+                                @error('company_name') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                            </div>
+
+                            <div class="space-y-2">
+                                <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">GST Number</label>
+                                <input type="text" name="gst_number" class="ti-form-input rounded-sm form-control-sm" value="{{ old('gst_number', $client->gst_number) }}" placeholder="GST Number">
+                                @error('gst_number') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                            </div>
+
+                            <div class="space-y-2">
                                 <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Phone Number</label>
                                 <input type="tel" id="contact_number" name="contact_number" class="ti-form-input intl-phone-input iti rounded-sm form-control-sm" value="{{ old('contact_number', $client->contact_number) }}" required>
                                 <input type="hidden" name="contact_country_code" id="contact_country_code" value="{{ old('contact_country_code', $client->contact_country_code) }}">

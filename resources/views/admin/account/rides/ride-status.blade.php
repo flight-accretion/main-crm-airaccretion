@@ -160,6 +160,8 @@
                                 <th data-priority="1">S.No</th>
 
                                 <th data-priority="6">Name</th>
+                                <th data-priority="7">Company Name</th>
+                                <th data-priority="8">GST Number</th>
                                 <th data-priority="7">Phone</th>
                                 <th data-priority="8">Service Date</th>
                                 <th data-priority="9">Service</th>
@@ -179,6 +181,8 @@
                                 <td class="text-center">{{ (isset($rideStatusPaginator) && $rideStatusPaginator->firstItem() ? $rideStatusPaginator->firstItem() : 1) + $index }}</td>
 
                                 <td>{{ $ride['client_name'] }}</td>
+                                <td>{{ $ride['company_name'] }}</td>
+                                <td>{{ $ride['gst_number'] }}</td>
                                 <td class="text-center">{{ $ride['contact_number'] }}</td>
                                 <td class="text-center"
                                     data-order="{{ isset($ride['service_date_sortable']) ? $ride['service_date_sortable'] : '0000-00-00' }}">
@@ -471,6 +475,14 @@
                             <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
                                 <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Email</label>
                                 <p class="text-gray-800 dark:text-white" id="client-email">-</p>
+                            </div>
+                            <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
+                                <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Company Name</label>
+                                <p class="text-gray-800 dark:text-white" id="client-company-name">-</p>
+                            </div>
+                            <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
+                                <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">GST Number</label>
+                                <p class="text-gray-800 dark:text-white" id="client-gst-number">-</p>
                             </div>
                             <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
                                 <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Phone Number</label>
@@ -1017,6 +1029,8 @@
                         const transformedData = {
                             client_name: response.client ? `${response.client.name || ''}`.trim() :
                                 'Unknown Client',
+                            company_name: response.client ? response.client.company_name : '',
+                            gst_number: response.client ? response.client.gst_number : '',
                             client_email: response.client ? response.client.email : '',
                             contact_number: response.client ? response.client.contact_number : '',
                             whatsapp_number: response.client ? response.client.alternate_number : '',
@@ -1166,6 +1180,8 @@ if (shouldFreezeStatus) {
             // Update client information
             $('#client-name').text(data.client_name || '-');
             $('#client-email').text(data.client_email || '-');
+            $('#client-company-name').text(data.company_name || '-');
+            $('#client-gst-number').text(data.gst_number || '-');
             $('#client-phone').text(data.contact_number || '-');
             $('#client-whatsapp').text(data.whatsapp_number || '-');
             $('#client-country').text(data.country_name || '-');
@@ -2676,7 +2692,7 @@ function closeRefundSuccessModal() {
         function showLoadingState() {
             $('#modal-client-name').text('Loading...');
             // Show loading indicators for all fields
-            $('#client-name, #client-email, #client-phone, #client-whatsapp, #client-country, #client-city, #client-address')
+            $('#client-name, #client-email, #client-company-name, #client-gst-number, #client-phone, #client-whatsapp, #client-country, #client-city, #client-address')
                 .text('Loading...');
             $('#travel-from-date, #travel-from-place, #travel-to-date, #travel-to-place').text('Loading...');
             $('#service-name, #extra-services').text('Loading...');
