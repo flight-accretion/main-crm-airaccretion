@@ -22,6 +22,7 @@ class Kernel extends ConsoleKernel
     //$schedule->command('reminders:extra-services')->dailyAt('10:00');
 
      // Sales Executive Daily Update — Morning 9:00 AM IST (3:30 AM UTC)
+    if (filter_var(config('cron.sales_update_enabled', true), FILTER_VALIDATE_BOOLEAN)) {
         $schedule->command('sales:send-update --session=Morning')
                  ->dailyAt('03:30')
                  ->withoutOverlapping()
@@ -32,6 +33,7 @@ class Kernel extends ConsoleKernel
                  ->dailyAt('13:30')
                  ->withoutOverlapping()
                  ->appendOutputTo(storage_path('logs/sales-update-cron.log'));
+    }
 
         // Booking Reminders - run daily at 10:30 AM for 5, 3, and 1 day reminders
         $schedule->command('booking:send-update')
