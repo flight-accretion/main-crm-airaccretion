@@ -16,7 +16,7 @@
     <!-- Style Css -->
     <link rel="stylesheet" href="/assets/admin/css/style.css?v=1.4">
     <link rel="stylesheet" href="/assets/admin/css/responsive.css?v=1.1">
-    <link rel="stylesheet" href="/assets/admin/css/custom.css?v=2.2">
+    <link rel="stylesheet" href="/assets/admin/css/custom.css?v=2.4">
 
     <!-- Simplebar Css -->
     <link rel="stylesheet" href="/assets/admin/libs/simplebar/simplebar.min.css">
@@ -40,29 +40,6 @@
     <link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.dataTables.min.css">
     <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.dataTables.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/intl-tel-input@25.3.1/build/css/intlTelInput.css">
-
-    <style>
-        .table-responsive,
-        .dataTables_wrapper {
-            overflow-x: auto;
-        }
-
-        table.table,
-        table.dataTable,
-        table.table-datatable {
-            table-layout: auto !important;
-        }
-
-        table.table thead th,
-        table.dataTable thead th,
-        table.table-datatable thead th {
-            white-space: nowrap !important;
-            word-break: normal !important;
-            overflow-wrap: normal !important;
-            line-height: 1.25;
-            min-width: max-content;
-        }
-    </style>
 
 </head>
 
@@ -1713,50 +1690,7 @@
     <script src="/assets/admin/js/main.js"></script>
 
     <!-- Custom JS -->
-    <script src="/assets/admin/js/custom.js?v=2.2"></script>
-
-    <script>
-        $(document).ready(function() {
-            const $tables = $('.table-datatable').not('.server-paginated');
-            const emptyMsg = $tables.first().data('empty-msg') || 'No records available';
-            if ($tables.length && !$.fn.DataTable.isDataTable($tables.first())) {
-                $tables.DataTable({
-                    responsive: false, // No plus icon
-                    scrollX: true, // Horizontal scroll
-                    autoWidth: false,
-                    columnDefs: [{
-                        orderable: false,
-                        targets: 0 // S.No. column — make non-sortable
-                    }],
-                    language: {
-                        emptyTable: emptyMsg, // shown when table has no data at all
-                        zeroRecords: emptyMsg // shown when search/filter returns no rows
-                    },
-                    order: [
-                        [0, 'asc']
-                    ], // Sort by S.No.
-                    drawCallback: function(settings) {
-                        var api = this.api();
-                        api.rows({
-                            page: 'current'
-                        }).every(function(rowIdx) {
-                            var cell = this.cell(rowIdx, 0)
-                                .node(); // Set S.No. in first column (index 0)
-                            $(cell).html(rowIdx + 1);
-                        });
-                    },
-                    initComplete: function() {
-                        this.api().columns.adjust();
-                    }
-                });
-
-                setTimeout(function() {
-                    $tables.DataTable().columns.adjust();
-                }, 100);
-            }
-        });
-    </script>
-
+    <script src="/assets/admin/js/custom.js?v=2.4"></script>
 
     <script>
         // document.addEventListener('DOMContentLoaded', function () {

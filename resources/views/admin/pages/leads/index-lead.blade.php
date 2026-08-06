@@ -1,5 +1,176 @@
 @extends('admin.layouts.header')
 @section('content')
+<style>
+    /*
+     * Single-line preview visible inside the Leads table.
+     */
+    .followup-history-preview {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 280px;
+        max-width: 280px;
+        cursor: pointer;
+        outline: none;
+    }
+
+    .followup-history-preview-text {
+        display: block;
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+
+    .followup-history-preview-count {
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 23px;
+        height: 23px;
+        padding: 0 6px;
+        border-radius: 50px;
+        background: rgba(var(--primary), 0.1);
+        color: rgb(var(--primary));
+        font-size: 11px;
+        font-weight: 600;
+    }
+
+    /*
+     * Highlight only when Follow-up History column is hovered.
+     */
+    .followup-history-preview:hover
+    .followup-history-preview-text,
+    .followup-history-preview:focus
+    .followup-history-preview-text {
+        color: rgb(var(--primary));
+    }
+
+    /*
+     * Existing follow-up table is reused as the popup.
+     * No new modal or duplicate table is created.
+     */
+    .followup-history-popup {
+        display: none !important;
+        position: fixed !important;
+
+        /*
+         * Always show in the center of the browser window.
+         */
+        top: 50% !important;
+        left: 50% !important;
+        transform: translate(-50%, -50%) !important;
+
+        z-index: 99999;
+        box-sizing: border-box;
+
+        width: min(1000px, calc(100vw - 40px)) !important;
+        max-width: calc(100vw - 40px) !important;
+
+        /*
+         * Small history: no scrollbar.
+         * Large history: scrollbar appears automatically.
+         */
+        height: auto !important;
+        max-height: calc(100vh - 80px) !important;
+
+        overflow-x: auto !important;
+        overflow-y: auto !important;
+
+        padding: 16px;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        border-radius: 12px;
+        background: #ffffff;
+        box-shadow:
+            0 25px 65px rgba(15, 23, 42, 0.3),
+            0 0 0 100vmax rgba(15, 23, 42, 0.25);
+
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .followup-history-popup.followup-popup-visible {
+        display: block !important;
+    }
+
+    /*
+     * Full table width.
+     * On desktop, horizontal scrolling normally will not appear.
+     */
+    .followup-history-popup
+    .followup-history-inner-table {
+        width: 100% !important;
+        min-width: 100% !important;
+        margin-bottom: 0;
+        table-layout: auto !important;
+    }
+
+    /*
+     * Keep header visible while scrolling a large history.
+     */
+    .followup-history-popup thead th {
+        position: sticky;
+        top: -16px;
+        z-index: 2;
+        background: rgb(var(--primary));
+        color: #ffffff;
+    }
+
+    .followup-history-popup th,
+    .followup-history-popup td {
+        vertical-align: top;
+        white-space: nowrap;
+    }
+
+    /*
+     * Follow-up note may wrap so complete note remains readable.
+     */
+    .followup-history-popup td:first-child {
+        width: 45%;
+        min-width: 300px;
+        max-width: 480px;
+        white-space: normal !important;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+    }
+
+    /*
+     * Next-follow-up date may wrap when necessary.
+     */
+    .followup-history-popup td:nth-child(3) {
+        min-width: 145px;
+        white-space: normal !important;
+    }
+
+    .dark .followup-history-popup {
+        border-color: rgba(255, 255, 255, 0.12);
+        background: rgb(var(--body-bg));
+        color: #ffffff;
+        box-shadow:
+            0 25px 65px rgba(0, 0, 0, 0.55),
+            0 0 0 100vmax rgba(0, 0, 0, 0.45);
+    }
+
+    @media (max-width: 767.98px) {
+        .followup-history-preview {
+            width: 230px;
+            max-width: 230px;
+        }
+
+        .followup-history-popup {
+            width: calc(100vw - 24px) !important;
+            max-width: calc(100vw - 24px) !important;
+            max-height: calc(100vh - 40px) !important;
+            padding: 12px;
+        }
+
+        .followup-history-popup thead th {
+            top: -12px;
+        }
+    }
+</style>
 <!-- Page Header -->
 <div class="block justify-between page-header md:flex">
     <div>
@@ -181,8 +352,8 @@
                                 <th></th>
                                 <th data-priority="1">S.No</th>
                                 <th data-priority="2">Client Name</th>
-                                <th data-priority="4">Company Name</th>
-                                <th data-priority="5">GST Number</th>
+                                <!-- <th data-priority="4">Company Name</th>
+                                <th data-priority="5">GST Number</th> -->
                                 <th data-priority="3">Email</th>
                                 <th data-priority="6">Phone</th>
                                 <th data-priority="6">Next Follow Up</th>
@@ -198,13 +369,14 @@
                         </thead>
                         <tbody>
                             @foreach ($leads as $key => $enquiry)
-                            <tr class="border-b border-defaultborder">
+                            <!-- <tr class="border-b border-defaultborder"> -->
+                                <tr class="border-b border-defaultborder lead-followup-hover-row">
                                 <td></td>
                                 <td class="text-center">
                                     {{ $leads->firstItem() ? $leads->firstItem() + $key : $key + 1 }}</td>
                                 <td>{{ optional($enquiry->client)->name ?? 'N/A' }}</td>
-                                <td>{{ optional($enquiry->client)->company_name ?? 'N/A' }}</td>
-                                <td>{{ optional($enquiry->client)->gst_number ?? 'N/A' }}</td>
+                                <!-- <td>{{ optional($enquiry->client)->company_name ?? 'N/A' }}</td>
+                                <td>{{ optional($enquiry->client)->gst_number ?? 'N/A' }}</td> -->
                                 <td>{{ optional($enquiry->client)->email ?? 'N/A' }}</td>
                                 <td class="text-center">{{ optional($enquiry->client)->contact_number ?? 'N/A' }}</td>
                                 <td class="text-center">
@@ -278,8 +450,41 @@
                                         <div class="text-sm text-gray-700 text-center">No follow-up history</div>
                                         @endforelse
                                     </div> --}}
-                                    <div class="followup-history table-responsive">
-                                        <table class="table display responsive nowrap" width="100%">
+                                    @php
+                                $sortedFollowups = $enquiry->leadFollowups
+                                    ->sortByDesc('next_followup_date')
+                                    ->values();
+
+                                $latestFollowupForPreview = $sortedFollowups->first();
+                            @endphp
+
+                            <!-- <div class="followup-history-preview"> -->
+                              <div class="followup-history-preview"
+                                tabindex="0"
+                                role="button"
+                                aria-expanded="false"
+                                aria-label="Click to view complete follow-up history"
+                                title="Click to view complete follow-up history">
+                                @if ($latestFollowupForPreview)
+                                    <span class="followup-history-preview-text"
+                                        title="{{ $latestFollowupForPreview->followup_note }}">
+
+                                        {{ $latestFollowupForPreview->followup_note ?: 'No follow-up note' }}
+                                    </span>
+
+                                    <span class="followup-history-preview-count">
+                                        {{ $sortedFollowups->count() }} Followup
+                                    </span>
+                                @else
+                                    <span class="text-muted">
+                                        No follow-up history
+                                    </span>
+                                @endif
+                            </div>
+                            @if ($latestFollowupForPreview)
+
+                                    <div class="followup-history table-responsive followup-history-popup">
+                                        <table class="table table-bordered followup-history-inner-table" width="100%">
                                             <thead class="bg-primary text-white">
                                                 <tr class="border-b border-defaultborder">
                                                     <th scope="col" class="text-start">Note</th>
@@ -359,6 +564,7 @@
                                             </tbody>
                                         </table>
                                     </div>
+                                @endif
                                 </td>
                                 <td class="text-center">
                                     @php
@@ -1016,41 +1222,23 @@
 
             // Initialize DataTable with export functionality
             // Disable client-side paging/info because server-side Laravel pagination is used
-            var isMobile = window.innerWidth <= 768;
             var leadsTable = $('.lead-datatable').DataTable({
                 paging: false,
                 info: false,
                 searching: false, // Disabled - using server-side search instead
                 lengthChange: false,
 
-                responsive: isMobile ? false : {
-                    details: {
-                        type: 'column',
-                        target: 0,
-                        renderer: function(api, rowIdx, columns) {
-                            var rowData = api.row(rowIdx).data();
-                            return `
-                        <div class="leads-tableshow">
-                            <div class="p-3 ml-5 text-sm text-gray-700">
-                                <div class="mb-4"><strong>Assigned:</strong> ${columns[9] ? columns[9].data : 'N/A'}</div>
-                                <div class="mb-4">
-                                    <strong>Service Date:</strong> ${columns[10] ? columns[10].data : 'N/A'}
-                                </div>
-                                <div class="mb-4"><strong>Service:</strong> ${columns[11] ? columns[11].data : 'N/A'} </div>
-                                <div class="mb-4"><strong>Last Update:</strong> ${columns[12] ? columns[12].data : 'N/A'} </div>
-                            </div>
-                            <div class="follow-history p-3 ml-5 text-sm text-gray-700"><div class="mb-4"><strong>Follow-up History:</strong></div> ${columns[13] ? columns[13].data : 'No history'} </div>
-                        </div>
-                        `;
-                        }
-                    }
-                },
-                scrollX: true, // Horizontal scroll
-                
+                // Never hide columns. Keep every column available through horizontal scrolling.
+                responsive: false,
+                scrollX: true,
+                scrollCollapse: false,
+                autoWidth: true,
+
                 columnDefs: [{
-                        className: 'control',
+                        visible: false,
+                        searchable: false,
                         orderable: false,
-                        targets: 0
+                        targets: 0 // Old Responsive control column is no longer required.
                     },
                     {
                         orderable: false,
@@ -1068,39 +1256,80 @@
                         var cell = this.cell(rowIdx, 1).node();
                         $(cell).html(rowIdx + 1);
                     });
+                    api.columns.adjust();
+                },
+                initComplete: function() {
+                    this.api().columns.adjust();
                 },
                 buttons: [{
-                        extend: 'excel',
-                        exportOptions: {
-                            columns: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
-                            format: {
-                                body: function(data, row, column, node) {
-                                    var tempDiv = document.createElement('div');
-                                    tempDiv.innerHTML = data;
-                                    var plainText = tempDiv.textContent || tempDiv.innerText || '';
+                        
+            extend: 'excel',
+            exportOptions: {
+                columns: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+                format: {
+                    body: function(data, row, column, node) {
+                        var tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = data;
 
-                                    if (column === 14) { // Status column
-                                        if (plainText.includes('Active')) return 'Active';
-                                        if (plainText.includes('Pending')) return 'Pending';
-                                        if (plainText.includes('Cancelled')) return 'Cancelled';
-                                        if (plainText.includes('Completed')) return 'Completed';
-                                        return 'N/A';
-                                    }
+                        var plainText =
+                            tempDiv.textContent ||
+                            tempDiv.innerText ||
+                            '';
 
-                                    // Phone column - wrap in ="..." so Excel preserves leading + and formatting when opening CSV
-                                    if (column === 6) {
-                                        var cleaned = plainText.trim();
-                                        // escape any double quotes inside the value
-                                        cleaned = cleaned.replace(/"/g, '""');
-                                        return '="' + cleaned + '"';
-                                    }
-
-                                    return plainText.trim();
-                                }
+                        // Status column
+                        if (column === 12) {
+                            if (plainText.includes('Active')) {
+                                return 'Active';
                             }
-                        },
-                        title: 'Leads Export - ' + new Date().toLocaleDateString()
-                    },
+
+                            if (plainText.includes('Pending')) {
+                                return 'Pending';
+                            }
+
+                            if (plainText.includes('Cancelled')) {
+                                return 'Cancelled';
+                            }
+
+                            if (plainText.includes('Full Payment Received')) {
+                                return 'Full Payment Received';
+                            }
+
+                            if (plainText.includes('Partial Payment Received')) {
+                                return 'Partial Payment Received';
+                            }
+
+                            if (plainText.includes('Confirmed')) {
+                                return 'Confirmed';
+                            }
+
+                            if (plainText.includes('Approved')) {
+                                return 'Approved';
+                            }
+
+                            if (plainText.includes('Rejected')) {
+                                return 'Rejected';
+                            }
+
+                            return 'N/A';
+                        }
+
+                        // Phone column
+                        if (column === 4) {
+                            var cleaned = plainText
+                                .trim()
+                                .replace(/"/g, '""');
+
+                            return '="' + cleaned + '"';
+                        }
+
+                        return plainText.trim();
+                    }
+                }
+            },
+
+            title: 'Leads Export - ' +
+                new Date().toLocaleDateString()
+        },
                     {
                         extend: 'csv',
                         exportOptions: {
@@ -1120,7 +1349,7 @@
                                     }
 
                                     // Phone column - preserve as text when opening CSV
-                                    if (column === 6) {
+                                    if (column === 4) {
                                         var cleaned = plainText.trim();
                                         // escape any double quotes inside the value
                                         cleaned = cleaned.replace(/"/g, '""');
@@ -1252,19 +1481,255 @@
         });
 </script>
 <script>
-    window.addEventListener('DOMContentLoaded', () => {
-            const containers = document.querySelectorAll('.followup-history');
+    document.addEventListener('DOMContentLoaded', function() {
+        let activePopup = null;
+        let activeTrigger = null;
 
-            containers.forEach(container => {
-                if (container.scrollHeight > 150) {
-                    container.style.height = '150px';
-                    container.style.overflowY = 'auto';
-                } else {
-                    container.style.height = 'auto';
-                    container.style.overflowY = 'visible';
+        /*
+         * Existing follow-up popup ki original position store karta hai.
+         */
+        const popupRecords = new WeakMap();
+
+        function restorePopup(popup) {
+            if (!popup) {
+                return;
+            }
+
+            const record = popupRecords.get(popup);
+
+            popup.classList.remove(
+                'followup-popup-visible'
+            );
+
+            /*
+             * Popup ko original Follow-up History cell mein wapas rakhein.
+             */
+            if (
+                record &&
+                record.placeholder &&
+                record.placeholder.parentNode
+            ) {
+                record.placeholder.parentNode.insertBefore(
+                    popup,
+                    record.placeholder.nextSibling
+                );
+            }
+
+            if (record && record.trigger) {
+                record.trigger.setAttribute(
+                    'aria-expanded',
+                    'false'
+                );
+            }
+
+            if (activePopup === popup) {
+                activePopup = null;
+                activeTrigger = null;
+            }
+        }
+
+        function showPopup(trigger, popup) {
+            /*
+             * Agar kisi doosri row ka popup open hai to pehle close karein.
+             */
+            if (
+                activePopup &&
+                activePopup !== popup
+            ) {
+                restorePopup(activePopup);
+            }
+
+            activePopup = popup;
+            activeTrigger = trigger;
+
+            /*
+             * Existing popup ko body mein move karte hain,
+             * taaki DataTable container usko clip na kare.
+             */
+            document.body.appendChild(popup);
+
+            popup.classList.add(
+                'followup-popup-visible'
+            );
+
+            trigger.setAttribute(
+                'aria-expanded',
+                'true'
+            );
+        }
+
+        document
+            .querySelectorAll(
+                '.followup-history-preview'
+            )
+            .forEach(function(trigger) {
+                const historyCell = trigger.closest('td');
+
+                if (!historyCell) {
+                    return;
                 }
+
+                const popup = historyCell.querySelector(
+                    '.followup-history-popup'
+                );
+
+                /*
+                 * Follow-up data nahi hai to click action nahi lagega.
+                 */
+                if (!popup) {
+                    return;
+                }
+
+                const placeholder =
+                    document.createComment(
+                        'followup-history-original-position'
+                    );
+
+                popup.parentNode.insertBefore(
+                    placeholder,
+                    popup
+                );
+
+                popupRecords.set(popup, {
+                    placeholder: placeholder,
+                    trigger: trigger
+                });
+
+                /*
+                 * Click par popup open hoga.
+                 * Same column dobara click karne par close hoga.
+                 */
+                trigger.addEventListener(
+                    'click',
+                    function(event) {
+                        event.preventDefault();
+                        event.stopPropagation();
+
+                        if (
+                            activePopup === popup &&
+                            popup.classList.contains(
+                                'followup-popup-visible'
+                            )
+                        ) {
+                            restorePopup(popup);
+                            return;
+                        }
+
+                        showPopup(trigger, popup);
+                    }
+                );
+
+                /*
+                 * Enter ya Space key se bhi modal toggle hoga.
+                 */
+                trigger.addEventListener(
+                    'keydown',
+                    function(event) {
+                        if (
+                            event.key !== 'Enter' &&
+                            event.key !== ' '
+                        ) {
+                            return;
+                        }
+
+                        event.preventDefault();
+
+                        if (
+                            activePopup === popup &&
+                            popup.classList.contains(
+                                'followup-popup-visible'
+                            )
+                        ) {
+                            restorePopup(popup);
+                            return;
+                        }
+
+                        showPopup(trigger, popup);
+                    }
+                );
+
+                /*
+                 * Popup ke andar click karne par modal close nahi hoga.
+                 * View attachment links bhi kaam karenge.
+                 */
+                popup.addEventListener(
+                    'click',
+                    function(event) {
+                        event.stopPropagation();
+                    }
+                );
+
+                /*
+                 * Popup ke andar scrolling normal chalegi.
+                 */
+                popup.addEventListener(
+                    'wheel',
+                    function(event) {
+                        event.stopPropagation();
+                    },
+                    {
+                        passive: true
+                    }
+                );
             });
-        });
+
+        /*
+         * Modal ke bahar click karne par close.
+         */
+        document.addEventListener(
+            'click',
+            function(event) {
+                if (!activePopup) {
+                    return;
+                }
+
+                const clickedInsidePopup =
+                    activePopup.contains(event.target);
+
+                const clickedOnTrigger =
+                    activeTrigger &&
+                    activeTrigger.contains(event.target);
+
+                if (
+                    !clickedInsidePopup &&
+                    !clickedOnTrigger
+                ) {
+                    restorePopup(activePopup);
+                }
+            }
+        );
+
+        /*
+         * Escape key se close.
+         */
+        document.addEventListener(
+            'keydown',
+            function(event) {
+                if (
+                    event.key === 'Escape' &&
+                    activePopup
+                ) {
+                    restorePopup(activePopup);
+                }
+            }
+        );
+
+        /*
+         * Browser tab change hone par popup safely close.
+         */
+        document.addEventListener(
+            'visibilitychange',
+            function() {
+                if (
+                    document.hidden &&
+                    activePopup
+                ) {
+                    restorePopup(activePopup);
+                }
+            }
+        );
+    });
+
 
         function clearFilters() {
             $('#filter-form')[0].reset();

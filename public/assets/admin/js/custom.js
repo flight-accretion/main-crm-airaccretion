@@ -537,21 +537,88 @@ setInterval(() => {
 /* count-up */
 
 
-if (window.jQuery && $.fn.DataTable) {
-  $(".table-datatable").not(".server-paginated").each(function () {
-    if (!$.fn.DataTable.isDataTable(this)) {
-      $(this).DataTable({
+/* Global horizontal scrolling for admin tables. */
+(function () {
+  function hasScrollContainer(table) {
+    return Boolean(
+      table.closest(
+        ".table-responsive, .overflow-auto, .overflow-x-auto, " +
+        ".dataTables_wrapper, .dataTables_scroll"
+      )
+    );
+  }
+
+  function ensureTableScrollContainers(root) {
+    var scope = root || document;
+
+    scope.querySelectorAll(
+      "table.table, table.table-datatable, table.lead-datatable, table.ti-custom-table"
+    ).forEach(function (table) {
+      if (table.classList.contains("no-horizontal-scroll")) return;
+      if (hasScrollContainer(table)) return;
+
+      var wrapper = document.createElement("div");
+      wrapper.className = "table-responsive";
+      table.parentNode.insertBefore(wrapper, table);
+      wrapper.appendChild(table);
+    });
+  }
+
+  function adjustVisibleDataTables() {
+    if (!window.jQuery || !$.fn.DataTable) return;
+
+    $.fn.dataTable
+      .tables({
+        visible: true,
+        api: true
+      })
+      .columns.adjust();
+  }
+
+  function initializeStandardDataTables() {
+    if (!window.jQuery || !$.fn.DataTable) return;
+
+    $(".table-datatable").not(".server-paginated").each(function () {
+      if ($.fn.DataTable.isDataTable(this)) return;
+
+      var $table = $(this);
+      var emptyMsg = $table.data("empty-msg") || "No records available";
+
+      $table.DataTable({
         responsive: false,
         scrollX: true,
-        autoWidth: false,
+        scrollCollapse: false,
+        autoWidth: true,
         columnDefs: [{
           orderable: false,
           targets: 0
-        }]
+        }],
+        language: {
+          emptyTable: emptyMsg,
+          zeroRecords: emptyMsg
+        },
+        initComplete: function () {
+          this.api().columns.adjust();
+        }
       });
-    }
+    });
+  }
+
+  ensureTableScrollContainers(document);
+  initializeStandardDataTables();
+
+  window.setTimeout(adjustVisibleDataTables, 100);
+  window.addEventListener("load", adjustVisibleDataTables);
+
+  var resizeTimer = null;
+  window.addEventListener("resize", function () {
+    window.clearTimeout(resizeTimer);
+    resizeTimer = window.setTimeout(adjustVisibleDataTables, 150);
   });
-}
+
+  window.ensureTableScrollContainers = ensureTableScrollContainers;
+  window.adjustVisibleDataTables = adjustVisibleDataTables;
+})();
 
 if (window.jQuery) {
   $(function () {

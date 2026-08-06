@@ -973,36 +973,18 @@
     <script>
         $(document).ready(function() {
             // Initialize DataTable with export functionality
-            var isMobile = window.innerWidth <= 768;
             var leadsTable = $('.lead-datatable').DataTable({
 
-                responsive: isMobile ? false : {
-                    details: {
-                        type: 'column',
-                        target: 0,
-                        renderer: function(api, rowIdx, columns) {
-                            var rowData = api.row(rowIdx).data();
-                            return `
-                        <div class="leads-tableshow">
-                            <div class="p-3 ml-5 text-sm text-gray-700">
-                                <div class="mb-4"><strong>Assigned:</strong> ${columns[6] ? columns[6].data : 'N/A'}</div>
-                                <div class="mb-4">
-                                    <strong>Service Date:</strong> ${columns[7] ? columns[7].data : 'N/A'}
-                                </div>
-                                <div class="mb-4"><strong>Service:</strong> ${columns[8] ? columns[8].data : 'N/A'} </div>
-                                <div class="mb-4"><strong>Last Update:</strong> ${columns[9] ? columns[9].data : 'N/A'} </div>
-                            </div>
-                            <div class="follow-history p-3 ml-5 text-sm text-gray-700"><div class="mb-4"><strong>Follow-up History:</strong></div> ${columns[10] ? columns[10].data : 'No history'} </div>
-                        </div>
-                        `;
-                        }
-                    }
-                },
-                scrollX: true, // Horizontal scroll
+                // Never hide columns. Keep every column available through horizontal scrolling.
+                responsive: false,
+                scrollX: true,
+                scrollCollapse: false,
+                autoWidth: true,
                 columnDefs: [{
-                        className: 'control',
+                        visible: false,
+                        searchable: false,
                         orderable: false,
-                        targets: 0
+                        targets: 0 // Old Responsive control column is no longer required.
                     },
                     {
                         orderable: false,
@@ -1020,6 +1002,10 @@
                         var cell = this.cell(rowIdx, 1).node();
                         $(cell).html(rowIdx + 1);
                     });
+                    api.columns.adjust();
+                },
+                initComplete: function() {
+                    this.api().columns.adjust();
                 },
                 buttons: [{
                         extend: 'excel',

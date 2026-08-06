@@ -228,3 +228,99 @@ table.dataTable thead>tr>th.sorting{
 .overflow-y-height{
     max-height: 80vh;
 }
+
+/* Global horizontal table scrolling */
+.table-responsive,
+.overflow-auto,
+.overflow-x-auto {
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.table-responsive {
+  display: block;
+  width: 100%;
+  overflow-x: auto !important;
+  overflow-y: visible;
+}
+
+/* Plain Laravel tables should grow according to their content. */
+.table-responsive > table:not(.dataTable),
+.overflow-auto > table:not(.dataTable),
+.overflow-x-auto > table:not(.dataTable) {
+  width: max-content !important;
+  min-width: 100%;
+  table-layout: auto !important;
+}
+
+/* DataTables creates its own horizontal-scroll structure. */
+.dataTables_wrapper,
+.dataTables_scroll,
+.dataTables_scrollHead,
+.dataTables_scrollBody {
+  width: 100% !important;
+  max-width: 100%;
+}
+
+.dataTables_wrapper {
+  overflow: visible;
+}
+
+.dataTables_scrollBody {
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.dataTables_scrollHeadInner {
+  min-width: 100%;
+}
+
+.dataTables_scrollHeadInner > table,
+.dataTables_scrollBody > table {
+  min-width: 100% !important;
+  table-layout: auto !important;
+}
+
+/* Keep columns visible instead of wrapping/squeezing them. */
+.table-responsive table th,
+.table-responsive table td,
+.overflow-auto table th,
+.overflow-auto table td,
+.overflow-x-auto table th,
+.overflow-x-auto table td,
+.dataTables_wrapper table.dataTable th,
+.dataTables_wrapper table.dataTable td {
+  white-space: nowrap;
+  word-break: normal !important;
+  overflow-wrap: normal !important;
+  line-height: 1.25;
+}
+
+/* Add this class only to cells that are intentionally allowed to wrap. */
+.table-responsive .table-cell-wrap,
+.overflow-auto .table-cell-wrap,
+.overflow-x-auto .table-cell-wrap,
+.dataTables_wrapper .table-cell-wrap {
+  min-width: 260px;
+  max-width: 480px;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+}
+
+.dataTables_wrapper .dataTables_filter {
+  margin-inline-start: auto;
+  text-align: end;
+}
+
+.dataTables_wrapper .dataTables_filter input {
+  max-width: 100%;
+}
+
+@media (max-width: 767.98px) {
+  .table-responsive,
+  .dataTables_scrollBody {
+    padding-bottom: 0.35rem;
+  }
+}

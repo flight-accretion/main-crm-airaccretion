@@ -257,7 +257,6 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
         */
 
         if (!empty($client->email)) {
-
             $emailTemplate = config('services.msg91.booking_email_template', 'extra_service_template');
             $emailVariables = $this->buildMsg91EmailVariables(
                 $client->name,
@@ -265,7 +264,7 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                 $salesData
             );
 
-            Log::info('Ride Reminder - Email payload', [
+            Log::info('Booking Reminder - Email payload', [
                 'lead_id' => $leadId,
                 'ride_id' => $ride->id,
                 'days' => $days,
@@ -274,43 +273,92 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                 'variables' => $emailVariables,
             ]);
 
-            $emailResp = app(SendMessageController::class)
-                ->sendMsg91Email(
-                    $emailTemplate,
-                    $client->email,
-                    $client->name,
-                    $emailVariables
-                );
-            $emailSent = $this->reminderEmailSucceeded($emailResp);
+            try {
+                $emailResp = app(SendMessageController::class)
+                    ->sendMsg91Email(
+                        $emailTemplate,
+                        $client->email,
+                        $client->name,
+                        $emailVariables
+                    );
+                $emailSent = $this->reminderEmailSucceeded($emailResp);
 
-            if (!$emailSent) {
-                Log::warning('Ride Reminder - Email provider failed', [
+                if (!$emailSent) {
+                    Log::warning('Booking Reminder - MSG91 email failed; using SMTP fallback', [
+                        'lead_id' => $leadId,
+                        'ride_id' => $ride->id,
+                        'days' => $days,
+                        'template' => $emailTemplate,
+                        'to' => $client->email,
+                        'response' => $emailResp,
+                    ]);
+
+                    try {
+                        $fallbackSubject = 'Booking reminder - Your ride is scheduled';
+                        $fallbackTemplate = 'emails.booking_reminder_fallback';
+                        $fallbackData = $this->buildBookingReminderFallbackEmailData(
+                            $client->name,
+                            $serviceLines,
+                            $salesData,
+                            $ride,
+                            $days
+                        );
+
+                        Mail::to($client->email)->send(new VoucherMail($fallbackTemplate, $fallbackSubject, $fallbackData));
+                        $emailSent = true;
+
+                        Log::info('Booking Reminder - SMTP fallback email sent', [
+                            'lead_id' => $leadId,
+                            'ride_id' => $ride->id,
+                            'days' => $days,
+                            'to' => $client->email,
+                        ]);
+                    } catch (\Exception $e) {
+                        Log::error('Booking Reminder - SMTP fallback email failed', [
+                            'lead_id' => $leadId,
+                            'ride_id' => $ride->id,
+                            'days' => $days,
+                            'to' => $client->email,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+                } else {
+                    Log::info('Booking Reminder - MSG91 email sent successfully', [
+                        'lead_id' => $leadId,
+                        'ride_id' => $ride->id,
+                        'days' => $days,
+                        'to' => $client->email,
+                    ]);
+                }
+            } catch (\Exception $e) {
+                Log::error('Booking Reminder - MSG91 email send exception', [
                     'lead_id' => $leadId,
                     'ride_id' => $ride->id,
-                    'template' => $emailTemplate,
+                    'days' => $days,
                     'to' => $client->email,
-                    'response' => $emailResp,
+                    'error' => $e->getMessage(),
                 ]);
 
                 try {
                     $fallbackSubject = 'Booking reminder - Your ride is scheduled';
-                    $fallbackTemplate = 'emails.ride_reminder';
-                    $fallbackData = $this->buildReminderFallbackEmailData($client, $ride, $serviceLines);
+                    $fallbackTemplate = 'emails.booking_reminder_fallback';
+                    $fallbackData = $this->buildBookingReminderFallbackEmailData(
+                        $client->name,
+                        $serviceLines,
+                        $salesData,
+                        $ride,
+                        $days
+                    );
 
                     Mail::to($client->email)->send(new VoucherMail($fallbackTemplate, $fallbackSubject, $fallbackData));
                     $emailSent = true;
-
-                    Log::info('Ride Reminder - SMTP fallback email sent', [
+                } catch (\Exception $fallbackException) {
+                    Log::error('Booking Reminder - SMTP fallback after exception failed', [
                         'lead_id' => $leadId,
                         'ride_id' => $ride->id,
+                        'days' => $days,
                         'to' => $client->email,
-                    ]);
-                } catch (\Exception $e) {
-                    Log::error('Ride Reminder - SMTP fallback email failed', [
-                        'lead_id' => $leadId,
-                        'ride_id' => $ride->id,
-                        'to' => $client->email,
-                        'error' => $e->getMessage(),
+                        'error' => $fallbackException->getMessage(),
                     ]);
                 }
             }
@@ -546,6 +594,30 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
             'ride' => $ride,
         ];
     }
+
+    /**
+     * Build booking reminder email data matching WhatsApp format for fallback
+     * This ensures consistent messaging across WhatsApp and Email channels
+     */
+    private function buildBookingReminderFallbackEmailData($customerName, $serviceLines, $salesData, $ride, $days): array
+    {
+        $mappedServices = array_values(array_filter($serviceLines));
+        
+        return [
+            'name' => $customerName,
+            'service' => 'booking reminder',
+            'days_before' => $days,
+            'ride_time' => $this->formatRideTime($ride->from_date ?? null, $ride->to_date ?? null),
+            'from_place' => $ride->from_place ?? 'TBA',
+            'to_place' => $ride->to_place ?? 'TBA',
+            'extra_services' => $mappedServices,
+            'sales_name' => $salesData['sales_name'],
+            'sales_phone' => $salesData['sales_phone'],
+            'manager_name' => $salesData['manager_name'],
+            'manager_phone' => $salesData['manager_phone'],
+        ];
+    }
+
 
     private function formatRideTime($from, $to)
     {
