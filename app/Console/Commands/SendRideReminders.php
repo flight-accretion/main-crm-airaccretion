@@ -108,7 +108,7 @@ class SendRideReminders extends Command
                     } catch (\Exception $e) {
                         $service = $ride->serviceAddress->from_place ?? null;
                     }
-                    $service = $service ?? ($ride->serviceAddress->from_place ?? 'your service');
+                    $service = $service ?? 'ride';
                     $time = Carbon::parse($ride->from_date)->format('H:i');
                     $location = $ride->serviceAddress->from_place ?? $ride->from_place ?? 'pickup point';
                     $extra = 'Please arrive with original ID proof of all passengers.';

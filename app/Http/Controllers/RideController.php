@@ -451,6 +451,13 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
         return array_pad(array_slice($lines, 0, 13), 13, '');
     }
 
+    private function buildBookingReminderServiceLines($lead, $ride)
+    {
+        $serviceLines = $this->buildReminderServiceLines($lead, $ride);
+        $filtered = array_values(array_filter($serviceLines, fn($line) => !empty($line)));
+        return array_pad($filtered, 13, '');
+    }
+
     private function cleanReminderIds($ids): array
     {
         if (empty($ids)) {

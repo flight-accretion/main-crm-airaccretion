@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use Carbon\Carbon;
 use Illuminate\Console\Command;
 
 class BookingSendUpdate extends Command
@@ -20,6 +21,20 @@ class BookingSendUpdate extends Command
             $this->error('The --today option requires --lead to avoid sending same-day test reminders to all leads.');
 
             return Command::FAILURE;
+        }
+
+        if ($minutes === null && !$today) {
+            $now = Carbon::now()->setTimezone('Asia/Kolkata');
+            $windowStart = Carbon::today('Asia/Kolkata')->setTime(10, 20);
+            $windowEnd = Carbon::today('Asia/Kolkata')->setTime(10, 40);
+
+            if (!$now->between($windowStart, $windowEnd)) {
+                $this->error('Booking reminder command can only run around 10:30 AM IST unless --minutes or --today is used.');
+                app('log')->warning('Booking send update skipped outside scheduled 10:30 AM IST window', [
+                    'current_time_ist' => $now->toDateTimeString(),
+                ]);
+                return Command::SUCCESS;
+            }
         }
 
         app(\App\Http\Controllers\RideController::class)
