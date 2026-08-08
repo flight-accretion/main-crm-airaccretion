@@ -1,0 +1,4 @@
+@extends('admin.layouts.header')
+@section('content')
+<div class="box"><div class="box-header"><div class="box-title">DTMF Rule Details</div></div><div class="box-body"><p><b>Call Type:</b> {{ $item->callType->name ?? 'All' }}</p><p><b>DTMF:</b> {{ $item->dtmf_value }}</p><p><b>Name:</b> {{ $item->name }}</p><p><b>Category:</b> {{ $item->category ?: '-' }}</p><p><b>Match Values:</b> {{ implode(', ',$item->match_values ?? []) ?: '-' }}</p><p><b>Users:</b> {{ $item->users->pluck('user.name')->filter()->implode(', ') ?: '-' }}</p><p><b>Mode:</b> {{ ucfirst($item->assignment_mode) }}</p><p><b>Default:</b> {{ $item->is_default ? 'Yes' : 'No' }}</p><div class="mt-4"><a href="{{ route('admin.ivr.dtmf-rules.edit',$item) }}" class="ti-btn ti-btn-primary">Edit</a> <a href="{{ route('admin.ivr.dtmf-rules.index') }}" class="ti-btn ti-btn-light">Back</a></div></div></div>
+@endsection

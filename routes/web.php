@@ -33,6 +33,9 @@ use App\Http\Controllers\SendMessageController;
 use Carbon\Carbon;
 
 use App\Http\Controllers\SalesExecutiveManagementController;
+use App\Http\Controllers\IvrCallTypeController;
+use App\Http\Controllers\IvrDtmfRuleController;
+use App\Http\Controllers\IvrAgentController;
 
 /*
 |--------------------------------------------------------------------------
@@ -300,6 +303,30 @@ Route::middleware('auth')->group(function () {
         Route::delete('/{extraService}', [ExtraServiceController::class, 'destroy'])->name('admin.extra-services.destroy');
         Route::patch('/toggle-status/{extraService}', [ExtraServiceController::class, 'toggleStatus'])->name('extra-services.toggle-status');
         Route::get('/{id}/view-modal', [ExtraServiceController::class, 'viewModal']);
+    });
+
+      // IVR Management - Super Admin access is enforced inside each controller.
+    Route::prefix('admin/ivr')->name('admin.ivr.')->group(function () {
+        Route::get('/call-types', [IvrCallTypeController::class, 'index'])->name('call-types.index');
+        Route::get('/call-types/create', [IvrCallTypeController::class, 'create'])->name('call-types.create');
+        Route::post('/call-types', [IvrCallTypeController::class, 'store'])->name('call-types.store');
+        Route::get('/call-types/{callType}', [IvrCallTypeController::class, 'show'])->name('call-types.show');
+        Route::get('/call-types/{callType}/edit', [IvrCallTypeController::class, 'edit'])->name('call-types.edit');
+        Route::put('/call-types/{callType}', [IvrCallTypeController::class, 'update'])->name('call-types.update');
+
+        Route::get('/dtmf-rules', [IvrDtmfRuleController::class, 'index'])->name('dtmf-rules.index');
+        Route::get('/dtmf-rules/create', [IvrDtmfRuleController::class, 'create'])->name('dtmf-rules.create');
+        Route::post('/dtmf-rules', [IvrDtmfRuleController::class, 'store'])->name('dtmf-rules.store');
+        Route::get('/dtmf-rules/{dtmfRule}', [IvrDtmfRuleController::class, 'show'])->name('dtmf-rules.show');
+        Route::get('/dtmf-rules/{dtmfRule}/edit', [IvrDtmfRuleController::class, 'edit'])->name('dtmf-rules.edit');
+        Route::put('/dtmf-rules/{dtmfRule}', [IvrDtmfRuleController::class, 'update'])->name('dtmf-rules.update');
+
+        Route::get('/agents', [IvrAgentController::class, 'index'])->name('agents.index');
+        Route::get('/agents/create', [IvrAgentController::class, 'create'])->name('agents.create');
+        Route::post('/agents', [IvrAgentController::class, 'store'])->name('agents.store');
+        Route::get('/agents/{agent}', [IvrAgentController::class, 'show'])->name('agents.show');
+        Route::get('/agents/{agent}/edit', [IvrAgentController::class, 'edit'])->name('agents.edit');
+        Route::put('/agents/{agent}', [IvrAgentController::class, 'update'])->name('agents.update');
     });
 
     Route::prefix('admin/client')->group(function () {

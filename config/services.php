@@ -67,4 +67,14 @@ return [
         'app_id'            => env('WHATSCRM_VOUCHERS_APP_ID'),
     ],
 
+     'vi_cpaas' => [
+        'auth_url' => env('VI_CPAAS_AUTH_URL'),
+        'report_url' => env('VI_CPAAS_REPORT_URL'),
+        'username' => env('VI_CPAAS_USERNAME'),
+        'password' => env('VI_CPAAS_PASSWORD'),
+        'dni' => env('VI_CPAAS_DNI'),
+        'campaign_id' => env('VI_CPAAS_CAMPAIGN_ID'),
+        'timeout' => env('VI_CPAAS_TIMEOUT', 60),
+    ],
+
 ];

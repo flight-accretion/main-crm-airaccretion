@@ -50,23 +50,36 @@ class LeadAllocationService
                 continue;
             }
 
-            DB::transaction(function () use ($lead, $salesperson, $queueItem) {
-                $lead->representative_user_id = $salesperson->id;
-                $lead->save();
+         DB::transaction(function () use ($lead, $salesperson, $queueItem) {
+            $lead->representative_user_id = $salesperson->id;
+            $lead->save();
 
-                $queueItem->assigned_to = $salesperson->id;
-                $queueItem->status = 'assigned';
-                $queueItem->processed_at = now();
-                $queueItem->save();
+            $queueItem->assigned_to = $salesperson->id;
+            $queueItem->status = 'assigned';
+            $queueItem->processed_at = now();
+            $queueItem->save();
 
-                LeadAllocationLog::create([
-                    'lead_id' => $lead->id,
-                    'salesperson_id' => $salesperson->id,
-                    'action' => 'assigned',
-                    'result' => 'success',
-                    'details' => 'Auto assigned via queue',
-                ]);
-            });
+            LeadAllocationLog::create([
+                'lead_id' => $lead->id,
+                'salesperson_id' => $salesperson->id,
+                'action' => 'assigned',
+                'result' => 'success',
+                'details' => 'Auto assigned via queue',
+            ]);
+        });
+
+        $ivrCallLog = $lead->ivrCallLogs()
+            ->whereNull('initial_followup_created_at')
+            ->orderByDesc('call_start_at')
+            ->first();
+
+        if ($ivrCallLog) {
+            app(IvrFollowupService::class)->createIfNeeded(
+                $lead,
+                $ivrCallLog,
+                $ivrCallLog->processing_status === 'repeat_lead'
+            );
+        }
 
             $processed++;
         }
@@ -259,6 +272,40 @@ class LeadAllocationService
             return null;
         }
 
+        $ivrMode = null;
+
+// $ivrCallLog = $lead->ivrCallLogs()
+//     ->orderByDesc('call_start_at')
+//     ->first();
+$ivrCallLog = $lead->ivrCallLogs()
+    ->latest('call_start_at')
+    ->first();
+
+if ($ivrCallLog) {
+    $pool = app(DtmfAllocationService::class)
+        ->poolForCallLog($ivrCallLog);
+
+    $allowedIvrUserIds = collect(
+        $pool['user_ids'] ?? []
+    );
+
+    $ivrMode = $pool['mode'] ?? 'balanced';
+
+    if ($allowedIvrUserIds->isNotEmpty()) {
+        $eligibleUsers = $eligibleUsers->filter(
+            function ($user) use ($allowedIvrUserIds) {
+                return $allowedIvrUserIds->contains(
+                    $user->id
+                );
+            }
+        );
+    }
+
+    if ($eligibleUsers->isEmpty()) {
+        return null;
+    }
+}
+
         $leadProductIds = $lead->product_ids_array;
         if (!empty($leadProductIds)) {
             $allowedSalespersonIds = Product::whereIn('id', $leadProductIds)
@@ -296,13 +343,37 @@ class LeadAllocationService
             return $score;
         });
 
-        if ($settings->allocation_method === 'balanced') {
-            return $eligibleUsers->sortBy(function ($user) {
-                $assignedCount = Lead::where('representative_user_id', $user->id)->count();
-                $queuedCount = LeadAllocationQueue::where('assigned_to', $user->id)->where('status', 'queued')->count();
-                return $assignedCount + $queuedCount;
-            })->first();
+        // if ($settings->allocation_method === 'balanced') {
+        //     return $eligibleUsers->sortBy(function ($user) {
+        //         $assignedCount = Lead::where('representative_user_id', $user->id)->count();
+        //         $queuedCount = LeadAllocationQueue::where('assigned_to', $user->id)->where('status', 'queued')->count();
+        //         return $assignedCount + $queuedCount;
+        //     })->first();
+        // }
+       $allocationMethod = $ivrMode ?? $settings->allocation_method;
+
+        if ($allocationMethod === 'random') {
+            return $eligibleUsers
+                ->values()
+                ->random();
         }
+
+        if ($allocationMethod === 'balanced') {
+            return $eligibleUsers
+                ->sortBy(function ($user) {
+                    return Lead::where(
+                        'representative_user_id',
+                        $user->id
+                    )
+                    ->whereDate(
+                        'created_at',
+                        now()->toDateString()
+                    )
+                    ->count();
+                })
+                ->first();
+        }
+
 
         return $eligibleUsers->first();
     }

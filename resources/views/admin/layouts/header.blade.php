@@ -1188,6 +1188,22 @@
                             </li>
                         @endif
 
+                         <!-- IVR Management - Super Admin only -->
+                        @if ($userType === UserType::SUPER_ADMIN)
+                            <li class="slide has-sub {{ Route::is('admin.ivr.*') ? 'active open' : '' }}">
+                                <a href="javascript:void(0);" class="side-menu__item">
+                                    <i class="bx bx-phone-call side-menu__icon"></i>
+                                    <span class="side-menu__label">IVR Management</span>
+                                    <i class="fe fe-chevron-right side-menu__angle"></i>
+                                </a>
+                                <ul class="slide-menu child1">
+                                    <li class="slide"><a href="{{ route('admin.ivr.call-types.index') }}" class="side-menu__item">Call Types</a></li>
+                                    <li class="slide"><a href="{{ route('admin.ivr.dtmf-rules.index') }}" class="side-menu__item">DTMF Allocation</a></li>
+                                    <li class="slide"><a href="{{ route('admin.ivr.agents.index') }}" class="side-menu__item">Agent Mapping</a></li>
+                                </ul>
+                            </li>
+                        @endif
+
                         <!-- Services Section -->
                         @if (canAccess($userType, $adminRoles) || canAccess($userType, $operationsManagerRoles))
                             <li class="slide has-sub {{ Route::is('admin.services.*') ? 'active open' : '' }}">

@@ -62,6 +62,10 @@ class Lead extends Model
     {
         return $this->belongsTo(User::class, 'representative_user_id');
     }
+    public function ivrCallLogs()
+    {
+        return $this->hasMany(IvrCallLog::class, 'lead_id');
+    }
 
     public function rideSegments()
     {
