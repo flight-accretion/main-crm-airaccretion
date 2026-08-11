@@ -40,34 +40,91 @@ class ViCpaasService
         return $token;
     }
 
-    public function pullReport(IvrCallType $callType, string $fromDate, string $toDate): array
-    {
-        $payload = [
-            'dni' => config('services.vi_cpaas.dni'),
-            'fromdate' => $fromDate,
-            'todate' => $toDate,
-            'calltype' => (string) $callType->code,
-        ];
+    // public function pullReport(IvrCallType $callType, string $fromDate, string $toDate): array
+    // {
+    //     $payload = [
+    //         'dni' => config('services.vi_cpaas.dni'),
+    //         'fromdate' => $fromDate,
+    //         'todate' => $toDate,
+    //         'calltype' => (string) $callType->code,
+    //     ];
 
-        $campaignId = trim((string) config('services.vi_cpaas.campaign_id', ''));
-        if ($campaignId !== '') {
-            $payload['campaignid'] = $campaignId;
-        }
+    //     $campaignId = trim((string) config('services.vi_cpaas.campaign_id', ''));
+    //     if ($campaignId !== '') {
+    //         $payload['campaignid'] = $campaignId;
+    //     }
 
-        $response = $this->sendPullRequest($payload, $this->getToken());
+    //     $response = $this->sendPullRequest($payload, $this->getToken());
 
-        if ($response->status() === 401) {
-            Cache::forget('vi_cpaas_pull_report_token');
-            $response = $this->sendPullRequest($payload, $this->getToken());
-        }
+    //     if ($response->status() === 401) {
+    //         Cache::forget('vi_cpaas_pull_report_token');
+    //         $response = $this->sendPullRequest($payload, $this->getToken());
+    //     }
 
-        if ($response->failed()) {
-            throw new RuntimeException('VI CPaaS pull report failed with HTTP ' . $response->status() . ': ' . $response->body());
-        }
+    //     if ($response->failed()) {
+    //         throw new RuntimeException('VI CPaaS pull report failed with HTTP ' . $response->status() . ': ' . $response->body());
+    //     }
 
-        $json = $response->json();
-        return $this->extractRecords($json);
+    //     $json = $response->json();
+    //     return $this->extractRecords($json);
+    // }
+
+    public function pullReport(
+    IvrCallType $callType,
+    string $fromDate,
+    string $toDate
+): array {
+    $token = $this->getToken();
+
+    $payload = [
+        'dni' => config('services.vi_cpaas.dni'),
+        'fromdate' => $fromDate,
+        'todate' => $toDate,
+        'calltype' => (string) $callType->code,
+    ];
+
+    $campaignId = trim(
+        (string) config('services.vi_cpaas.campaign_id')
+    );
+
+    if ($campaignId !== '') {
+        $payload['campaignid'] = $campaignId;
     }
+
+    // DEBUG: must be AFTER $payload is created.
+    \Log::info('VI CPaaS pull report request', [
+        'url' => config('services.vi_cpaas.report_url'),
+        'payload' => $payload,
+    ]);
+
+    $response = Http::withToken($token)
+        ->acceptJson()
+        ->asJson()
+        ->timeout(
+            (int) config('services.vi_cpaas.timeout', 60)
+        )
+        ->post(
+            config('services.vi_cpaas.report_url'),
+            $payload
+        );
+
+    // DEBUG: must be AFTER $response exists.
+    \Log::info('VI CPaaS pull report response', [
+        'status' => $response->status(),
+        'body' => $response->body(),
+    ]);
+
+    if ($response->failed()) {
+        throw new \RuntimeException(
+            'VI CPaaS pull report failed with HTTP '
+            . $response->status()
+            . ': '
+            . $response->body()
+        );
+    }
+
+    return $response->json() ?? [];
+}
 
     private function sendPullRequest(array $payload, string $token)
     {
