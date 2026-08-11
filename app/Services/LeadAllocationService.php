@@ -162,64 +162,92 @@ class LeadAllocationService
         ]);
     }
 
-    public function getPopupData(User $user, ?Carbon $currentTime = null): array
-    {
-        $settings = LeadAllocationSetting::getActiveSettings();
-        $now = $currentTime ?? now();
-        $queueCount = LeadAllocationQueue::where('status', 'queued')->count();
-        $availability = SalespersonAvailability::firstOrCreate(
-            ['user_id' => $user->id],
-            ['state' => 'offline', 'is_available' => false, 'is_opted_in' => false]
-        );
+ public function getPopupData(User $user, ?Carbon $currentTime = null): array
+{
+    $settings = LeadAllocationSetting::getActiveSettings();
+    $now = $currentTime ?? now();
 
-        $popupIntervalMinutes = max(120, (int) ($settings->popup_interval_minutes ?? 120));
-        $minimumLeadsBeforePopup = max(1, (int) ($settings->minimum_leads_before_popup ?? 1));
-        $hasMinimumLeads = $queueCount >= $minimumLeadsBeforePopup;
+    $queueCount = LeadAllocationQueue::where('status', 'queued')->count();
 
-        $lastPopupAt = $availability->last_popup_at ?? $availability->last_response_at;
-        $hasNewQueuedLeadsSinceLastPopup = false;
-        if ($lastPopupAt) {
-            $hasNewQueuedLeadsSinceLastPopup = LeadAllocationQueue::where('status', 'queued')
-                ->where('queued_at', '>', $lastPopupAt)
-                ->exists();
-        }
+    $availability = SalespersonAvailability::firstOrCreate(
+        ['user_id' => $user->id],
+        [
+            'state' => 'offline',
+            'is_available' => false,
+            'is_opted_in' => false,
+        ]
+    );
 
-        $isOfficeOpen = $this->isOfficeOpen($settings);
-        $showPopup = $hasMinimumLeads && $this->shouldShowPopup(
-            $user,
-            $isOfficeOpen,
-            $lastPopupAt,
-            $now,
-            $popupIntervalMinutes,
-            $availability->is_opted_in,
-            $hasNewQueuedLeadsSinceLastPopup
-        );
+    $isOfficeOpen = $this->isOfficeOpen($settings);
 
-        if ($showPopup) {
-            $availability->last_popup_at = $now;
-            $availability->save();
-        }
+    $popupIntervalMinutes = max(
+        120,
+        (int) ($settings->popup_interval_minutes ?? 120)
+    );
 
-        $popupReason = 'waiting_for_leads';
-        if ($showPopup) {
-            $popupReason = !$lastPopupAt || !$lastPopupAt->isSameDay($now) ? 'first_login_today' : 'due_after_interval';
-        } elseif (!$isOfficeOpen) {
-            $popupReason = 'office_closed';
-        } elseif (!$hasMinimumLeads) {
-            $popupReason = 'waiting_for_leads';
-        } else {
-            $popupReason = 'waiting_for_interval';
-        }
+    $showPopup = false;
+    $popupReason = 'not_required';
 
-        return [
-            'show_popup' => $showPopup,
-            'queue_count' => $queueCount,
-            'availability' => $availability,
-            'popup_interval_minutes' => $popupIntervalMinutes,
-            'office_open' => $isOfficeOpen,
-            'popup_reason' => $popupReason,
-        ];
+    /*
+     * Has the salesperson already answered the
+     * availability popup today?
+     */
+    $respondedToday = $availability->last_response_at
+        && $availability->last_response_at->isSameDay($now);
+
+    /*
+     * IMPORTANT:
+     *
+     * We no longer require queued leads for the FIRST popup.
+     *
+     * If office is open and salesperson has not given
+     * today's availability response, show the popup.
+     */
+    if ($isOfficeOpen && !$respondedToday) {
+        $showPopup = true;
+        $popupReason = 'daily_availability';
     }
+
+    /*
+     * If salesperson already answered NO today,
+     * we can show the popup again after the configured
+     * interval, but only when leads are actually waiting.
+     */
+    if (
+        $isOfficeOpen
+        && $respondedToday
+        && !$availability->is_opted_in
+        && $queueCount > 0
+    ) {
+        $lastPopupAt = $availability->last_popup_at
+            ?? $availability->last_response_at;
+
+        if (
+            !$lastPopupAt
+            || $lastPopupAt->diffInMinutes($now) >= $popupIntervalMinutes
+        ) {
+            $showPopup = true;
+            $popupReason = 'waiting_for_leads';
+        }
+    }
+
+    /*
+     * Record when the popup was actually shown.
+     */
+    if ($showPopup) {
+        $availability->last_popup_at = $now;
+        $availability->save();
+    }
+
+    return [
+        'show_popup' => $showPopup,
+        'queue_count' => $queueCount,
+        'availability' => $availability,
+        'popup_interval_minutes' => $popupIntervalMinutes,
+        'office_open' => $isOfficeOpen,
+        'popup_reason' => $popupReason,
+    ];
+}
 
     public function shouldShowPopup(
         User $user,
