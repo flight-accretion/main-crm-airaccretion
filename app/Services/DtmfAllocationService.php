@@ -74,25 +74,25 @@ class DtmfAllocationService
             }
         }
 
-        if ($callTypeId) {
-            $callType = IvrCallType::with(['users.user'])->where('id', $callTypeId)->where('is_active', true)->first();
-            if ($callType) {
-                $ids = $callType->users
-                    ->sortBy('priority')
-                    ->filter(function ($row) { return $row->user && (int) $row->user->status === 1; })
-                    ->pluck('user_id')
-                    ->unique()
-                    ->values();
-                if ($ids->isNotEmpty()) {
-                    return [
-                        'user_ids' => $ids,
-                        'mode' => $callType->assignment_mode ?: 'balanced',
-                        'source' => 'call_type',
-                        'rule_id' => $callType->id,
-                    ];
-                }
-            }
-        }
+        // if ($callTypeId) {
+        //     $callType = IvrCallType::with(['users.user'])->where('id', $callTypeId)->where('is_active', true)->first();
+        //     if ($callType) {
+        //         $ids = $callType->users
+        //             ->sortBy('priority')
+        //             ->filter(function ($row) { return $row->user && (int) $row->user->status === 1; })
+        //             ->pluck('user_id')
+        //             ->unique()
+        //             ->values();
+        //         if ($ids->isNotEmpty()) {
+        //             return [
+        //                 'user_ids' => $ids,
+        //                 'mode' => $callType->assignment_mode ?: 'balanced',
+        //                 'source' => 'call_type',
+        //                 'rule_id' => $callType->id,
+        //             ];
+        //         }
+        //     }
+        // }
 
         return [
             'user_ids' => $this->allActiveSalesUserIds(),

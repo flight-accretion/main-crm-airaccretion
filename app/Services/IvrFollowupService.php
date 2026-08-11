@@ -30,11 +30,23 @@ class IvrFollowupService
         $callLog->save();
     }
 
-    public function isSuccessfulStatus(?string $status): bool
-    {
-        $status = Str::lower(trim((string) $status));
-        return in_array($status, ['success', 'sucess'], true);
-    }
+public function isSuccessfulStatus(
+    ?string $status
+): bool {
+    $status = Str::lower(
+        trim((string) $status)
+    );
+
+    return in_array(
+        $status,
+        [
+            'success',
+            'sucess',
+            'connected',
+        ],
+        true
+    );
+}
 
     private function buildNote(IvrCallLog $callLog, bool $repeat): string
     {

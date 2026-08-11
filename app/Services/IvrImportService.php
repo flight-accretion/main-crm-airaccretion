@@ -53,7 +53,10 @@ class IvrImportService
                     'normalized_phone' => $phone,
                     'raw_dtmf' => $data['DTMF'] ?? null,
                     'agent_name' => $data['AGENTNAME'] ?? null,
-                    'dial_status' => $data['DIALSTATUS'] ?? null,
+                   'dial_status' =>
+                    $data['DIALSTATUS']
+                    ?? $data['BPARTYSTATUS']
+                    ?? null,
                     'call_start_at' => $this->parseDateTime($data['CALLSTARTTIME'] ?? null),
                     'call_end_at' => $this->parseDateTime($data['CALLENDTIME'] ?? null),
                     'duration_sec' => $this->toNullableInt($data['DUARATIONSEC'] ?? $data['DURATIONSEC'] ?? null),
@@ -84,17 +87,36 @@ class IvrImportService
         return $result;
     }
 
-    private function selectCanonicalAttempt(array $attempts): array
-    {
-        foreach ($attempts as $attempt) {
-            $data = $this->normalizeKeys($attempt);
-            $status = strtolower(trim((string) ($data['DIALSTATUS'] ?? '')));
-            if (in_array($status, ['success', 'sucess'], true)) {
-                return $attempt;
-            }
+ private function selectCanonicalAttempt(array $attempts): array
+{
+    foreach ($attempts as $attempt) {
+        $data = $this->normalizeKeys($attempt);
+
+        $status = strtolower(
+            trim(
+                (string) (
+                    $data['DIALSTATUS']
+                    ?? $data['BPARTYSTATUS']
+                    ?? ''
+                )
+            )
+        );
+
+        if (in_array(
+            $status,
+            [
+                'success',
+                'sucess',
+                'connected',
+            ],
+            true
+        )) {
+            return $attempt;
         }
-        return $attempts[0];
     }
+
+    return $attempts[0];
+}
 
     private function normalizeKeys(array $record): array
     {

@@ -7,7 +7,7 @@ use App\Models\IvrCallLog;
 use App\Models\Lead;
 use App\Models\LeadAllocationLog;
 use App\Models\LeadAllocationSetting;
-use Carbon\Carbon;
+// use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -30,11 +30,13 @@ class IvrLeadService
                 return ['status' => 'already_processed', 'lead_id' => $callLog->lead_id];
             }
 
-            $existingLead = $this->findRecentLeadByPhone($callLog->normalized_phone, $callLog->call_start_at);
+            $existingLead = $this->findActiveLeadByPhone(
+            $callLog->normalized_phone
+        );
             if ($existingLead) {
                 $callLog->lead_id = $existingLead->id;
                 $callLog->processing_status = 'repeat_lead';
-                $callLog->processing_message = 'Existing lead found for same phone in today/yesterday window.';
+                $callLog->processing_message = 'Existing active lead found for same phone. Lead retained with existing representative.';
                 $callLog->save();
 
                 if (!empty($existingLead->representative_user_id)) {
@@ -103,25 +105,68 @@ class IvrLeadService
         });
     }
 
-    private function findRecentLeadByPhone(?string $phone, $callStart): ?Lead
-    {
-        if (empty($phone)) {
-            return null;
-        }
+    // private function findRecentLeadByPhone(?string $phone, $callStart): ?Lead
+    // {
+    //     if (empty($phone)) {
+    //         return null;
+    //     }
 
-        $anchor = $callStart ? Carbon::parse($callStart) : now();
-        $from = $anchor->copy()->subDay()->startOfDay();
-        $to = $anchor->copy()->endOfDay();
-        $expr = $this->digitsSqlExpression('clients.contact_number');
+    //     $anchor = $callStart ? Carbon::parse($callStart) : now();
+    //     $from = $anchor->copy()->subDay()->startOfDay();
+    //     $to = $anchor->copy()->endOfDay();
+    //     $expr = $this->digitsSqlExpression('clients.contact_number');
 
-        return Lead::query()
-            ->join('clients', 'clients.id', '=', 'leads.client_id')
-            ->whereRaw("{$expr} LIKE ?", ['%' . $phone])
-            ->whereBetween('leads.created_at', [$from, $to])
-            ->orderByDesc('leads.created_at')
-            ->select('leads.*')
-            ->first();
+    //     return Lead::query()
+    //         ->join('clients', 'clients.id', '=', 'leads.client_id')
+    //         ->whereRaw("{$expr} LIKE ?", ['%' . $phone])
+    //         ->whereBetween('leads.created_at', [$from, $to])
+    //         ->orderByDesc('leads.created_at')
+    //         ->select('leads.*')
+    //         ->first();
+    // }
+
+    private function findActiveLeadByPhone(
+    ?string $phone
+): ?Lead {
+    if (empty($phone)) {
+        return null;
     }
+
+    $expr = $this->digitsSqlExpression(
+        'clients.contact_number'
+    );
+
+    $leads = Lead::query()
+        ->join(
+            'clients',
+            'clients.id',
+            '=',
+            'leads.client_id'
+        )
+        ->whereRaw(
+            "{$expr} LIKE ?",
+            ['%' . $phone]
+        )
+        ->orderByDesc('leads.created_at')
+        ->select('leads.*')
+        ->get();
+
+    foreach ($leads as $lead) {
+        $latestFollowup = $lead
+            ->leadFollowups()
+            ->orderByDesc('created_at')
+            ->first();
+
+        if (
+            $latestFollowup
+            && (int) $latestFollowup->status === 1
+        ) {
+            return $lead;
+        }
+    }
+
+    return null;
+}
 
     private function findClientByPhone(?string $phone): ?Client
     {
