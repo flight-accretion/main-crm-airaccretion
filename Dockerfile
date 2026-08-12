@@ -13,13 +13,26 @@ RUN apt-get update && apt-get install -y \
     libjpeg-dev \
     libfreetype6-dev \
     libpq-dev \
+    libc-client-dev \
+    libkrb5-dev \
     default-mysql-client \
     postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-# PHP extensions — includes pdo_pgsql for PostgreSQL
+# PHP extensions — PostgreSQL + IMAP
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install pdo_mysql pdo_pgsql pgsql mbstring exif pcntl bcmath gd zip
+    && docker-php-ext-configure imap --with-kerberos --with-imap-ssl \
+    && docker-php-ext-install \
+        pdo_mysql \
+        pdo_pgsql \
+        pgsql \
+        mbstring \
+        exif \
+        pcntl \
+        bcmath \
+        gd \
+        zip \
+        imap
 
 # Increase PHP memory limit for heavy reports/dashboards
 RUN echo "memory_limit = 1024M" > /usr/local/etc/php/conf.d/memory-limit.ini
@@ -38,4 +51,5 @@ RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cac
     && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
 EXPOSE 9000
+
 CMD ["php-fpm"]
