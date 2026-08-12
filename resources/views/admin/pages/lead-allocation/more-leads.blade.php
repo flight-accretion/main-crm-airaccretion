@@ -30,7 +30,7 @@
 
                     <form
                         method="POST"
-                        action="{{ route('admin.sales-dashboard.availability.decline') }}"
+                        action="{{ route('admin.sales-dashboard.popup.decline') }}"
                     >
                         @csrf
 
@@ -44,7 +44,7 @@
 
                     <form
                         method="POST"
-                        action="{{ route('admin.sales-dashboard.availability.accept') }}"
+                        action="{{ route('admin.sales-dashboard.popup.accept') }}"
                     >
                         @csrf
 
