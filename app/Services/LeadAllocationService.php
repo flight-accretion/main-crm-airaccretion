@@ -14,6 +14,7 @@ use App\Models\UserType;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
+use App\Services\EmailLeadFollowupService;
 
 class LeadAllocationService
 {
@@ -80,6 +81,24 @@ class LeadAllocationService
                 $ivrCallLog->processing_status === 'repeat_lead'
             );
         }
+        $emailLeadLog = $lead
+    ->emailLeadLogs()
+    ->whereNull(
+        'followup_created_at'
+    )
+    ->orderByDesc(
+        'received_at'
+    )
+    ->first();
+
+if ($emailLeadLog) {
+    app(
+        EmailLeadFollowupService::class
+    )->createIfNeeded(
+        $lead,
+        $emailLeadLog
+    );
+}
 
             $processed++;
         }
@@ -162,12 +181,17 @@ class LeadAllocationService
         ]);
     }
 
- public function getPopupData(User $user, ?Carbon $currentTime = null): array
-{
+public function getPopupData(
+    User $user,
+    ?Carbon $currentTime = null
+): array {
     $settings = LeadAllocationSetting::getActiveSettings();
     $now = $currentTime ?? now();
 
-    $queueCount = LeadAllocationQueue::where('status', 'queued')->count();
+    $queueCount = LeadAllocationQueue::where(
+        'status',
+        'queued'
+    )->count();
 
     $availability = SalespersonAvailability::firstOrCreate(
         ['user_id' => $user->id],
@@ -180,60 +204,43 @@ class LeadAllocationService
 
     $isOfficeOpen = $this->isOfficeOpen($settings);
 
-    $popupIntervalMinutes = max(
-        120,
-        (int) ($settings->popup_interval_minutes ?? 120)
-    );
+    /*
+     * Automatic popup is ONLY for Sales Executive
+     * and Sales Manager roles.
+     */
+    $isEligibleSalesRole = $user->userType
+        && in_array(
+            $user->userType->user_type,
+            UserType::SALES_ROLES
+        );
+
+    /*
+     * Has this salesperson already answered
+     * today's automatic availability popup?
+     */
+    $respondedToday = $availability->last_response_at
+        && $availability->last_response_at->isSameDay($now);
 
     $showPopup = false;
     $popupReason = 'not_required';
 
     /*
-     * Has the salesperson already answered the
-     * availability popup today?
-     */
-    $respondedToday = $availability->last_response_at
-        && $availability->last_response_at->isSameDay($now);
-
-    /*
-     * IMPORTANT:
+     * Automatic popup:
      *
-     * We no longer require queued leads for the FIRST popup.
-     *
-     * If office is open and salesperson has not given
-     * today's availability response, show the popup.
+     * - Sales Executive / Sales Manager only
+     * - Office hours only
+     * - Once per day
+     * - Does NOT depend on queued leads
      */
-    if ($isOfficeOpen && !$respondedToday) {
+    if (
+        $isEligibleSalesRole
+        && $isOfficeOpen
+        && !$respondedToday
+    ) {
         $showPopup = true;
         $popupReason = 'daily_availability';
     }
 
-    /*
-     * If salesperson already answered NO today,
-     * we can show the popup again after the configured
-     * interval, but only when leads are actually waiting.
-     */
-    if (
-        $isOfficeOpen
-        && $respondedToday
-        && !$availability->is_opted_in
-        && $queueCount > 0
-    ) {
-        $lastPopupAt = $availability->last_popup_at
-            ?? $availability->last_response_at;
-
-        if (
-            !$lastPopupAt
-            || $lastPopupAt->diffInMinutes($now) >= $popupIntervalMinutes
-        ) {
-            $showPopup = true;
-            $popupReason = 'waiting_for_leads';
-        }
-    }
-
-    /*
-     * Record when the popup was actually shown.
-     */
     if ($showPopup) {
         $availability->last_popup_at = $now;
         $availability->save();
@@ -243,9 +250,10 @@ class LeadAllocationService
         'show_popup' => $showPopup,
         'queue_count' => $queueCount,
         'availability' => $availability,
-        'popup_interval_minutes' => $popupIntervalMinutes,
         'office_open' => $isOfficeOpen,
         'popup_reason' => $popupReason,
+        'responded_today' => $respondedToday,
+        'is_sales_role' => $isEligibleSalesRole,
     ];
 }
 
@@ -282,129 +290,186 @@ class LeadAllocationService
         return true;
     }
 
-    protected function pickSalesperson(Lead $lead, LeadAllocationSetting $settings): ?User
-    {
-        $eligibleUsers = User::query()
-            ->whereHas('userType', function ($query) {
-                $query->whereIn('user_type', UserType::SALES_ROLES);
-            })
-            ->where('status', 1)
-            ->get();
+   protected function pickSalesperson(
+    Lead $lead,
+    LeadAllocationSetting $settings
+): ?User {
+    /*
+     * STEP 1:
+     * All ACTIVE sales users who have explicitly
+     * opted in and are currently available.
+     */
+    $allAvailableUsers = User::query()
+        ->whereHas('userType', function ($query) {
+            $query->whereIn(
+                'user_type',
+                UserType::SALES_ROLES
+            );
+        })
+        ->where('status', 1)
+        ->get()
+        ->filter(function ($user) {
+            $availability = SalespersonAvailability::where(
+                'user_id',
+                $user->id
+            )->first();
 
-        $eligibleUsers = $eligibleUsers->filter(function ($user) {
-            $availability = SalespersonAvailability::where('user_id', $user->id)->first();
-            return $availability ? $availability->is_available && $availability->is_opted_in : false;
-        });
+            return $availability
+                && $availability->is_available
+                && $availability->is_opted_in;
+        })
+        ->values();
 
-        if ($eligibleUsers->isEmpty()) {
-            return null;
-        }
+    /*
+     * Nobody is available today.
+     * Keep the lead in queue.
+     */
+    if ($allAvailableUsers->isEmpty()) {
+        return null;
+    }
 
-        $ivrMode = null;
+    $eligibleUsers = $allAvailableUsers;
+    $allocationMethod = $settings->allocation_method;
 
-// $ivrCallLog = $lead->ivrCallLogs()
-//     ->orderByDesc('call_start_at')
-//     ->first();
-$ivrCallLog = $lead->ivrCallLogs()
-    ->latest('call_start_at')
-    ->first();
+    /*
+     * STEP 2:
+     * IVR / DTMF restriction.
+     */
+    $ivrCallLog = $lead->ivrCallLogs()
+        ->orderByDesc('call_start_at')
+        ->first();
 
-if ($ivrCallLog) {
-    $pool = app(DtmfAllocationService::class)
-        ->poolForCallLog($ivrCallLog);
+    if ($ivrCallLog) {
+        $pool = app(DtmfAllocationService::class)
+            ->poolForCallLog($ivrCallLog);
 
-    $allowedIvrUserIds = collect(
-        $pool['user_ids'] ?? []
-    );
-
-    $ivrMode = $pool['mode'] ?? 'balanced';
-
-    if ($allowedIvrUserIds->isNotEmpty()) {
-        $eligibleUsers = $eligibleUsers->filter(
-            function ($user) use ($allowedIvrUserIds) {
-                return $allowedIvrUserIds->contains(
-                    $user->id
-                );
-            }
+        $allowedIvrUserIds = collect(
+            $pool['user_ids'] ?? []
         );
+
+        $allocationMethod =
+            $pool['mode']
+            ?? $allocationMethod;
+
+        if ($allowedIvrUserIds->isNotEmpty()) {
+            $ivrEligibleUsers = $eligibleUsers
+                ->filter(function ($user) use (
+                    $allowedIvrUserIds
+                ) {
+                    return $allowedIvrUserIds
+                        ->contains($user->id);
+                })
+                ->values();
+
+            /*
+             * Use IVR pool only when at least
+             * one mapped salesperson is available.
+             */
+            if ($ivrEligibleUsers->isNotEmpty()) {
+                $eligibleUsers = $ivrEligibleUsers;
+            } else {
+                /*
+                 * IVR team is absent.
+                 *
+                 * Requirement:
+                 * Assign randomly to another available
+                 * and opted-in salesperson.
+                 */
+                return $allAvailableUsers->random();
+            }
+        }
+    }
+
+    /*
+     * STEP 3:
+     * Product restriction.
+     */
+    $leadProductIds = $lead->product_ids_array;
+
+    if (!empty($leadProductIds)) {
+        $allowedSalespersonIds = Product::whereIn(
+            'id',
+            $leadProductIds
+        )
+            ->get()
+            ->pluck('user_ids')
+            ->flatMap(function ($userIds) {
+                if (is_string($userIds)) {
+                    $userIds = json_decode(
+                        $userIds,
+                        true
+                    ) ?? [];
+                }
+
+                return is_array($userIds)
+                    ? $userIds
+                    : [];
+            })
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($allowedSalespersonIds->isNotEmpty()) {
+            $productEligibleUsers = $eligibleUsers
+                ->filter(function ($user) use (
+                    $allowedSalespersonIds
+                ) {
+                    return $allowedSalespersonIds
+                        ->contains($user->id);
+                })
+                ->values();
+
+            if ($productEligibleUsers->isNotEmpty()) {
+                $eligibleUsers = $productEligibleUsers;
+            } else {
+                /*
+                 * Product executives are absent.
+                 *
+                 * Fall back randomly to another
+                 * available + opted-in salesperson.
+                 */
+                return $allAvailableUsers->random();
+            }
+        }
     }
 
     if ($eligibleUsers->isEmpty()) {
-        return null;
+        return $allAvailableUsers->random();
     }
-}
 
-        $leadProductIds = $lead->product_ids_array;
-        if (!empty($leadProductIds)) {
-            $allowedSalespersonIds = Product::whereIn('id', $leadProductIds)
-                ->get()
-                ->pluck('user_ids')
-                ->flatMap(function ($userIds) {
-                    if (is_string($userIds)) {
-                        $userIds = json_decode($userIds, true) ?? [];
-                    }
+    /*
+     * STEP 4:
+     * Configured allocation method.
+     */
+    if ($allocationMethod === 'random') {
+        return $eligibleUsers
+            ->values()
+            ->random();
+    }
 
-                    return is_array($userIds) ? $userIds : [];
-                })
-                ->filter()
-                ->unique()
-                ->values();
-
-            if ($allowedSalespersonIds->isNotEmpty()) {
-                $eligibleUsers = $eligibleUsers->filter(function ($user) use ($allowedSalespersonIds) {
-                    return $allowedSalespersonIds->contains($user->id);
-                });
-
-                if ($eligibleUsers->isEmpty()) {
-                    return null;
-                }
-            }
-        }
-
-        $eligibleUsers = $eligibleUsers->sortBy(function ($user) {
-            $availability = SalespersonAvailability::where('user_id', $user->id)->first();
-            $score = 0;
-            if ($availability && $availability->state === 'available') {
-                $score += 10;
-            }
-
-            return $score;
-        });
-
-        // if ($settings->allocation_method === 'balanced') {
-        //     return $eligibleUsers->sortBy(function ($user) {
-        //         $assignedCount = Lead::where('representative_user_id', $user->id)->count();
-        //         $queuedCount = LeadAllocationQueue::where('assigned_to', $user->id)->where('status', 'queued')->count();
-        //         return $assignedCount + $queuedCount;
-        //     })->first();
-        // }
-       $allocationMethod = $ivrMode ?? $settings->allocation_method;
-
-        if ($allocationMethod === 'random') {
-            return $eligibleUsers
-                ->values()
-                ->random();
-        }
-
-        if ($allocationMethod === 'balanced') {
-            return $eligibleUsers
-                ->sortBy(function ($user) {
-                    return Lead::where(
-                        'representative_user_id',
-                        $user->id
-                    )
+    /*
+     * Balanced:
+     * person having fewer leads TODAY gets
+     * the next lead.
+     */
+    if ($allocationMethod === 'balanced') {
+        return $eligibleUsers
+            ->sortBy(function ($user) {
+                return Lead::where(
+                    'representative_user_id',
+                    $user->id
+                )
                     ->whereDate(
                         'created_at',
                         now()->toDateString()
                     )
                     ->count();
-                })
-                ->first();
-        }
-
-
-        return $eligibleUsers->first();
+            })
+            ->first();
     }
+
+    return $eligibleUsers->first();
+}
 
     public function isOfficeOpenForDebug(LeadAllocationSetting $settings, ?Carbon $now = null): bool
     {

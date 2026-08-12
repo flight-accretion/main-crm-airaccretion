@@ -1095,6 +1095,18 @@
                                 </ul>
                             </li>
                         @endif
+                         <li class="slide">
+                            <a
+                                href="javascript:void(0);"
+                                data-hs-overlay="#assign-more-leads-modal" class="side-menu__item"
+                            >
+                                <i class="bx bx-trending-up side-menu__icon"></i>
+
+                                <span class="side-menu__label">
+                                    Assign More Leads
+                                </span>
+                            </a>
+                        </li>
 
                         <!-- Lead Tracking Section -->
                         @if (canAccess($userType, $adminRoles) || canAccess($userType, $accountRoles))
@@ -1352,6 +1364,7 @@
                                 <span class="side-menu__label">Reports</span>
                             </a>
                         </li>
+                         
                         @if(canAccess($userType, $adminRoles) || canAccess($userType, $accountRoles))
                             <!-- Accounts Reports -->
                             <li class="slide has-sub {{ Route::is('admin.report.sales') || Route::is('admin.report.vendor') || Route::is('admin.report.profit-loss') ? 'open active' : '' }}">
@@ -1742,6 +1755,125 @@
     </script>
 
     @stack('scripts')
+
+    <div
+    id="assign-more-leads-modal"
+    class="hs-overlay hidden ti-modal"
+    tabindex="-1"
+>
+
+    <div class="hs-overlay-open:mt-7 ti-modal-box mt-0 ease-out">
+
+        <div class="ti-modal-content">
+
+            <div class="ti-modal-header">
+
+                <h6 class="modal-title text-[1rem] font-semibold">
+                    Assign More Leads
+                </h6>
+
+                <button
+                    type="button"
+                    class="hs-dropdown-toggle !text-[1rem] !font-semibold !text-defaulttextcolor"
+                    data-hs-overlay="#assign-more-leads-modal"
+                >
+                    <span class="sr-only">Close</span>
+                    <i class="ri-close-line"></i>
+                </button>
+
+            </div>
+
+            <div class="ti-modal-body text-center">
+
+                @php
+                    $currentUser = auth()->user();
+
+                    $canReceiveLeads =
+                        $currentUser
+                        && $currentUser->userType
+                        && in_array(
+                            $currentUser->userType->user_type,
+                            \App\Models\UserType::SALES_ROLES
+                        );
+                @endphp
+
+                @if($canReceiveLeads)
+
+                    <h5 class="font-semibold mb-2">
+                        Do you want more leads?
+                    </h5>
+
+                    <p class="text-gray-500">
+                        Select Yes if you are available to receive
+                        new automatically assigned leads.
+                    </p>
+
+                @else
+
+                    <h5 class="font-semibold mb-2">
+                        Lead Allocation
+                    </h5>
+
+                    <p class="text-gray-500">
+                        Your account is not a Sales Executive
+                        or Sales Manager account.
+                    </p>
+
+                @endif
+
+            </div>
+
+            <div class="ti-modal-footer">
+
+                @if($canReceiveLeads)
+
+                    <form
+                        method="POST"
+                        action="{{ route('admin.sales-dashboard.availability.decline') }}"
+                    >
+                        @csrf
+
+                        <button
+                            type="submit"
+                            class="ti-btn ti-btn-danger"
+                        >
+                            No
+                        </button>
+                    </form>
+
+                    <form
+                        method="POST"
+                        action="{{ route('admin.sales-dashboard.availability.accept') }}"
+                    >
+                        @csrf
+
+                        <button
+                            type="submit"
+                            class="ti-btn ti-btn-primary"
+                        >
+                            Yes
+                        </button>
+                    </form>
+
+                @else
+
+                    <button
+                        type="button"
+                        class="ti-btn ti-btn-light"
+                        data-hs-overlay="#assign-more-leads-modal"
+                    >
+                        Close
+                    </button>
+
+                @endif
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
 </body>
 
 </html>

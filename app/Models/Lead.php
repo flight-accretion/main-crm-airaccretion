@@ -5,6 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Support\Facades\Log;
+use App\Models\EmailLeadLog;
+use App\Models\LeadTransfer;
 
 class Lead extends Model
 {
@@ -28,6 +30,24 @@ class Lead extends Model
         'service_ids' => 'array',
         'product_ids' => 'array',
     ];
+
+    public function transferRequests()
+{
+    return $this->hasMany(
+        LeadTransfer::class,
+        'lead_id'
+    );
+}
+
+public function pendingTransfer()
+{
+    return $this->hasOne(
+        LeadTransfer::class,
+        'lead_id'
+    )
+    ->where('status', 'pending')
+    ->latestOfMany();
+}
 
     /**
      * Get service IDs as array, handling both string and array formats
@@ -66,6 +86,14 @@ class Lead extends Model
     {
         return $this->hasMany(IvrCallLog::class, 'lead_id');
     }
+
+    public function emailLeadLogs()
+{
+    return $this->hasMany(
+        EmailLeadLog::class,
+        'lead_id'
+    );
+}
 
     public function rideSegments()
     {

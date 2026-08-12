@@ -36,6 +36,7 @@ use App\Http\Controllers\SalesExecutiveManagementController;
 use App\Http\Controllers\IvrCallTypeController;
 use App\Http\Controllers\IvrDtmfRuleController;
 use App\Http\Controllers\IvrAgentController;
+use App\Http\Controllers\LeadTransferController;
 
 /*
 |--------------------------------------------------------------------------
@@ -131,6 +132,26 @@ Route::middleware('auth')->group(function () {
 
     // Separate route group for lead-specific operations
     Route::prefix('admin/leads')->group(function () {
+        Route::post(
+    '/{lead}/transfer',
+            [LeadTransferController::class, 'store']
+        )
+            ->whereUuid('lead')
+            ->name('admin.leads.transfer.store');
+
+        Route::post(
+            '/transfers/{transfer}/accept',
+            [LeadTransferController::class, 'accept']
+        )
+            ->whereUuid('transfer')
+            ->name('admin.leads.transfer.accept');
+
+        Route::post(
+            '/transfers/{transfer}/reject',
+            [LeadTransferController::class, 'reject']
+        )
+            ->whereUuid('transfer')
+            ->name('admin.leads.transfer.reject');
         // Static routes first so segments like "import" are not captured by the dynamic {lead} binding
         Route::get('/import', [ClientController::class, 'showImportForm'])->name('admin.leads.import');
         Route::post('/import', [ClientController::class, 'importLeads'])->name('admin.leads.import.store');

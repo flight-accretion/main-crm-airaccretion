@@ -17,36 +17,60 @@ class IvrLeadService
     public function __construct(
         private DtmfAllocationService $allocationService,
         private LeadAllocationService $leadAllocationService,
-        private IvrFollowupService $followupService
+        private IvrFollowupService $followupService,
+        private ActiveLeadService $activeLeadService
     ) {
     }
 
     public function processCallLog(IvrCallLog $callLog): array
     {
         return DB::transaction(function () use ($callLog) {
-            $callLog = IvrCallLog::where('id', $callLog->id)->lockForUpdate()->firstOrFail();
 
-            if (!empty($callLog->lead_id)) {
-                return ['status' => 'already_processed', 'lead_id' => $callLog->lead_id];
-            }
+        $callLog = IvrCallLog::where('id', $callLog->id)
+            ->lockForUpdate()
+            ->firstOrFail();
 
-            $existingLead = $this->findActiveLeadByPhone(
+        if (!empty($callLog->lead_id)) {
+            return [
+                'status' => 'already_processed',
+                'lead_id' => $callLog->lead_id
+            ];
+        }
+
+        $existingLead = $this->activeLeadService->findByPhone(
             $callLog->normalized_phone
         );
-            if ($existingLead) {
-                $callLog->lead_id = $existingLead->id;
-                $callLog->processing_status = 'repeat_lead';
-                $callLog->processing_message = 'Existing active lead found for same phone. Lead retained with existing representative.';
-                $callLog->save();
 
-                if (!empty($existingLead->representative_user_id)) {
-                    $this->followupService->createIfNeeded($existingLead, $callLog, true);
-                } else {
-                    $this->leadAllocationService->queueLead($existingLead, 'ivr_repeat_call');
-                }
+        if ($existingLead) {
 
-                return ['status' => 'repeat_lead', 'lead_id' => $existingLead->id];
+            $callLog->lead_id = $existingLead->id;
+            $callLog->processing_status = 'repeat_lead';
+            $callLog->processing_message =
+                'Existing active lead found for same phone. Lead retained with existing representative.';
+
+            $callLog->save();
+
+            if (!empty($existingLead->representative_user_id)) {
+
+                $this->followupService->createIfNeeded(
+                    $existingLead,
+                    $callLog,
+                    true
+                );
+
+            } else {
+
+                $this->leadAllocationService->queueLead(
+                    $existingLead,
+                    'ivr_repeat_call'
+                );
             }
+
+            return [
+                'status' => 'repeat_lead',
+                'lead_id' => $existingLead->id
+            ];
+        }
 
             $client = $this->findClientByPhone($callLog->normalized_phone);
             if (!$client) {
@@ -124,49 +148,6 @@ class IvrLeadService
     //         ->select('leads.*')
     //         ->first();
     // }
-
-    private function findActiveLeadByPhone(
-    ?string $phone
-): ?Lead {
-    if (empty($phone)) {
-        return null;
-    }
-
-    $expr = $this->digitsSqlExpression(
-        'clients.contact_number'
-    );
-
-    $leads = Lead::query()
-        ->join(
-            'clients',
-            'clients.id',
-            '=',
-            'leads.client_id'
-        )
-        ->whereRaw(
-            "{$expr} LIKE ?",
-            ['%' . $phone]
-        )
-        ->orderByDesc('leads.created_at')
-        ->select('leads.*')
-        ->get();
-
-    foreach ($leads as $lead) {
-        $latestFollowup = $lead
-            ->leadFollowups()
-            ->orderByDesc('created_at')
-            ->first();
-
-        if (
-            $latestFollowup
-            && (int) $latestFollowup->status === 1
-        ) {
-            return $lead;
-        }
-    }
-
-    return null;
-}
 
     private function findClientByPhone(?string $phone): ?Client
     {

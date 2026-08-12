@@ -35,6 +35,7 @@ use App\Services\AirpointsIntegrationService;
 use App\Services\LeadAllocationService;
 use App\Services\SalesAmountCalculator;
 use function App\Helpers\getRepresentativeIds;
+use App\Services\ActiveLeadService;
 
 class ClientController extends Controller
 {
@@ -558,8 +559,64 @@ class ClientController extends Controller
         ]);
 
         if ($validator->fails()) {
-            // dd($validator->errors());
-            return back()->withErrors($validator)->withInput();
+    return back()
+        ->withErrors($validator)
+        ->withInput();
+}
+
+/*
+|--------------------------------------------------------------------------
+| Check existing active lead
+|--------------------------------------------------------------------------
+|
+| This check only prevents duplicate active leads.
+| It does NOT change manual representative selection or allocation.
+|
+*/
+try {
+
+    $activeLeadService = app(ActiveLeadService::class);
+
+    $fullPhone =
+        $request->contact_country_code .
+        '-' .
+        $request->contact_number;
+
+    $existingActiveLead =
+        $activeLeadService->findByPhone(
+            $fullPhone
+        );
+
+    if ($existingActiveLead) {
+
+        return back()
+            ->withInput()
+            ->with(
+                'error',
+                'An active lead already exists for this customer. Please open the existing lead instead of creating a duplicate.'
+            )
+            ->with(
+                'existing_lead_id',
+                $existingActiveLead->id
+            );
+    }
+
+        } catch (\Throwable $e) {
+
+            Log::error(
+                'Active duplicate lead check failed',
+                [
+                    'phone' => $request->contact_number,
+                    'error' => $e->getMessage(),
+                ]
+            );
+
+            return back()
+                ->withInput()
+                ->with(
+                    'error',
+                    'We could not verify whether this customer already has an active lead. Please try again.'
+                );
         }
 
         DB::beginTransaction();
@@ -5137,6 +5194,15 @@ class ClientController extends Controller
         // Get staff based on logged-in user hierarchy
         $staff = $this->getUsersInHierarchy();
 
+        // Active sales users available for lead transfer
+        $transferUsers = User::query()
+            ->where('status', 1)
+            ->whereHas('userType', function ($query) {
+                $query->whereIn('user_type', UserType::SALES_ROLES);
+            })
+            ->orderBy('name')
+            ->get();
+
         // Get country name
         $country = DB::table('countries')
             ->where('id', $client->country_id)
@@ -5198,6 +5264,7 @@ class ClientController extends Controller
             'services',
             'country',
             'staff',
+            'transferUsers',
             'selectedServices',
             'selectedExtraServices',
             'totalServiceAmount',

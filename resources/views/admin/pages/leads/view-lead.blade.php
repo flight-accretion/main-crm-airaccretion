@@ -23,9 +23,85 @@
     <div class="grid grid-cols-12 gap-6">
         <div class="col-span-12">
             <div class="box">
-                <div class="box-header flex justify-between items-center">
-                    <h5 class="box-title">Basic Information</h5>
+              <div class="box-header flex justify-between items-center">
+                <h5 class="box-title">Basic Information</h5>
+
+                @if($latestLead && $latestLead->representative_user_id)
+                    <button
+                        type="button"
+                        class="ti-btn ti-btn-primary"
+                        data-hs-overlay="#lead-transfer-modal"
+                    >
+                        Transfer Lead
+                    </button>
+                @endif
+            </div>
+            @if($latestLead && $latestLead->pendingTransfer)
+    @php
+        $pendingTransfer = $latestLead->pendingTransfer;
+    @endphp
+
+    <div class="px-5 pt-4">
+        <div class="alert alert-warning">
+            <strong>Lead Transfer Pending</strong>
+
+            <div class="mt-2">
+                From:
+                {{ optional($pendingTransfer->fromUser)->name ?? 'N/A' }}
+            </div>
+
+            <div>
+                To:
+                {{ optional($pendingTransfer->toUser)->name ?? 'N/A' }}
+            </div>
+
+            @if($pendingTransfer->reason)
+                <div>
+                    Reason:
+                    {{ $pendingTransfer->reason }}
                 </div>
+            @endif
+
+            @if(
+                auth()->id()
+                ===
+                $pendingTransfer->to_user_id
+            )
+                <div class="flex gap-2 mt-3">
+
+                    <form
+                        method="POST"
+                        action="{{ route(
+                            'admin.leads.transfer.accept',
+                            $pendingTransfer->id
+                        ) }}"
+                    >
+                        @csrf
+
+                        <button
+                            type="submit"
+                            class="ti-btn ti-btn-success"
+                            onclick="return confirm(
+                                'Accept this lead transfer?'
+                            );"
+                        >
+                            Accept Transfer
+                        </button>
+                    </form>
+
+                    <button
+                        type="button"
+                        class="ti-btn ti-btn-danger"
+                        data-hs-overlay="#lead-transfer-reject-modal"
+                    >
+                        Reject Transfer
+                    </button>
+
+                </div>
+            @endif
+        </div>
+    </div>
+@endif
                 <div class="box-body">
                     <div class="grid lg:grid-cols-4 gap-6">
                         <div class="space-y-2">
@@ -662,4 +738,200 @@
             window.HSOverlay.open(document.getElementById('lead-receipt-viewer-modal'));
         });
     </script>
+    <div
+    id="lead-transfer-modal"
+    class="hs-overlay hidden ti-modal"
+>
+    <div class="hs-overlay-open:mt-7 ti-modal-box mt-0 ease-out">
+
+        <div class="ti-modal-content">
+
+            <div class="ti-modal-header">
+                <h6 class="modal-title">
+                    Transfer Lead
+                </h6>
+
+                <button
+                    type="button"
+                    class="hs-dropdown-toggle !text-[1rem]"
+                    data-hs-overlay="#lead-transfer-modal"
+                >
+                    <i class="ri-close-line"></i>
+                </button>
+            </div>
+
+            <form
+                method="POST"
+                action="{{ route(
+                    'admin.leads.transfer.store',
+                    $latestLead->id
+                ) }}"
+            >
+                @csrf
+
+                <div class="ti-modal-body">
+
+                    <div class="mb-4">
+                        <label class="ti-form-label">
+                            Current Salesperson
+                        </label>
+
+                        <input
+                            type="text"
+                            class="form-control"
+                            value="{{ optional(
+                                $latestLead->representative
+                            )->name ?? 'Unassigned' }}"
+                            disabled
+                        >
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="ti-form-label">
+                            Transfer To
+                        </label>
+
+                        <select
+                            name="to_user_id"
+                            class="form-control"
+                            required
+                        >
+                            <option value="">
+                                Select Salesperson
+                            </option>
+
+                            @foreach($transferUsers as $user)
+
+                                @if(
+                                    $user->id
+                                    !==
+                                    $latestLead->representative_user_id
+                                )
+                                    <option
+                                        value="{{ $user->id }}"
+                                    >
+                                        {{ $user->name }}
+                                    </option>
+                                @endif
+
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="ti-form-label">
+                            Reason
+                        </label>
+
+                        <textarea
+                            name="reason"
+                            class="form-control"
+                            rows="4"
+                            maxlength="1000"
+                            placeholder="Reason for transferring this lead"
+                        ></textarea>
+                    </div>
+
+                </div>
+
+                <div class="ti-modal-footer">
+
+                    <button
+                        type="button"
+                        class="ti-btn ti-btn-light"
+                        data-hs-overlay="#lead-transfer-modal"
+                    >
+                        Cancel
+                    </button>
+
+                    <button
+                        type="submit"
+                        class="ti-btn ti-btn-primary"
+                    >
+                        Send Transfer Request
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+    </div>
+</div>
+
+@if(
+    $latestLead
+    &&
+    $latestLead->pendingTransfer
+    &&
+    auth()->id()
+        ===
+        $latestLead->pendingTransfer->to_user_id
+)
+
+<div
+    id="lead-transfer-reject-modal"
+    class="hs-overlay hidden ti-modal"
+>
+    <div class="hs-overlay-open:mt-7 ti-modal-box mt-0 ease-out">
+
+        <div class="ti-modal-content">
+
+            <div class="ti-modal-header">
+                <h6 class="modal-title">
+                    Reject Lead Transfer
+                </h6>
+            </div>
+
+            <form
+                method="POST"
+                action="{{ route(
+                    'admin.leads.transfer.reject',
+                    $latestLead->pendingTransfer->id
+                ) }}"
+            >
+                @csrf
+
+                <div class="ti-modal-body">
+
+                    <label class="ti-form-label">
+                        Reason for rejection
+                    </label>
+
+                    <textarea
+                        name="response_note"
+                        class="form-control"
+                        rows="4"
+                        maxlength="1000"
+                        placeholder="Optional rejection reason"
+                    ></textarea>
+
+                </div>
+
+                <div class="ti-modal-footer">
+
+                    <button
+                        type="button"
+                        class="ti-btn ti-btn-light"
+                        data-hs-overlay="#lead-transfer-reject-modal"
+                    >
+                        Cancel
+                    </button>
+
+                    <button
+                        type="submit"
+                        class="ti-btn ti-btn-danger"
+                    >
+                        Reject Transfer
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+    </div>
+</div>
+
+@endif
 @endsection

@@ -304,6 +304,29 @@ class DashboardController extends Controller
         ]);
     }
 
+    public function moreLeads()
+{
+    $user = auth()->user();
+
+    if (!$user) {
+        abort(401);
+    }
+
+    $isSalesRole = $user->userType
+        && in_array(
+            $user->userType->user_type,
+            \App\Models\UserType::SALES_ROLES
+        );
+
+    return view(
+        'admin.pages.lead-allocation.more-leads',
+        compact(
+            'user',
+            'isSalesRole'
+        )
+    );
+}
+
     private function buildTeamMemberProgress(array $repIds, int $year, int $month, bool $todayClosed = false)
     {
         $repIds = array_values(array_filter(array_unique($repIds)));

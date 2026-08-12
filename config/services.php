@@ -77,4 +77,42 @@ return [
         'timeout' => env('VI_CPAAS_TIMEOUT', 60),
     ],
 
+    'email_leads' => [
+    'host' => env('EMAIL_LEADS_IMAP_HOST'),
+    'port' => env('EMAIL_LEADS_IMAP_PORT', 993),
+
+    'encryption' => env(
+        'EMAIL_LEADS_IMAP_ENCRYPTION',
+        'ssl'
+    ),
+
+    'validate_cert' => env(
+        'EMAIL_LEADS_IMAP_VALIDATE_CERT',
+        true
+    ),
+
+    'username' => env(
+        'EMAIL_LEADS_IMAP_USERNAME'
+    ),
+
+    'password' => env(
+        'EMAIL_LEADS_IMAP_PASSWORD'
+    ),
+
+    'mailbox' => env(
+        'EMAIL_LEADS_IMAP_MAILBOX',
+        'INBOX'
+    ),
+
+    'allowed_sender' => env(
+        'EMAIL_LEADS_ALLOWED_SENDER',
+        'noreply@accretionaviation.com'
+    ),
+
+    'recipient' => env(
+        'EMAIL_LEADS_RECIPIENT',
+        'ops@accretionaviation.com'
+    ),
+],
+
 ];
