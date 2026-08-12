@@ -1436,7 +1436,7 @@
 @endif-->
 
                         <!-- Leads Section -->
-                        @if (canAccess($userType, $adminRoles) || canAccess($userType, $operationsRoles) || canAccess($userType, $salesRoles))
+                        @if (canAccess($userType, $adminRoles) || canAccess($userType, $operationsRoles))
                             <li class="slide has-sub {{ Route::is('admin.leads.*') ? 'active open' : '' }}">
                                 <a href="javascript:void(0);" class="side-menu__item">
                                     <i class="bx bx-import side-menu__icon"></i>
