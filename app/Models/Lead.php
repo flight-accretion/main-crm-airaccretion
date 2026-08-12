@@ -31,22 +31,21 @@ class Lead extends Model
         'product_ids' => 'array',
     ];
 
-    public function transferRequests()
+public function latestTransfer()
 {
-    return $this->hasMany(
-        LeadTransfer::class,
-        'lead_id'
-    );
+    // return $this->hasMany(
+    //     LeadTransfer::class,
+    //     'lead_id'
+    // );
+      return $this->hasOne(LeadTransfer::class, 'lead_id')
+        ->orderByDesc('created_at');
 }
 
 public function pendingTransfer()
 {
-    return $this->hasOne(
-        LeadTransfer::class,
-        'lead_id'
-    )
-    ->where('status', 'pending')
-    ->latestOfMany();
+      return $this->hasOne(LeadTransfer::class, 'lead_id')
+        ->where('status', 'pending')
+        ->orderByDesc('created_at');
 }
 
     /**
