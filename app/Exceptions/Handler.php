@@ -3,6 +3,7 @@
 namespace App\Exceptions;
 
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
+use Illuminate\Session\TokenMismatchException;
 use Throwable;
 
 class Handler extends ExceptionHandler
@@ -37,5 +38,24 @@ class Handler extends ExceptionHandler
         $this->reportable(function (Throwable $e) {
             //
         });
+    }
+
+    /**
+     * Render an exception into an HTTP response.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Throwable  $e
+     * @return \Symfony\Component\HttpFoundation\Response
+     */
+    public function render($request, Throwable $e)
+    {
+        if ($e instanceof TokenMismatchException && $request->isMethod('post') && $request->is('/')) {
+            return redirect()
+                ->route('login')
+                ->withErrors(['email' => 'Email or password is incorrect.'])
+                ->withInput($request->only('email', 'remember'));
+        }
+
+        return parent::render($request, $e);
     }
 }

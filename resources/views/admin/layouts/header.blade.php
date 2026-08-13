@@ -1070,7 +1070,14 @@
 
                         <!-- Leads Section -->
                         @if (canAccess($userType, $adminRoles) || canAccess($userType, $operationsRoles) || canAccess($userType, $salesRoles))
-                            <li class="slide has-sub {{ Route::is('admin.clients.*') ? 'active open' : '' }}">
+                            <!-- <li class="slide has-sub {{ Route::is('admin.clients.*') ? 'active open' : '' }}"> -->
+                                <li class="slide has-sub {{
+                                    Route::is('admin.clients.*')
+                                    ||
+                                    Route::is('admin.leads.transfers.*')
+                                        ? 'active open'
+                                        : ''
+                                }}">
                                 <a href="javascript:void(0);" class="side-menu__item">
                                     <i class="bx bx-trending-up side-menu__icon"></i>
                                     <span class="side-menu__label">Leads</span>
@@ -1092,6 +1099,32 @@
                                         <a href="{{ route('admin.leads.dnp') }}" class="side-menu__item">View DNP
                                             Leads</a>
                                     </li>
+                                    @if(
+                                        $userType === \App\Models\UserType::SUPER_ADMIN
+                                        ||
+                                        in_array(
+                                            $userType,
+                                            \App\Models\UserType::SALES_ROLES,
+                                            true
+                                        )
+                                    )
+
+                                        <li class="slide">
+
+                                            <a
+                                                href="{{ route('admin.leads.transfers.index') }}"
+                                                class="side-menu__item {{
+                                                    Route::is('admin.leads.transfers.*')
+                                                        ? 'active'
+                                                        : ''
+                                                }}"
+                                            >
+                                                Transfer Leads
+                                            </a>
+
+                                        </li>
+
+                                    @endif
                                 </ul>
                             </li>
                         @endif

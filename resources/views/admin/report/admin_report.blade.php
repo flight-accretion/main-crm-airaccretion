@@ -1,5 +1,19 @@
 @extends('admin.layouts.header')
 @section('content')
+@php
+    $currentUserType =
+        optional(auth()->user()->userType)->user_type;
+
+    $canRequestLeads =
+        in_array(
+            $currentUserType,
+            \App\Models\UserType::SALES_ROLES,
+            true
+        );
+
+    $pendingTransfersByLead =
+        $pendingTransfersByLead ?? collect();
+@endphp
 <!-- Page Header -->
 <div class="block justify-between page-header md:flex">
   <div>
@@ -13,6 +27,18 @@
       aria-current="page">Report
     </li>
   </ol>
+    @if($canRequestLeads)
+    <button
+        type="submit"
+        form="bulk-lead-request-form"
+        class="ti-btn ti-btn-primary ti-btn-sm"
+        onclick="return confirm(
+            'Request all selected leads?'
+        );"
+    >
+        Request Selected Leads
+    </button>
+@endif
 </div>
 <!-- Page Header Close -->
 
@@ -121,6 +147,12 @@
 
 <div class="grid grid-cols-12 gap-6">
   <div class="xl:col-span-12 col-span-12">
+    <form
+    method="POST"
+    action="{{ route('admin.leads.transfer.bulk') }}"
+    id="bulk-lead-request-form"
+>
+    @csrf
     <div class="box custom-box">
       <div class="box-header flex justify-between items-center">
         <div class="box-title">Report</div>
@@ -157,6 +189,11 @@
           <table class="table display responsive nowrap table-datatable" width="100%">
             <thead class="bg-primary text-white">
               <tr class="border-b border-defaultborder">
+                @if($canRequestLeads)
+                  <th>
+                      Select
+                  </th>
+                @endif
                 <th data-priority="1">S.No</th>
                 <th data-priority="2">Name</th>
                 <th data-priority="3">Email</th>
@@ -174,20 +211,55 @@
                 <th data-priority="13">Pending Amount</th>
                 <th data-priority="14">Amount</th>
                 @endif
+                <th class="text-center" style="min-width: 150px;">
+                  Action
+              </th>
               </tr>
             </thead>
             <tbody>
               @foreach ($payments as $key => $payment)
               @php
               $enquiry = App\Models\Lead::with(['client', 'representative', 'rideSegments'])->find($payment->lead_id);
+              $leadOwnerId = $payment->representative_user_id ?? optional($enquiry)->representative_user_id;
+              $pendingTransfer = $pendingTransfersByLead->get($payment->lead_id);
+              $isOwnLead = (string) $leadOwnerId === (string) auth()->id();
+              $isUnassigned = empty($leadOwnerId);
+              $firstSegment = ($enquiry && $enquiry->rideSegments->count() > 0)
+                  ? $enquiry->rideSegments->first()
+                  : null;
+              $lastSegment = ($enquiry && $enquiry->rideSegments->count() > 0)
+                  ? $enquiry->rideSegments->last()
+                  : null;
+              $serviceDateOrder = ($firstSegment && $firstSegment->from_date)
+                  ? \Carbon\Carbon::parse($firstSegment->from_date)->format('Y-m-d H:i:s')
+                  : '0000-00-00 00:00:00';
+              $canRequestThisLead =
+                  $canRequestLeads
+                  &&
+                  !$isOwnLead
+                  &&
+                  !$isUnassigned
+                  &&
+                  !$pendingTransfer;
               @endphp
               <tr class="border-b border-defaultborder">
+                 @if($canRequestLeads)
+                <td>
+                    <input
+                        type="checkbox"
+                        name="lead_ids[]"
+                        value="{{ $payment->lead_id }}"
+                        class="form-check-input lead-request-checkbox"
+                        {{ $canRequestThisLead ? '' : 'disabled' }}
+                    >
+                </td>
+            @endif
                 <td class="text-center">{{ $key + 1 }}</td>
                 <td>{{ $payment->first_name }}</td>
                 <td>{{ $payment->email }}</td>
                 <td class="text-center">{{ $payment->phone_number }}</td>
                 <td>
-                  @if ($enquiry->representative)
+                  @if ($enquiry && $enquiry->representative)
                   {{ $enquiry->representative->name }}
                   @else
                   N/A
@@ -202,17 +274,12 @@
                   @endif
                 </td>
                 <td class="text-center"
-                  data-order="{{ $enquiry->created_at ? $enquiry->created_at->format('Y-m-d H:i:s') : '0000-00-00 00:00:00' }}">
-                  {{ date('d-m-Y', strtotime($enquiry->created_at)) }}</td>
-                <td
-                  data-order="{{ $enquiry->rideSegments->count() > 0 ? $enquiry->rideSegments->first()->from_date->format('Y-m-d H:i:s') : '0000-00-00 00:00:00' }}">
-                  @if ($enquiry->rideSegments->count() > 0)
-                  @php
-                  $firstSegment = $enquiry->rideSegments->first();
-                  $lastSegment = $enquiry->rideSegments->last();
-                  @endphp
-                  From: {{ date('d-m-Y', strtotime($firstSegment->from_date)) }} To:
-                  {{ date('d-m-Y', strtotime($lastSegment->to_date)) }}
+                  data-order="{{ $enquiry && $enquiry->created_at ? $enquiry->created_at->format('Y-m-d H:i:s') : '0000-00-00 00:00:00' }}">
+                  {{ $enquiry && $enquiry->created_at ? date('d-m-Y', strtotime($enquiry->created_at)) : 'N/A' }}</td>
+                <td data-order="{{ $serviceDateOrder }}">
+                  @if ($firstSegment && $lastSegment)
+                  From: {{ $firstSegment->from_date ? date('d-m-Y', strtotime($firstSegment->from_date)) : 'N/A' }} To:
+                  {{ $lastSegment->to_date ? date('d-m-Y', strtotime($lastSegment->to_date)) : 'N/A' }}
                   @else
                   N/A
                   @endif
@@ -254,8 +321,8 @@
                   @endif
                 </td>
                 <td
-                  data-order="{{ $enquiry->updated_at ? $enquiry->updated_at->format('Y-m-d H:i:s') : '0000-00-00 00:00:00' }}">
-                  {{ $enquiry->updated_at->format('d-m-Y H:i:s') }}
+                  data-order="{{ $enquiry && $enquiry->updated_at ? $enquiry->updated_at->format('Y-m-d H:i:s') : '0000-00-00 00:00:00' }}">
+                  {{ $enquiry && $enquiry->updated_at ? $enquiry->updated_at->format('d-m-Y H:i:s') : 'N/A' }}
                 </td>
                 @php
                 $received = (float) $payment->received_amount;
@@ -265,6 +332,68 @@
                 <td>{{ isset($received) ? number_format($received,2) : 0}}</td>
                 <td>{{ isset($total) ? number_format($total,2) : 0}}</td>
                 @endif
+                 <td class="text-center whitespace-nowrap" style="min-width: 150px;">
+
+                @if(!$canRequestLeads)
+
+                    <span class="text-muted">
+                        -
+                    </span>
+
+                @elseif($isOwnLead)
+
+                    <span class="badge bg-success/10 text-success">
+                        Your Lead
+                    </span>
+
+                @elseif($isUnassigned)
+
+                    <span class="badge bg-default/10 text-default">
+                        Unassigned
+                    </span>
+
+                @elseif($pendingTransfer)
+
+                    @if(
+                        (string) $pendingTransfer->requested_by
+                        ===
+                        (string) auth()->id()
+                    )
+
+                        <span class="badge bg-warning/10 text-warning">
+                            Requested
+                        </span>
+
+                    @else
+
+                        <span class="badge bg-warning/10 text-warning">
+                            Transfer Pending
+                        </span>
+
+                    @endif
+
+                @else
+
+                    <button
+                        type="submit"
+                        formaction="{{ route(
+                            'admin.leads.transfer.store',
+                            $payment->lead_id
+                        ) }}"
+                        formmethod="POST"
+                        class="ti-btn ti-btn-sm ti-btn-primary-full inline-flex items-center justify-center gap-1 whitespace-nowrap !px-3 !py-1.5 !text-white"
+                        style="min-width: 112px; background-color: #3158b8;"
+                        onclick="return confirm(
+                            'Request this lead for yourself?'
+                        );"
+                    >
+                        <i class="ri-send-plane-line"></i>
+                        Request Lead
+                    </button>
+
+                @endif
+
+            </td>
               </tr>
               @endforeach
             </tbody>
@@ -278,6 +407,7 @@
         @endif
       </div>
     </div>
+</form>
   </div>
 </div>
 

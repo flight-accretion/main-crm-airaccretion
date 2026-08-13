@@ -54,7 +54,7 @@ use App\Http\Controllers\LeadTransferController;
 
 Route::get('/', function () {
     return view('admin.auth.login');
-});
+})->name('login');
 
 // HELPER FUNCTION ROUTES
 // State/City routes (web-accessible)
@@ -76,7 +76,7 @@ Route::get('/cities/{stateId}', function ($stateId) {
     }
 });
 
-Route::post('/', [UserController::class, 'login'])->name('login');
+Route::post('/', [UserController::class, 'login'])->name('login.attempt');
 Route::post('/forgot-password', [UserController::class, 'sendResetLink'])->name('password.email');
 Route::get('/reset-password/{token}', [UserController::class, 'showResetForm'])->name('password.reset');
 Route::post('/reset-password', [UserController::class, 'resetPassword'])->name('password.update');
@@ -132,26 +132,72 @@ Route::middleware('auth')->group(function () {
 
     // Separate route group for lead-specific operations
     Route::prefix('admin/leads')->group(function () {
-        Route::post(
-    '/{lead}/transfer',
-            [LeadTransferController::class, 'store']
-        )
-            ->whereUuid('lead')
-            ->name('admin.leads.transfer.store');
 
-        Route::post(
-            '/transfers/{transfer}/accept',
-            [LeadTransferController::class, 'accept']
-        )
-            ->whereUuid('transfer')
-            ->name('admin.leads.transfer.accept');
+ /*
+    |--------------------------------------------------------------------------
+    | Lead Transfer Routes
+    |--------------------------------------------------------------------------
+    */
 
-        Route::post(
-            '/transfers/{transfer}/reject',
-            [LeadTransferController::class, 'reject']
-        )
-            ->whereUuid('transfer')
-            ->name('admin.leads.transfer.reject');
+    // Transfer request inbox
+    Route::get(
+        '/transfers',
+        [LeadTransferController::class, 'index']
+    )
+        ->name('admin.leads.transfers.index');
+
+    // Bulk lead request from Sales Report
+    Route::post(
+        '/transfers/bulk-request',
+        [LeadTransferController::class, 'bulkStore']
+    )
+        ->name('admin.leads.transfer.bulk');
+
+    // Request one lead for logged-in user
+    Route::post(
+        '/{lead}/transfer',
+        [LeadTransferController::class, 'store']
+    )
+        ->whereUuid('lead')
+        ->name('admin.leads.transfer.store');
+
+    // Approve transfer
+    Route::post(
+        '/transfers/{transfer}/accept',
+        [LeadTransferController::class, 'accept']
+    )
+        ->whereUuid('transfer')
+        ->name('admin.leads.transfer.accept');
+
+    // Reject transfer
+    Route::post(
+        '/transfers/{transfer}/reject',
+        [LeadTransferController::class, 'reject']
+    )
+        ->whereUuid('transfer')
+        ->name('admin.leads.transfer.reject');
+
+
+    //     Route::post(
+    // '/{lead}/transfer',
+    //         [LeadTransferController::class, 'store']
+    //     )
+    //         ->whereUuid('lead')
+    //         ->name('admin.leads.transfer.store');
+
+    //     Route::post(
+    //         '/transfers/{transfer}/accept',
+    //         [LeadTransferController::class, 'accept']
+    //     )
+    //         ->whereUuid('transfer')
+    //         ->name('admin.leads.transfer.accept');
+
+    //     Route::post(
+    //         '/transfers/{transfer}/reject',
+    //         [LeadTransferController::class, 'reject']
+    //     )
+    //         ->whereUuid('transfer')
+    //         ->name('admin.leads.transfer.reject');
         // Static routes first so segments like "import" are not captured by the dynamic {lead} binding
         Route::get('/import', [ClientController::class, 'showImportForm'])->name('admin.leads.import');
         Route::post('/import', [ClientController::class, 'importLeads'])->name('admin.leads.import.store');

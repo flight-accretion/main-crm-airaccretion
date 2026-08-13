@@ -26,19 +26,24 @@ class UserController extends Controller
         // dd($request->all());
         // Validate input
         $validator = Validator::make($request->all(), [
-            'email' => 'required|email|exists:users,email',
+            'email' => 'required|email',
             'password' => 'required|string',
         ]);
 
         if ($validator->fails()) {
-            return back()->withErrors($validator)->withInput();
+            return back()->withErrors($validator)->withInput($request->only('email', 'remember'));
         }
 
         // Attempt login using web guard
-        if (!Auth::attempt($request->only('email', 'password'), $request->filled('remember'))) {
+        $credentials = [
+            'email' => strtolower(trim($request->input('email'))),
+            'password' => $request->input('password'),
+        ];
+
+        if (!Auth::attempt($credentials, $request->filled('remember'))) {
             return back()->withErrors([
                 'email' => 'Email or password is incorrect.',
-            ])->withInput();
+            ])->withInput($request->only('email', 'remember'));
         }
 
         // Regenerate session

@@ -87,6 +87,37 @@ class ReportController extends Controller
         }
     }
 
+    private function getPendingTransfersByLead($rows)
+    {
+        $leadIds = collect($rows)
+            ->pluck('lead_id')
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($leadIds->isEmpty()) {
+            return collect();
+        }
+
+        return \App\Models\LeadTransfer::query()
+            ->with([
+                'fromUser',
+                'toUser',
+                'requestedBy',
+            ])
+            ->whereIn('lead_id', $leadIds)
+            ->where('status', 'pending')
+            ->orderByDesc('created_at')
+            ->get()
+            ->reduce(function ($carry, $transfer) {
+                if (!$carry->has($transfer->lead_id)) {
+                    $carry->put($transfer->lead_id, $transfer);
+                }
+
+                return $carry;
+            }, collect());
+    }
+
     public function index(Request $request)
     {
 
@@ -229,6 +260,7 @@ class ReportController extends Controller
                 return (object) [
                     'followup_id' => $latest->id,
                     'lead_id' => $latest->lead_id,
+                    'representative_user_id' => $latest->enquiry->representative_user_id ?? null,
                     'first_name' => $client->name ?? '',
                     'phone_number' => $client->contact_number ?? '',
                     'email' => $client->email ?? '',
@@ -262,6 +294,8 @@ class ReportController extends Controller
             })->values();
         }
 
+        $pendingTransfersByLead = $this->getPendingTransfersByLead($payments);
+
         // Get services for filter dropdown (same as refund notes)
         $services = Service::select('id', 'service')->get();
         $products = Product::select('id', 'product')->get();
@@ -276,7 +310,7 @@ class ReportController extends Controller
                 $staff = null;
             }
         }
-        return view('admin.report.admin_report', compact('payments', 'services', 'products', 'serviceDate', 'serviceName', 'status', 'fromDate', 'toDate', 'representatives', 'staff', 'statusArray', 'hidePaymentColumns'));
+        return view('admin.report.admin_report', compact('payments', 'services', 'products', 'serviceDate', 'serviceName', 'status', 'fromDate', 'toDate', 'representatives', 'staff', 'statusArray', 'hidePaymentColumns', 'pendingTransfersByLead'));
     }
 
     /**
@@ -834,6 +868,8 @@ class ReportController extends Controller
                 return (object) [
                     'followup_id' => $latest->id,
                     'lead_id' => $latest->lead_id,
+                    'representative_user_id' =>
+                    $latest->enquiry->representative_user_id ?? null,
                     'client_name' => $client->name ?? 'N/A',
                     'email' => $client->email ?? 'N/A',
                     'contact' => $client->contact_number ?? 'N/A',
@@ -859,6 +895,8 @@ class ReportController extends Controller
             })->values();
         }
 
+        $pendingTransfersByLead = $this->getPendingTransfersByLead($salesData);
+
         // Get services and products for filter dropdown
         $services = Service::select('id', 'service')->get();
         $products = Product::select('id', 'product')->get();
@@ -882,7 +920,8 @@ class ReportController extends Controller
             'managers',
             'statusArray',
             'representatives',
-            'hasFilters'
+            'hasFilters',
+            'pendingTransfersByLead'
         ));
     }
 

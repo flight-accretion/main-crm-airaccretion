@@ -12,75 +12,111 @@ use Illuminate\Validation\ValidationException;
 
 class LeadTransferService
 {
-    public function requestTransfer(
+    /**
+     * Request ownership of another salesperson's lead.
+     *
+     * from_user_id = current lead owner
+     * to_user_id = requester
+     * requested_by = requester
+     */
+    public function requestForSelf(
         Lead $lead,
-        User $requestedBy,
-        User $toUser,
+        User $requester,
         ?string $reason = null
     ): LeadTransfer {
-        if (empty($lead->representative_user_id)) {
-            throw ValidationException::withMessages([
-                'transfer' =>
-                    'This lead does not currently have an assigned salesperson.',
+        return DB::transaction(function () use (
+            $lead,
+            $requester,
+            $reason
+        ) {
+            $lead = Lead::where('id', $lead->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            /*
+             * Transfer system should not handle unassigned leads.
+             * Existing allocation system handles those.
+             */
+            if (empty($lead->representative_user_id)) {
+                throw ValidationException::withMessages([
+                    'transfer' =>
+                        'This lead is currently unassigned and cannot be requested through lead transfer.',
+                ]);
+            }
+
+            /*
+             * User cannot request their own lead.
+             */
+            if (
+                (string) $lead->representative_user_id
+                ===
+                (string) $requester->id
+            ) {
+                throw ValidationException::withMessages([
+                    'transfer' =>
+                        'This lead is already assigned to you.',
+                ]);
+            }
+
+            /*
+             * Only active sales users can request a lead for themselves.
+             */
+            if (!$this->isSalesUser($requester)) {
+                throw ValidationException::withMessages([
+                    'transfer' =>
+                        'Only Sales Executives or Sales Managers can request lead ownership.',
+                ]);
+            }
+
+            if ((int) $requester->status !== 1) {
+                throw ValidationException::withMessages([
+                    'transfer' =>
+                        'Your CRM user account is inactive.',
+                ]);
+            }
+
+            /*
+             * Only one pending transfer per lead.
+             */
+            $pendingExists = LeadTransfer::where(
+                'lead_id',
+                $lead->id
+            )
+                ->where('status', 'pending')
+                ->exists();
+
+            if ($pendingExists) {
+                throw ValidationException::withMessages([
+                    'transfer' =>
+                        'A transfer request is already pending for this lead.',
+                ]);
+            }
+
+            return LeadTransfer::create([
+                'lead_id' =>
+                    $lead->id,
+
+                'from_user_id' =>
+                    $lead->representative_user_id,
+
+                'to_user_id' =>
+                    $requester->id,
+
+                'requested_by' =>
+                    $requester->id,
+
+                'status' =>
+                    'pending',
+
+                'reason' =>
+                    $reason,
             ]);
-        }
-
-        if ($lead->representative_user_id === $toUser->id) {
-            throw ValidationException::withMessages([
-                'transfer' =>
-                    'This lead is already assigned to the selected salesperson.',
-            ]);
-        }
-
-        if (!$this->isSalesUser($toUser)) {
-            throw ValidationException::withMessages([
-                'transfer' =>
-                    'Lead can only be transferred to an active sales user.',
-            ]);
-        }
-
-        if ((int) $toUser->status !== 1) {
-            throw ValidationException::withMessages([
-                'transfer' =>
-                    'The selected salesperson is inactive.',
-            ]);
-        }
-
-        $pendingExists = LeadTransfer::where(
-            'lead_id',
-            $lead->id
-        )
-            ->where('status', 'pending')
-            ->exists();
-
-        if ($pendingExists) {
-            throw ValidationException::withMessages([
-                'transfer' =>
-                    'A transfer request is already pending for this lead.',
-            ]);
-        }
-
-        return LeadTransfer::create([
-            'lead_id' =>
-                $lead->id,
-
-            'from_user_id' =>
-                $lead->representative_user_id,
-
-            'to_user_id' =>
-                $toUser->id,
-
-            'requested_by' =>
-                $requestedBy->id,
-
-            'status' =>
-                'pending',
-
-            'reason' =>
-                $reason,
-        ]);
+        });
     }
 
+    /**
+     * Current owner or Super Admin can approve.
+     */
     public function accept(
         LeadTransfer $transfer,
         User $user
@@ -103,10 +139,18 @@ class LeadTransferService
                 ]);
             }
 
-            if ($transfer->to_user_id !== $user->id) {
+            $isCurrentOwner =
+                (string) $transfer->from_user_id
+                ===
+                (string) $user->id;
+
+            $isSuperAdmin =
+                $this->isSuperAdmin($user);
+
+            if (!$isCurrentOwner && !$isSuperAdmin) {
                 throw ValidationException::withMessages([
                     'transfer' =>
-                        'Only the salesperson receiving this lead can accept the transfer.',
+                        'Only the current lead owner or Super Admin can approve this transfer.',
                 ]);
             }
 
@@ -118,30 +162,39 @@ class LeadTransferService
                 ->firstOrFail();
 
             /*
-             * Protect against stale transfer.
+             * Protect against stale requests.
              */
             if (
-                $lead->representative_user_id
+                (string) $lead->representative_user_id
                 !==
-                $transfer->from_user_id
+                (string) $transfer->from_user_id
             ) {
                 $transfer->update([
-                    'status' => 'cancelled',
-                    'responded_at' => now(),
-                    'responded_by' => $user->id,
+                    'status' =>
+                        'cancelled',
+
+                    'responded_at' =>
+                        now(),
+
+                    'responded_by' =>
+                        $user->id,
+
                     'response_note' =>
-                        'Transfer automatically cancelled because lead ownership changed before acceptance.',
+                        'Transfer automatically cancelled because lead ownership changed before approval.',
                 ]);
 
                 throw ValidationException::withMessages([
                     'transfer' =>
-                        'Lead ownership has already changed. This transfer request is no longer valid.',
+                        'Lead ownership has already changed. This request is no longer valid.',
                 ]);
             }
 
             $oldRepresentative =
                 $lead->representative_user_id;
 
+            /*
+             * Assign to the person who REQUESTED the lead.
+             */
             $lead->representative_user_id =
                 $transfer->to_user_id;
 
@@ -158,9 +211,6 @@ class LeadTransferService
                     $user->id,
             ]);
 
-            /*
-             * Existing CRM audit system.
-             */
             LeadAuditTrail::create([
                 'id' =>
                     (string) \Illuminate\Support\Str::uuid(),
@@ -186,6 +236,9 @@ class LeadTransferService
         });
     }
 
+    /**
+     * Current owner or Super Admin can reject.
+     */
     public function reject(
         LeadTransfer $transfer,
         User $user,
@@ -210,10 +263,53 @@ class LeadTransferService
                 ]);
             }
 
-            if ($transfer->to_user_id !== $user->id) {
+            $isCurrentOwner =
+                (string) $transfer->from_user_id
+                ===
+                (string) $user->id;
+
+            $isSuperAdmin =
+                $this->isSuperAdmin($user);
+
+            if (!$isCurrentOwner && !$isSuperAdmin) {
                 throw ValidationException::withMessages([
                     'transfer' =>
-                        'Only the salesperson receiving this lead can reject the transfer.',
+                        'Only the current lead owner or Super Admin can reject this transfer.',
+                ]);
+            }
+
+            /*
+             * Also protect rejection against stale ownership.
+             */
+            $lead = Lead::where(
+                'id',
+                $transfer->lead_id
+            )
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (
+                (string) $lead->representative_user_id
+                !==
+                (string) $transfer->from_user_id
+            ) {
+                $transfer->update([
+                    'status' =>
+                        'cancelled',
+
+                    'responded_at' =>
+                        now(),
+
+                    'responded_by' =>
+                        $user->id,
+
+                    'response_note' =>
+                        'Transfer automatically cancelled because lead ownership changed before rejection.',
+                ]);
+
+                throw ValidationException::withMessages([
+                    'transfer' =>
+                        'Lead ownership has already changed. This request is no longer valid.',
                 ]);
             }
 
@@ -244,5 +340,13 @@ class LeadTransferService
             UserType::SALES_ROLES,
             true
         );
+    }
+
+    private function isSuperAdmin(User $user): bool
+    {
+        return $user->userType
+            &&
+            $user->userType->user_type
+                === UserType::SUPER_ADMIN;
     }
 }

@@ -26,15 +26,39 @@
               <div class="box-header flex justify-between items-center">
                 <h5 class="box-title">Basic Information</h5>
 
-                @if($latestLead && $latestLead->representative_user_id)
-                    <button
-                        type="button"
-                        class="ti-btn ti-btn-primary"
-                        data-hs-overlay="#lead-transfer-modal"
-                    >
-                        Transfer Lead
-                    </button>
-                @endif
+               @php
+    $currentUserType =
+        optional(auth()->user()->userType)->user_type;
+
+    $canRequestLead =
+        $latestLead
+        &&
+        $latestLead->representative_user_id
+        &&
+        !$latestLead->pendingTransfer
+        &&
+        (string) $latestLead->representative_user_id
+            !==
+            (string) auth()->id()
+        &&
+        in_array(
+            $currentUserType,
+            \App\Models\UserType::SALES_ROLES,
+            true
+        );
+@endphp
+
+@if($canRequestLead)
+
+    <button
+        type="button"
+        class="ti-btn ti-btn-primary"
+        data-hs-overlay="#lead-transfer-modal"
+    >
+        Request Lead
+    </button>
+
+@endif
             </div>
             @if($latestLead && $latestLead->pendingTransfer)
     @php
@@ -62,11 +86,18 @@
                 </div>
             @endif
 
-            @if(
-                auth()->id()
-                ===
-                $pendingTransfer->to_user_id
-            )
+       @php
+    $canApproveTransfer =
+        (string) auth()->id()
+            ===
+            (string) $pendingTransfer->from_user_id
+        ||
+        optional(auth()->user()->userType)->user_type
+            ===
+            \App\Models\UserType::SUPER_ADMIN;
+@endphp
+
+@if($canApproveTransfer)
                 <div class="flex gap-2 mt-3">
 
                     <form
@@ -99,6 +130,7 @@
 
                 </div>
             @endif
+
         </div>
     </div>
 @endif
@@ -738,7 +770,8 @@
             window.HSOverlay.open(document.getElementById('lead-receipt-viewer-modal'));
         });
     </script>
-    <div
+
+ <div
     id="lead-transfer-modal"
     class="hs-overlay hidden ti-modal"
 >
@@ -747,17 +780,18 @@
         <div class="ti-modal-content">
 
             <div class="ti-modal-header">
+
                 <h6 class="modal-title">
-                    Transfer Lead
+                    Request Lead
                 </h6>
 
                 <button
                     type="button"
-                    class="hs-dropdown-toggle !text-[1rem]"
                     data-hs-overlay="#lead-transfer-modal"
                 >
                     <i class="ri-close-line"></i>
                 </button>
+
             </div>
 
             <form
@@ -772,6 +806,7 @@
                 <div class="ti-modal-body">
 
                     <div class="mb-4">
+
                         <label class="ti-form-label">
                             Current Salesperson
                         </label>
@@ -784,41 +819,26 @@
                             )->name ?? 'Unassigned' }}"
                             disabled
                         >
+
                     </div>
 
                     <div class="mb-4">
+
                         <label class="ti-form-label">
-                            Transfer To
+                            Requested By
                         </label>
 
-                        <select
-                            name="to_user_id"
+                        <input
+                            type="text"
                             class="form-control"
-                            required
+                            value="{{ auth()->user()->name }}"
+                            disabled
                         >
-                            <option value="">
-                                Select Salesperson
-                            </option>
 
-                            @foreach($transferUsers as $user)
-
-                                @if(
-                                    $user->id
-                                    !==
-                                    $latestLead->representative_user_id
-                                )
-                                    <option
-                                        value="{{ $user->id }}"
-                                    >
-                                        {{ $user->name }}
-                                    </option>
-                                @endif
-
-                            @endforeach
-                        </select>
                     </div>
 
                     <div>
+
                         <label class="ti-form-label">
                             Reason
                         </label>
@@ -828,8 +848,9 @@
                             class="form-control"
                             rows="4"
                             maxlength="1000"
-                            placeholder="Reason for transferring this lead"
+                            placeholder="Why do you want this lead?"
                         ></textarea>
+
                     </div>
 
                 </div>
@@ -848,7 +869,7 @@
                         type="submit"
                         class="ti-btn ti-btn-primary"
                     >
-                        Send Transfer Request
+                        Send Request
                     </button>
 
                 </div>
@@ -856,6 +877,7 @@
             </form>
 
         </div>
+
     </div>
 </div>
 
@@ -864,9 +886,15 @@
     &&
     $latestLead->pendingTransfer
     &&
-    auth()->id()
-        ===
-        $latestLead->pendingTransfer->to_user_id
+    (
+        (string) auth()->id()
+            ===
+            (string) $latestLead->pendingTransfer->from_user_id
+        ||
+        optional(auth()->user()->userType)->user_type
+            ===
+            \App\Models\UserType::SUPER_ADMIN
+    )
 )
 
 <div

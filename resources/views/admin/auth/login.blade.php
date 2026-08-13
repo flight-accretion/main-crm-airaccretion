@@ -60,7 +60,7 @@
                                 </div>
                             @endif
                             
-                            <form method="POST" action="{{ route('login') }}">
+                            <form method="POST" action="{{ route('login.attempt') }}">
                                 @csrf
                                 <div class="grid grid-cols-12">
                                     <div class="xl:col-span-12 col-span-12 mb-3">

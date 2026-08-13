@@ -1168,6 +1168,13 @@ try {
             return $enquiry;
         });
         $latestLead = $client->leads->sortByDesc('created_at')->first();
+        if ($latestLead) {
+            $latestLead->load([
+                'pendingTransfers.fromUser',
+                'pendingTransfers.toUser',
+                'pendingTransfers.requestedBy',
+            ]);
+        }
         $followups = [];
         if ($latestLead) {
             $followups = LeadFollowup::with('followedBy')
@@ -5099,7 +5106,15 @@ try {
     public function viewLead(Lead $lead)
     {
         // Load the lead with necessary relationships
-        $lead->load(['rideSegments', 'representative', 'client', 'leadFollowups.followedBy']);
+        $lead->load([
+            'rideSegments',
+            'representative',
+            'client',
+            'leadFollowups.followedBy',
+            'pendingTransfers.fromUser',
+            'pendingTransfers.toUser',
+            'pendingTransfers.requestedBy',
+        ]);
 
         // Get the client for this lead
         $client = $lead->client;
@@ -5195,13 +5210,13 @@ try {
         $staff = $this->getUsersInHierarchy();
 
         // Active sales users available for lead transfer
-        $transferUsers = User::query()
-            ->where('status', 1)
-            ->whereHas('userType', function ($query) {
-                $query->whereIn('user_type', UserType::SALES_ROLES);
-            })
-            ->orderBy('name')
-            ->get();
+        // $transferUsers = User::query()
+        //     ->where('status', 1)
+        //     ->whereHas('userType', function ($query) {
+        //         $query->whereIn('user_type', UserType::SALES_ROLES);
+        //     })
+        //     ->orderBy('name')
+        //     ->get();
 
         // Get country name
         $country = DB::table('countries')
@@ -5264,7 +5279,6 @@ try {
             'services',
             'country',
             'staff',
-            'transferUsers',
             'selectedServices',
             'selectedExtraServices',
             'totalServiceAmount',
