@@ -44,7 +44,25 @@ class LeadAllocationService
                 continue;
             }
 
-            $salesperson = $this->pickSalesperson($lead, $settings);
+            // $salesperson = $this->pickSalesperson($lead, $settings);
+            if (
+                str_starts_with(
+                    (string) $queueItem->reason,
+                    'email_'
+                )
+            ) {
+                $salesperson = app(
+                    EmailLeadAllocationService::class
+                )->pickSalesperson(
+                    $lead,
+                    $settings
+                );
+            } else {
+                $salesperson = $this->pickSalesperson(
+                    $lead,
+                    $settings
+                );
+            }
             if (!$salesperson) {
                 $queueItem->attempt_count += 1;
                 $queueItem->save();

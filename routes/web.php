@@ -37,6 +37,7 @@ use App\Http\Controllers\IvrCallTypeController;
 use App\Http\Controllers\IvrDtmfRuleController;
 use App\Http\Controllers\IvrAgentController;
 use App\Http\Controllers\LeadTransferController;
+use App\Http\Controllers\LeadAllocationSettingController;
 
 /*
 |--------------------------------------------------------------------------
@@ -100,6 +101,22 @@ Route::middleware('auth')->group(function () {
     Route::post('/sales-dashboard/popup/accept', [DashboardController::class, 'acceptPopup'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard.popup.accept');
     Route::post('/sales-dashboard/popup/decline', [DashboardController::class, 'declinePopup'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard.popup.decline');
     Route::post('/sales-dashboard/daily-update', [DashboardController::class, 'storeDailyUpdate'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard.daily-update.store');
+
+    Route::get(
+        '/admin/lead-allocation/settings',
+        [LeadAllocationSettingController::class, 'edit']
+    )
+        ->name(
+            'admin.lead-allocation.settings.edit'
+        );
+
+    Route::put(
+        '/admin/lead-allocation/settings',
+        [LeadAllocationSettingController::class, 'update']
+    )
+        ->name(
+            'admin.lead-allocation.settings.update'
+        );
 
 
     Route::prefix('admin/lead')->group(function () {

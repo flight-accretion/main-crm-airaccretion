@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
+use App\Models\User;
 
 class LeadAllocationSetting extends Model
 {
@@ -16,13 +17,30 @@ class LeadAllocationSetting extends Model
 
     protected $fillable = [
         'id',
-        'office_start_time',
-        'office_end_time',
-        'popup_interval_minutes',
-        'minimum_leads_before_popup',
-        'auto_allocation_enabled',
-        'allocation_method',
+    'office_start_time',
+    'office_end_time',
+    'popup_interval_minutes',
+    'minimum_leads_before_popup',
+    'auto_allocation_enabled',
+    'allocation_method',
+
+    // Email-only routing configuration
+    'email_charter_owner_user_id',
+    'email_charter_product_ids',
     ];
+
+    protected $casts = [
+    'email_charter_product_ids' => 'array',
+    'auto_allocation_enabled' => 'boolean',
+  ];
+
+    public function emailCharterOwner()
+{
+    return $this->belongsTo(
+        User::class,
+        'email_charter_owner_user_id'
+    );
+}
 
     protected static function boot()
     {
@@ -34,7 +52,6 @@ class LeadAllocationSetting extends Model
             }
         });
     }
-
     public static function getActiveSettings()
     {
         $settings = self::query()->first();

@@ -549,109 +549,7 @@
 
                     <div class="header-content-right">
 
-                        {{-- <div class="header-element py-[1rem] md:px-[0.65rem] px-2 header-search">
-                            <button aria-label="button" type="button" data-hs-overlay="#search-modal"
-                                class="inline-flex flex-shrink-0 justify-center items-center gap-2  rounded-full font-medium focus:ring-offset-0 focus:ring-offset-white transition-all text-xs dark:bg-bgdark dark:hover:bg-black/20 dark:text-[#8c9097] dark:text-white/50 dark:hover:text-white dark:focus:ring-white/10 dark:focus:ring-offset-white/10">
-                                <i class="bx bx-search-alt-2 header-link-icon"></i>
-                            </button>
-                        </div> --}}
-
-                        <!-- start header country -->
-                        {{-- <div
-                            class="header-element py-[1rem] md:px-[0.65rem] px-2  header-country hs-dropdown ti-dropdown  hidden sm:block [--placement:bottom-right] rtl:[--placement:bottom-left]">
-                            <button id="dropdown-flag" type="button"
-                                class="hs-dropdown-toggle ti-dropdown-toggle !p-0 flex-shrink-0  !border-0 !rounded-full !shadow-none">
-                                <img src="/assets/admin/images/flags/us_flag.jpg" alt="flag-img"
-                                    class="h-[1.25rem] w-[1.25rem] rounded-full">
-                            </button>
-
-                            <div class="hs-dropdown-menu ti-dropdown-menu min-w-[10rem] hidden !-mt-3"
-                                aria-labelledby="dropdown-flag">
-                                <div class="ti-dropdown-divider divide-y divide-gray-200 dark:divide-white/10">
-                                    <div class="py-2 first:pt-0 last:pb-0">
-                                        <div class="ti-dropdown-item !p-[0.65rem] ">
-                                            <div class="flex items-center space-x-2 rtl:space-x-reverse w-full">
-                                                <div class="h-[1.375rem] flex items-center w-[1.375rem] rounded-full">
-                                                    <img src="/assets/admin/images/flags/us_flag.jpg" alt="flag-img"
-                                                        class="h-[1rem] w-[1rem] rounded-full">
-                                                </div>
-                                                <div>
-                                                    <p class="!text-[0.8125rem] font-medium">
-                                                        English
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="ti-dropdown-item !p-[0.65rem]">
-                                            <div class="flex items-center space-x-2 rtl:space-x-reverse w-full">
-                                                <div class="h-[1.375rem] w-[1.375rem] flex items-center rounded-full">
-                                                    <img src="/assets/admin/images/flags/spain_flag.jpg"
-                                                        alt="flag-img" class="h-[1rem] w-[1rem] rounded-full">
-                                                </div>
-                                                <div>
-                                                    <p class="!text-[0.8125rem] font-medium">
-                                                        Spanish
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="ti-dropdown-item !p-[0.65rem]">
-                                            <div class="flex items-center space-x-2 rtl:space-x-reverse w-full">
-                                                <div class="h-[1.375rem] w-[1.375rem] flex items-center rounded-full">
-                                                    <img src="/assets/admin/images/flags/french_flag.jpg"
-                                                        alt="flag-img" class="h-[1rem] w-[1rem] rounded-full">
-                                                </div>
-                                                <div>
-                                                    <p class="!text-[0.8125rem] font-medium">
-                                                        French
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="ti-dropdown-item !p-[0.65rem]">
-                                            <div class="flex items-center space-x-2 rtl:space-x-reverse w-full">
-                                                <div class="h-[1.375rem] w-[1.375rem] flex items-center rounded-full">
-                                                    <img src="/assets/admin/images/flags/germany_flag.jpg"
-                                                        alt="flag-img" class="h-[1rem] w-[1rem] rounded-full">
-                                                </div>
-                                                <div>
-                                                    <p class="!text-[0.8125rem] font-medium">
-                                                        German
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="ti-dropdown-item !p-[0.65rem]">
-                                            <div class="flex items-center space-x-2 rtl:space-x-reverse w-full">
-                                                <div class="h-[1.375rem] w-[1.375rem] flex items-center rounded-full">
-                                                    <img src="/assets/admin/images/flags/italy_flag.jpg"
-                                                        alt="flag-img" class="h-[1rem] w-[1rem] rounded-full">
-                                                </div>
-                                                <div>
-                                                    <p class="!text-[0.8125rem] font-medium">
-                                                        Italian
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="ti-dropdown-item !p-[0.65rem]">
-                                            <div class="flex items-center space-x-2 rtl:space-x-reverse w-full">
-                                                <div class="h-[1.375rem] w-[1.375rem] flex items-center  rounded-sm">
-                                                    <img src="/assets/admin/images/flags/russia_flag.jpg"
-                                                        alt="flag-img" class="h-[1rem] w-[1rem] rounded-full">
-                                                </div>
-                                                <div>
-                                                    <p class="!text-[0.8125rem] font-medium">
-                                                        Russian
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div> --}}
-                        <!-- end header country -->
+                       
 
                         <!-- light and dark theme -->
                         <div
@@ -667,199 +565,7 @@
                                 <i class="bx bx-sun header-link-icon"></i>
                             </a>
                         </div>
-                        <!-- End light and dark theme -->
-                        <!--Header Notifictaion -->
-                        {{-- <div
-                            class="header-element py-[1rem] md:px-[0.65rem] px-2 notifications-dropdown header-notification hs-dropdown ti-dropdown !hidden md:!block [--placement:bottom-left]">
-                            <button id="dropdown-notification" type="button"
-                                class="hs-dropdown-toggle relative ti-dropdown-toggle !p-0 !border-0 flex-shrink-0  !rounded-full !shadow-none align-middle text-xs">
-                                <i class="bx bx-bell header-link-icon  text-[1.125rem]"></i>
-                                <span class="flex absolute h-5 w-5 -top-[0.25rem] end-0  -me-[0.6rem]">
-                                    <span
-                                        class="animate-slow-ping absolute inline-flex -top-[2px] -start-[2px] h-full w-full rounded-full bg-secondary/40 opacity-75"></span>
-                                    <span
-                                        class="relative inline-flex justify-center items-center rounded-full  h-[14.7px] w-[14px] bg-secondary text-[0.625rem] text-white"
-                                        id="notification-icon-badge">5</span>
-                                </span>
-                            </button>
-                            <div class="main-header-dropdown !-mt-3 !p-0 hs-dropdown-menu ti-dropdown-menu bg-white !w-[22rem] border-0 border-defaultborder hidden !m-0"
-                                aria-labelledby="dropdown-notification">
-
-                                <div
-                                    class="ti-dropdown-header !m-0 !p-4 !bg-transparent flex justify-between items-center">
-                                    <p
-                                        class="mb-0 text-[1.0625rem] text-defaulttextcolor font-semibold dark:text-[#8c9097] dark:text-white/50">
-                                        Notifications</p>
-                                    <span
-                                        class="text-[0.75em] py-[0.25rem/2] px-[0.45rem] font-[600] rounded-sm bg-secondary/10 text-secondary"
-                                        id="notifiation-data">5 Unread</span>
-                                </div>
-                                <div class="dropdown-divider"></div>
-                                <ul class="list-none !m-0 !p-0 end-0" id="header-notification-scroll">
-                                    <li class="ti-dropdown-item dropdown-item !block">
-                                        <div class="flex items-start">
-                                            <div class="pe-2">
-                                                <span
-                                                    class="inline-flex text-primary justify-center items-center !w-[2.5rem] !h-[2.5rem] !leading-[2.5rem] !text-[0.8rem] !bg-primary/10 !rounded-[50%]"><i
-                                                        class="ti ti-gift text-[1.125rem]"></i></span>
-                                            </div>
-                                            <div class="grow flex items-center justify-between">
-                                                <div>
-                                                    <p
-                                                        class="mb-0 text-defaulttextcolor dark:text-white text-[0.8125rem] font-semibold">
-                                                        <a href="javascript:void(0)">Your Order Has Been Shipped</a>
-                                                    </p>
-                                                    <span
-                                                        class="text-[#8c9097] dark:text-white/50 font-normal text-[0.75rem] header-notification-text">Order
-                                                        No: 123456
-                                                        Has Shipped To Your Delivery Address</span>
-                                                </div>
-                                                <div>
-                                                    <a aria-label="anchor" href="javascript:void(0);"
-                                                        class="min-w-fit text-[#8c9097] dark:text-white/50 me-1 dropdown-item-close1"><i
-                                                            class="ti ti-x text-[1rem]"></i></a>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </li>
-                                    <li class="ti-dropdown-item dropdown-item !block">
-                                        <div class="flex items-start">
-                                            <div class="pe-2">
-                                                <span
-                                                    class="inline-flex text-secondary justify-center items-center !w-[2.5rem] !h-[2.5rem] !leading-[2.5rem] !text-[0.8rem]  bg-secondary/10 rounded-[50%]"><i
-                                                        class="ti ti-discount-2 text-[1.125rem]"></i></span>
-                                            </div>
-                                            <div class="grow flex items-center justify-between">
-                                                <div>
-                                                    <p
-                                                        class="mb-0 text-defaulttextcolor dark:text-white text-[0.8125rem]  font-semibold">
-                                                        <a href="javascript:void(0)">Discount Available</a>
-                                                    </p>
-                                                    <span
-                                                        class="text-[#8c9097] dark:text-white/50 font-normal text-[0.75rem] header-notification-text">Discount
-                                                        Available On Selected Products</span>
-                                                </div>
-                                                <div>
-                                                    <a aria-label="anchor" href="javascript:void(0);"
-                                                        class="min-w-fit  text-[#8c9097] dark:text-white/50 me-1 dropdown-item-close1"><i
-                                                            class="ti ti-x text-[1rem]"></i></a>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </li>
-                                    <li class="ti-dropdown-item dropdown-item !block">
-                                        <div class="flex items-start">
-                                            <div class="pe-2">
-                                                <span
-                                                    class="inline-flex text-pinkmain justify-center items-center !w-[2.5rem] !h-[2.5rem] !leading-[2.5rem] !text-[0.8rem]  bg-pinkmain/10 rounded-[50%]"><i
-                                                        class="ti ti-user-check text-[1.125rem]"></i></span>
-                                            </div>
-                                            <div class="grow flex items-center justify-between">
-                                                <div>
-                                                    <p
-                                                        class="mb-0 text-defaulttextcolor dark:text-white text-[0.8125rem]  font-semibold">
-                                                        <a href="javascript:void(0)">Account Has Been Verified</a>
-                                                    </p>
-                                                    <span
-                                                        class="text-[#8c9097] dark:text-white/50 font-normal text-[0.75rem] header-notification-text">Your
-                                                        Account Has
-                                                        Been Verified Sucessfully</span>
-                                                </div>
-                                                <div>
-                                                    <a aria-label="anchor" href="javascript:void(0);"
-                                                        class="min-w-fit text-[#8c9097] dark:text-white/50 me-1 dropdown-item-close1"><i
-                                                            class="ti ti-x text-[1rem]"></i></a>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </li>
-                                    <li class="ti-dropdown-item dropdown-item !block">
-                                        <div class="flex items-start">
-                                            <div class="pe-2">
-                                                <span
-                                                    class="inline-flex text-warning justify-center items-center !w-[2.5rem] !h-[2.5rem] !leading-[2.5rem] !text-[0.8rem]  bg-warning/10 rounded-[50%]"><i
-                                                        class="ti ti-circle-check text-[1.125rem]"></i></span>
-                                            </div>
-                                            <div class="grow flex items-center justify-between">
-                                                <div>
-                                                    <p
-                                                        class="mb-0 text-defaulttextcolor dark:text-white text-[0.8125rem]  font-semibold">
-                                                        <a href="javascript:void(0)">Order Placed <span
-                                                                class="text-warning">ID: #1116773</span></a>
-                                                    </p>
-                                                    <span
-                                                        class="text-[#8c9097] dark:text-white/50 font-normal text-[0.75rem] header-notification-text">Order
-                                                        Placed
-                                                        Successfully</span>
-                                                </div>
-                                                <div>
-                                                    <a aria-label="anchor" href="javascript:void(0);"
-                                                        class="min-w-fit text-[#8c9097] dark:text-white/50 me-1 dropdown-item-close1"><i
-                                                            class="ti ti-x text-[1rem]"></i></a>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </li>
-                                    <li class="ti-dropdown-item dropdown-item !block">
-                                        <div class="flex items-start">
-                                            <div class="pe-2">
-                                                <span
-                                                    class="inline-flex text-success justify-center items-center !w-[2.5rem] !h-[2.5rem] !leading-[2.5rem] !text-[0.8rem]  bg-success/10 rounded-[50%]"><i
-                                                        class="ti ti-clock text-[1.125rem]"></i></span>
-                                            </div>
-                                            <div class="grow flex items-center justify-between">
-                                                <div>
-                                                    <p
-                                                        class="mb-0 text-defaulttextcolor dark:text-white  text-[0.8125rem]  font-semibold">
-                                                        <a href="javascript:void(0)">Order Delayed <span
-                                                                class="text-success">ID: 7731116</span></a>
-                                                    </p>
-                                                    <span
-                                                        class="text-[#8c9097] dark:text-white/50 font-normal text-[0.75rem] header-notification-text">Order
-                                                        Delayed
-                                                        Unfortunately</span>
-                                                </div>
-                                                <div>
-                                                    <a aria-label="anchor" href="javascript:void(0);"
-                                                        class="min-w-fit text-[#8c9097] dark:text-white/50 me-1 dropdown-item-close1"><i
-                                                            class="ti ti-x text-[1rem]"></i></a>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </li>
-                                </ul>
-
-                                <div class="p-4 empty-header-item1 border-t mt-2">
-                                    <div class="grid">
-                                        <a href="javascript:void(0)"
-                                            class="ti-btn ti-btn-primary-full !m-0 w-full p-2">View All</a>
-                                    </div>
-                                </div>
-                                <div class="p-[3rem] empty-item1 hidden">
-                                    <div class="text-center">
-                                        <span
-                                            class="!h-[4rem]  !w-[4rem] avatar !leading-[4rem] !rounded-full !bg-secondary/10 !text-secondary">
-                                            <i class="ri-notification-off-line text-[2rem]  "></i>
-                                        </span>
-                                        <h6
-                                            class="font-semibold mt-3 text-defaulttextcolor dark:text-white text-[1rem]">
-                                            No New Notifications</h6>
-                                    </div>
-                                </div>
-                            </div>
-                        </div> --}}
-                        <!--End Header Notifictaion -->
-                        <!-- Fullscreen -->
-                        {{-- <div class="header-element header-fullscreen py-[1rem] md:px-[0.65rem] px-2">
-                            <!-- Start::header-link -->
-                            <a aria-label="anchor" onclick="openFullscreen();" href="javascript:void(0);"
-                                class="inline-flex flex-shrink-0 justify-center items-center gap-2  !rounded-full font-medium dark:hover:bg-black/20 dark:text-[#8c9097] dark:text-white/50 dark:hover:text-white dark:focus:ring-white/10 dark:focus:ring-offset-white/10">
-                                <i class="bx bx-fullscreen full-screen-open header-link-icon"></i>
-                                <i class="bx bx-exit-fullscreen full-screen-close header-link-icon hidden"></i>
-                            </a>
-                            <!-- End::header-link -->
-                        </div> --}}
-                        <!-- End Full screen -->
+                      
 
                         @php
                             $user = Auth::user();
@@ -915,19 +621,8 @@
                                 </ul>
                             </div>
                         </div>
-                        <!-- End Header Profile -->
+                       
 
-                        <!-- Switcher Icon -->
-                        {{-- <div class="header-element md:px-[0.48rem]">
-                            <button aria-label="button" type="button"
-                                class="hs-dropdown-toggle switcher-icon inline-flex flex-shrink-0 justify-center items-center gap-2  rounded-full font-medium  align-middle transition-all text-xs dark:text-[#8c9097] dark:text-white/50 dark:hover:text-white dark:focus:ring-white/10 dark:focus:ring-offset-white/10"
-                                data-hs-overlay="#hs-overlay-switcher">
-                                <i class="bx bx-cog header-link-icon animate-spin-slow"></i>
-                            </button>
-                        </div> --}}
-                        <!-- Switcher Icon -->
-
-                        <!-- End::header-element -->
                     </div>
                 </div>
             </nav>
@@ -984,21 +679,6 @@
                         <li class="slide__category"><span class="category-name">Main</span></li>
                         <!-- End::slide__category -->
 
-                        <!-- Start::slide -->
-                        <!-- @if (canAccess($userType, $adminRoles) || canAccess($userType, $salesRoles))
-                            <li class="slide has-sub">
-                                <a href="javascript:void(0);" class="side-menu__item">
-                                    <i class="bx bx-home side-menu__icon"></i>
-                                    <span class="side-menu__label">Dashboards</span>
-                                </a>
-                                <ul class="slide-menu child1">
-                                    <li class="slide side-menu__label1">
-                                        <a href="javascript:void(0)">Dashboards</a>
-                                    </li>
-                                </ul>
-                            </li>
-                        @endif -->
-
                         <!-- Sales Dashboard Section -->
                         @if (canAccess($userType, $adminRoles) || canAccess($userType, $salesRoles))
                             <li class="slide {{ Route::is('admin.sales-dashboard') ? 'active' : '' }}">
@@ -1054,12 +734,7 @@
                                 </a>
                                 <ul class="slide-menu child1">
                                     <li class="slide side-menu__label1"><a href="javascript:void(0)">Pages</a></li>
-                                    <!-- <li class="slide">
-                                    <a href="{{ route('admin.client.create') }}"
-                                        class="side-menu__item {{ Route::is('admin.client.create') ? 'active' : '' }}">
-                                        Add Client
-                                    </a>
-                                </li> -->
+                                   
                                     <li class="slide">
                                         <a href="{{ route('admin.client.index') }}" class="side-menu__item">View
                                             Client</a>
@@ -1128,18 +803,35 @@
                                 </ul>
                             </li>
                         @endif
-                         <li class="slide">
+                      @if(
+                        $userType
+                        &&
+                        in_array(
+                            $userType,
+                            \App\Models\UserType::SALES_ROLES,
+                            true
+                        )
+                    )
+
+                        <li class="slide">
+
                             <a
                                 href="javascript:void(0);"
-                                data-hs-overlay="#assign-more-leads-modal" class="side-menu__item"
+                                data-hs-overlay="#assign-more-leads-modal"
+                                class="side-menu__item"
                             >
+
                                 <i class="bx bx-trending-up side-menu__icon"></i>
 
                                 <span class="side-menu__label">
                                     Assign More Leads
                                 </span>
+
                             </a>
+
                         </li>
+
+                    @endif
 
                         <!-- Lead Tracking Section -->
                         @if (canAccess($userType, $adminRoles) || canAccess($userType, $accountRoles))
@@ -1171,12 +863,7 @@
                                 </a>
                                 <ul class="slide-menu child1">
                                     <li class="slide side-menu__label1"><a href="javascript:void(0)">Pages</a></li>
-                                    <!-- <li class="slide">
-                                    <a href="{{ route('admin.users.create') }}"
-                                        class="side-menu__item {{ Route::is('admin.users.create') ? 'active' : '' }}">
-                                        Add Staff
-                                    </a>
-                                </li> -->
+                                   
                                     <li class="slide">
                                         <a href="{{ route('admin.users.index') }}" class="side-menu__item">View
                                             Staff</a>
@@ -1303,12 +990,7 @@
                                 </a>
                                 <ul class="slide-menu child1">
                                     <li class="slide side-menu__label1"><a href="javascript:void(0)">Pages</a></li>
-                                    <!-- <li class="slide">
-                                    <a href="{{ route('admin.products.create') }}"
-                                        class="side-menu__item {{ Route::is('admin.products.create') ? 'active' : '' }}">
-                                        Add Product
-                                    </a>
-                                </li> -->
+                                   
                                     <li class="slide">
                                         <a href="{{ route('admin.products.index') }}" class="side-menu__item">View
                                             Products</a>
@@ -1331,12 +1013,7 @@
                                 </a>
                                 <ul class="slide-menu child1">
                                     <li class="slide side-menu__label1"><a href="javascript:void(0)">Pages</a></li>
-                                    <!-- <li class="slide">
-                                    <a href="{{ route('admin.service-addresses.create') }}"
-                                        class="side-menu__item {{ Route::is('admin.service-addresses.create') ? 'active' : '' }}">
-                                        Add Service Address
-                                    </a>
-                                </li> -->
+                                   
                                     <li class="slide">
                                         <a href="{{ route('admin.service-addresses.index') }}"
                                             class="side-menu__item">View Service Addresses</a>
@@ -1355,12 +1032,7 @@
                                 </a>
                                 <ul class="slide-menu child1">
                                     <li class="slide side-menu__label1"><a href="javascript:void(0)">Pages</a></li>
-                                    <!-- <li class="slide">
-                                    <a href="{{ route('admin.vendors.create') }}"
-                                        class="side-menu__item {{ Route::is('admin.vendors.create') ? 'active' : '' }}">
-                                        Add Vendor
-                                    </a>
-                                </li> -->
+                                   
                                     <li class="slide">
                                         <a href="{{ route('admin.vendors.index') }}"
                                             class="side-menu__item {{ Route::is('admin.vendors.index') ? 'active' : '' }}">
@@ -1380,6 +1052,43 @@
                                 </a>
                             </li>
                         @endif
+
+                        @if(
+                        $userType === \App\Models\UserType::SUPER_ADMIN
+                    )
+
+                        <li
+                            class="slide {{
+                                Route::is(
+                                    'admin.lead-allocation.settings.*'
+                                )
+                                    ? 'active'
+                                    : ''
+                            }}"
+                        >
+
+                            <a
+                                href="{{ route(
+                                    'admin.lead-allocation.settings.edit'
+                                ) }}"
+                                class="side-menu__item"
+                            >
+
+                                <i
+                                    class="bx bx-cog side-menu__icon"
+                                ></i>
+
+                                <span
+                                    class="side-menu__label"
+                                >
+                                    Lead Allocation Settings
+                                </span>
+
+                            </a>
+
+                        </li>
+
+                    @endif
 
                         <!-- Follow Up Status Direct Link -->
                         @if (canAccess($userType, $adminRoles) || canAccess($userType, $salesRoles))
@@ -1457,16 +1166,6 @@
                                 </a>
                             </li>
                         @endif
-
-                        <!-- Refund Notes Direct Link -->
-                        <!--@if (canAccess($userType, $adminRoles) || canAccess($userType, $accountRoles))
-<li class="slide {{ Route::is('refund-notes.*') ? 'active' : '' }}">
-                            <a href="{{ route('admin.refunds.index') }}" class="side-menu__item">
-                                <i class="bx bx-money-withdraw side-menu__icon"></i>
-                                <span class="side-menu__label">Refund Notes</span>
-                            </a>
-                        </li>
-@endif-->
 
                         <!-- Leads Section -->
                         @if (canAccess($userType, $adminRoles) || canAccess($userType, $operationsRoles))
@@ -1754,51 +1453,45 @@
     <!-- Custom JS -->
     <script src="/assets/admin/js/custom.js?v=2.4"></script>
 
-    <script>
-        // document.addEventListener('DOMContentLoaded', function () {
-        //   const container = document.getElementById('repeatableFieldsContainer');
-
-        //   container.addEventListener('click', function (e) {
-        //     const target = e.target;
-
-        //     // Handle Add Button
-        //     if (target.classList.contains('addBtn')) {
-        //       const row = target.closest('.repeatable-row');
-        //       const clone = row.cloneNode(true);
-
-        //       // Reset values
-        //       clone.querySelectorAll('input, textarea').forEach(el => el.value = '');
-
-        //       // Change button to Remove
-        //       const button = clone.querySelector('button');
-        //       button.textContent = '−';
-        //       button.classList.remove('addBtn', 'bg-green-500');
-        //       button.classList.add('removeBtn', 'bg-red-500');
-
-        //       container.appendChild(clone);
-        //     }
-
-        //     // Handle Remove Button
-        //     if (target.classList.contains('removeBtn')) {
-        //       const row = target.closest('.repeatable-row');
-        //       row.remove();
-        //     }
-        //   });
-        // });
-    </script>
 
     @stack('scripts')
 
-    <div
+{{-- ========================================================== --}}
+{{-- SHARED LEAD AVAILABILITY MODAL --}}
+{{-- Used by:
+     1. Morning automatic popup on Sales Dashboard
+     2. Sidebar "Assign More Leads"
+--}}
+{{-- ========================================================== --}}
+
+@php
+    $currentUser = auth()->user();
+
+    $canReceiveLeads =
+        $currentUser
+        && $currentUser->userType
+        && in_array(
+            $currentUser->userType->user_type,
+            \App\Models\UserType::SALES_ROLES,
+            true
+        );
+@endphp
+
+
+<div
     id="assign-more-leads-modal"
     class="hs-overlay hidden ti-modal"
     tabindex="-1"
+    aria-hidden="true"
 >
 
-    <div class="hs-overlay-open:mt-7 ti-modal-box mt-0 ease-out">
+    <div
+        class="hs-overlay-open:mt-7 ti-modal-box mt-0 ease-out"
+    >
 
         <div class="ti-modal-content">
 
+            {{-- Header --}}
             <div class="ti-modal-header">
 
                 <h6 class="modal-title text-[1rem] font-semibold">
@@ -1810,29 +1503,22 @@
                     class="hs-dropdown-toggle !text-[1rem] !font-semibold !text-defaulttextcolor"
                     data-hs-overlay="#assign-more-leads-modal"
                 >
-                    <span class="sr-only">Close</span>
+                    <span class="sr-only">
+                        Close
+                    </span>
+
                     <i class="ri-close-line"></i>
                 </button>
 
             </div>
 
+
+            {{-- Body --}}
             <div class="ti-modal-body text-center">
-
-                @php
-                    $currentUser = auth()->user();
-
-                    $canReceiveLeads =
-                        $currentUser
-                        && $currentUser->userType
-                        && in_array(
-                            $currentUser->userType->user_type,
-                            \App\Models\UserType::SALES_ROLES
-                        );
-                @endphp
 
                 @if($canReceiveLeads)
 
-                    <h5 class="font-semibold mb-2">
+                    <h5 class="font-semibold text-lg mb-2">
                         Do you want more leads?
                     </h5>
 
@@ -1843,27 +1529,34 @@
 
                 @else
 
-                    <h5 class="font-semibold mb-2">
+                    <h5 class="font-semibold text-lg mb-2">
                         Lead Allocation
                     </h5>
 
                     <p class="text-gray-500">
-                        Your account is not a Sales Executive
-                        or Sales Manager account.
+                        Automatic lead allocation is available only
+                        for Sales Executives and Sales Managers.
                     </p>
 
                 @endif
 
             </div>
 
+
+            {{-- Footer --}}
             <div class="ti-modal-footer">
 
                 @if($canReceiveLeads)
 
+                    {{-- NO --}}
                     <form
                         method="POST"
-                        action="{{ route('admin.sales-dashboard.popup.decline') }}"
+                        action="{{ route(
+                            'admin.sales-dashboard.popup.decline'
+                        ) }}"
+                        class="inline-block"
                     >
+
                         @csrf
 
                         <button
@@ -1872,12 +1565,19 @@
                         >
                             No
                         </button>
+
                     </form>
 
+
+                    {{-- YES --}}
                     <form
                         method="POST"
-                        action="{{ route('admin.sales-dashboard.popup.accept') }}"
+                        action="{{ route(
+                            'admin.sales-dashboard.popup.accept'
+                        ) }}"
+                        class="inline-block"
                     >
+
                         @csrf
 
                         <button
@@ -1886,6 +1586,7 @@
                         >
                             Yes
                         </button>
+
                     </form>
 
                 @else

@@ -28,90 +28,68 @@
         </div>
     </div>
 </div>
-<div id="lead-allocation-popup" class="hs-overlay hidden ti-modal" style="z-index: 9999;">
-    <div class="hs-overlay-open:mt-7 ti-modal-box mt-0 ease-out min-h-[calc(100%-3.5rem)] flex items-center">
-        <div class="ti-modal-content w-full max-w-lg mx-auto" style="background-color: gainsboro;">
-            <div class="ti-modal-header flex items-center justify-between px-6 py-4 border-b border-defaultborder">
-                <div>
-                    <h6 class="modal-title text-[1rem] font-semibold text-gray-800">Receive more leads</h6>
-                    <p class="mb-0 text-sm text-gray-800">During working hours, this reminder appears every 2 hours.</p>
-                </div>
-                <button type="button" class="ti-modal-close-btn text-gray-500 hover:text-gray-700" data-hs-overlay="#lead-allocation-popup" aria-label="Close">
-                    <i class="bx bx-x text-[1.2rem]"></i>
-                </button>
-            </div>
-            <div class="ti-modal-body px-6 py-5">
-                <div class="mb-4 flex items-start gap-3 rounded-lg border border-primary/20 p-3 bg-gray-50">
-                    <div class="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-                        <i class="bx bx-bell text-[1.15rem]"></i>
-                    </div>
-                    <div>
-                        <h6 class="font-semibold text-gray-800">{{ $popupData['queue_count'] ?? 0 }} lead(s) are waiting</h6>
-                        <p class="mb-0 text-sm text-gray-600">If you click Yes, new leads will be assigned to you automatically.</p>
-                    </div>
-                </div>
-                <div class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
-                    Leads are only processed during working hours. After working hours, they stay queued and will be assigned the next working day.
-                </div>
-            </div>
-            <div class="ti-modal-footer flex justify-end gap-2 border-t border-defaultborder px-6 py-4">
-                <form method="POST" action="{{ route('admin.sales-dashboard.popup.decline') }}">
-                    @csrf
-                    <button type="submit" class="ti-btn" style="width:170px; padding: 1.2rem 1rem;background-color: #17b9f7; color: white !important;">No, skip for now</button>
-                </form>
-                <form method="POST" action="{{ route('admin.sales-dashboard.popup.accept') }}">
-                    @csrf
-                    <button type="submit" class="ti-btn bg-primary text-white">Yes, assign me more leads</button>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
+{{-- ========================================================== --}}
+{{-- MORNING LEAD AVAILABILITY POPUP --}}
+{{-- Uses the single shared #assign-more-leads-modal from header.blade.php --}}
+{{-- The controller decides whether it should appear today. --}}
+{{-- ========================================================== --}}
 
 @if(($popupData['show_popup'] ?? false))
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        var modal = document.getElementById('lead-allocation-popup');
-        if (!modal) return;
+        setTimeout(function () {
+            var modalSelector = '#assign-more-leads-modal';
 
-        try {
-            modal.classList.remove('hidden');
-            modal.classList.add('open');
-            modal.setAttribute('aria-hidden', 'false');
-            modal.style.display = 'block';
+            /*
+             * Preferred approach:
+             * trigger the same HS Overlay control used by the sidebar.
+             * This avoids creating a second modal/backdrop.
+             */
+            var trigger = document.querySelector(
+                '[data-hs-overlay="' + modalSelector + '"]'
+            );
 
-            if (window.HSOverlay && typeof window.HSOverlay.open === 'function') {
-                try {
-                    var instance = null;
-                    if (window.HSOverlay.getInstance) {
-                        try {
-                            instance = window.HSOverlay.getInstance('#lead-allocation-popup');
-                        } catch (e) {
-                            instance = null;
-                        }
-                    }
-                    if (!instance && window.HSOverlay.autoInit) {
-                        try {
-                            window.HSOverlay.autoInit();
-                            instance = window.HSOverlay.getInstance ? window.HSOverlay.getInstance('#lead-allocation-popup') : null;
-                        } catch (e) {
-                            instance = null;
-                        }
-                    }
-                    if (instance) {
-                        window.HSOverlay.open('#lead-allocation-popup');
-                        return;
-                    }
-                } catch (e) {
-                    console.error('[sales-dashboard] HSOverlay.open failed', e);
-                }
+            if (trigger) {
+                trigger.click();
+                return;
             }
 
-            var inner = modal.querySelector('.ti-modal-content');
-            if (inner) inner.classList.remove('hidden');
-        } catch (e) {
-            console.error('[sales-dashboard] popup fallback failed', e);
-        }
+            /*
+             * Fallback in case the sidebar trigger is not present.
+             */
+            try {
+                if (
+                    window.HSOverlay &&
+                    typeof window.HSOverlay.open === 'function'
+                ) {
+                    window.HSOverlay.open(modalSelector);
+                    return;
+                }
+            } catch (e) {
+                console.error(
+                    '[sales-dashboard] HSOverlay.open failed',
+                    e
+                );
+            }
+
+            /*
+             * Final fallback: expose the existing shared modal only.
+             * No new modal/backdrop is created.
+             */
+            var modal = document.querySelector(modalSelector);
+
+            if (!modal) {
+                console.error(
+                    '[sales-dashboard] Shared Assign More Leads modal not found'
+                );
+                return;
+            }
+
+            modal.classList.remove('hidden');
+            modal.classList.add('open');
+            modal.style.display = 'block';
+            modal.setAttribute('aria-hidden', 'false');
+        }, 300);
     });
 </script>
 @endif
@@ -1087,11 +1065,6 @@
     </script>
     <script>
         (function(){
-            var leadPopupModal = document.getElementById('lead-allocation-popup');
-            if (leadPopupModal && leadPopupModal.classList.contains('hidden')) {
-                leadPopupModal.classList.remove('hidden');
-            }
-
             var commonSelect = document.getElementById('dashboard_common_select');
             var spinner = document.getElementById('dashboard_loading_spinner');
             var overviewUrl = "{{ route('admin.sales-dashboard.overview-data') }}";
