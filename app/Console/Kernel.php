@@ -54,24 +54,24 @@ class Kernel extends ConsoleKernel
         ->appendOutputTo(storage_path('logs/vi-ivr-sync.log'));
 
          $schedule->command('email:fetch-leads')
-    ->everyFiveMinutes()
-    ->withoutOverlapping()
-    ->appendOutputTo(
-        storage_path(
-            'logs/email-leads.log'
+        ->everyFiveMinutes()
+        ->withoutOverlapping()
+        ->appendOutputTo(
+            storage_path(
+                'logs/email-leads.log'
+            )
+        );
+        $schedule
+        ->command(
+            'call-summary:process-pending'
         )
-    );
-    $schedule
-    ->command(
-        'call-summary:process-pending'
-    )
-    ->everyMinute()
-    ->withoutOverlapping()
-    ->appendOutputTo(
-        storage_path(
-            'logs/call-summary-processing.log'
-        )
-    );
+        ->everyMinute()
+        ->withoutOverlapping()
+        ->appendOutputTo(
+            storage_path(
+                'logs/call-summary-processing.log'
+            )
+        );
     }
 
     /**

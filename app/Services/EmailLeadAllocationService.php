@@ -605,4 +605,66 @@ class EmailLeadAllocationService
             $value
         );
     }
+
+    public function findUserForProduct(string $productId): ?\App\Models\User
+{
+    $mappedUserIds =
+        \App\Models\EmailLeadProductUserAssignment::query()
+            ->where('product_id', $productId)
+            ->pluck('user_id')
+            ->filter()
+            ->unique()
+            ->values();
+
+    if ($mappedUserIds->isEmpty()) {
+        return null;
+    }
+
+    $availableUserIds =
+        \App\Models\SalespersonAvailability::query()
+            ->whereIn('user_id', $mappedUserIds)
+            ->where('is_available', true)
+            ->where('is_opted_in', true)
+            ->whereDate('last_response_at', today())
+            ->pluck('user_id')
+            ->unique()
+            ->values();
+
+    if ($availableUserIds->isEmpty()) {
+        return null;
+    }
+
+    $users =
+        \App\Models\User::query()
+            ->whereIn('id', $availableUserIds)
+            ->where('status', 1)
+            ->get();
+
+    if ($users->isEmpty()) {
+        return null;
+    }
+
+    if ($users->count() === 1) {
+        return $users->first();
+    }
+
+    return $users
+        ->map(function ($user) {
+            $user->today_lead_count =
+                \App\Models\Lead::query()
+                    ->where('representative_user_id', $user->id)
+                    ->whereDate('created_at', today())
+                    ->count();
+
+            return $user;
+        })
+        ->sortBy(function ($user) {
+            return sprintf(
+                '%010d-%s',
+                $user->today_lead_count,
+                $user->id
+            );
+        })
+        ->first();
+}
 }

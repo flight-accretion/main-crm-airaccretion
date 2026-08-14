@@ -574,4 +574,46 @@ public function getPopupData(
     {
         return $this->isOfficeOpenForDebug($settings, Carbon::now());
     }
+
+    private function extractProductIds($value): array
+{
+    if (empty($value)) {
+        return [];
+    }
+
+    if (is_array($value)) {
+        return array_values(
+            array_filter($value)
+        );
+    }
+
+    $decoded =
+        json_decode(
+            $value,
+            true
+        );
+
+    if (is_array($decoded)) {
+        return array_values(
+            array_filter($decoded)
+        );
+    }
+
+    if (is_string($decoded)) {
+
+        $decodedAgain =
+            json_decode(
+                $decoded,
+                true
+            );
+
+        if (is_array($decodedAgain)) {
+            return array_values(
+                array_filter($decodedAgain)
+            );
+        }
+    }
+
+    return [];
+}
 }
