@@ -68,5 +68,7 @@ class Kernel extends HttpKernel
         'verify.lead.key' => \App\Http\Middleware\VerifyLeadApiKey::class,
         'whatcrm.auth' =>
          \App\Http\Middleware\VerifyWhatCrmWebhook::class,
+         'call.summary.auth' =>
+    \App\Http\Middleware\VerifyCallSummaryWebhook::class,
     ];
 }

@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\WhatsAppLeadController;
+use App\Http\Controllers\Api\CallSummaryController;
 
 
 /*
@@ -37,3 +38,17 @@ Route::post(
 )
 ->middleware('whatcrm.auth')
 ->name('api.whatsapp-leads.store');
+
+Route::post(
+    '/call-summaries',
+    [
+        CallSummaryController::class,
+        'store'
+    ]
+)
+->middleware(
+    'call.summary.auth'
+)
+->name(
+    'api.call-summaries.store'
+);

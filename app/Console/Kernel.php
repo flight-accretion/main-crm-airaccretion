@@ -61,6 +61,17 @@ class Kernel extends ConsoleKernel
             'logs/email-leads.log'
         )
     );
+    $schedule
+    ->command(
+        'call-summary:process-pending'
+    )
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->appendOutputTo(
+        storage_path(
+            'logs/call-summary-processing.log'
+        )
+    );
     }
 
     /**
