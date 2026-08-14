@@ -2,6 +2,8 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\WhatsAppLeadController;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -25,3 +27,13 @@ Route::middleware(['verify.lead.key', 'throttle:60,1'])->group(function () {
     Route::get('/leads', [LeadApiController::class, 'index']);
     Route::post('/leads', [LeadApiController::class, 'store']);
 });
+
+Route::post(
+    '/whatsapp-leads',
+    [
+        WhatsAppLeadController::class,
+        'store'
+    ]
+)
+->middleware('whatcrm.auth')
+->name('api.whatsapp-leads.store');

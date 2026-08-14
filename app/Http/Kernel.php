@@ -66,5 +66,7 @@ class Kernel extends HttpKernel
         'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
         'role' => RoleMiddleware::class,
         'verify.lead.key' => \App\Http\Middleware\VerifyLeadApiKey::class,
+        'whatcrm.auth' =>
+         \App\Http\Middleware\VerifyWhatCrmWebhook::class,
     ];
 }

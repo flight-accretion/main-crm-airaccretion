@@ -58,10 +58,44 @@ class LeadAllocationService
                     $settings
                 );
             } else {
-                $salesperson = $this->pickSalesperson(
+               $whatsAppIntegration =
+    \App\Models\WhatsAppLeadIntegration::query()
+        ->where('lead_id', $lead->id)
+        ->first();
+
+        if (
+            $whatsAppIntegration
+            && $whatsAppIntegration->product_id
+        ) {
+
+            $salesperson =
+                app(
+                    \App\Services\WhatsAppProductAllocationService::class
+                )->findUser(
+                    $whatsAppIntegration->product_id
+                );
+
+        } elseif ($whatsAppIntegration) {
+
+            /*
+            * WhatsApp product was not resolved.
+            *
+            * Do NOT give it to a random salesperson.
+            */
+            $salesperson = null;
+
+        } else {
+
+            /*
+            * Existing IVR / Email / manual queue behavior
+            * remains exactly as before.
+            */
+            $salesperson =
+                $this->pickSalesperson(
                     $lead,
                     $settings
                 );
+        }
             }
             if (!$salesperson) {
                 $queueItem->attempt_count += 1;
@@ -86,6 +120,44 @@ class LeadAllocationService
                 'details' => 'Auto assigned via queue',
             ]);
         });
+
+        /*
+|--------------------------------------------------------------------------
+| WhatsApp / WhatCRM assignment callback
+|--------------------------------------------------------------------------
+|
+| If this queued lead originally came from WhatCRM,
+| update the WhatsApp integration record and send
+| the assigned CRM salesperson back to n8n.
+|
+| IVR / Email / Manual leads are unaffected because
+| they will not have a WhatsAppLeadIntegration record.
+|
+*/
+
+        $whatsAppIntegration =
+            \App\Models\WhatsAppLeadIntegration::query()
+                ->where('lead_id', $lead->id)
+                ->first();
+
+        if ($whatsAppIntegration) {
+
+            $whatsAppIntegration->update([
+                'status' => 'assigned',
+
+                'assigned_user_id' =>
+                    $salesperson->id,
+
+                'assigned_at' =>
+                    now(),
+            ]);
+
+            app(
+                \App\Services\WhatCrmAssignmentWebhookService::class
+            )->send(
+                $whatsAppIntegration
+            );
+        }
 
         $ivrCallLog = $lead->ivrCallLogs()
             ->whereNull('initial_followup_created_at')
