@@ -304,6 +304,75 @@
                         </div>
                     </div>
                 </div>
+                @php
+    /**
+     * Normalize Lead JSON/array fields.
+     *
+     * Handles:
+     * 1. Already cast PHP arrays
+     * 2. Normal JSON strings
+     * 3. Double-encoded legacy/automation JSON strings
+     * 4. null / empty values
+     */
+    $normalizeLeadIds = function ($value) {
+
+        if (empty($value)) {
+            return [];
+        }
+
+        // Already converted by Eloquent cast.
+        if (is_array($value)) {
+            return array_values($value);
+        }
+
+        if (!is_string($value)) {
+            return [];
+        }
+
+        $decoded = json_decode($value, true);
+
+        // Normal JSON: ["uuid"]
+        if (is_array($decoded)) {
+            return array_values($decoded);
+        }
+
+        // Double encoded JSON:
+        // "\"[\\\"uuid\\\"]\""
+        if (is_string($decoded)) {
+            $decodedAgain = json_decode($decoded, true);
+
+            if (is_array($decodedAgain)) {
+                return array_values($decodedAgain);
+            }
+        }
+
+        return [];
+    };
+
+    $selectedProductIds = old('product_ids');
+
+    if ($selectedProductIds === null) {
+        $selectedProductIds = $normalizeLeadIds(
+            $latestLead->product_ids ?? null
+        );
+    } else {
+        $selectedProductIds = (array) $selectedProductIds;
+    }
+
+    $selectedServiceIds = old('service_ids');
+
+    if ($selectedServiceIds === null) {
+        $selectedServiceIds = $normalizeLeadIds(
+            $latestLead->service_ids ?? null
+        );
+    } else {
+        $selectedServiceIds = (array) $selectedServiceIds;
+    }
+
+    // Normalize everything to strings for reliable UUID comparison.
+    $selectedProductIds = array_map('strval', $selectedProductIds);
+    $selectedServiceIds = array_map('strval', $selectedServiceIds);
+@endphp
                 <div class="box">
                     <div class="box-header">
                         <h5 class="box-title">Service Selection</h5>
@@ -311,35 +380,58 @@
                     <div class="box-body">
                         <div class="grid lg:grid-cols-2 gap-6">
                             <div class="space-y-2">
-                                <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Product<span class="text-danger">*</span></label>
-                                <select class="js-example-basic-multiple w-full form-control-sm" name="product_ids[]"
-                                    id="product_ids" data-placeholder="Select Products" multiple="multiple" required>
-                                    @foreach ($products as $product)
-                                        <option value="{{ $product->id }}"
-                                            {{ in_array($product->id, (array) old('product_ids', json_decode($latestLead->product_ids ?? '[]', true) ?? [])) ? 'selected' : '' }}>
-                                            {{ $product->product }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                                @error('product_ids')
-                                    <span class="text-red-500 text-xs">{{ $message }}</span>
-                                @enderror
-                            </div>
-                            <div class="space-y-2">
-                                <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Services</label>
-                                <select name="service_ids[]" class="js-example-basic-multiple w-full service_ids" multiple="multiple"
-                                    data-placeholder="Select Services" required>
-                                    @foreach ($services as $service)
-                                        <option value="{{ $service->id }}"
-                                            {{ in_array($service->id, (array) old('service_ids', json_decode($latestLead->service_ids ?? '[]', true) ?? [])) ? 'selected' : '' }}>
-                                            {{ $service->service }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                                @error('service_ids')
-                                    <span class="text-red-500 text-xs">{{ $message }}</span>
-                                @enderror
-                            </div>
+    <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">
+        Product<span class="text-danger">*</span>
+    </label>
+
+    <select
+        class="js-example-basic-multiple w-full form-control-sm"
+        name="product_ids[]"
+        id="product_ids"
+        data-placeholder="Select Products"
+        multiple="multiple"
+        required
+    >
+        @foreach ($products as $product)
+            <option
+                value="{{ $product->id }}"
+                {{ in_array((string) $product->id, $selectedProductIds, true) ? 'selected' : '' }}
+            >
+                {{ $product->product }}
+            </option>
+        @endforeach
+    </select>
+
+    @error('product_ids')
+        <span class="text-red-500 text-xs">{{ $message }}</span>
+    @enderror
+</div>
+                         <div class="space-y-2">
+    <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">
+        Services
+    </label>
+
+    <select
+        name="service_ids[]"
+        class="js-example-basic-multiple w-full service_ids"
+        multiple="multiple"
+        data-placeholder="Select Services"
+        required
+    >
+        @foreach ($services as $service)
+            <option
+                value="{{ $service->id }}"
+                {{ in_array((string) $service->id, $selectedServiceIds, true) ? 'selected' : '' }}
+            >
+                {{ $service->service }}
+            </option>
+        @endforeach
+    </select>
+
+    @error('service_ids')
+        <span class="text-red-500 text-xs">{{ $message }}</span>
+    @enderror
+</div>
                             <div class="space-y-2">
                                 <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Call Notes <span class="text-warning">(Add a Lead Followup From Here)</span> <a aria-label="anchor" href="{{ route('admin.leads.follow-up.create', $latestLead->id) }}"
                             
