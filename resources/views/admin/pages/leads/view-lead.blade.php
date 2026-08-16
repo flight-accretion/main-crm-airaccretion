@@ -226,7 +226,7 @@
                                     {{ date('d-m-Y H:i', strtotime($latestFollowup->created_at)) }}
                                 </td>
                                 <td>
-                                    @php
+                                    <!-- @php
                                         $serviceNames = [];
                                         if (!empty($latestLead->service_ids)) {
                                             $serviceIds = json_decode($latestLead->service_ids, true);
@@ -236,7 +236,71 @@
                                                 $serviceNames = \App\Models\Service::whereIn('id', $serviceIds)->pluck('service')->toArray();
                                             }
                                         }
-                                    @endphp
+                                    @endphp -->
+                                    @php
+                                    $serviceNames = [];
+                                    $serviceIds = [];
+
+                                    $rawServiceIds = $latestLead->service_ids ?? null;
+
+                                    /*
+                                    |--------------------------------------------------------------------------
+                                    | Accept every historical/current storage format
+                                    |--------------------------------------------------------------------------
+                                    |
+                                    | Possible values:
+                                    |
+                                    | 1. Already cast array
+                                    |    ['uuid']
+                                    |
+                                    | 2. Normal JSON
+                                    |    '["uuid"]'
+                                    |
+                                    | 3. Legacy / double encoded JSON
+                                    |    '"[\"uuid\"]"'
+                                    |
+                                    */
+
+                                    if (is_array($rawServiceIds)) {
+
+                                        $serviceIds = $rawServiceIds;
+
+                                    } elseif (is_string($rawServiceIds) && trim($rawServiceIds) !== '') {
+
+                                        $decoded = json_decode($rawServiceIds, true);
+
+                                        if (is_array($decoded)) {
+
+                                            $serviceIds = $decoded;
+
+                                        } elseif (is_string($decoded)) {
+
+                                            // Handle double-encoded legacy value.
+                                            $decodedAgain = json_decode($decoded, true);
+
+                                            if (is_array($decodedAgain)) {
+                                                $serviceIds = $decodedAgain;
+                                            }
+                                        }
+                                    }
+
+                                    $serviceIds = array_values(
+                                        array_filter(
+                                            $serviceIds,
+                                            function ($id) {
+                                                return is_string($id) && trim($id) !== '';
+                                            }
+                                        )
+                                    );
+
+                                    if (!empty($serviceIds)) {
+
+                                        $serviceNames = \App\Models\Service::query()
+                                            ->whereIn('id', $serviceIds)
+                                            ->pluck('service')
+                                            ->toArray();
+                                    }
+                                @endphp
                                     {{ $serviceNames ? implode(', ', $serviceNames) : 'N/A' }}
                                 </td>
                                 <td class="text-center">

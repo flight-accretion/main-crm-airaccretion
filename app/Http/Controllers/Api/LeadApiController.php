@@ -205,8 +205,15 @@ class LeadApiController extends Controller
                 'id' => (string) Str::uuid(),
                 'client_id' => $client->id,
                 'representative_user_id' => $request->representative_user_id,
-                'product_ids' => !empty($leadProductIds) ? json_encode($leadProductIds) : null,
-                'service_ids' => json_encode($request->service_ids),
+                // 'product_ids' => !empty($leadProductIds) ? json_encode($leadProductIds) : null,
+                // 'service_ids' => json_encode($request->service_ids),
+                'product_ids' => !empty($leadProductIds)
+                ? array_values($leadProductIds)
+                : null,
+
+            'service_ids' => !empty($serviceIds)
+                ? array_values($serviceIds)
+                : null,
                 'number_of_passengers' => $request->number_of_passengers,
                 'description' => $request->requirement_description,
                 'occasion' => $request->occasion,
