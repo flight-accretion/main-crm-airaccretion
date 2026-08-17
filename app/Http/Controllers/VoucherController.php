@@ -294,7 +294,14 @@ class VoucherController extends Controller
             ]);
 
             $selectedServices = Service::whereIn('id', $selectedServiceIds)->get();
-            $selectedExtraServices = ExtraService::whereIn('id', $selectedExtraServiceIds)->get();
+            // $selectedExtraServices = ExtraService::whereIn('id', $selectedExtraServiceIds)->get();
+            $selectedExtraServices =
+            ExtraService::customerVisible()
+                ->whereIn(
+                    'id',
+                    $selectedExtraServiceIds
+                )
+                ->get();
 
             // If we have service_details saved on the latest followup, use those to determine
             // the final (discounted) amounts for services and extra services. This ensures
@@ -381,12 +388,20 @@ class VoucherController extends Controller
                 $query->where('extra_services.status', 1)
                     ->select('extra_services.id', 'extra_services.extra_service', 'extra_services.extra_service_amount', 'extra_services.status');
             }])->where('status', 1)->get();
-            $allExtraServices = ExtraService::where(function ($query) use ($selectedExtraServiceIds) {
-                $query->where('status', 1);
-                if (!empty($selectedExtraServiceIds)) {
-                    $query->orWhereIn('id', $selectedExtraServiceIds);
-                }
-            })->get();
+          $allExtraServices = ExtraService::customerVisible()
+    ->where(function ($query) use ($selectedExtraServiceIds) {
+
+        $query->where('status', 1);
+
+        if (!empty($selectedExtraServiceIds)) {
+            $query->orWhereIn(
+                'id',
+                $selectedExtraServiceIds
+            );
+        }
+
+    })
+    ->get();
             $serviceExtraServicesMap = $this->serviceExtraServicesMap($allServices);
 
             // Load vendors for dropdown services (assign collections)
@@ -466,6 +481,29 @@ class VoucherController extends Controller
                 ->where('name', '!=', '')
                 ->get();
 
+                /*
+            |--------------------------------------------------------------------------
+            | Completely separate Vendor Extra Service master
+            |--------------------------------------------------------------------------
+            */
+
+            $allVendorExtraServices =
+                ExtraService::vendorOnly()
+                    ->where('status', 1)
+                    ->orderBy('extra_service')
+                    ->get();
+
+            $allVendors =
+                Vendor::query()
+                    ->where('status', 1)
+                    ->orderBy('name')
+                    ->get();
+
+            /*
+            * New voucher has no vendor-only selections yet.
+            */
+            $selectedVendorExtraGroups = [];
+
             return view('admin.pages.vouchers.generate-voucher', compact(
                 'lead',
                 'selectedServices',
@@ -477,7 +515,10 @@ class VoucherController extends Controller
                 'operationTeam',
                 'showHandlerSections',
                 'isAirAmbulance',
-                'preVoucherPassengers'
+                'preVoucherPassengers',
+                'allVendorExtraServices',
+                'allVendors',
+                'selectedVendorExtraGroups'
             ))->with('registration_link', null);
         } catch (\Exception $e) {
             Log::error('Error showing voucher form: ' . $e->getMessage());
@@ -694,16 +735,96 @@ class VoucherController extends Controller
             $voucherExtraServiceIds = collect();
             $voucherServiceData = []; // Store vendor/amount info from voucher
 
+            $selectedVendorExtraGroups = [];
             foreach ($voucher->vendorPayments as $vendorPayment) {
                 foreach ($vendorPayment->paymentDetails as $detail) {
-                    if ($detail->is_extra_service) {
-                        $voucherExtraServiceIds->push($detail->service_id);
-                        $voucherServiceData['extra_' . $detail->service_id] = [
-                            'vendor_id' => $vendorPayment->vendor_id,
-                            'amount' => $detail->service_amount,
-                            'vendor_amount' => $detail->vendor_service_amount
+                   if ($detail->is_extra_service) {
+
+                $extraService =
+                    ExtraService::find(
+                        $detail->service_id
+                    );
+
+                /*
+                |--------------------------------------------------------------------------
+                | NEW vendor-only extra service
+                |--------------------------------------------------------------------------
+                */
+
+                if (
+                    $extraService
+                    &&
+                    $extraService->usage_scope
+                        === ExtraService::SCOPE_VENDOR
+                ) {
+
+                    $vendorKey =
+                        (string)
+                        $vendorPayment->vendor_id;
+
+                    if (
+                        !isset(
+                            $selectedVendorExtraGroups[
+                                $vendorKey
+                            ]
+                        )
+                    ) {
+
+                        $selectedVendorExtraGroups[
+                            $vendorKey
+                        ] = [
+                            'vendor_id' =>
+                                $vendorPayment->vendor_id,
+
+                            'items' => [],
                         ];
-                    } else {
+                    }
+
+                    $selectedVendorExtraGroups[
+                        $vendorKey
+                    ]['items'][
+                        $extraService->id
+                    ] = [
+                        'selected' => true,
+
+                        'amount' =>
+                            $detail
+                                ->vendor_service_amount,
+                    ];
+
+                    /*
+                    * IMPORTANT:
+                    * Do not mix into Customer Extra Services.
+                    */
+                    continue;
+                }
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Existing / Customer ExtraService behaviour
+                |--------------------------------------------------------------------------
+                */
+
+                $voucherExtraServiceIds->push(
+                    $detail->service_id
+                );
+
+                $voucherServiceData[
+                    'extra_' . $detail->service_id
+                ] = [
+                    'vendor_id' =>
+                        $vendorPayment->vendor_id,
+
+                    'amount' =>
+                        $detail->service_amount,
+
+                    'vendor_amount' =>
+                        $detail
+                            ->vendor_service_amount
+                ];
+
+            } else {
                         $voucherServiceIds->push($detail->service_id);
                         $voucherServiceData['service_' . $detail->service_id] = [
                             'vendor_id' => $vendorPayment->vendor_id,
@@ -890,12 +1011,20 @@ class VoucherController extends Controller
                 $query->where('extra_services.status', 1)
                     ->select('extra_services.id', 'extra_services.extra_service', 'extra_services.extra_service_amount', 'extra_services.status');
             }])->where('status', 1)->get();
-            $allExtraServices = ExtraService::where(function ($query) use ($allExtraServiceIds) {
-                $query->where('status', 1);
-                if (!empty($allExtraServiceIds)) {
-                    $query->orWhereIn('id', $allExtraServiceIds);
-                }
-            })->get();
+          $allExtraServices = ExtraService::customerVisible()
+    ->where(function ($query) use ($allExtraServiceIds) {
+
+        $query->where('status', 1);
+
+        if (!empty($allExtraServiceIds)) {
+            $query->orWhereIn(
+                'id',
+                $allExtraServiceIds
+            );
+        }
+
+    })
+    ->get();
             $serviceExtraServicesMap = $this->serviceExtraServicesMap($allServices);
 
             // Load vendors for dropdown services (ensure collections)
@@ -959,6 +1088,67 @@ class VoucherController extends Controller
                 }
             }
 
+            $existingVendorExtraIds = [];
+
+foreach (
+    $selectedVendorExtraGroups
+    as $group
+) {
+
+    $existingVendorExtraIds =
+        array_merge(
+            $existingVendorExtraIds,
+            array_keys(
+                $group['items'] ?? []
+            )
+        );
+}
+
+$existingVendorExtraIds =
+    array_values(
+        array_unique(
+            $existingVendorExtraIds
+        )
+    );
+
+
+$allVendorExtraServices =
+    ExtraService::query()
+        ->where(
+            'usage_scope',
+            ExtraService::SCOPE_VENDOR
+        )
+        ->where(function ($query) use ($existingVendorExtraIds) {
+
+            $query->where(
+                'status',
+                1
+            );
+
+            if (
+                !empty(
+                    $existingVendorExtraIds
+                )
+            ) {
+
+                $query->orWhereIn(
+                    'id',
+                    $existingVendorExtraIds
+                );
+            }
+        })
+        ->orderBy(
+            'extra_service'
+        )
+        ->get();
+
+
+$allVendors =
+    Vendor::query()
+        ->where('status', 1)
+        ->orderBy('name')
+        ->get();
+
             return view('admin.pages.vouchers.generate-voucher', compact(
                 'lead',
                 'selectedServices',
@@ -970,7 +1160,10 @@ class VoucherController extends Controller
                 'operationTeam',
                 'showHandlerSections',
                 'isAirAmbulance',
-                'voucher'
+                'voucher',
+                'allVendorExtraServices',
+                'allVendors',
+                'selectedVendorExtraGroups',
             ))->with('registration_link', $voucher->registrationLink());
         } catch (\Exception $e) {
             Log::error('Error showing existing voucher form: ' . $e->getMessage());
@@ -1034,6 +1227,23 @@ class VoucherController extends Controller
                 'extra_services.*.extra_service_id' => 'required_with:extra_services|string|exists:extra_services,id',
                 'extra_services.*.vendor_id' => 'required_with:extra_services|exists:vendors,id',
                 'extra_services.*.amount' => 'required_with:extra_services|numeric|min:0',
+                // Vendor-only Extra Services
+                'vendor_extra_services' => 'nullable|array',
+
+                'vendor_extra_services.*.vendor_id' =>
+                    'nullable|exists:vendors,id',
+
+                'vendor_extra_services.*.items' =>
+                    'nullable|array',
+
+                'vendor_extra_services.*.items.*.extra_service_id' =>
+                    'nullable|string|exists:extra_services,id',
+
+                'vendor_extra_services.*.items.*.selected' =>
+                    'nullable|in:1',
+
+                'vendor_extra_services.*.items.*.amount' =>
+                    'nullable|numeric|min:0',
                 'passengers' => 'required|array|min:1',
                 'passengers.*.name' => 'required|string|max:255',
                 'passengers.*.age' => 'nullable|integer|min:0|max:150',

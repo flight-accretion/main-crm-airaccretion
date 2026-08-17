@@ -665,7 +665,7 @@
                 <!-- Extra Service & Vendor Information -->
                 <div class="box">
                     <div class="box-header flex justify-between items-center">
-                        <h5 class="box-title">Extra Service & Vendor Information</h5>
+                        <h5 class="box-title">Customer Extra Service & Vendor Information</h5>
                             <a href="{{ route('admin.leads.follow-up.create', $lead->id) }}" target="_blank" class="ti-btn ti-btn-secondary !text-[0.85rem] ml-2">
                                 <i class="ri-external-link-line"></i> Open Add Follow Up
                             </a>
@@ -858,6 +858,425 @@
                         </div>
                     </div>
                 </div>
+<!-- =========================================================
+     VENDOR EXTRA SERVICES
+     ========================================================= -->
+
+<div class="box vendor-extra-section">
+
+    <div class="box-header">
+        <div>
+            <h5 class="box-title mb-1">
+                Vendor Extra Services
+            </h5>
+
+            <p class="text-xs text-gray-500 mb-0">
+                Add vendor-only charges for this voucher.
+                These charges do not affect customer extra services.
+            </p>
+        </div>
+    </div>
+
+
+    <div class="box-body bg-gray-50">
+
+        @php
+            $vendorExtraGroups = old(
+                'vendor_extra_services',
+                !empty($selectedVendorExtraGroups)
+                    ? array_values($selectedVendorExtraGroups)
+                    : [
+                        [
+                            'vendor_id' => null,
+                            'items' => [],
+                        ]
+                    ]
+            );
+        @endphp
+
+
+        <div id="vendor-extra-groups">
+
+            @foreach ($vendorExtraGroups as $groupIndex => $group)
+
+                <div
+                    class="vendor-extra-group"
+                    data-index="{{ $groupIndex }}"
+                >
+
+                    <!-- =========================================
+                         VENDOR HEADER
+                         ========================================= -->
+
+                    <div class="vendor-extra-group-header">
+
+                        <div class="vendor-extra-title-area">
+
+                            <div class="vendor-extra-icon">
+                                <i class="ri-store-2-line"></i>
+                            </div>
+
+                            <div>
+
+                                <div class="vendor-number">
+                                    Vendor #{{ $groupIndex + 1 }}
+                                </div>
+
+                                <div class="vendor-extra-subtitle">
+                                    Select vendor and applicable extra charges
+                                </div>
+
+                            </div>
+
+                        </div>
+
+
+                        <button
+                            type="button"
+                            class="remove-vendor-extra-group vendor-remove-button"
+                            title="Remove Vendor"
+                        >
+                            <i class="ri-delete-bin-line"></i>
+
+                            <span>
+                                Remove
+                            </span>
+                        </button>
+
+                    </div>
+
+
+                    <!-- =========================================
+                         VENDOR BODY
+                         ========================================= -->
+
+                    <div class="vendor-extra-group-body">
+
+
+                        <!-- Vendor -->
+
+                        <div class="vendor-field-block">
+
+                            <label class="ti-form-label vendor-field-label">
+                                Vendor
+                                <span class="text-danger">*</span>
+                            </label>
+
+
+                            <select
+                                name="vendor_extra_services[{{ $groupIndex }}][vendor_id]"
+                                class="js-example-basic-single w-full vendor-extra-vendor-select"
+                            >
+
+                                <option value="">
+                                    Select Vendor
+                                </option>
+
+
+                                @foreach ($allVendors as $vendor)
+
+                                    <option
+                                        value="{{ $vendor->id }}"
+                                        {{ ($group['vendor_id'] ?? null) == $vendor->id ? 'selected' : '' }}
+                                    >
+                                        {{ $vendor->name }}
+                                    </option>
+
+                                @endforeach
+
+                            </select>
+
+                        </div>
+
+
+                        <!-- =====================================
+                             EXTRA SERVICE SELECTION AREA
+                             ===================================== -->
+
+                        <div class="vendor-extra-selection-box">
+
+                            <div class="vendor-extra-selection-grid">
+
+
+                                <!-- Existing Vendor Extra -->
+
+                                <div class="vendor-existing-extra">
+
+                                    <label class="ti-form-label vendor-field-label">
+                                        Select Vendor Extra Service
+                                    </label>
+
+
+                                    <select
+                                        class="js-example-basic-single w-full vendor-extra-picker"
+                                    >
+
+                                        <option value="">
+                                            Search / Select Extra Service
+                                        </option>
+
+
+                                        @foreach ($allVendorExtraServices as $vendorExtra)
+
+                                            <option
+                                                value="{{ $vendorExtra->id }}"
+                                                data-name="{{ $vendorExtra->extra_service }}"
+                                            >
+                                                {{ $vendorExtra->extra_service }}
+                                            </option>
+
+                                        @endforeach
+
+                                    </select>
+
+
+                                    <small class="vendor-field-help">
+                                        Search an existing vendor-only extra service.
+                                    </small>
+
+                                </div>
+
+
+                                <!-- Add New -->
+
+                                <div class="vendor-new-extra">
+
+                                    <label class="ti-form-label vendor-field-label">
+                                        Add New Extra Service
+                                    </label>
+
+
+                                    <div class="vendor-new-extra-control">
+
+                                        <input
+                                            type="text"
+                                            class="ti-form-input new-vendor-extra-name"
+                                            placeholder="Example: Crew Hotel"
+                                            maxlength="100"
+                                        >
+
+
+                                        <button
+                                            type="button"
+                                            class="add-vendor-extra-master vendor-add-button"
+                                        >
+                                            <i class="ri-add-line"></i>
+
+                                            <span>
+                                                Add
+                                            </span>
+                                        </button>
+
+                                    </div>
+
+
+                                    <small class="vendor-field-help">
+                                        New service will become available for future vouchers.
+                                    </small>
+
+
+                                    <div class="vendor-extra-message"></div>
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+
+                        <!-- =====================================
+                             SELECTED EXTRA SERVICES
+                             ===================================== -->
+
+                        <div class="vendor-selected-services-area">
+
+                            <div class="vendor-selected-heading">
+
+                                <span>
+                                    Selected Vendor Extra Services
+                                </span>
+
+                                <span class="vendor-selected-badge">
+
+                                    <span class="vendor-selected-count">
+                                        0
+                                    </span>
+
+                                    selected
+
+                                </span>
+
+                            </div>
+
+
+                            <div class="vendor-extra-items">
+
+                                @foreach ($allVendorExtraServices as $vendorExtra)
+
+                                    @php
+                                        $existingItem =
+                                            $group['items'][$vendorExtra->id]
+                                            ?? [];
+
+                                        $checked =
+                                            !empty($existingItem['selected']);
+                                    @endphp
+
+
+                                    <div
+                                        class="vendor-extra-item {{ $checked ? 'selected' : '' }}"
+                                        data-extra-id="{{ $vendorExtra->id }}"
+                                        style="{{ !$checked ? 'display:none;' : '' }}"
+                                    >
+
+                                        <input
+                                            type="hidden"
+                                            name="vendor_extra_services[{{ $groupIndex }}][items][{{ $vendorExtra->id }}][extra_service_id]"
+                                            value="{{ $vendorExtra->id }}"
+                                        >
+
+
+                                        <div class="vendor-extra-row">
+
+
+                                            <!-- Checkbox + Name -->
+
+                                            <label class="vendor-extra-check-label">
+
+                                                <input
+                                                    type="checkbox"
+                                                    class="vendor-extra-checkbox"
+                                                    name="vendor_extra_services[{{ $groupIndex }}][items][{{ $vendorExtra->id }}][selected]"
+                                                    value="1"
+                                                    {{ $checked ? 'checked' : '' }}
+                                                >
+
+
+                                                <span class="vendor-extra-name">
+                                                    {{ $vendorExtra->extra_service }}
+                                                </span>
+
+                                            </label>
+
+
+                                            <!-- Vendor Amount -->
+
+                                            <div class="vendor-extra-amount-side">
+
+                                                <label>
+                                                    Vendor Amount
+                                                </label>
+
+
+                                                <div class="vendor-extra-money">
+
+                                                    <span class="currency-symbol">
+                                                        ₹
+                                                    </span>
+
+
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        step="0.01"
+                                                        class="vendor-extra-amount"
+                                                        name="vendor_extra_services[{{ $groupIndex }}][items][{{ $vendorExtra->id }}][amount]"
+                                                        value="{{ $existingItem['amount'] ?? '' }}"
+                                                        placeholder="0.00"
+                                                        {{ !$checked ? 'disabled' : '' }}
+                                                    >
+
+                                                </div>
+
+                                            </div>
+
+                                        </div>
+
+                                    </div>
+
+                                @endforeach
+
+                            </div>
+
+
+                            <!-- Empty State -->
+
+                            <div class="vendor-extra-empty-state">
+
+                                <i class="ri-add-circle-line"></i>
+
+                                <span>
+                                    Select an extra service above or add a new one.
+                                </span>
+
+                            </div>
+
+
+                            <!-- Footer Summary -->
+
+                            <div class="vendor-extra-footer">
+
+                                <div class="vendor-extra-footer-count">
+
+                                    <i class="ri-checkbox-circle-line"></i>
+
+                                    <span>
+                                        <strong class="vendor-selected-count">
+                                            0
+                                        </strong>
+                                        service(s) selected
+                                    </span>
+
+                                </div>
+
+
+                                <div class="vendor-extra-footer-total">
+
+                                    Total Vendor Extra Amount
+
+                                    <strong class="vendor-extra-total">
+                                        ₹0.00
+                                    </strong>
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            @endforeach
+
+        </div>
+
+
+        <!-- =============================================
+             ADD ANOTHER VENDOR
+             ============================================= -->
+
+        <div class="vendor-add-another-wrapper">
+
+            <button
+                type="button"
+                id="add-vendor-extra-group"
+                class="vendor-add-another-button"
+            >
+
+                <i class="ri-add-circle-line"></i>
+
+                Add Another Vendor
+
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
+
                 <!-- Operation Team -->
                 <div class="box">
                     <div class="box-header flex justify-between items-center">
@@ -1245,7 +1664,2723 @@
     </form>
 @endsection
 
+<style>
+
+/* ============================================================
+   VENDOR EXTRA SERVICE SECTION
+   ============================================================ */
+
+.vendor-extra-section {
+    overflow: visible;
+}
+
+
+/* ============================================================
+   VENDOR CARD
+   ============================================================ */
+
+.vendor-extra-group {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    margin-bottom: 18px;
+    overflow: visible;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+
+.vendor-extra-group-header {
+    min-height: 68px;
+    padding: 14px 18px;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    gap: 15px;
+
+    border-bottom: 1px solid #e5e7eb;
+
+    background: #ffffff;
+
+    border-radius: 10px 10px 0 0;
+}
+
+
+.vendor-extra-title-area {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+
+    min-width: 0;
+}
+
+
+.vendor-extra-icon {
+    width: 36px;
+    height: 36px;
+
+    flex: 0 0 36px;
+
+    border-radius: 8px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    background: #eff6ff;
+
+    color: #2563eb;
+
+    font-size: 17px;
+}
+
+
+.vendor-number {
+    font-size: 14px;
+    font-weight: 600;
+
+    color: #1f2937;
+
+    line-height: 1.4;
+}
+
+
+.vendor-extra-subtitle {
+    margin-top: 2px;
+
+    font-size: 11px;
+
+    color: #94a3b8;
+
+    line-height: 1.3;
+}
+
+
+/* ============================================================
+   REMOVE VENDOR BUTTON
+   ============================================================ */
+
+.vendor-remove-button {
+    min-width: 92px;
+    height: 36px;
+
+    padding: 0 12px;
+
+    flex-shrink: 0;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    gap: 6px;
+
+    border: 1px solid #fecaca;
+    border-radius: 7px;
+
+    background: #fff7f7;
+
+    color: #ef4444;
+
+    font-size: 12px;
+    font-weight: 500;
+
+    white-space: nowrap;
+
+    transition: all .15s ease;
+}
+
+
+.vendor-remove-button:hover {
+    background: #fef2f2;
+    border-color: #fca5a5;
+}
+
+
+/* ============================================================
+   BODY
+   ============================================================ */
+
+.vendor-extra-group-body {
+    padding: 20px;
+}
+
+
+.vendor-field-block {
+    margin-bottom: 18px;
+}
+
+
+.vendor-field-label {
+    margin-bottom: 7px !important;
+
+    font-size: 12px;
+
+    font-weight: 500;
+}
+
+
+.vendor-field-help {
+    display: block;
+
+    margin-top: 6px;
+
+    color: #94a3b8;
+
+    font-size: 10px;
+}
+
+
+/* ============================================================
+   SELECT / ADD AREA
+   ============================================================ */
+
+.vendor-extra-selection-box {
+    padding: 16px;
+
+    margin-bottom: 20px;
+
+    border: 1px solid #e5e7eb;
+
+    border-radius: 9px;
+
+    background: #f8fafc;
+}
+
+
+.vendor-extra-selection-grid {
+    display: grid;
+
+    grid-template-columns:
+        minmax(0, 1.15fr)
+        minmax(320px, 0.85fr);
+
+    gap: 18px;
+
+    align-items: start;
+}
+
+
+.vendor-existing-extra,
+.vendor-new-extra {
+    min-width: 0;
+}
+
+
+/* ============================================================
+   NEW SERVICE INPUT + BUTTON
+   ============================================================ */
+
+.vendor-new-extra-control {
+    display: flex;
+
+    align-items: stretch;
+
+    width: 100%;
+
+    gap: 8px;
+}
+
+
+.vendor-new-extra-control .ti-form-input {
+    flex: 1;
+
+    min-width: 0;
+
+    height: 42px;
+}
+
+
+.vendor-add-button {
+    width: auto !important;
+    min-width: 88px !important;
+    max-width: 100px;
+
+    height: 42px;
+
+    padding: 0 15px !important;
+
+    flex: 0 0 auto;
+
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+
+    gap: 5px;
+
+    border: 1px solid #2563eb;
+    border-radius: 7px;
+
+    background: #2563eb;
+
+    color: #ffffff;
+
+    font-size: 12px;
+
+    font-weight: 600;
+
+    line-height: 1;
+
+    white-space: nowrap !important;
+
+    word-break: normal !important;
+
+    overflow-wrap: normal !important;
+}
+
+
+.vendor-add-button span {
+    white-space: nowrap !important;
+}
+
+
+.vendor-add-button:hover {
+    background: #1d4ed8;
+}
+
+
+/* ============================================================
+   MESSAGE
+   ============================================================ */
+
+.vendor-extra-message {
+    min-height: 18px;
+
+    margin-top: 5px;
+
+    font-size: 11px;
+}
+
+
+/* ============================================================
+   SELECTED SERVICES AREA
+   ============================================================ */
+
+.vendor-selected-services-area {
+    margin-top: 8px;
+}
+
+
+.vendor-selected-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    margin-bottom: 10px;
+
+    gap: 12px;
+
+    font-size: 12px;
+
+    font-weight: 600;
+
+    color: #334155;
+}
+
+
+.vendor-selected-badge {
+    padding: 3px 9px;
+
+    border-radius: 20px;
+
+    background: #eff6ff;
+
+    color: #2563eb;
+
+    font-size: 10px;
+
+    font-weight: 500;
+}
+
+
+/* ============================================================
+   SERVICE ROW
+   ============================================================ */
+
+.vendor-extra-items {
+    display: flex;
+
+    flex-direction: column;
+
+    gap: 9px;
+}
+
+
+.vendor-extra-item {
+    width: 100%;
+
+    padding: 12px 14px;
+
+    border: 1px solid #dfe3ea;
+
+    border-radius: 9px;
+
+    background: #ffffff;
+
+    transition:
+        border-color .15s ease,
+        background .15s ease,
+        box-shadow .15s ease;
+}
+
+
+.vendor-extra-item:hover {
+    border-color: #cbd5e1;
+}
+
+
+.vendor-extra-item.selected {
+    border-color: #3b82f6;
+
+    background: #f8fbff;
+
+    box-shadow:
+        inset 0 0 0 1px rgba(
+            59,
+            130,
+            246,
+            0.04
+        );
+}
+
+
+.vendor-extra-row {
+    min-height: 42px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: space-between;
+
+    gap: 20px;
+}
+
+
+/* ============================================================
+   CHECKBOX / NAME
+   ============================================================ */
+
+.vendor-extra-check-label {
+    flex: 1;
+
+    min-width: 0;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 11px;
+
+    cursor: pointer;
+}
+
+
+.vendor-extra-checkbox {
+    width: 18px;
+    height: 18px;
+
+    flex: 0 0 18px;
+
+    accent-color: #2563eb;
+}
+
+
+.vendor-extra-name {
+    overflow: hidden;
+
+    color: #1f2937;
+
+    font-size: 13px;
+
+    font-weight: 500;
+
+    text-overflow: ellipsis;
+
+    white-space: nowrap;
+}
+
+
+/* ============================================================
+   AMOUNT
+   ============================================================ */
+
+.vendor-extra-amount-side {
+    flex: 0 0 auto;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 10px;
+}
+
+
+.vendor-extra-amount-side > label {
+    margin: 0;
+
+    color: #64748b;
+
+    font-size: 11px;
+
+    white-space: nowrap;
+}
+
+
+.vendor-extra-money {
+    width: 138px;
+
+    height: 38px;
+
+    display: flex;
+
+    align-items: center;
+
+    overflow: hidden;
+
+    border: 1px solid #dbe1e8;
+
+    border-radius: 7px;
+
+    background: #ffffff;
+}
+
+
+.vendor-extra-money:focus-within {
+    border-color: #3b82f6;
+
+    box-shadow:
+        0 0 0 2px
+        rgba(
+            59,
+            130,
+            246,
+            0.08
+        );
+}
+
+
+.currency-symbol {
+    padding-left: 11px;
+
+    color: #64748b;
+
+    font-size: 13px;
+}
+
+
+.vendor-extra-money input {
+    width: 100%;
+    height: 100%;
+
+    border: 0;
+
+    outline: 0;
+
+    padding: 0 10px;
+
+    background: transparent;
+
+    color: #334155;
+
+    font-size: 13px;
+}
+
+
+.vendor-extra-money input:disabled {
+    cursor: not-allowed;
+
+    color: #94a3b8;
+
+    background: #f8fafc;
+}
+
+
+/* ============================================================
+   EMPTY STATE
+   ============================================================ */
+
+.vendor-extra-empty-state {
+    display: none;
+
+    min-height: 58px;
+
+    align-items: center;
+
+    justify-content: center;
+
+    gap: 7px;
+
+    border: 1px dashed #cbd5e1;
+
+    border-radius: 8px;
+
+    color: #94a3b8;
+
+    font-size: 11px;
+
+    background: #ffffff;
+}
+
+
+/* ============================================================
+   FOOTER
+   ============================================================ */
+
+.vendor-extra-footer {
+    margin-top: 13px;
+
+    padding-top: 12px;
+
+    border-top: 1px solid #e5e7eb;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: space-between;
+
+    gap: 18px;
+
+    color: #64748b;
+
+    font-size: 11px;
+}
+
+
+.vendor-extra-footer-count {
+    display: flex;
+
+    align-items: center;
+
+    gap: 6px;
+}
+
+
+.vendor-extra-footer-count i {
+    color: #2563eb;
+}
+
+
+.vendor-extra-footer-total {
+    display: flex;
+
+    align-items: center;
+
+    gap: 8px;
+}
+
+
+.vendor-extra-total {
+    color: #16a34a;
+
+    font-size: 13px;
+
+    font-weight: 600;
+}
+
+
+/* ============================================================
+   ADD ANOTHER VENDOR
+   ============================================================ */
+
+.vendor-add-another-wrapper {
+    padding-top: 2px;
+}
+
+
+.vendor-add-another-button {
+    min-height: 38px;
+
+    padding: 0 14px;
+
+    display: inline-flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    gap: 6px;
+
+    border: 1px solid #93c5fd;
+
+    border-radius: 7px;
+
+    background: #ffffff;
+
+    color: #2563eb;
+
+    font-size: 12px;
+
+    font-weight: 500;
+
+    white-space: nowrap;
+
+    transition: all .15s ease;
+}
+
+
+.vendor-add-another-button:hover {
+    border-color: #3b82f6;
+
+    background: #eff6ff;
+}
+
+
+/* ============================================================
+   SELECT2 FIXES
+   ============================================================ */
+
+.vendor-extra-section
+.select2-container {
+    width: 100% !important;
+}
+
+
+.vendor-extra-section
+.select2-container
+.select2-selection--single {
+    height: 42px !important;
+
+    display: flex;
+
+    align-items: center;
+
+    border-color: #dbe1e8;
+
+    border-radius: 7px;
+}
+
+
+.vendor-extra-section
+.select2-container
+.select2-selection--single
+.select2-selection__rendered {
+    width: 100%;
+
+    padding-left: 12px;
+
+    padding-right: 32px;
+
+    line-height: 40px !important;
+}
+
+
+.vendor-extra-section
+.select2-container
+.select2-selection--single
+.select2-selection__arrow {
+    height: 40px !important;
+}
+
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 1000px) {
+
+    .vendor-extra-selection-grid {
+        grid-template-columns: 1fr;
+    }
+
+}
+
+
+@media (max-width: 700px) {
+
+    .vendor-extra-group-header {
+        align-items: flex-start;
+    }
+
+
+    .vendor-extra-row {
+        align-items: stretch;
+
+        flex-direction: column;
+    }
+
+
+    .vendor-extra-amount-side {
+        justify-content: space-between;
+
+        width: 100%;
+    }
+
+
+    .vendor-extra-money {
+        width: 160px;
+    }
+
+
+    .vendor-extra-footer {
+        align-items: flex-start;
+
+        flex-direction: column;
+    }
+
+
+    .vendor-new-extra-control {
+        align-items: stretch;
+    }
+
+}
+
+</style>
+
 @push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+
+    /* ============================================================
+       ELEMENTS
+       ============================================================ */
+
+    const groupsContainer =
+        document.getElementById('vendor-extra-groups');
+
+    const addVendorButton =
+        document.getElementById('add-vendor-extra-group');
+
+    if (!groupsContainer) {
+        return;
+    }
+
+
+    /* ============================================================
+       HELPERS
+       ============================================================ */
+
+    function getCsrfToken() {
+        return document
+            .querySelector('meta[name="csrf-token"]')
+            ?.getAttribute('content') || '';
+    }
+
+
+    function getGroupIndex(group) {
+        return parseInt(
+            group.dataset.index || '0',
+            10
+        );
+    }
+
+
+    function escapeSelector(value) {
+
+        if (
+            window.CSS &&
+            typeof CSS.escape === 'function'
+        ) {
+            return CSS.escape(String(value));
+        }
+
+        return String(value)
+            .replace(/["\\]/g, '\\$&');
+    }
+
+
+    /* ============================================================
+       SELECT2
+       ============================================================ */
+
+    function initializeSelect2(element) {
+
+        if (
+            !element ||
+            !window.jQuery ||
+            !$.fn.select2
+        ) {
+            return;
+        }
+
+        if (
+            $(element).hasClass(
+                'select2-hidden-accessible'
+            )
+        ) {
+            return;
+        }
+
+        $(element).select2({
+            width: '100%'
+        });
+    }
+
+
+    function initializeGroupSelects(group) {
+
+        if (!group) {
+            return;
+        }
+
+        initializeSelect2(
+            group.querySelector(
+                '.vendor-extra-vendor-select'
+            )
+        );
+
+        initializeSelect2(
+            group.querySelector(
+                '.vendor-extra-picker'
+            )
+        );
+    }
+
+
+    groupsContainer
+        .querySelectorAll('.vendor-extra-group')
+        .forEach(initializeGroupSelects);
+
+
+    /* ============================================================
+       EMPTY STATE
+       ============================================================ */
+
+    function updateVendorEmptyState(group) {
+
+        if (!group) {
+            return;
+        }
+
+        const selectedCount =
+            group.querySelectorAll(
+                '.vendor-extra-checkbox:checked'
+            ).length;
+
+        const emptyState =
+            group.querySelector(
+                '.vendor-extra-empty-state'
+            );
+
+        if (!emptyState) {
+            return;
+        }
+
+        emptyState.style.display =
+            selectedCount === 0
+                ? 'flex'
+                : 'none';
+    }
+
+
+    /* ============================================================
+       VENDOR REQUIRED STATE
+       ============================================================ */
+
+    function updateVendorRequirement(group) {
+
+        if (!group) {
+            return;
+        }
+
+        const vendorSelect =
+            group.querySelector(
+                '.vendor-extra-vendor-select'
+            );
+
+        if (!vendorSelect) {
+            return;
+        }
+
+        const hasSelectedServices =
+            group.querySelectorAll(
+                '.vendor-extra-checkbox:checked'
+            ).length > 0;
+
+        if (hasSelectedServices) {
+
+            vendorSelect.setAttribute(
+                'required',
+                'required'
+            );
+
+        } else {
+
+            vendorSelect.removeAttribute(
+                'required'
+            );
+        }
+    }
+
+
+    /* ============================================================
+       SUMMARY
+       ============================================================ */
+
+    function updateVendorSummary(group) {
+
+        if (!group) {
+            return;
+        }
+
+        const selected =
+            group.querySelectorAll(
+                '.vendor-extra-checkbox:checked'
+            );
+
+        let total = 0;
+
+        selected.forEach(function (checkbox) {
+
+            const item =
+                checkbox.closest(
+                    '.vendor-extra-item'
+                );
+
+            const amountElement =
+                item?.querySelector(
+                    '.vendor-extra-amount'
+                );
+
+            const amount =
+                parseFloat(
+                    amountElement?.value || 0
+                );
+
+            if (Number.isFinite(amount)) {
+                total += amount;
+            }
+        });
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Update ALL selected counters
+        |--------------------------------------------------------------------------
+        */
+
+        const countElements =
+            group.querySelectorAll(
+                '.vendor-selected-count'
+            );
+
+        countElements.forEach(
+            function (element) {
+
+                element.textContent =
+                    selected.length;
+            }
+        );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Update total
+        |--------------------------------------------------------------------------
+        */
+
+        const totalElement =
+            group.querySelector(
+                '.vendor-extra-total'
+            );
+
+        if (totalElement) {
+
+            totalElement.textContent =
+                '₹' + total.toFixed(2);
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Empty state + vendor requirement
+        |--------------------------------------------------------------------------
+        */
+
+        updateVendorEmptyState(group);
+        updateVendorRequirement(group);
+    }
+
+
+    /* ============================================================
+       SELECT AN EXTRA SERVICE
+       ============================================================ */
+
+    function selectExtraService(
+        group,
+        extraId,
+        focusAmount = true
+    ) {
+
+        if (!group || !extraId) {
+            return;
+        }
+
+        const item =
+            group.querySelector(
+                '.vendor-extra-item[data-extra-id="' +
+                escapeSelector(extraId) +
+                '"]'
+            );
+
+        if (!item) {
+            return;
+        }
+
+
+        const checkbox =
+            item.querySelector(
+                '.vendor-extra-checkbox'
+            );
+
+        const amount =
+            item.querySelector(
+                '.vendor-extra-amount'
+            );
+
+        if (!checkbox) {
+            return;
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Select service
+        |--------------------------------------------------------------------------
+        */
+
+        checkbox.checked = true;
+
+        item.classList.add(
+            'selected'
+        );
+
+        item.style.display = '';
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Enable and require amount
+        |--------------------------------------------------------------------------
+        */
+
+        if (amount) {
+
+            amount.disabled = false;
+
+            amount.setAttribute(
+                'required',
+                'required'
+            );
+
+            if (focusAmount) {
+                amount.focus();
+            }
+        }
+
+
+        updateVendorSummary(group);
+    }
+
+
+    /* ============================================================
+       REMOVE FROM CURRENT VENDOR SELECTION
+       ============================================================ */
+
+    function unselectExtraService(item) {
+
+        if (!item) {
+            return;
+        }
+
+        const group =
+            item.closest(
+                '.vendor-extra-group'
+            );
+
+        const checkbox =
+            item.querySelector(
+                '.vendor-extra-checkbox'
+            );
+
+        const amount =
+            item.querySelector(
+                '.vendor-extra-amount'
+            );
+
+
+        if (checkbox) {
+            checkbox.checked = false;
+        }
+
+
+        if (amount) {
+
+            amount.value = '';
+
+            amount.disabled = true;
+
+            amount.removeAttribute(
+                'required'
+            );
+        }
+
+
+        item.classList.remove(
+            'selected'
+        );
+
+        /*
+         * Hide from selected service list.
+         * It remains available in dropdown.
+         */
+
+        item.style.display = 'none';
+
+
+        updateVendorSummary(group);
+    }
+
+
+    /* ============================================================
+       EXISTING EXTRA SERVICE DROPDOWN
+       ============================================================ */
+
+    groupsContainer.addEventListener(
+        'change',
+        function (event) {
+
+            if (
+                !event.target.classList.contains(
+                    'vendor-extra-picker'
+                )
+            ) {
+                return;
+            }
+
+            const picker =
+                event.target;
+
+            const group =
+                picker.closest(
+                    '.vendor-extra-group'
+                );
+
+            const extraId =
+                picker.value;
+
+            if (!extraId) {
+                return;
+            }
+
+
+            selectExtraService(
+                group,
+                extraId,
+                true
+            );
+
+
+            /*
+             * Reset dropdown after selection.
+             */
+
+            if (
+                window.jQuery &&
+                $.fn.select2 &&
+                $(picker).hasClass(
+                    'select2-hidden-accessible'
+                )
+            ) {
+
+                $(picker)
+                    .val(null)
+                    .trigger(
+                        'change.select2'
+                    );
+
+            } else {
+
+                picker.value = '';
+            }
+        }
+    );
+
+
+    /* ============================================================
+       CHECKBOX CHANGE
+       ============================================================ */
+
+    groupsContainer.addEventListener(
+        'change',
+        function (event) {
+
+            if (
+                !event.target.classList.contains(
+                    'vendor-extra-checkbox'
+                )
+            ) {
+                return;
+            }
+
+            const checkbox =
+                event.target;
+
+            const item =
+                checkbox.closest(
+                    '.vendor-extra-item'
+                );
+
+            if (!item) {
+                return;
+            }
+
+            const group =
+                item.closest(
+                    '.vendor-extra-group'
+                );
+
+            const amount =
+                item.querySelector(
+                    '.vendor-extra-amount'
+                );
+
+
+            if (checkbox.checked) {
+
+                item.classList.add(
+                    'selected'
+                );
+
+                item.style.display = '';
+
+                if (amount) {
+
+                    amount.disabled = false;
+
+                    amount.setAttribute(
+                        'required',
+                        'required'
+                    );
+
+                    amount.focus();
+                }
+
+                updateVendorSummary(group);
+
+                return;
+            }
+
+
+            unselectExtraService(item);
+        }
+    );
+
+
+    /* ============================================================
+       AMOUNT CHANGE
+       ============================================================ */
+
+    groupsContainer.addEventListener(
+        'input',
+        function (event) {
+
+            if (
+                !event.target.classList.contains(
+                    'vendor-extra-amount'
+                )
+            ) {
+                return;
+            }
+
+            updateVendorSummary(
+                event.target.closest(
+                    '.vendor-extra-group'
+                )
+            );
+        }
+    );
+
+
+    /* ============================================================
+       ADD NEW VENDOR EXTRA SERVICE
+       ============================================================ */
+
+    groupsContainer.addEventListener(
+        'click',
+        async function (event) {
+
+            const button =
+                event.target.closest(
+                    '.add-vendor-extra-master'
+                );
+
+            if (!button) {
+                return;
+            }
+
+
+            const group =
+                button.closest(
+                    '.vendor-extra-group'
+                );
+
+            const input =
+                group?.querySelector(
+                    '.new-vendor-extra-name'
+                );
+
+            const name =
+                input?.value?.trim();
+
+
+            if (!name) {
+
+                showGroupMessage(
+                    group,
+                    'Enter Vendor Extra Service name.',
+                    false
+                );
+
+                input?.focus();
+
+                return;
+            }
+
+
+            button.disabled = true;
+
+
+            try {
+
+                const response =
+                    await fetch(
+                        "{{ route('admin.vendor-extra-services.store') }}",
+                        {
+                            method: 'POST',
+
+                            headers: {
+                                'Content-Type':
+                                    'application/json',
+
+                                'Accept':
+                                    'application/json',
+
+                                'X-CSRF-TOKEN':
+                                    getCsrfToken()
+                            },
+
+                            body:
+                                JSON.stringify({
+                                    name: name
+                                })
+                        }
+                    );
+
+
+                let result;
+
+                try {
+
+                    result =
+                        await response.json();
+
+                } catch (error) {
+
+                    throw new Error(
+                        'Invalid server response.'
+                    );
+                }
+
+
+                if (
+                    !response.ok ||
+                    !result.success
+                ) {
+
+                    let message =
+                        result.message ||
+                        'Unable to add Vendor Extra Service.';
+
+
+                    if (result.errors) {
+
+                        const firstError =
+                            Object.values(
+                                result.errors
+                            )[0];
+
+                        if (
+                            Array.isArray(
+                                firstError
+                            ) &&
+                            firstError.length
+                        ) {
+
+                            message =
+                                firstError[0];
+                        }
+                    }
+
+                    throw new Error(message);
+                }
+
+
+                const extra =
+                    result.extra_service;
+
+
+                if (
+                    !extra ||
+                    !extra.id ||
+                    !extra.name
+                ) {
+
+                    throw new Error(
+                        'Vendor Extra Service was created but invalid data was returned.'
+                    );
+                }
+
+
+                /*
+                 * Add to every vendor section.
+                 */
+
+                groupsContainer
+                    .querySelectorAll(
+                        '.vendor-extra-group'
+                    )
+                    .forEach(
+                        function (targetGroup) {
+
+                            addExtraToPicker(
+                                targetGroup,
+                                extra
+                            );
+
+                            addExtraRow(
+                                targetGroup,
+                                extra
+                            );
+                        }
+                    );
+
+
+                /*
+                 * Automatically select newly added
+                 * service for current vendor only.
+                 */
+
+                selectExtraService(
+                    group,
+                    extra.id,
+                    true
+                );
+
+
+                if (input) {
+                    input.value = '';
+                }
+
+
+                showGroupMessage(
+                    group,
+                    result.existing
+                        ? 'Vendor Extra Service already exists and has been selected.'
+                        : 'Vendor Extra Service added successfully.',
+                    true
+                );
+
+
+            } catch (error) {
+
+                showGroupMessage(
+                    group,
+                    error.message,
+                    false
+                );
+
+            } finally {
+
+                button.disabled = false;
+            }
+        }
+    );
+
+
+    /* ============================================================
+       ENTER KEY = ADD NEW EXTRA SERVICE
+       ============================================================ */
+
+    groupsContainer.addEventListener(
+        'keydown',
+        function (event) {
+
+            if (
+                !event.target.classList.contains(
+                    'new-vendor-extra-name'
+                )
+            ) {
+                return;
+            }
+
+            if (event.key !== 'Enter') {
+                return;
+            }
+
+
+            event.preventDefault();
+
+
+            const group =
+                event.target.closest(
+                    '.vendor-extra-group'
+                );
+
+            group
+                ?.querySelector(
+                    '.add-vendor-extra-master'
+                )
+                ?.click();
+        }
+    );
+
+
+    /* ============================================================
+       ADD OPTION TO DROPDOWN
+       ============================================================ */
+
+    function addExtraToPicker(
+        group,
+        extra
+    ) {
+
+        const picker =
+            group?.querySelector(
+                '.vendor-extra-picker'
+            );
+
+        if (!picker) {
+            return;
+        }
+
+
+        const existingOption =
+            Array.from(
+                picker.options
+            ).find(
+                option =>
+                    String(option.value)
+                    ===
+                    String(extra.id)
+            );
+
+
+        if (existingOption) {
+            return;
+        }
+
+
+        const option =
+            document.createElement(
+                'option'
+            );
+
+        option.value =
+            extra.id;
+
+        option.textContent =
+            extra.name;
+
+        option.dataset.name =
+            extra.name;
+
+
+        picker.appendChild(option);
+
+
+        if (
+            window.jQuery &&
+            $.fn.select2 &&
+            $(picker).hasClass(
+                'select2-hidden-accessible'
+            )
+        ) {
+
+            $(picker).trigger(
+                'change.select2'
+            );
+        }
+    }
+
+
+    /* ============================================================
+       ADD HIDDEN/SELECTABLE ROW TO GROUP
+       ============================================================ */
+
+    function addExtraRow(
+        group,
+        extra
+    ) {
+
+        if (!group || !extra) {
+            return;
+        }
+
+
+        const existing =
+            group.querySelector(
+                '.vendor-extra-item[data-extra-id="' +
+                escapeSelector(extra.id) +
+                '"]'
+            );
+
+
+        if (existing) {
+            return;
+        }
+
+
+        const index =
+            getGroupIndex(group);
+
+        const container =
+            group.querySelector(
+                '.vendor-extra-items'
+            );
+
+        if (!container) {
+            return;
+        }
+
+
+        const wrapper =
+            document.createElement(
+                'div'
+            );
+
+        wrapper.className =
+            'vendor-extra-item';
+
+        wrapper.dataset.extraId =
+            extra.id;
+
+        wrapper.style.display =
+            'none';
+
+
+        /*
+         * Build DOM instead of inserting service
+         * name directly into raw HTML.
+         */
+
+        wrapper.innerHTML = `
+
+            <input
+                type="hidden"
+                class="vendor-extra-hidden-id"
+            >
+
+            <div class="vendor-extra-row">
+
+                <label class="vendor-extra-check-label">
+
+                    <input
+                        type="checkbox"
+                        class="vendor-extra-checkbox"
+                        value="1"
+                    >
+
+                    <span class="vendor-extra-name"></span>
+
+                </label>
+
+
+                <div class="vendor-extra-amount-side">
+
+                    <label>
+                        Vendor Amount
+                    </label>
+
+
+                    <div class="vendor-extra-money">
+
+                        <span>₹</span>
+
+                        <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            disabled
+                            class="vendor-extra-amount"
+                            placeholder="0.00"
+                        >
+
+                    </div>
+
+                </div>
+
+            </div>
+        `;
+
+
+        const hiddenInput =
+            wrapper.querySelector(
+                '.vendor-extra-hidden-id'
+            );
+
+        hiddenInput.name =
+            `vendor_extra_services[${index}][items][${extra.id}][extra_service_id]`;
+
+        hiddenInput.value =
+            extra.id;
+
+
+        const checkbox =
+            wrapper.querySelector(
+                '.vendor-extra-checkbox'
+            );
+
+        checkbox.name =
+            `vendor_extra_services[${index}][items][${extra.id}][selected]`;
+
+
+        const amount =
+            wrapper.querySelector(
+                '.vendor-extra-amount'
+            );
+
+        amount.name =
+            `vendor_extra_services[${index}][items][${extra.id}][amount]`;
+
+
+        wrapper
+            .querySelector(
+                '.vendor-extra-name'
+            )
+            .textContent =
+                extra.name;
+
+
+        container.appendChild(
+            wrapper
+        );
+    }
+
+
+    /* ============================================================
+       ADD ANOTHER VENDOR
+       ============================================================ */
+
+    addVendorButton?.addEventListener(
+        'click',
+        function () {
+
+            const sourceGroup =
+                groupsContainer.querySelector(
+                    '.vendor-extra-group'
+                );
+
+            if (!sourceGroup) {
+                return;
+            }
+
+
+            const clone =
+                sourceGroup.cloneNode(
+                    true
+                );
+
+
+            const newIndex =
+                groupsContainer
+                    .querySelectorAll(
+                        '.vendor-extra-group'
+                    )
+                    .length;
+
+
+            clone.dataset.index =
+                newIndex;
+
+
+            /*
+             * Remove copied Select2 visual wrappers.
+             */
+
+            clone
+                .querySelectorAll(
+                    '.select2-container'
+                )
+                .forEach(
+                    element =>
+                        element.remove()
+                );
+
+
+            /*
+             * Reset native Select2 attributes.
+             */
+
+            clone
+                .querySelectorAll(
+                    'select'
+                )
+                .forEach(
+                    function (select) {
+
+                        select.classList.remove(
+                            'select2-hidden-accessible'
+                        );
+
+                        select.removeAttribute(
+                            'data-select2-id'
+                        );
+
+                        select.removeAttribute(
+                            'aria-hidden'
+                        );
+
+                        select.removeAttribute(
+                            'tabindex'
+                        );
+
+                        select
+                            .querySelectorAll(
+                                '[data-select2-id]'
+                            )
+                            .forEach(
+                                function (option) {
+
+                                    option.removeAttribute(
+                                        'data-select2-id'
+                                    );
+                                }
+                            );
+                    }
+                );
+
+
+            /*
+             * Reindex all backend field names.
+             */
+
+            clone
+                .querySelectorAll(
+                    '[name]'
+                )
+                .forEach(
+                    function (element) {
+
+                        element.name =
+                            element.name.replace(
+                                /vendor_extra_services\[\d+\]/g,
+                                'vendor_extra_services[' +
+                                newIndex +
+                                ']'
+                            );
+                    }
+                );
+
+
+            /*
+             * Reset vendor select.
+             */
+
+            const vendorSelect =
+                clone.querySelector(
+                    '.vendor-extra-vendor-select'
+                );
+
+            if (vendorSelect) {
+
+                vendorSelect.value = '';
+
+                vendorSelect.removeAttribute(
+                    'required'
+                );
+            }
+
+
+            /*
+             * Reset extra-service picker.
+             */
+
+            const picker =
+                clone.querySelector(
+                    '.vendor-extra-picker'
+                );
+
+            if (picker) {
+                picker.value = '';
+            }
+
+
+            /*
+             * Clear new extra input.
+             */
+
+            clone
+                .querySelectorAll(
+                    '.new-vendor-extra-name'
+                )
+                .forEach(
+                    input =>
+                        input.value = ''
+                );
+
+
+            /*
+             * Clear any messages.
+             */
+
+            clone
+                .querySelectorAll(
+                    '.vendor-extra-message'
+                )
+                .forEach(
+                    function (message) {
+
+                        message.textContent = '';
+                    }
+                );
+
+
+            /*
+             * Reset service selections.
+             */
+
+            clone
+                .querySelectorAll(
+                    '.vendor-extra-item'
+                )
+                .forEach(
+                    function (item) {
+
+                        item.classList.remove(
+                            'selected'
+                        );
+
+                        item.style.display =
+                            'none';
+
+
+                        const checkbox =
+                            item.querySelector(
+                                '.vendor-extra-checkbox'
+                            );
+
+                        if (checkbox) {
+
+                            checkbox.checked =
+                                false;
+                        }
+
+
+                        const amount =
+                            item.querySelector(
+                                '.vendor-extra-amount'
+                            );
+
+                        if (amount) {
+
+                            amount.value = '';
+
+                            amount.disabled =
+                                true;
+
+                            amount.removeAttribute(
+                                'required'
+                            );
+                        }
+                    }
+                );
+
+
+            /*
+             * Update heading.
+             */
+
+            const number =
+                clone.querySelector(
+                    '.vendor-number'
+                );
+
+            if (number) {
+
+                number.textContent =
+                    'Vendor #' +
+                    (newIndex + 1);
+            }
+
+
+            /*
+             * Reset ALL counters.
+             */
+
+            clone
+                .querySelectorAll(
+                    '.vendor-selected-count'
+                )
+                .forEach(
+                    function (count) {
+
+                        count.textContent = '0';
+                    }
+                );
+
+
+            /*
+             * Reset total.
+             */
+
+            const total =
+                clone.querySelector(
+                    '.vendor-extra-total'
+                );
+
+            if (total) {
+
+                total.textContent =
+                    '₹0.00';
+            }
+
+
+            groupsContainer.appendChild(
+                clone
+            );
+
+
+            initializeGroupSelects(
+                clone
+            );
+
+            updateVendorSummary(
+                clone
+            );
+        }
+    );
+
+
+    /* ============================================================
+       REMOVE VENDOR
+       ============================================================ */
+
+    groupsContainer.addEventListener(
+        'click',
+        function (event) {
+
+            const button =
+                event.target.closest(
+                    '.remove-vendor-extra-group'
+                );
+
+            if (!button) {
+                return;
+            }
+
+
+            const groups =
+                groupsContainer
+                    .querySelectorAll(
+                        '.vendor-extra-group'
+                    );
+
+
+            /*
+             * Keep at least one vendor section.
+             */
+
+            if (groups.length === 1) {
+
+                resetVendorGroup(
+                    groups[0]
+                );
+
+                return;
+            }
+
+
+            const group =
+                button.closest(
+                    '.vendor-extra-group'
+                );
+
+
+            /*
+             * Safely destroy Select2 instances.
+             */
+
+            if (
+                group &&
+                window.jQuery &&
+                $.fn.select2
+            ) {
+
+                group
+                    .querySelectorAll(
+                        'select.select2-hidden-accessible'
+                    )
+                    .forEach(
+                        function (select) {
+
+                            try {
+
+                                $(select).select2(
+                                    'destroy'
+                                );
+
+                            } catch (error) {
+
+                                // Ignore cleanup error.
+                            }
+                        }
+                    );
+            }
+
+
+            group?.remove();
+
+            reindexVendorGroups();
+        }
+    );
+
+
+    /* ============================================================
+       RESET SINGLE VENDOR
+       ============================================================ */
+
+    function resetVendorGroup(group) {
+
+        if (!group) {
+            return;
+        }
+
+
+        const vendorSelect =
+            group.querySelector(
+                '.vendor-extra-vendor-select'
+            );
+
+
+        if (vendorSelect) {
+
+            if (
+                window.jQuery &&
+                $.fn.select2 &&
+                $(vendorSelect).hasClass(
+                    'select2-hidden-accessible'
+                )
+            ) {
+
+                $(vendorSelect)
+                    .val(null)
+                    .trigger('change');
+
+            } else {
+
+                vendorSelect.value = '';
+            }
+
+            vendorSelect.removeAttribute(
+                'required'
+            );
+        }
+
+
+        const picker =
+            group.querySelector(
+                '.vendor-extra-picker'
+            );
+
+
+        if (picker) {
+
+            if (
+                window.jQuery &&
+                $.fn.select2 &&
+                $(picker).hasClass(
+                    'select2-hidden-accessible'
+                )
+            ) {
+
+                $(picker)
+                    .val(null)
+                    .trigger(
+                        'change.select2'
+                    );
+
+            } else {
+
+                picker.value = '';
+            }
+        }
+
+
+        group
+            .querySelectorAll(
+                '.new-vendor-extra-name'
+            )
+            .forEach(
+                input =>
+                    input.value = ''
+            );
+
+
+        group
+            .querySelectorAll(
+                '.vendor-extra-item'
+            )
+            .forEach(
+                function (item) {
+
+                    const checkbox =
+                        item.querySelector(
+                            '.vendor-extra-checkbox'
+                        );
+
+                    if (checkbox) {
+
+                        checkbox.checked =
+                            false;
+                    }
+
+
+                    const amount =
+                        item.querySelector(
+                            '.vendor-extra-amount'
+                        );
+
+                    if (amount) {
+
+                        amount.value = '';
+
+                        amount.disabled =
+                            true;
+
+                        amount.removeAttribute(
+                            'required'
+                        );
+                    }
+
+
+                    item.classList.remove(
+                        'selected'
+                    );
+
+                    item.style.display =
+                        'none';
+                }
+            );
+
+
+        const message =
+            group.querySelector(
+                '.vendor-extra-message'
+            );
+
+        if (message) {
+            message.textContent = '';
+        }
+
+
+        updateVendorSummary(group);
+    }
+
+
+    /* ============================================================
+       REINDEX AFTER REMOVING VENDOR
+       ============================================================ */
+
+    function reindexVendorGroups() {
+
+        groupsContainer
+            .querySelectorAll(
+                '.vendor-extra-group'
+            )
+            .forEach(
+                function (
+                    group,
+                    index
+                ) {
+
+                    group.dataset.index =
+                        index;
+
+
+                    const title =
+                        group.querySelector(
+                            '.vendor-number'
+                        );
+
+                    if (title) {
+
+                        title.textContent =
+                            'Vendor #' +
+                            (index + 1);
+                    }
+
+
+                    group
+                        .querySelectorAll(
+                            '[name]'
+                        )
+                        .forEach(
+                            function (element) {
+
+                                element.name =
+                                    element.name.replace(
+                                        /vendor_extra_services\[\d+\]/g,
+                                        'vendor_extra_services[' +
+                                        index +
+                                        ']'
+                                    );
+                            }
+                        );
+                }
+            );
+    }
+
+
+    /* ============================================================
+       DELETE EXTRA SERVICE MASTER
+       ============================================================ */
+
+    groupsContainer.addEventListener(
+        'click',
+        async function (event) {
+
+            const button =
+                event.target.closest(
+                    '.delete-vendor-extra-master'
+                );
+
+            if (!button) {
+                return;
+            }
+
+
+            const id =
+                button.dataset.id;
+
+            if (!id) {
+                return;
+            }
+
+
+            if (
+                !confirm(
+                    'Delete this Vendor Extra Service?'
+                )
+            ) {
+                return;
+            }
+
+
+            button.disabled = true;
+
+
+            try {
+
+                const response =
+                    await fetch(
+                        "{{ url('/admin/vendor-extra-services') }}" +
+                        '/' +
+                        id,
+                        {
+                            method: 'DELETE',
+
+                            headers: {
+                                'Accept':
+                                    'application/json',
+
+                                'X-CSRF-TOKEN':
+                                    getCsrfToken()
+                            }
+                        }
+                    );
+
+
+                let result;
+
+                try {
+
+                    result =
+                        await response.json();
+
+                } catch (error) {
+
+                    throw new Error(
+                        'Invalid server response.'
+                    );
+                }
+
+
+                if (
+                    !response.ok ||
+                    !result.success
+                ) {
+
+                    throw new Error(
+                        result.message ||
+                        'Unable to delete Vendor Extra Service.'
+                    );
+                }
+
+
+                /*
+                 * Remove from every dropdown.
+                 */
+
+                groupsContainer
+                    .querySelectorAll(
+                        '.vendor-extra-picker'
+                    )
+                    .forEach(
+                        function (picker) {
+
+                            Array.from(
+                                picker.options
+                            )
+                            .filter(
+                                option =>
+                                    String(
+                                        option.value
+                                    )
+                                    ===
+                                    String(id)
+                            )
+                            .forEach(
+                                option =>
+                                    option.remove()
+                            );
+
+
+                            if (
+                                window.jQuery &&
+                                $.fn.select2 &&
+                                $(picker).hasClass(
+                                    'select2-hidden-accessible'
+                                )
+                            ) {
+
+                                $(picker).trigger(
+                                    'change.select2'
+                                );
+                            }
+                        }
+                    );
+
+
+                /*
+                 * Remove service row from every vendor.
+                 */
+
+                groupsContainer
+                    .querySelectorAll(
+                        '.vendor-extra-item[data-extra-id="' +
+                        escapeSelector(id) +
+                        '"]'
+                    )
+                    .forEach(
+                        function (item) {
+
+                            const group =
+                                item.closest(
+                                    '.vendor-extra-group'
+                                );
+
+                            item.remove();
+
+                            updateVendorSummary(
+                                group
+                            );
+                        }
+                    );
+
+
+            } catch (error) {
+
+                alert(
+                    error.message
+                );
+
+                button.disabled = false;
+            }
+        }
+    );
+
+
+    /* ============================================================
+       MESSAGE
+       ============================================================ */
+
+    function showGroupMessage(
+        group,
+        message,
+        success
+    ) {
+
+        if (!group) {
+            return;
+        }
+
+
+        let messageBox =
+            group.querySelector(
+                '.vendor-extra-message'
+            );
+
+
+        /*
+         * Create message box automatically
+         * if it isn't present in HTML.
+         */
+
+        if (!messageBox) {
+
+            messageBox =
+                document.createElement(
+                    'div'
+                );
+
+            messageBox.className =
+                'vendor-extra-message mt-2 text-sm';
+
+
+            const input =
+                group.querySelector(
+                    '.new-vendor-extra-name'
+                );
+
+            const parent =
+                input?.closest(
+                    '.col-span-12'
+                )
+                ||
+                input?.parentElement;
+
+
+            if (parent) {
+
+                parent.appendChild(
+                    messageBox
+                );
+            }
+        }
+
+
+        if (!messageBox) {
+            return;
+        }
+
+
+        messageBox.textContent =
+            message;
+
+
+        messageBox.className =
+            success
+                ? 'vendor-extra-message mt-2 text-sm text-success'
+                : 'vendor-extra-message mt-2 text-sm text-danger';
+
+
+        if (success) {
+
+            setTimeout(
+                function () {
+
+                    if (
+                        messageBox.textContent
+                        ===
+                        message
+                    ) {
+
+                        messageBox.textContent =
+                            '';
+                    }
+                },
+                4000
+            );
+        }
+    }
+
+
+    /* ============================================================
+       INITIALIZE EXISTING VOUCHER VALUES
+       ============================================================ */
+
+    groupsContainer
+        .querySelectorAll(
+            '.vendor-extra-group'
+        )
+        .forEach(
+            function (group) {
+
+                group
+                    .querySelectorAll(
+                        '.vendor-extra-item'
+                    )
+                    .forEach(
+                        function (item) {
+
+                            const checkbox =
+                                item.querySelector(
+                                    '.vendor-extra-checkbox'
+                                );
+
+                            const amount =
+                                item.querySelector(
+                                    '.vendor-extra-amount'
+                                );
+
+
+                            if (
+                                checkbox &&
+                                checkbox.checked
+                            ) {
+
+                                item.classList.add(
+                                    'selected'
+                                );
+
+                                item.style.display =
+                                    '';
+
+                                if (amount) {
+
+                                    amount.disabled =
+                                        false;
+
+                                    amount.setAttribute(
+                                        'required',
+                                        'required'
+                                    );
+                                }
+
+                            } else {
+
+                                item.classList.remove(
+                                    'selected'
+                                );
+
+                                item.style.display =
+                                    'none';
+
+                                if (amount) {
+
+                                    amount.disabled =
+                                        true;
+
+                                    amount.removeAttribute(
+                                        'required'
+                                    );
+                                }
+                            }
+                        }
+                    );
+
+
+                updateVendorSummary(
+                    group
+                );
+            }
+        );
+
+});
+</script>
+
     <script>
         (function() {
             const form = document.getElementById('voucher-form');

@@ -17,7 +17,8 @@ class ExtraServiceController extends Controller
     // Extra Service List
     public function index(Request $request)
     {
-        $query = ExtraService::latest();
+       $query = ExtraService::customerVisible()
+    ->latest();
 
         // Apply search filters
         if ($request->filled('extra-service')) {
@@ -88,6 +89,7 @@ class ExtraServiceController extends Controller
                 'extra_service' => $request->extra_service_name,
                 'extra_service_amount' => $request->extra_service_amount,
                 'description' => $request->extra_service_description ?? null,
+                'usage_scope' => ExtraService::SCOPE_CUSTOMER,
                 'status' => 1,
             ]);
 
@@ -233,6 +235,24 @@ class ExtraServiceController extends Controller
             ], 403);
         }
         try {
+            
+            if (
+                $extraService->usage_scope
+                === ExtraService::SCOPE_BOTH
+            ) {
+
+                $extraService->update([
+                    'usage_scope' =>
+                        ExtraService::SCOPE_VENDOR,
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' =>
+                        'Customer Extra Service removed. Existing Vendor mapping has been preserved.',
+                ]);
+            }
+
             $extraService->delete();
             return response()->json([
                 'success' => true,

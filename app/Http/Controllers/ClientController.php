@@ -2801,8 +2801,15 @@ try {
         }])->get();
 
         // Get distinct extra services with their amounts
-        $allExtraServices = ExtraService::select('id', 'extra_service', 'extra_service_amount', 'status')
-            ->get();
+       $allExtraServices =
+    ExtraService::customerVisible()
+        ->select(
+            'id',
+            'extra_service',
+            'extra_service_amount',
+            'status'
+        )
+        ->get();
 
         // Get service IDs from this specific lead
         $leadServiceIds = [];

@@ -671,27 +671,55 @@ class CallSummaryIntegrationService
                         |--------------------------------------------------------------------------
                         */
 
-                        $logAgent =
-                            $this
-                                ->normalizeAgent(
-                                    $log
-                                        ->agent_name
-                                    ?? ''
-                                );
+                    /* --------------------------------------------------------------------------
+| AGENT MATCH
+|--------------------------------------------------------------------------
+|
+| Do not require exact spelling.
+|
+| Example:
+|
+| API : Saurav Namdeo
+| IVR : Sourav Namdeo
+|
+*/
+
+$logAgent =
+    $this->normalizeAgent(
+        $log->agent_name
+        ?? ''
+    );
 
 
-                        if (
-                            $apiAgent !== ''
-                            &&
-                            $logAgent !== ''
-                            &&
-                            $apiAgent
-                                ===
-                            $logAgent
-                        ) {
+$agentSimilarity =
+    $this->agentSimilarity(
+        $apiAgent,
+        $logAgent
+    );
 
-                            $score += 25;
-                        }
+
+if ($agentSimilarity >= 95) {
+
+    /*
+     * Exact / practically exact.
+     */
+    $score += 25;
+
+} elseif ($agentSimilarity >= 85) {
+
+    /*
+     * Minor spelling error.
+     */
+    $score += 22;
+
+} elseif ($agentSimilarity >= 75) {
+
+    /*
+     * Reasonable similarity,
+     * but weaker evidence.
+     */
+    $score += 12;
+}
 
 
                         /*
@@ -740,6 +768,106 @@ class CallSummaryIntegrationService
                                 $score += 10;
                             }
                         }
+
+                        /* --------------------------------------------------------------------------
+| COMPANY DNI FALLBACK
+|--------------------------------------------------------------------------
+|
+| Some third-party recording/summarization systems send our
+| common company/DNI number instead of the customer CLI.
+|
+| DNI alone is NOT enough because the same number is used
+| across many calls.
+|
+| But:
+|
+| same DNI
+| + same/fuzzy agent
+| + very close call start time
+|
+| is strong enough to identify the IVR call safely.
+|
+*/
+
+$isDniMatch =
+    $apiPhone !== ''
+    &&
+    $dni !== ''
+    &&
+    $apiPhone === $dni
+    &&
+    $apiPhone !== $logPhone;
+
+
+if (
+    $isDniMatch
+    &&
+    $agentSimilarity >= 85
+    &&
+    isset($difference)
+) {
+
+    /*
+     * Summary provider and VI timestamps can differ
+     * slightly because one may use connected-call time
+     * while the other uses IVR call-start time.
+     */
+
+    if ($difference <= 30) {
+
+        $score += 30;
+
+    } elseif ($difference <= 60) {
+
+        $score += 25;
+
+    } elseif ($difference <= 120) {
+
+        $score += 15;
+    }
+}
+
+/* --------------------------------------------------------------------------
+| CALL END TIME MATCH
+|--------------------------------------------------------------------------
+|
+| This is useful because two calls may start near each other,
+| but start + end together is much more specific.
+|
+*/
+
+if (
+    $log->call_end_at
+    &&
+    $integration->call_end_at
+) {
+
+    $endDifference =
+        abs(
+            Carbon::parse(
+                $log->call_end_at
+            )->diffInSeconds(
+                Carbon::parse(
+                    $integration->call_end_at
+                ),
+                false
+            )
+        );
+
+
+    if ($endDifference <= 30) {
+
+        $score += 15;
+
+    } elseif ($endDifference <= 90) {
+
+        $score += 10;
+
+    } elseif ($endDifference <= 180) {
+
+        $score += 5;
+    }
+}
 
 
                         /*
@@ -1367,4 +1495,112 @@ class CallSummaryIntegrationService
         return $name
             ?: '';
     }
+
+    /**
+ * Compare agent names safely.
+ *
+ * Handles minor spelling differences such as:
+ *
+ * Sourav Namdeo
+ * Saurav Namdeo
+ */
+private function agentSimilarity(
+    ?string $first,
+    ?string $second
+): float {
+
+    $first = $this->normalizeAgent(
+        $first ?? ''
+    );
+
+    $second = $this->normalizeAgent(
+        $second ?? ''
+    );
+
+    if (
+        $first === ''
+        ||
+        $second === ''
+    ) {
+        return 0;
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Exact normalized match
+    |--------------------------------------------------------------------------
+    */
+
+    if ($first === $second) {
+        return 100;
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Similarity percentage
+    |--------------------------------------------------------------------------
+    */
+
+    similar_text(
+        $first,
+        $second,
+        $percentage
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Also consider Levenshtein distance
+    |--------------------------------------------------------------------------
+    |
+    | This is particularly useful for:
+    |
+    | Sourav / Saurav
+    |
+    */
+
+    $distance =
+        levenshtein(
+            $first,
+            $second
+        );
+
+
+    $maxLength =
+        max(
+            strlen($first),
+            strlen($second)
+        );
+
+
+    if ($maxLength > 0) {
+
+        $levenshteinPercentage =
+            (
+                1
+                -
+                (
+                    $distance
+                    /
+                    $maxLength
+                )
+            )
+            * 100;
+
+
+        $percentage =
+            max(
+                $percentage,
+                $levenshteinPercentage
+            );
+    }
+
+
+    return round(
+        $percentage,
+        2
+    );
+}
 }

@@ -58,9 +58,10 @@ public function index(Request $request)
     public function create()
     {
         $products = Product::where('status', 1)->get();
-        $extraServices = ExtraService::where('status', 1)
-            ->orderBy('extra_service')
-            ->get();
+       $extraServices = ExtraService::customerVisible()
+    ->where('status', 1)
+    ->orderBy('extra_service')
+    ->get();
 
         return view('admin.pages.services.add-services', compact('products', 'extraServices'));
     }
@@ -82,12 +83,18 @@ public function index(Request $request)
             // Accept single selected product from form but store as product_ids array
             'product_id' => 'required|exists:products,id',
             'extra_service_ids' => 'nullable|array',
-            'extra_service_ids.*' => [
-                'string',
-                Rule::exists('extra_services', 'id')->where(function ($query) {
-                    return $query->where('status', 1);
+        'extra_service_ids.*' => [
+            'string',
+            Rule::exists('extra_services', 'id')
+                ->where(function ($query) {
+                    return $query
+                        ->where('status', 1)
+                        ->whereIn('usage_scope', [
+                            ExtraService::SCOPE_CUSTOMER,
+                            ExtraService::SCOPE_BOTH,
+                        ]);
                 }),
-            ],
+        ],
             // 'extra_services.*.name' => [
             //     function ($attribute, $value, $fail) use ($request) {
             //         $index = explode('.', $attribute)[1];
@@ -203,9 +210,10 @@ public function index(Request $request)
     {
         $service->load('extraServices');
         $products = Product::where('status', 1)->get();
-        $extraServices = ExtraService::where('status', 1)
-            ->orderBy('extra_service')
-            ->get();
+        $extraServices = ExtraService::customerVisible()
+    ->where('status', 1)
+    ->orderBy('extra_service')
+    ->get();
 
         return view('admin.pages.services.edit-services', compact('service', 'products', 'extraServices'));
     }
@@ -226,12 +234,18 @@ public function index(Request $request)
             'terms_and_conditions' => 'nullable',
             'product_id' => 'required|exists:products,id',
             'extra_service_ids' => 'nullable|array',
-            'extra_service_ids.*' => [
-                'string',
-                Rule::exists('extra_services', 'id')->where(function ($query) {
-                    return $query->where('status', 1);
+           'extra_service_ids.*' => [
+            'string',
+            Rule::exists('extra_services', 'id')
+                ->where(function ($query) {
+                    return $query
+                        ->where('status', 1)
+                        ->whereIn('usage_scope', [
+                            ExtraService::SCOPE_CUSTOMER,
+                            ExtraService::SCOPE_BOTH,
+                        ]);
                 }),
-            ],
+        ],
             // 'extra_services.*.name' => [
             //     function ($attribute, $value, $fail) use ($request) {
             //         $index = explode('.', $attribute)[1];
