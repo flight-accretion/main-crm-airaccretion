@@ -1526,14 +1526,67 @@ $allVendors =
                 ]);
 
                 // Collect existing LeadVendorPayment entries and their VendorPayment history so we can reassign
-                $existingPayments = LeadVendorPayment::where('voucher_id', $voucherId)->get();
-                $oldVendorPaymentsMap = [];
-                $oldPaymentIds = [];
-                foreach ($existingPayments as $payment) {
-                    $key = is_null($payment->vendor_id) ? 'null_vendor' : (string) $payment->vendor_id;
-                    $oldVendorPaymentsMap[$key] = \App\Models\VendorPayment::where('lead_vendor_payment_id', $payment->id)->get();
-                    $oldPaymentIds[] = $payment->id;
-                }
+             $existingPayments =
+    LeadVendorPayment::where(
+        'voucher_id',
+        $voucherId
+    )->get();
+
+
+$oldVendorPaymentsMap = [];
+
+/*
+|--------------------------------------------------------------------------
+| NEW
+|--------------------------------------------------------------------------
+*/
+
+$oldVendorRefundsMap = [];
+
+
+$oldPaymentIds = [];
+
+
+foreach ($existingPayments as $payment) {
+
+    $key =
+        is_null(
+            $payment->vendor_id
+        )
+            ? 'null_vendor'
+            : (string)
+            $payment->vendor_id;
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Existing vendor payment history
+    |--------------------------------------------------------------------------
+    */
+
+    $oldVendorPaymentsMap[$key] =
+        \App\Models\VendorPayment::where(
+            'lead_vendor_payment_id',
+            $payment->id
+        )->get();
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | NEW: Vendor refund history
+    |--------------------------------------------------------------------------
+    */
+
+    $oldVendorRefundsMap[$key] =
+        \App\Models\VendorRefund::where(
+            'lead_vendor_payment_id',
+            $payment->id
+        )->get();
+
+
+    $oldPaymentIds[] =
+        $payment->id;
+}
 
                 // Delete only passengers whose IDs were explicitly marked for deletion via deleted_passenger_ids
                 // Do NOT delete all passengers; we'll update existing ones and create new ones below
@@ -1816,6 +1869,83 @@ $allVendors =
                         }
                     }
                 }
+
+                /*
+|--------------------------------------------------------------------------
+| Reassign historical VendorRefund records
+|--------------------------------------------------------------------------
+*/
+
+if (!empty($oldVendorRefundsMap)) {
+
+    foreach (
+        $oldVendorRefundsMap
+        as $vendorKey => $vendorRefunds
+    ) {
+
+        if (
+            !isset(
+                $createdVendorPaymentIds[
+                    $vendorKey
+                ]
+            )
+            ||
+            $vendorRefunds->isEmpty()
+        ) {
+
+            continue;
+        }
+
+
+        $newLeadVendorPaymentId =
+            $createdVendorPaymentIds[
+                $vendorKey
+            ];
+
+
+        foreach (
+            $vendorRefunds
+            as $refund
+        ) {
+
+            try {
+
+                $refund->lead_vendor_payment_id =
+                    $newLeadVendorPaymentId;
+
+                $refund->save();
+
+
+            } catch (\Throwable $e) {
+
+                Log::warning(
+                    'Could not reassign vendor refund history',
+                    [
+                        'vendor_refund_id' =>
+                            $refund->id,
+
+                        'old_vendor_key' =>
+                            $vendorKey,
+
+                        'new_lead_vendor_payment_id' =>
+                            $newLeadVendorPaymentId,
+
+                        'error' =>
+                            $e->getMessage(),
+                    ]
+                );
+
+
+                /*
+                 * Important:
+                 * Do not silently lose accounting records.
+                 */
+
+                throw $e;
+            }
+        }
+    }
+}
 
                 // After reassigning historical VendorPayment rows, delete old details and old LeadVendorPayment rows
                 if (!empty($oldPaymentIds)) {

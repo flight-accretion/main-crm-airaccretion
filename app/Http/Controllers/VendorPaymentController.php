@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Facades\Excel;
+use App\Models\VendorRefund;
 
 class VendorPaymentController extends Controller
 {
@@ -34,7 +35,8 @@ class VendorPaymentController extends Controller
                 'voucher',
                 'paymentDetails.service',
                 'paymentDetails.extraService',
-                'vendorPayments'
+                'vendorPayments',
+                 'vendorRefunds',
             ]);
 
             // $query->whereDoesntHave('lead.latestFollowup', function ($q) {
@@ -142,54 +144,304 @@ class VendorPaymentController extends Controller
             //     }
             // }
 
-            // --- CORE LOGIC START ---
-        
-        // Define SQL snippets for readability
-        // 1. Paid Amount Subquery
-        $rawPaid = "(SELECT COALESCE(SUM(paid_amount), 0) 
-                        FROM vendor_payments 
-                        WHERE vendor_payments.lead_vendor_payment_id = lead_vendor_payments.id)";
-        // 2. Total Cost
-        $rawCost = "COALESCE(lead_vendor_payments.total_vendor_service_amount, 0)";
-        // 3. Balance
-        $rawBalance = "($rawCost - $rawPaid)";
+           // --- CORE LOGIC START ---
 
-        // CASE 1: Initial View (No Filter)
-        // Logic: Show the WHOLE Lead group if at least ONE vendor in that group has a pending balance.
-        // This ensures the "Fully Paid" vendor appears alongside the "Unpaid" vendor for the same lead.
-        if (!request()->has('status')) {
-            $query->whereIn('lead_id', function ($sub) {
-                $sub->select('lead_id')
-                    ->from('lead_vendor_payments')
-                    // Check strictly for Balance > 0
-                    ->whereRaw("(total_vendor_service_amount
-                         - (SELECT COALESCE(SUM(paid_amount), 0) 
-                         FROM vendor_payments 
-                         WHERE vendor_payments.lead_vendor_payment_id = lead_vendor_payments.id)) > 0");
-            });
-        }
-        
-        // CASE 2: Specific Filters (Strict Filtering)
-        // When a user explicitly asks for "Unpaid", we only show the unpaid rows.
-        elseif (!empty($status)) {
-            $normalized = strtolower(trim($status));
+/*
+|--------------------------------------------------------------------------
+| Total actually paid to vendor
+|--------------------------------------------------------------------------
+*/
 
-            if (in_array($normalized, ['paid', 'full paid', 'full_paid', 'full'])) {
-                $query->whereRaw("$rawBalance <= 0");
-            } 
-            elseif (in_array($normalized, ['partial', 'partial paid', 'partial_paid'])) {
-                $query->whereRaw("$rawPaid > 0")
-                      ->whereRaw("$rawBalance > 0");
-            } 
-            elseif (in_array($normalized, ['unpaid'])) {
-                $query->whereRaw("$rawPaid = 0")
-                      ->whereRaw("$rawCost > 0");
-            } 
-            else {
-                $query->where('payment_status', $status);
-            }
+$rawPaid = "
+(
+    SELECT COALESCE(
+        SUM(vp.paid_amount),
+        0
+    )
+    FROM vendor_payments vp
+    WHERE
+        vp.lead_vendor_payment_id
+        =
+        lead_vendor_payments.id
+)
+";
+
+
+/*
+|--------------------------------------------------------------------------
+| Total actually refunded by vendor
+|--------------------------------------------------------------------------
+*/
+
+$rawRefunded = "
+(
+    SELECT COALESCE(
+        SUM(vr.refund_amount),
+        0
+    )
+    FROM vendor_refunds vr
+    WHERE
+        vr.lead_vendor_payment_id
+        =
+        lead_vendor_payments.id
+)
+";
+
+
+/*
+|--------------------------------------------------------------------------
+| Latest Cancellation Amount
+|--------------------------------------------------------------------------
+|
+| If cancellation settlement exists, this becomes the final vendor payable.
+| Otherwise original vendor service cost remains payable.
+|
+*/
+
+$rawCancellation = "
+(
+    SELECT vr.cancellation_amount
+    FROM vendor_refunds vr
+    WHERE
+        vr.lead_vendor_payment_id
+        =
+        lead_vendor_payments.id
+    ORDER BY
+        vr.created_at DESC
+    LIMIT 1
+)
+";
+
+
+/*
+|--------------------------------------------------------------------------
+| Final Vendor Payable
+|--------------------------------------------------------------------------
+*/
+
+$rawAdjustedPayable = "
+COALESCE(
+    $rawCancellation,
+    lead_vendor_payments.total_vendor_service_amount,
+    0
+)
+";
+
+
+/*
+|--------------------------------------------------------------------------
+| Net money currently retained by vendor
+|--------------------------------------------------------------------------
+*/
+
+$rawNetPaid = "
+GREATEST(
+    0,
+    (
+        $rawPaid
+        -
+        $rawRefunded
+    )
+)
+";
+
+
+/*
+|--------------------------------------------------------------------------
+| Final outstanding payable
+|--------------------------------------------------------------------------
+*/
+
+$rawBalance = "
+GREATEST(
+    0,
+    (
+        $rawAdjustedPayable
+        -
+        $rawNetPaid
+    )
+)
+";
+
+
+/*
+|--------------------------------------------------------------------------
+| Initial dashboard
+|--------------------------------------------------------------------------
+|
+| Keep existing business behaviour:
+| if ANY vendor under the lead has money pending,
+| show the whole lead group.
+|
+*/
+
+if (!$request->filled('status')) {
+
+    $query->whereIn(
+        'lead_id',
+        function ($sub) {
+
+            $sub->select(
+                'lead_id'
+            )
+            ->from(
+                'lead_vendor_payments'
+            )
+            ->whereRaw("
+                GREATEST(
+                    0,
+                    (
+                        COALESCE(
+                            (
+                                SELECT vr.cancellation_amount
+                                FROM vendor_refunds vr
+                                WHERE
+                                    vr.lead_vendor_payment_id
+                                    =
+                                    lead_vendor_payments.id
+                                ORDER BY
+                                    vr.created_at DESC
+                                LIMIT 1
+                            ),
+                            lead_vendor_payments.total_vendor_service_amount,
+                            0
+                        )
+                        -
+                        GREATEST(
+                            0,
+                            (
+                                (
+                                    SELECT COALESCE(
+                                        SUM(vp.paid_amount),
+                                        0
+                                    )
+                                    FROM vendor_payments vp
+                                    WHERE
+                                        vp.lead_vendor_payment_id
+                                        =
+                                        lead_vendor_payments.id
+                                )
+                                -
+                                (
+                                    SELECT COALESCE(
+                                        SUM(vr2.refund_amount),
+                                        0
+                                    )
+                                    FROM vendor_refunds vr2
+                                    WHERE
+                                        vr2.lead_vendor_payment_id
+                                        =
+                                        lead_vendor_payments.id
+                                )
+                            )
+                        )
+                    )
+                ) > 0
+            ");
         }
-        // --- CORE LOGIC END ---
+    );
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Status filtering
+|--------------------------------------------------------------------------
+*/
+
+elseif (!empty($status)) {
+
+    $normalized =
+        strtolower(
+            trim(
+                $status
+            )
+        );
+
+
+    /*
+     * Fully paid / settled
+     */
+
+    if (
+        in_array(
+            $normalized,
+            [
+                'paid',
+                'full paid',
+                'full_paid',
+                'full',
+            ],
+            true
+        )
+    ) {
+
+        $query
+            ->whereRaw(
+                "$rawBalance <= 0"
+            );
+    }
+
+
+    /*
+     * Partial payment
+     */
+
+    elseif (
+        in_array(
+            $normalized,
+            [
+                'partial',
+                'partial paid',
+                'partial_paid',
+            ],
+            true
+        )
+    ) {
+
+        $query
+            ->whereRaw(
+                "$rawNetPaid > 0"
+            )
+            ->whereRaw(
+                "$rawBalance > 0"
+            );
+    }
+
+
+    /*
+     * Unpaid
+     */
+
+    elseif (
+        $normalized === 'unpaid'
+    ) {
+
+        $query
+            ->whereRaw(
+                "$rawNetPaid <= 0"
+            )
+            ->whereRaw(
+                "$rawAdjustedPayable > 0"
+            );
+    }
+
+
+    /*
+     * Any custom historical status
+     */
+
+    else {
+
+        $query
+            ->where(
+                'payment_status',
+                $status
+            );
+    }
+}
+
+// --- CORE LOGIC END ---
 
             $vendorPaymentsPaginator = (clone $query)
                 ->setEagerLoads([])
@@ -239,26 +491,126 @@ class VendorPaymentController extends Controller
                     // Get services specific to this vendor
                     $vendorServiceInfo = $this->getVendorSpecificServiceInfo($vendorPayment);
                     
-                    // Calculate vendor specific amounts
-                    $vendorServiceCost = $vendorPayment->total_vendor_service_amount ?? 0;
-                    $paidAmount = $vendorPayment->vendorPayments->sum('paid_amount') ?? 0;
-                    $balanceAmount = $vendorServiceCost - $paidAmount;
+       // Calculate vendor specific amounts
 
-                    // Visual Status Calculation
-                 $statusLabel = 'Unpaid';
+/*
+|--------------------------------------------------------------------------
+| Original Vendor Service Cost
+|--------------------------------------------------------------------------
+*/
+
+$vendorServiceCost = round(
+    (float) ($vendorPayment->total_vendor_service_amount ?? 0),
+    2
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| Gross Amount Paid To Vendor
+|--------------------------------------------------------------------------
+*/
+
+$paidAmount = round(
+    (float) $vendorPayment->vendorPayments->sum('paid_amount'),
+    2
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| Total Amount Refunded By Vendor
+|--------------------------------------------------------------------------
+*/
+
+$refundedAmount = round(
+    (float) $vendorPayment->vendorRefunds->sum('refund_amount'),
+    2
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| Cancellation-adjusted Vendor Payable
+|--------------------------------------------------------------------------
+|
+| Normal booking:
+| adjusted payable = original vendor service cost
+|
+| Cancelled booking:
+| adjusted payable = cancellation amount
+|
+*/
+
+$adjustedVendorPayable = round(
+    (float) $vendorPayment->adjusted_vendor_payable,
+    2
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| Net Amount Currently Retained By Vendor
+|--------------------------------------------------------------------------
+*/
+
+$netPaidToVendor = round(
+    max(
+        0,
+        $paidAmount - $refundedAmount
+    ),
+    2
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| Balance Still Payable To Vendor
+|--------------------------------------------------------------------------
+*/
+
+$balanceAmount = round(
+    max(
+        0,
+        $adjustedVendorPayable - $netPaidToVendor
+    ),
+    2
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| Net Vendor Cost
+|--------------------------------------------------------------------------
+*/
+
+$netVendorCost = $netPaidToVendor;
+
+           // Visual Status Calculation
+
+            $statusLabel = 'Unpaid';
+            $statusClass = 'bg-danger/10 text-danger';
+
+            if ($adjustedVendorPayable <= 0) {
+
+                $statusLabel = 'Full Paid';
+                $statusClass = 'bg-success/10 text-success';
+
+            } elseif ($balanceAmount <= 0) {
+
+                $statusLabel = 'Full Paid';
+                $statusClass = 'bg-success/10 text-success';
+
+            } elseif ($netPaidToVendor > 0) {
+
+                $statusLabel = 'Partial Paid';
+                $statusClass = 'bg-warning/10 text-warning';
+
+            } else {
+
+                $statusLabel = 'Unpaid';
                 $statusClass = 'bg-danger/10 text-danger';
-                   // Use a small epsilon for float comparison safety, or strict check logic
-                if ($balanceAmount <= 0 && $vendorServiceCost > 0) {
-                    $statusLabel = 'Full Paid';
-                    $statusClass = 'bg-success/10 text-success';
-                } elseif ($paidAmount > 0 && $balanceAmount > 0) {
-                    $statusLabel = 'Partial Paid';
-                    $statusClass = 'bg-warning/10 text-warning';
-                } elseif ($vendorServiceCost == 0) {
-                     // Handle the visual label for "0 Cost" items if they appear
-                    $statusLabel = 'Free/No Cost'; 
-                    $statusClass = 'bg-gray-100 text-gray-500';
-                }
+            }
 
                 // Get Latest Paid Date
                 $vendorPaidDates = $vendorPayment->vendorPayments->pluck('paid_date')->filter();
@@ -294,6 +646,22 @@ class VendorPaymentController extends Controller
                             'extra_service_display' => $vendorServiceInfo['extra_service_display'] ?? '',
                         ],
                         'vendor_service_cost' => $vendorServiceCost,
+                        'cancellation_amount' =>
+                            $vendorPayment
+                                ->cancellation_amount,
+
+                        'adjusted_vendor_payable' =>
+                            $adjustedVendorPayable,
+
+                        'refunded_amount' =>
+                            $refundedAmount,
+
+                        'net_paid_amount' =>
+                            $netPaidToVendor,
+
+                        'refund_status' =>
+                            $vendorPayment
+                                ->vendor_refund_status,
                         'balance_amount' => $balanceAmount,
                         'paid_amount' => $paidAmount,
                         'paid_date' => $latestPaidDate ?? 'N/A',
@@ -326,6 +694,74 @@ class VendorPaymentController extends Controller
         }
     }
 
+
+    public function refundIndex(Request $request)
+    {
+        $query =
+            VendorRefund::query()
+                ->with([
+                    'lead.client',
+                    'vendor',
+                    'leadVendorPayment.vendorPayments',
+                    'leadVendorPayment.paymentDetails.service',
+                    'leadVendorPayment.paymentDetails.extraService',
+                    'createdBy',
+                ])
+                ->orderByDesc('created_at');
+
+
+        if ($request->filled('search')) {
+
+            $search =
+                trim($request->search);
+
+
+            $query->where(
+                function ($q) use ($search) {
+
+                    $q->whereHas(
+                        'lead.client',
+                        function ($client) use ($search) {
+
+                            $client->where(
+                                'name',
+                                'like',
+                                '%' . $search . '%'
+                            );
+                        }
+                    );
+
+                    $q->orWhereHas(
+                        'vendor',
+                        function ($vendor) use ($search) {
+
+                            $vendor->where(
+                                'name',
+                                'like',
+                                '%' . $search . '%'
+                            );
+                        }
+                    );
+                }
+            );
+        }
+
+
+        $vendorRefunds =
+            $query
+                ->paginate(25)
+                ->appends(
+                    $request->query()
+                );
+
+
+        return view(
+            'admin.account.vendors.vendor-refunds',
+            compact('vendorRefunds')
+        );
+    }
+
+
     /**
      * Show vendor payment details
      */
@@ -337,11 +773,12 @@ class VendorPaymentController extends Controller
                 'lead.client.city',
                 'vendor',
                 'voucher',
-                'paymentDetails'
+                'paymentDetails',
+                 'vendorRefunds',
             ])->findOrFail($id);
 
             // Get all vendors for this voucher (order preserved by voucher created_at if needed)
-            $allVendorPayments = LeadVendorPayment::with(['vendor', 'paymentDetails', 'vendorPayments'])
+            $allVendorPayments = LeadVendorPayment::with(['vendor', 'paymentDetails', 'vendorPayments','vendorRefunds',])
                 ->where('voucher_id', $vendorPayment->voucher_id)
                 ->get();
 
@@ -359,10 +796,55 @@ class VendorPaymentController extends Controller
                 $hist = VendorPayment::where('lead_vendor_payment_id', $vp->id)
                     ->orderBy('created_at', 'desc')
                     ->get();
-                $perVendorHistories[$vp->id] = [
-                    'history' => $hist,
-                    'paid_total' => $hist->sum('paid_amount'),
-                ];
+              $refundHistory =
+    $vp->vendorRefunds
+        ->sortByDesc(
+            'created_at'
+        )
+        ->values();
+
+
+$totalPaid =
+    (float)
+    $hist->sum(
+        'paid_amount'
+    );
+
+
+$totalRefunded =
+    (float)
+    $refundHistory->sum(
+        'refund_amount'
+    );
+
+
+$perVendorHistories[$vp->id] = [
+
+    'history' =>
+        $hist,
+
+    'paid_total' =>
+        $totalPaid,
+
+    // NEW
+
+    'refund_history' =>
+        $refundHistory,
+
+    'refunded_total' =>
+        $totalRefunded,
+
+    'net_vendor_cost' =>
+        max(
+            0,
+            $totalPaid
+            -
+            $totalRefunded
+        ),
+
+    'refund_status' =>
+        $vp->vendor_refund_status,
+];
             }
 
             // Also load client payment history from PaymentAuditTrail (via LeadFollowup)
@@ -703,19 +1185,169 @@ class VendorPaymentController extends Controller
             ]);
 
             // ── Update lead vendor payment status ─────────────────────────────────
-            $leadVendorPayment = LeadVendorPayment::find($request->lead_vendor_payment_id);
+            // ── Resolve Lead Vendor Payment ─────────────────────────────────────────
 
-            if ($request->filled('total_vendor_service_amount') && $leadVendorPayment) {
-                $leadVendorPayment->update([
-                    'total_vendor_service_amount' => $request->total_vendor_service_amount,
-                ]);
-            }
+$leadVendorPayment =
+    LeadVendorPayment::query()
+        ->with([
+            'vendorPayments',
+            'vendorRefunds',
+        ])
+        ->lockForUpdate()
+        ->findOrFail(
+            $request->lead_vendor_payment_id
+        );
 
-            $totalPaid = VendorPayment::where('lead_vendor_payment_id', $request->lead_vendor_payment_id)
-                ->sum('paid_amount');
 
-            $status = $totalPaid >= ($leadVendorPayment->total_vendor_service_amount ?? 0) ? 'paid' : 'partial';
-            $leadVendorPayment->update(['payment_status' => $status]);
+/*
+|--------------------------------------------------------------------------
+| IMPORTANT
+|--------------------------------------------------------------------------
+|
+| Do NOT overwrite total_vendor_service_amount here.
+|
+| total_vendor_service_amount = ORIGINAL agreed vendor cost.
+|
+| Cancellation settlement is separately maintained through VendorRefund.
+|
+*/
+
+
+/*
+|--------------------------------------------------------------------------
+| Reload after current VendorPayment was created
+|--------------------------------------------------------------------------
+*/
+
+$leadVendorPayment->load([
+    'vendorPayments',
+    'vendorRefunds',
+]);
+
+
+/*
+|--------------------------------------------------------------------------
+| Total gross payments sent to vendor
+|--------------------------------------------------------------------------
+*/
+
+$totalPaid =
+    round(
+        (float)
+        $leadVendorPayment
+            ->vendorPayments
+            ->sum(
+                'paid_amount'
+            ),
+        2
+    );
+
+
+/*
+|--------------------------------------------------------------------------
+| Money returned by vendor
+|--------------------------------------------------------------------------
+*/
+
+$totalRefunded =
+    round(
+        (float)
+        $leadVendorPayment
+            ->vendorRefunds
+            ->sum(
+                'refund_amount'
+            ),
+        2
+    );
+
+
+/*
+|--------------------------------------------------------------------------
+| Net money retained by vendor
+|--------------------------------------------------------------------------
+*/
+
+$netPaid =
+    round(
+        max(
+            0,
+            $totalPaid
+            -
+            $totalRefunded
+        ),
+        2
+    );
+
+
+/*
+|--------------------------------------------------------------------------
+| Current Vendor Payable
+|--------------------------------------------------------------------------
+|
+| If cancellation exists:
+| adjusted_vendor_payable should return cancellation amount.
+|
+| Otherwise:
+| original vendor amount.
+|
+*/
+
+$adjustedVendorPayable =
+    round(
+        (float)
+        $leadVendorPayment
+            ->adjusted_vendor_payable,
+        2
+    );
+
+
+/*
+|--------------------------------------------------------------------------
+| Determine status
+|--------------------------------------------------------------------------
+*/
+
+if (
+    $adjustedVendorPayable <= 0
+) {
+
+    $status =
+        'paid';
+
+} elseif (
+    $netPaid <= 0
+) {
+
+    $status =
+        'unpaid';
+
+} elseif (
+    $netPaid
+    >=
+    $adjustedVendorPayable
+) {
+
+    $status =
+        'paid';
+
+} else {
+
+    $status =
+        'partial';
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Store derived status only
+|--------------------------------------------------------------------------
+*/
+
+$leadVendorPayment
+    ->update([
+        'payment_status' =>
+            $status,
+    ]);
 
             DB::commit();
 
@@ -752,11 +1384,85 @@ class VendorPaymentController extends Controller
                     } catch (\Throwable $e) {}
 
                     // Amounts
-                    $totalPaidNow  = VendorPayment::where('lead_vendor_payment_id', $leadVendorPayment->id)->sum('paid_amount');
-                    $totalCost     = floatval($leadVendorPayment->total_vendor_service_amount ?? 0);
-                    $paidAmount    = floatval($request->paid_amount);
-                    $pendingAmount = max(0, $totalCost - $totalPaidNow);
-                    $balanceAmount = $pendingAmount;
+                   /*
+|--------------------------------------------------------------------------
+| Current payment totals for notification
+|--------------------------------------------------------------------------
+*/
+
+$leadVendorPayment->load([
+    'vendorPayments',
+    'vendorRefunds',
+]);
+
+
+$totalPaidNow =
+    round(
+        (float)
+        $leadVendorPayment
+            ->vendorPayments
+            ->sum(
+                'paid_amount'
+            ),
+        2
+    );
+
+
+$totalRefundedNow =
+    round(
+        (float)
+        $leadVendorPayment
+            ->vendorRefunds
+            ->sum(
+                'refund_amount'
+            ),
+        2
+    );
+
+
+$netPaidNow =
+    round(
+        max(
+            0,
+            $totalPaidNow
+            -
+            $totalRefundedNow
+        ),
+        2
+    );
+
+
+$totalCost =
+    round(
+        (float)
+        $leadVendorPayment
+            ->adjusted_vendor_payable,
+        2
+    );
+
+
+$paidAmount =
+    round(
+        (float)
+        $request->paid_amount,
+        2
+    );
+
+
+$pendingAmount =
+    round(
+        max(
+            0,
+            $totalCost
+            -
+            $netPaidNow
+        ),
+        2
+    );
+
+
+$balanceAmount =
+    $pendingAmount;
 
                     $vendorName  = $vendor->name  ?? 'Vendor';
                     $clientName  = $client->name  ?? 'Customer';
@@ -1056,19 +1762,146 @@ class VendorPaymentController extends Controller
     /**
      * Get payment status for a vendor payment
      */
-    private function getPaymentStatus($payment)
-    {
-        $totalAmount = $payment->total_vendor_service_amount ?? 0;
-        $paidAmount = $payment->paid_amount ?? 0;
+ private function getPaymentStatus(
+    $payment
+) {
+    /*
+    |--------------------------------------------------------------------------
+    | Load required relationships
+    |--------------------------------------------------------------------------
+    */
 
-        if ($paidAmount >= $totalAmount && $totalAmount > 0) {
-            return ['status' => 'Full Paid', 'class' => 'bg-success/10 text-success'];
-        } elseif ($paidAmount > 0) {
-            return ['status' => 'Partial Paid', 'class' => 'bg-warning/10 text-warning'];
-        } else {
-            return ['status' => 'Unpaid', 'class' => 'bg-danger/10 text-danger'];
-        }
+    $payment->loadMissing([
+        'vendorPayments',
+        'vendorRefunds',
+    ]);
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Final payable
+    |--------------------------------------------------------------------------
+    */
+
+    $totalAmount =
+        round(
+            (float)
+            $payment
+                ->adjusted_vendor_payable,
+            2
+        );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Gross paid
+    |--------------------------------------------------------------------------
+    */
+
+    $paidAmount =
+        round(
+            (float)
+            $payment
+                ->vendorPayments
+                ->sum(
+                    'paid_amount'
+                ),
+            2
+        );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Vendor refunds
+    |--------------------------------------------------------------------------
+    */
+
+    $refundedAmount =
+        round(
+            (float)
+            $payment
+                ->vendorRefunds
+                ->sum(
+                    'refund_amount'
+                ),
+            2
+        );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Net paid
+    |--------------------------------------------------------------------------
+    */
+
+    $netPaid =
+        round(
+            max(
+                0,
+                $paidAmount
+                -
+                $refundedAmount
+            ),
+            2
+        );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Full paid / settled
+    |--------------------------------------------------------------------------
+    */
+
+    if (
+        $totalAmount <= 0
+        ||
+        $netPaid
+        >=
+        $totalAmount
+    ) {
+
+        return [
+            'status' =>
+                'Full Paid',
+
+            'class' =>
+                'bg-success/10 text-success',
+        ];
     }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Partial
+    |--------------------------------------------------------------------------
+    */
+
+    if ($netPaid > 0) {
+
+        return [
+            'status' =>
+                'Partial Paid',
+
+            'class' =>
+                'bg-warning/10 text-warning',
+        ];
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Unpaid
+    |--------------------------------------------------------------------------
+    */
+
+    return [
+        'status' =>
+            'Unpaid',
+
+        'class' =>
+            'bg-danger/10 text-danger',
+    ];
+}
 
     /**
      * Update vendor payment amounts

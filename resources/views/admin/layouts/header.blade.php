@@ -1156,7 +1156,23 @@
                                 </a>
                             </li>
                         @endif
+                        @if (canAccess($userType, $adminRoles) || canAccess($userType, $accountRoles) || canAccess($userType, $operationsRoles))
 
+                        <li class="slide">
+                        <a
+                            href="{{ route('admin.account.vendor-refunds') }}"
+                            class="side-menu__item"
+                        >
+
+                            <i class="ri-refund-2-line side-menu__icon"></i>
+
+                            <span class="side-menu__label">
+                                Vendor Refunds
+                            </span>
+
+                        </a>
+                    </li>
+                  @endif
                         <!-- Invoices Direct Link -->
                         @if (canAccess($userType, $adminRoles) || canAccess($userType, $accountRoles))
                             <li class="slide {{ Route::is('admin.account.invoices*') ? 'active' : '' }}">

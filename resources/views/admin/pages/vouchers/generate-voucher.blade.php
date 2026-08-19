@@ -1058,7 +1058,7 @@
 
                                         <button
                                             type="button"
-                                            class="add-vendor-extra-master vendor-add-button"
+                                            class="add-vendor-extra-master vendor-add-button" style="background: #2563eb"
                                         >
                                             <i class="ri-add-line"></i>
 

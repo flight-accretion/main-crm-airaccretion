@@ -190,6 +190,7 @@
                             </thead>
                             <tbody>
                                 @foreach ($products as $key => $product)
+                            <!-- <p>{{ $product->product }}</p> -->
                                     <tr class="border-b border-defaultborder">
 
                                         <td class="text-center">{{ $key + 1 }}</td>

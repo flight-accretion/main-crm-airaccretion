@@ -133,6 +133,7 @@
                                 <th>Vendor Service Cost</th>
                                 <th>Balance Amount</th>
                                 <th>Paid Amount</th>
+                                <!-- <th>Refunded Amount</th> -->
                                 <th>Date Paid</th>
                                 <th>Status</th>
                                 <th>Actions</th>
@@ -159,7 +160,16 @@
                                 </td>
                                 <td class="text-center">
                                     @foreach ($payment['vendors'] as $vendor)
-                                    ₹{{ number_format($vendor['vendor_service_cost'], 2) }}<br>
+                                   ₹{{ number_format(
+                                    $vendor[
+                                        'adjusted_vendor_payable'
+                                    ]
+                                    ??
+                                    $vendor[
+                                        'vendor_service_cost'
+                                    ],
+                                    2
+                                ) }}<br>
                                     @endforeach
                                 </td>
                                 <td class="text-center text-danger">
@@ -168,9 +178,29 @@
                                     @endforeach
                                 </td>
                                 <td class="text-center">
-                                    @foreach ($payment['vendors'] as $vendor)
-                                    ₹{{ number_format($vendor['paid_amount'], 2) }}<br>
+                                        @foreach ($payment['vendors'] as $vendor)
+                                        ₹{{ number_format($vendor['paid_amount'], 2) }}<br>
+                                        @endforeach
+                                </td>
+                                 <td class="text-center text-success">
+
+                                    @foreach (
+                                        $payment['vendors']
+                                        as $vendor
+                                    )
+
+                                        ₹{{ number_format(
+                                            $vendor[
+                                                'refunded_amount'
+                                            ]
+                                            ?? 0,
+                                            2
+                                        ) }}
+
+                                        <br>
+
                                     @endforeach
+
                                 </td>
                                 <td class="text-center">
                                     @foreach ($payment['vendors'] as $vendor)

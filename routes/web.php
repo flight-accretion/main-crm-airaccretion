@@ -370,6 +370,15 @@ Route::middleware('auth')->group(function () {
         Route::post('/payment-history/{id}/reject', [PaymentReviewController::class, 'rejectHistory'])->name('admin.account.payment-history.reject');
         Route::get('/payment-review-export', [PaymentReviewController::class, 'export'])->name('admin.account.payment-review.export');
 
+       //vendor refund
+
+        // Route::post(
+        // '/admin/rides/ride-status/{ride}/save-vendor-refund',
+        // [\App\Http\Controllers\RideController::class, 'saveVendorRefundFromRideStatus']
+        // )->name('admin.rides.ride-status.save-vendor-refund');
+
+
+        
         // Vendor Payments Routes
         Route::get('/vendor-payments', [VendorPaymentController::class, 'index'])->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES')->name('admin.account.vendor-payments');
         Route::get('/vendor-payments/export', [VendorPaymentController::class, 'export'])->name('admin.account.vendor-payments.export');
@@ -608,7 +617,31 @@ Route::middleware('auth')->group(function () {
         Route::post('/ride-status/{rideId}/generate-refund', [RideController::class, 'generateRefundNote'])->name('admin.rides.ride-status.generate-refund');
         Route::post('/ride-status/{rideId}/save-refund', [RideController::class, 'saveRefundFromRideStatus'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')->name('admin.rides.ride-status.save-refund');
         Route::post('/rides/{rideId}/send-refund-email', [RideController::class, 'sendRefundEmail'])->name('admin.rides.ride-status.send-refund-email');
-    });
+    Route::post(
+    '/ride-status/{rideId}/save-vendor-refund',
+    [RideController::class, 'saveVendorRefundFromRideStatus']
+)
+->middleware(
+    'role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES'
+)
+->name(
+    'admin.rides.ride-status.save-vendor-refund'
+);
+        });
+
+        Route::get(
+    '/vendor-refunds',
+    [
+        VendorPaymentController::class,
+        'refundIndex'
+    ]
+)
+->middleware(
+    'role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES'
+)
+->name(
+    'admin.account.vendor-refunds'
+);
 
     Route::prefix('admin/refunds')->group(function () {
         Route::get('/', [RefundController::class, 'index'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')->name('admin.refunds.index');

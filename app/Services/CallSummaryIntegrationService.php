@@ -213,161 +213,145 @@ class CallSummaryIntegrationService
     |--------------------------------------------------------------------------
     */
 
-    public function process(
-        CallSummaryIntegration $integration
-    ): CallSummaryIntegration {
+   public function process(
+    CallSummaryIntegration $integration
+): CallSummaryIntegration {
+
+    /*
+    |--------------------------------------------------------------------------
+    | Already completed
+    |--------------------------------------------------------------------------
+    |
+    | Never create a duplicate CRM follow-up.
+    |
+    */
+
+    if (
+        $integration->status === 'followup_created'
+        &&
+        !empty($integration->followup_id)
+    ) {
+        return $integration;
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Increment processing attempt
+    |--------------------------------------------------------------------------
+    */
+
+    $integration->attempt_count =
+        ((int) $integration->attempt_count) + 1;
+
+    $integration->last_error = null;
+
+    $integration->save();
+
+
+    try {
 
         /*
         |--------------------------------------------------------------------------
-        | Already completed - never create duplicate followup
+        | Resolve API / IVR agent to CRM user
         |--------------------------------------------------------------------------
         */
 
-        if (
-            $integration->status
-                === 'followup_created'
-            &&
-            !empty(
-                $integration->followup_id
-            )
-        ) {
+        $agentUser =
+            $this->resolveAgentUser(
+                $integration
+            );
 
-            return $integration;
+
+        if ($agentUser) {
+
+            $integration->agent_user_id =
+                $agentUser->id;
+
+            $integration->save();
         }
 
 
-        $integration->attempt_count =
-            ((int)
-                $integration->attempt_count
-            ) + 1;
+        /*
+        |--------------------------------------------------------------------------
+        | PRIORITY 1
+        | Find matching IVR call
+        |--------------------------------------------------------------------------
+        */
 
-        $integration->last_error =
-            null;
-
-        $integration->save();
-
-
-        try {
-
-            /*
-            |--------------------------------------------------------------------------
-            | Resolve agent -> CRM user
-            |--------------------------------------------------------------------------
-            */
-
-            $agentUser =
-                $this->resolveAgentUser(
-                    $integration
-                );
+        $ivrMatch =
+            $this->findBestIvrMatch(
+                $integration,
+                $agentUser
+            );
 
 
-            if ($agentUser) {
+        if ($ivrMatch) {
 
-                $integration
-                    ->agent_user_id =
-                        $agentUser->id;
+            $ivrLog =
+                $ivrMatch['log'];
 
-                $integration->save();
-            }
+
+            $integration->ivr_call_log_id =
+                $ivrLog->id;
+
+            $integration->match_score =
+                $ivrMatch['score'];
+
+            $integration->match_method =
+                'ivr_phone_agent_time';
+
+            $integration->save();
 
 
             /*
             |--------------------------------------------------------------------------
-            | Priority 1:
-            | Match the existing IVR call log
+            | IVR already has CRM lead
             |--------------------------------------------------------------------------
             */
 
-            $ivrMatch =
-                $this->findBestIvrMatch(
-                    $integration,
-                    $agentUser
-                );
+            if (!empty($ivrLog->lead_id)) {
+
+                $lead =
+                    Lead::find(
+                        $ivrLog->lead_id
+                    );
 
 
-            if ($ivrMatch) {
+                if ($lead) {
 
-                $integration
-                    ->ivr_call_log_id =
-                        $ivrMatch[
-                            'log'
-                        ]->id;
+                    $integration->lead_id =
+                        $lead->id;
 
-                $integration
-                    ->match_score =
-                        $ivrMatch[
-                            'score'
-                        ];
+                    $integration->status =
+                        'matched';
 
-                $integration
-                    ->match_method =
-                        'ivr_phone_agent_time';
+                    $integration->last_error =
+                        null;
 
-                /*
-                 * The IVR call may exist BEFORE
-                 * the lead is attached/created.
-                 */
-
-                if (
-                    !empty(
-                        $ivrMatch[
-                            'log'
-                        ]->lead_id
-                    )
-                ) {
-
-                    $lead =
-                        Lead::find(
-                            $ivrMatch[
-                                'log'
-                            ]->lead_id
-                        );
+                    $integration->save();
 
 
-                    if ($lead) {
-
-                        $integration
-                            ->lead_id =
-                                $lead->id;
-
-                        $integration
-                            ->status =
-                                'matched';
-
-                        $integration->save();
-
-
-                        return
-                            $this
-                                ->createFollowup(
-                                    $integration,
-                                    $lead,
-                                    $agentUser
-                                );
-                    }
+                    return $this->createFollowup(
+                        $integration,
+                        $lead,
+                        $agentUser
+                    );
                 }
-
-
-                /*
-                 * Strong IVR match but lead not ready yet.
-                 */
-
-                $integration->status =
-                    'pending_lead';
-
-                $integration->save();
-
-                return $integration;
             }
 
 
             /*
             |--------------------------------------------------------------------------
-            | Priority 2:
-            | Direct active Lead fallback
+            | IMPORTANT FALLBACK
             |--------------------------------------------------------------------------
             |
-            | Use your existing ActiveLeadService.
+            | We found the IVR call, but its lead_id may not yet be populated.
+            |
+            | DO NOT return pending_lead here.
+            |
+            | The CRM lead may already exist and ActiveLeadService may be able
+            | to find it from the customer phone number.
             |
             */
 
@@ -381,11 +365,11 @@ class CallSummaryIntegrationService
 
                 /*
                 |--------------------------------------------------------------------------
-                | Require agent consistency where possible
+                | Agent safety check
                 |--------------------------------------------------------------------------
                 |
-                | If API says Pallavi, don't silently
-                | attach to Sourav's lead.
+                | Do not attach Sourav's call to another salesperson's lead
+                | when both identities are known.
                 |
                 */
 
@@ -393,14 +377,12 @@ class CallSummaryIntegrationService
                     $agentUser
                     &&
                     !empty(
-                        $activeLead
-                            ->representative_user_id
+                        $activeLead->representative_user_id
                     )
                     &&
                     (string)
-                    $activeLead
-                        ->representative_user_id
-                        !==
+                    $activeLead->representative_user_id
+                    !==
                     (string)
                     $agentUser->id
                 ) {
@@ -408,94 +390,237 @@ class CallSummaryIntegrationService
                     $integration->status =
                         'ambiguous_match';
 
-                    $integration
-                        ->match_method =
-                            'active_lead_agent_mismatch';
+                    $integration->match_method =
+                        'ivr_active_lead_agent_mismatch';
 
-                    $integration
-                        ->last_error =
-                            'Phone matched an active lead but the mapped call agent does not match the lead representative.';
+                    $integration->last_error =
+                        'IVR call matched and phone matched an active lead, but the call agent does not match the lead representative.';
 
                     $integration->save();
+
 
                     return $integration;
                 }
 
 
+                /*
+                |--------------------------------------------------------------------------
+                | Connect integration to CRM lead
+                |--------------------------------------------------------------------------
+                */
+
                 $integration->lead_id =
                     $activeLead->id;
 
-                $integration->match_score =
-                    $agentUser
-                        ? 80
-                        : 70;
-
                 $integration->match_method =
-                    'active_lead_phone_agent';
+                    'ivr_plus_active_lead_phone';
 
                 $integration->status =
                     'matched';
 
+                $integration->last_error =
+                    null;
+
                 $integration->save();
 
 
-                return
-                    $this->createFollowup(
-                        $integration,
-                        $activeLead,
-                        $agentUser
-                    );
+                /*
+                |--------------------------------------------------------------------------
+                | Optional but recommended:
+                | attach lead back to IVR record
+                |--------------------------------------------------------------------------
+                |
+                | This makes the IVR record useful for future processing.
+                |
+                */
+
+                if (empty($ivrLog->lead_id)) {
+
+                    $ivrLog->lead_id =
+                        $activeLead->id;
+
+                    $ivrLog->save();
+                }
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | CREATE CRM FOLLOW-UP
+                |--------------------------------------------------------------------------
+                */
+
+                return $this->createFollowup(
+                    $integration,
+                    $activeLead,
+                    $agentUser
+                );
             }
 
 
             /*
             |--------------------------------------------------------------------------
-            | No safe match yet
+            | IVR exists but CRM lead genuinely unavailable
             |--------------------------------------------------------------------------
             */
 
             $integration->status =
                 'pending_lead';
 
-            $integration->save();
-
-            return $integration;
-
-
-        } catch (\Throwable $e) {
-
-            $integration->status =
-                'failed';
-
             $integration->last_error =
-                mb_substr(
-                    $e->getMessage(),
-                    0,
-                    5000
-                );
+                'IVR call matched, but no CRM lead is currently available.';
 
             $integration->save();
-
-
-            Log::error(
-                'Call Summary integration processing failed.',
-                [
-                    'integration_id' =>
-                        $integration->id,
-
-                    'phone' =>
-                        $integration
-                            ->normalized_phone,
-
-                    'error' =>
-                        $e->getMessage(),
-                ]
-            );
 
 
             return $integration;
         }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | PRIORITY 2
+        | No IVR match - search CRM directly by phone
+        |--------------------------------------------------------------------------
+        */
+
+        $activeLead =
+            $this->findActiveLead(
+                $integration
+            );
+
+
+        if ($activeLead) {
+
+            /*
+            |--------------------------------------------------------------------------
+            | Agent consistency protection
+            |--------------------------------------------------------------------------
+            */
+
+            if (
+                $agentUser
+                &&
+                !empty(
+                    $activeLead->representative_user_id
+                )
+                &&
+                (string)
+                $activeLead->representative_user_id
+                !==
+                (string)
+                $agentUser->id
+            ) {
+
+                $integration->status =
+                    'ambiguous_match';
+
+                $integration->match_method =
+                    'active_lead_agent_mismatch';
+
+                $integration->last_error =
+                    'Phone matched an active lead but the mapped call agent does not match the lead representative.';
+
+                $integration->save();
+
+
+                return $integration;
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | CRM lead found
+            |--------------------------------------------------------------------------
+            */
+
+            $integration->lead_id =
+                $activeLead->id;
+
+            $integration->match_score =
+                $agentUser
+                    ? 80
+                    : 70;
+
+            $integration->match_method =
+                'active_lead_phone_agent';
+
+            $integration->status =
+                'matched';
+
+            $integration->last_error =
+                null;
+
+            $integration->save();
+
+
+            return $this->createFollowup(
+                $integration,
+                $activeLead,
+                $agentUser
+            );
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Nothing found yet
+        |--------------------------------------------------------------------------
+        */
+
+        $integration->status =
+            'pending_lead';
+
+        $integration->last_error =
+            'No safe IVR or active CRM lead match is currently available.';
+
+        $integration->save();
+
+
+        return $integration;
+
+
+    } catch (\Throwable $e) {
+
+        /*
+        |--------------------------------------------------------------------------
+        | Processing failure
+        |--------------------------------------------------------------------------
+        */
+
+        $integration->status =
+            'failed';
+
+        $integration->last_error =
+            mb_substr(
+                $e->getMessage(),
+                0,
+                5000
+            );
+
+        $integration->save();
+
+
+        Log::error(
+            'Call Summary integration processing failed.',
+            [
+                'integration_id' =>
+                    $integration->id,
+
+                'phone' =>
+                    $integration->normalized_phone,
+
+                'error' =>
+                    $e->getMessage(),
+
+                'trace' =>
+                    $e->getTraceAsString(),
+            ]
+        );
+
+
+        return $integration;
     }
+}
 
 
     /*

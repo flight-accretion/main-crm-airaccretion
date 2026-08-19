@@ -27,6 +27,12 @@ use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\RideStatusExport;
 use Illuminate\Support\Facades\Schema;
 
+use App\Models\VendorRefund;
+use App\Models\LeadVendorPayment;
+use App\Models\VendorPayment;
+use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Storage;
+
 
 class RideController extends Controller
 {
@@ -1721,14 +1727,21 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
             return response()->json(['error' => 'Unauthorized'], 401);
         }
         try {
-            $ride = LeadRide::with([
-                'enquiry.client.country',
-                'enquiry.client.city',
-                'enquiry.representative',
-                'enquiry.leadFollowups' => function ($query) {
-                    $query->orderByDesc('created_at');
-                }
-            ])->find($rideId);
+           $ride = LeadRide::with([
+            'enquiry.client.country',
+            'enquiry.client.city',
+            'enquiry.representative',
+
+            'enquiry.leadFollowups' => function ($query) {
+                $query->orderByDesc('created_at');
+            },
+
+            // NEW
+            'enquiry.leadVendorPayments.vendor',
+            'enquiry.leadVendorPayments.vendorPayments',
+            'enquiry.leadVendorPayments.vendorRefunds',
+
+        ])->find($rideId);
 
             if (!$ride) {
                 return response()->json(['error' => 'Ride not found'], 404);
@@ -1964,6 +1977,110 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                 Log::warning('Error fetching existing refund for ride status', ['error' => $e->getMessage()]);
             }
 
+            /*
+|--------------------------------------------------------------------------
+| Vendor refund / settlement data for this lead
+|--------------------------------------------------------------------------
+*/
+
+$vendorRefundData = collect();
+
+if ($lead) {
+
+    $vendorRefundData =
+        $lead->leadVendorPayments
+            ->map(function ($payment) {
+
+               $totalPaid =
+    (float)
+    $payment
+        ->vendorPayments
+        ->sum('paid_amount');
+
+
+$totalRefunded =
+    (float)
+    $payment
+        ->vendorRefunds
+        ->sum('refund_amount');
+
+
+return [
+
+    'id' =>
+        $payment->id,
+
+    'vendor_id' =>
+        $payment->vendor_id,
+
+    'vendor_name' =>
+        optional(
+            $payment->vendor
+        )->name
+        ?? 'Vendor',
+
+    /*
+    |--------------------------------------------------------------------------
+    | Original vendor amount from voucher
+    |--------------------------------------------------------------------------
+    */
+
+    'vendor_amount' =>
+        (float)
+        ($payment->total_vendor_service_amount ?? 0),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Actual money already paid to vendor
+    |--------------------------------------------------------------------------
+    */
+
+    'total_paid' =>
+        $totalPaid,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Existing actual refunds
+    |--------------------------------------------------------------------------
+    */
+
+    'total_refunded' =>
+        $totalRefunded,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Current cancellation liability
+    |--------------------------------------------------------------------------
+    */
+
+    'cancellation_amount' =>
+        $payment->cancellation_amount,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Final calculated payable
+    |--------------------------------------------------------------------------
+    */
+
+    'adjusted_vendor_payable' =>
+        $payment->adjusted_vendor_payable,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Money still expected back from vendor
+    |--------------------------------------------------------------------------
+    */
+
+    'refund_due' =>
+        $payment->available_refund,
+
+    'refund_status' =>
+        $payment->vendor_refund_status,
+];
+            })
+            ->values();
+}
+
             $response = [
                 'ride' => [
                     'id' => $ride->id,
@@ -2012,6 +2129,7 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                 // Include latest followup id so front-end can reference the correct LeadFollowup record
                 'followup_id' => $latestFollowup ? $latestFollowup->id : null,
                 'refund' => $refundData,
+                'vendor_refunds' => $vendorRefundData,
             ];
 
             return response()->json($response);
@@ -3635,6 +3753,852 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
             ], 500);
         }
     }
+
+public function saveVendorRefundFromRideStatus(
+    Request $request,
+    $rideId
+) {
+    /*
+    |--------------------------------------------------------------------------
+    | Validation
+    |--------------------------------------------------------------------------
+    */
+
+    $request->validate([
+        'lead_vendor_payment_id' =>
+            'required|uuid',
+
+        'cancellation_amount' =>
+            'required|numeric|min:0',
+
+        'refund_amount' =>
+            'required|numeric|min:0',
+
+        'refund_date' =>
+            'nullable|date',
+
+        'refund_type' =>
+            'nullable|string|max:100',
+
+        'refund_reason' =>
+            'required|string|max:2000',
+
+        'refund_proof' =>
+            'nullable|file|mimes:jpg,jpeg,png,pdf|max:2048',
+    ]);
+
+
+    try {
+
+        return DB::transaction(
+            function () use (
+                $request,
+                $rideId
+            ) {
+
+                /*
+                |--------------------------------------------------------------------------
+                | Lock ride
+                |--------------------------------------------------------------------------
+                */
+
+                $ride =
+                    LeadRide::query()
+                        ->lockForUpdate()
+                        ->findOrFail(
+                            $rideId
+                        );
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Resolve lead
+                |--------------------------------------------------------------------------
+                */
+
+                $lead =
+                    $ride->enquiry
+                    ??
+                    $ride->lead
+                    ??
+                    null;
+
+
+                if (!$lead) {
+
+                    throw ValidationException::withMessages([
+                        'lead' =>
+                            'Lead could not be identified for this ride.',
+                    ]);
+                }
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Lock correct vendor-payment record
+                |--------------------------------------------------------------------------
+                |
+                | Vendor payment must belong to the same Lead.
+                |
+                */
+
+                $leadVendorPayment =
+                    LeadVendorPayment::query()
+                        ->where(
+                            'id',
+                            $request->lead_vendor_payment_id
+                        )
+                        ->where(
+                            'lead_id',
+                            $lead->id
+                        )
+                        ->lockForUpdate()
+                        ->first();
+
+
+                if (!$leadVendorPayment) {
+
+                    throw ValidationException::withMessages([
+                        'lead_vendor_payment_id' =>
+                            'Selected vendor does not belong to this lead.',
+                    ]);
+                }
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Original vendor service cost
+                |--------------------------------------------------------------------------
+                */
+
+                $originalVendorAmount =
+                    round(
+                        (float)
+                        (
+                            $leadVendorPayment
+                                ->total_vendor_service_amount
+                            ?? 0
+                        ),
+                        2
+                    );
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Cancellation Amount
+                |--------------------------------------------------------------------------
+                |
+                | IMPORTANT:
+                |
+                | Cancellation Amount = final amount vendor is entitled to keep /
+                | final amount payable to vendor after cancellation.
+                |
+                | Example:
+                |
+                | Original vendor amount = ₹70,000
+                | Cancellation amount    = ₹20,000
+                |
+                | Vendor final liability = ₹20,000
+                |
+                */
+
+                $cancellationAmount =
+                    round(
+                        (float)
+                        $request->cancellation_amount,
+                        2
+                    );
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Cancellation amount cannot exceed original vendor cost
+                |--------------------------------------------------------------------------
+                */
+
+                if (
+                    $cancellationAmount
+                    >
+                    $originalVendorAmount
+                    +
+                    0.009
+                ) {
+
+                    throw ValidationException::withMessages([
+                        'cancellation_amount' =>
+                            'Cancellation amount cannot exceed original vendor amount of ₹'
+                            .
+                            number_format(
+                                $originalVendorAmount,
+                                2
+                            )
+                            .
+                            '.',
+                    ]);
+                }
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Actual amount already paid to vendor
+                |--------------------------------------------------------------------------
+                */
+
+                $totalPaid =
+                    round(
+                        (float)
+                        VendorPayment::query()
+                            ->where(
+                                'lead_vendor_payment_id',
+                                $leadVendorPayment->id
+                            )
+                            ->sum(
+                                'paid_amount'
+                            ),
+                        2
+                    );
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Actual refunds already received from vendor
+                |--------------------------------------------------------------------------
+                */
+
+                $alreadyRefunded =
+                    round(
+                        (float)
+                        VendorRefund::query()
+                            ->where(
+                                'lead_vendor_payment_id',
+                                $leadVendorPayment->id
+                            )
+                            ->sum(
+                                'refund_amount'
+                            ),
+                        2
+                    );
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Calculate refund on server
+                |--------------------------------------------------------------------------
+                |
+                | Refund =
+                |
+                | Amount Paid To Vendor
+                | - Cancellation Amount
+                | - Previous Vendor Refunds
+                |
+                | Example:
+                |
+                | Paid              ₹70,000
+                | Cancellation      ₹20,000
+                | Previous Refund        ₹0
+                |
+                | Refund Due        ₹50,000
+                |
+                */
+
+                $calculatedRefundAmount =
+                    round(
+                        max(
+                            0,
+                            $totalPaid
+                            -
+                            $cancellationAmount
+                            -
+                            $alreadyRefunded
+                        ),
+                        2
+                    );
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Validate browser amount against server amount
+                |--------------------------------------------------------------------------
+                |
+                | Never trust a financial value calculated only in JavaScript.
+                |
+                */
+
+                $submittedRefundAmount =
+                    round(
+                        (float)
+                        $request->refund_amount,
+                        2
+                    );
+
+
+                if (
+                    abs(
+                        $submittedRefundAmount
+                        -
+                        $calculatedRefundAmount
+                    )
+                    >
+                    0.01
+                ) {
+
+                    throw ValidationException::withMessages([
+                        'refund_amount' =>
+                            'Vendor refund calculation has changed. Expected refund is ₹'
+                            .
+                            number_format(
+                                $calculatedRefundAmount,
+                                2
+                            )
+                            .
+                            '. Please reopen the Vendor Refund form.',
+                    ]);
+                }
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Final refund amount
+                |--------------------------------------------------------------------------
+                */
+
+                $refundAmount =
+                    $calculatedRefundAmount;
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Payment proof required only when actual money comes back
+                |--------------------------------------------------------------------------
+                */
+
+                if (
+                    $refundAmount > 0
+                    &&
+                    !$request->hasFile(
+                        'refund_proof'
+                    )
+                ) {
+
+                    throw ValidationException::withMessages([
+                        'refund_proof' =>
+                            'Payment proof is required when money is received from the vendor.',
+                    ]);
+                }
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Payment mode required only for real refund
+                |--------------------------------------------------------------------------
+                */
+
+                if (
+                    $refundAmount > 0
+                    &&
+                    !$request->filled(
+                        'refund_type'
+                    )
+                ) {
+
+                    throw ValidationException::withMessages([
+                        'refund_type' =>
+                            'Refund payment mode is required.',
+                    ]);
+                }
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Refund date required only for real refund
+                |--------------------------------------------------------------------------
+                */
+
+                if (
+                    $refundAmount > 0
+                    &&
+                    !$request->filled(
+                        'refund_date'
+                    )
+                ) {
+
+                    throw ValidationException::withMessages([
+                        'refund_date' =>
+                            'Refund date is required.',
+                    ]);
+                }
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Store payment proof
+                |--------------------------------------------------------------------------
+                */
+
+                $proofPath =
+                    null;
+
+
+                if (
+                    $request->hasFile(
+                        'refund_proof'
+                    )
+                ) {
+
+                    $proofPath =
+                        $request
+                            ->file(
+                                'refund_proof'
+                            )
+                            ->store(
+                                'vendor-refunds',
+                                'public'
+                            );
+                }
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | ₹0 settlement
+                |--------------------------------------------------------------------------
+                |
+                | Example:
+                |
+                | Nothing was paid to vendor.
+                | Booking cancelled.
+                | Vendor cancellation amount may be ₹0 OR some payable amount.
+                |
+                | No vendor refund money is being received.
+                |
+                | Store only one zero-settlement record and update it if required.
+                |
+                */
+
+                if ($refundAmount == 0) {
+
+                    $existingZeroSettlement =
+                        VendorRefund::query()
+                            ->where(
+                                'lead_vendor_payment_id',
+                                $leadVendorPayment->id
+                            )
+                            ->where(
+                                'no_refund_required',
+                                true
+                            )
+                            ->first();
+
+
+                    if ($existingZeroSettlement) {
+
+                        $existingZeroSettlement
+                            ->update([
+                                'lead_id' =>
+                                    $lead->id,
+
+                                'vendor_id' =>
+                                    $leadVendorPayment->vendor_id,
+
+                                'ride_id' =>
+                                    $ride->id,
+
+                                'cancellation_amount' =>
+                                    $cancellationAmount,
+
+                                'refund_amount' =>
+                                    0,
+
+                                'refund_date' =>
+                                    $request->refund_date
+                                    ?: now(),
+
+                                'refund_type' =>
+                                    null,
+
+                                'refund_reason' =>
+                                    $request->refund_reason,
+
+                                'refund_proof' =>
+                                    null,
+
+                                'no_refund_required' =>
+                                    true,
+
+                                'created_by' =>
+                                    auth()->id(),
+                            ]);
+
+
+                        /*
+                        |--------------------------------------------------------------------------
+                        | Refresh relationships
+                        |--------------------------------------------------------------------------
+                        */
+
+                        $leadVendorPayment->load([
+                            'vendorPayments',
+                            'vendorRefunds',
+                        ]);
+
+
+                        $totalRefunded =
+                            round(
+                                (float)
+                                $leadVendorPayment
+                                    ->vendorRefunds
+                                    ->sum(
+                                        'refund_amount'
+                                    ),
+                                2
+                            );
+
+
+                        $netPaidToVendor =
+                            round(
+                                max(
+                                    0,
+                                    $totalPaid
+                                    -
+                                    $totalRefunded
+                                ),
+                                2
+                            );
+
+
+                        $balanceAmount =
+                            round(
+                                max(
+                                    0,
+                                    $cancellationAmount
+                                    -
+                                    $netPaidToVendor
+                                ),
+                                2
+                            );
+
+
+                        return response()->json([
+                            'success' =>
+                                true,
+
+                            'message' =>
+                                'Vendor settlement updated successfully.',
+
+                            'vendor_refund_id' =>
+                                $existingZeroSettlement->id,
+
+                            'status' =>
+                                'no_refund_required',
+
+                            'original_vendor_amount' =>
+                                $originalVendorAmount,
+
+                            'cancellation_amount' =>
+                                $cancellationAmount,
+
+                            'adjusted_vendor_payable' =>
+                                $cancellationAmount,
+
+                            'total_paid' =>
+                                $totalPaid,
+
+                            'total_refunded' =>
+                                $totalRefunded,
+
+                            'net_paid_to_vendor' =>
+                                $netPaidToVendor,
+
+                            'balance_amount' =>
+                                $balanceAmount,
+                        ]);
+                    }
+                }
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Create Vendor Refund / Settlement transaction
+                |--------------------------------------------------------------------------
+                */
+
+                $vendorRefund =
+                    VendorRefund::create([
+
+                        'lead_id' =>
+                            $lead->id,
+
+                        'lead_vendor_payment_id' =>
+                            $leadVendorPayment->id,
+
+                        'vendor_id' =>
+                            $leadVendorPayment->vendor_id,
+
+                        'ride_id' =>
+                            $ride->id,
+
+                        'cancellation_amount' =>
+                            $cancellationAmount,
+
+                        'refund_amount' =>
+                            $refundAmount,
+
+                        'refund_date' =>
+                            $request->refund_date
+                                ? Carbon::parse(
+                                    $request->refund_date
+                                )
+                                : now(),
+
+                        'refund_type' =>
+                            $refundAmount > 0
+                                ? $request->refund_type
+                                : null,
+
+                        'refund_reason' =>
+                            $request->refund_reason,
+
+                        'refund_proof' =>
+                            $proofPath,
+
+                        'no_refund_required' =>
+                            $refundAmount == 0,
+
+                        'created_by' =>
+                            auth()->id(),
+                    ]);
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Re-read exact database totals
+                |--------------------------------------------------------------------------
+                */
+
+                $leadVendorPayment->load([
+                    'vendorPayments',
+                    'vendorRefunds',
+                ]);
+
+
+                $newTotalPaid =
+                    round(
+                        (float)
+                        $leadVendorPayment
+                            ->vendorPayments
+                            ->sum(
+                                'paid_amount'
+                            ),
+                        2
+                    );
+
+
+                $newTotalRefunded =
+                    round(
+                        (float)
+                        $leadVendorPayment
+                            ->vendorRefunds
+                            ->sum(
+                                'refund_amount'
+                            ),
+                        2
+                    );
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Net actual payment remaining with vendor
+                |--------------------------------------------------------------------------
+                */
+
+                $netPaidToVendor =
+                    round(
+                        max(
+                            0,
+                            $newTotalPaid
+                            -
+                            $newTotalRefunded
+                        ),
+                        2
+                    );
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Balance still payable to vendor
+                |--------------------------------------------------------------------------
+                |
+                | Final Cancellation Liability - Net Paid
+                |
+                */
+
+                $balanceAmount =
+                    round(
+                        max(
+                            0,
+                            $cancellationAmount
+                            -
+                            $netPaidToVendor
+                        ),
+                        2
+                    );
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Vendor payment status
+                |--------------------------------------------------------------------------
+                */
+
+                if ($cancellationAmount <= 0) {
+
+                    $paymentStatus =
+                        'paid';
+
+                } elseif (
+                    $netPaidToVendor <= 0
+                ) {
+
+                    $paymentStatus =
+                        'unpaid';
+
+                } elseif (
+                    $netPaidToVendor
+                    >=
+                    $cancellationAmount
+                ) {
+
+                    $paymentStatus =
+                        'paid';
+
+                } else {
+
+                    $paymentStatus =
+                        'partial';
+                }
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Synchronise dashboard status
+                |--------------------------------------------------------------------------
+                */
+
+                $leadVendorPayment
+                    ->update([
+                        'payment_status' =>
+                            $paymentStatus,
+                    ]);
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Refund / settlement status
+                |--------------------------------------------------------------------------
+                */
+
+                if ($refundAmount <= 0) {
+
+                    $refundStatus =
+                        'no_refund_required';
+
+                } elseif (
+                    $balanceAmount <= 0
+                    &&
+                    $netPaidToVendor
+                    <=
+                    $cancellationAmount
+                ) {
+
+                    $refundStatus =
+                        'settled';
+
+                } else {
+
+                    $refundStatus =
+                        'partial_refund';
+                }
+
+
+                return response()->json([
+                    'success' =>
+                        true,
+
+                    'message' =>
+                        $refundAmount > 0
+                            ? 'Vendor refund recorded successfully.'
+                            : 'Vendor settlement recorded successfully.',
+
+                    'vendor_refund_id' =>
+                        $vendorRefund->id,
+
+                    'status' =>
+                        $refundStatus,
+
+                    'payment_status' =>
+                        $paymentStatus,
+
+                    'original_vendor_amount' =>
+                        $originalVendorAmount,
+
+                    'cancellation_amount' =>
+                        $cancellationAmount,
+
+                    'adjusted_vendor_payable' =>
+                        $cancellationAmount,
+
+                    'total_paid' =>
+                        $newTotalPaid,
+
+                    'total_refunded' =>
+                        $newTotalRefunded,
+
+                    'net_paid_to_vendor' =>
+                        $netPaidToVendor,
+
+                    'balance_amount' =>
+                        $balanceAmount,
+                ]);
+            }
+        );
+
+
+    } catch (
+        ValidationException $e
+    ) {
+
+        throw $e;
+
+
+    } catch (\Throwable $e) {
+
+        Log::error(
+            'Vendor refund save failed',
+            [
+                'ride_id' =>
+                    $rideId,
+
+                'lead_vendor_payment_id' =>
+                    $request->lead_vendor_payment_id
+                    ?? null,
+
+                'error' =>
+                    $e->getMessage(),
+
+                'trace' =>
+                    $e->getTraceAsString(),
+            ]
+        );
+
+
+        return response()->json([
+            'success' =>
+                false,
+
+            'message' =>
+                'Unable to save vendor refund.',
+        ], 500);
+    }
+}
 
     /**
      * Get status text based on status code

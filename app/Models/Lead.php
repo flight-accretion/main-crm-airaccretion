@@ -37,6 +37,14 @@ class Lead extends Model
             ->orderByDesc('created_at');
     }
 
+    public function vendorRefunds()
+{
+    return $this->hasMany(
+        VendorRefund::class,
+        'lead_id'
+    );
+}
+
     public function pendingTransfers()
     {
         return $this->hasMany(LeadTransfer::class, 'lead_id')

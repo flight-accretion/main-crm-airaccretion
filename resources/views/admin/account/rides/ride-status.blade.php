@@ -344,8 +344,26 @@
                 <div class="mt-5" id="action-buttons" style="display: none;">
                     <button type="button" class="ti-btn bg-theme ti-btn-primary-full ti-custom-validate-btn me-2"
                         id="generate-invoice-btn" style="display: none;">Generate Invoice</button>
-                    <button type="button" class="ti-btn ti-btn-danger-full ti-custom-validate-btn" id="refund-note-btn"
-                        style="display: none;">Refund Note</button>
+                   <button
+                    type="button"
+                    class="ti-btn ti-btn-danger-full ti-custom-validate-btn me-2"
+                    id="refund-note-btn"
+                    style="display: none;"
+                >
+                    <i class="ri-refund-2-line me-1"></i>
+                    Customer Refund
+                </button>
+
+
+                <button
+                    type="button"
+                    class="ti-btn ti-btn-info ti-custom-validate-btn"
+                    id="vendor-refund-btn"
+                    style="display: none;"
+                >
+                    <i class="ri-bank-card-line me-1"></i>
+                    Vendor Refund
+                </button>
                 </div>
 
                 <!-- Refund Information Section (Hidden by default, shown when refund note button is clicked) -->
@@ -460,6 +478,448 @@
                         </form>
                     </div>
                 </div>
+
+                <!-- =========================================================
+     VENDOR REFUND / SETTLEMENT
+     ========================================================= -->
+
+<!-- =========================================================
+     VENDOR REFUND / SETTLEMENT
+     ========================================================= -->
+
+<div
+    class="box"
+    id="vendor-refund-information-section"
+    style="display:none;"
+>
+
+    <div class="box-header flex justify-between items-center">
+
+        <div>
+            <h5 class="box-title">
+                Vendor Refund / Settlement
+            </h5>
+
+            <p class="text-xs text-gray-500 mb-0 mt-1">
+                Record vendor cancellation charges and money returned by the vendor against this lead.
+            </p>
+        </div>
+
+        <button
+            type="button"
+            class="ti-btn ti-btn-outline-secondary"
+            id="cancel-vendor-refund-btn"
+        >
+            Cancel
+        </button>
+
+    </div>
+
+
+    <div class="box-body bg-gray-50">
+
+        <form
+            id="ride-vendor-refund-form"
+            enctype="multipart/form-data"
+        >
+
+            @csrf
+
+
+            <!-- =====================================================
+                 VENDOR SELECT
+                 ===================================================== -->
+
+            <div class="mb-4">
+
+                <label class="ti-form-label">
+                    Vendor
+                    <span class="text-danger">*</span>
+                </label>
+
+                <select
+                    class="form-control"
+                    id="ride-vendor-refund-payment-id"
+                    name="lead_vendor_payment_id"
+                    required
+                >
+
+                    <option value="">
+                        Select vendor...
+                    </option>
+
+                </select>
+
+                <small class="text-muted">
+                    Select the vendor associated with this lead.
+                </small>
+
+            </div>
+
+
+            <!-- =====================================================
+                 AMOUNTS
+                 ===================================================== -->
+
+            <div class="grid grid-cols-12 gap-4">
+
+                <!-- Vendor Amount -->
+
+                <div class="col-span-12 md:col-span-4">
+
+                    <label class="ti-form-label">
+                        Vendor Amount
+                        <span class="text-danger">*</span>
+                    </label>
+
+                    <div class="input-group">
+
+                        <span class="input-group-text">
+                            ₹
+                        </span>
+
+                        <input
+                            type="number"
+                            class="form-control"
+                            id="ride-vendor-original-amount"
+                            name="vendor_amount"
+                            min="0"
+                            step="0.01"
+                            value="0.00"
+                            required
+                        >
+
+                    </div>
+
+                    <small class="text-muted">
+                        Original vendor service amount.
+                    </small>
+
+                </div>
+
+
+                <!-- Paid To Vendor -->
+
+                <div class="col-span-12 md:col-span-4">
+
+                    <label class="ti-form-label">
+                        Paid To Vendor
+                    </label>
+
+                    <div
+                        class="form-control bg-gray-100"
+                        id="ride-vendor-paid-amount"
+                    >
+                        ₹0.00
+                    </div>
+
+                    <small class="text-muted">
+                        Actual payment already made.
+                    </small>
+
+                </div>
+
+
+                <!-- Cancellation Amount -->
+
+                <div class="col-span-12 md:col-span-4">
+
+                    <label class="ti-form-label">
+
+                        Cancellation Amount
+
+                        <span class="text-danger">
+                            *
+                        </span>
+
+                    </label>
+
+
+                    <div class="input-group">
+
+                        <span class="input-group-text">
+                            ₹
+                        </span>
+
+                        <input
+                            type="number"
+                            class="form-control"
+                            id="ride-vendor-cancellation-amount"
+                            name="cancellation_amount"
+                            min="0"
+                            step="0.01"
+                            value="0.00"
+                            required
+                        >
+
+                    </div>
+
+                    <small class="text-muted">
+                        Final amount payable to vendor after cancellation.
+                    </small>
+
+                </div>
+
+            </div>
+
+
+            <!-- =====================================================
+                 REFUND DETAILS
+                 ===================================================== -->
+
+            <div class="grid grid-cols-12 gap-4 mt-5">
+
+
+                <!-- Vendor Refund Amount -->
+
+                <div class="col-span-12 md:col-span-6">
+
+                    <label class="ti-form-label">
+
+                        Refund Amount
+
+                        <span class="text-danger">
+                            *
+                        </span>
+
+                    </label>
+
+                    <div class="input-group">
+
+                        <span class="input-group-text">
+                            ₹
+                        </span>
+
+                        <input
+                            type="number"
+                            class="form-control bg-gray-100"
+                            id="ride-vendor-refund-amount"
+                            name="refund_amount"
+                            min="0"
+                            step="0.01"
+                            value="0.00"
+                            readonly
+                        >
+
+                    </div>
+
+                    <small class="text-muted">
+                        Auto-calculated from paid amount and cancellation amount.
+                    </small>
+
+                </div>
+
+
+                <!-- Payment / Refund Mode -->
+
+                <div
+                    class="col-span-12 md:col-span-6"
+                    id="vendor-refund-type-wrapper"
+                >
+
+                    <label class="ti-form-label">
+
+                        Refund Type
+
+                        <span
+                            class="text-danger vendor-refund-money-required"
+                        >
+                            *
+                        </span>
+
+                    </label>
+
+
+                    <select
+                        class="form-control"
+                        id="ride-vendor-refund-type"
+                        name="refund_type"
+                    >
+
+                        <option value="">
+                            Select refund type...
+                        </option>
+
+                        <option value="Bank Transfer">
+                            Bank Transfer
+                        </option>
+
+                        <option value="UPI Payment">
+                            UPI Payment
+                        </option>
+
+                        <option value="Cash">
+                            Cash
+                        </option>
+
+                        <option value="Cheque">
+                            Cheque
+                        </option>
+
+                        <option value="Debit Card">
+                            Debit Card
+                        </option>
+
+                        <option value="Credit Card">
+                            Credit Card
+                        </option>
+
+                        <option value="Net Banking">
+                            Net Banking
+                        </option>
+
+                        <option value="Wallet">
+                            Wallet
+                        </option>
+
+                        <option value="Payment Gateway">
+                            Payment Gateway
+                        </option>
+
+                        <option value="Other">
+                            Other
+                        </option>
+
+                    </select>
+
+                </div>
+
+
+                <!-- Refund Date -->
+
+                <div class="col-span-12 md:col-span-6">
+
+                    <label class="ti-form-label">
+
+                        Refund Date
+
+                        <span
+                            class="text-danger vendor-refund-money-required"
+                        >
+                            *
+                        </span>
+
+                    </label>
+
+                    <input
+                        type="date"
+                        class="form-control"
+                        id="ride-vendor-refund-date"
+                        name="refund_date"
+                    >
+
+                </div>
+
+
+                <!-- Refund Receipt -->
+
+                <div class="col-span-12 md:col-span-6">
+
+                    <label class="ti-form-label">
+
+                        Upload Refund Proof
+
+                        <span
+                            class="text-danger vendor-refund-money-required"
+                        >
+                            *
+                        </span>
+
+                    </label>
+
+
+                    <div class="flex items-center gap-3">
+
+                        <input
+                            type="file"
+                            class="form-control"
+                            id="ride-vendor-refund-proof"
+                            name="refund_proof"
+                            accept=".pdf,.jpg,.jpeg,.png"
+                        >
+
+                        <button
+                            type="button"
+                            id="ride-vendor-preview-proof-btn"
+                            class="ti-btn ti-btn-outline-secondary"
+                        >
+                            Preview
+                        </button>
+
+                    </div>
+
+
+                    <small class="text-muted">
+                        Upload PDF or image (JPG, JPEG, PNG). Max 2MB.
+                    </small>
+
+
+                    <div class="text-sm text-gray-500 mt-1 flex items-center gap-3">
+
+                        <div id="ride-vendor-proof-filename">
+                            No file selected
+                        </div>
+
+                        <small
+                            id="ride-vendor-proof-hint"
+                            class="text-muted"
+                        ></small>
+
+                    </div>
+
+                </div>
+
+
+                <!-- Refund Reason -->
+
+                <div class="col-span-12">
+
+                    <label class="ti-form-label">
+
+                        Refund Reason
+
+                        <span class="text-danger">
+                            *
+                        </span>
+
+                    </label>
+
+                    <textarea
+                        class="form-control"
+                        id="ride-vendor-refund-reason"
+                        name="refund_reason"
+                        rows="3"
+                        placeholder="Enter reason for vendor cancellation / refund..."
+                        required
+                    ></textarea>
+
+                </div>
+
+            </div>
+
+
+            <!-- Save -->
+
+            <div class="mt-4">
+
+                <button
+                    type="submit"
+                    class="ti-btn ti-btn-primary"
+                >
+
+                    <i class="ri-save-line me-1"></i>
+
+                    Save Vendor Refund
+
+                </button>
+
+            </div>
+
+        </form>
+
+    </div>
+
+</div>
 
                 <!-- Client Information -->
                 <div class="box">
@@ -752,6 +1212,157 @@
 
 @push('scripts')
 <script>
+
+    $(document).on(
+    'click',
+    '#vendor-refund-btn',
+    function showVendorRefundInformationSection()
+{
+    /*
+    |--------------------------------------------------------------------------
+    | Hide Customer Refund
+    |--------------------------------------------------------------------------
+    */
+
+    $('#refund-information-section')
+        .hide();
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Show Vendor Refund
+    |--------------------------------------------------------------------------
+    */
+
+    $('#vendor-refund-information-section')
+        .show();
+
+
+    const $select =
+        $('#ride-vendor-refund-payment-id');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Reset vendor dropdown
+    |--------------------------------------------------------------------------
+    */
+
+    $select
+        .empty()
+        .append(
+            '<option value="">Select vendor...</option>'
+        );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Vendor data loaded with ride details
+    |--------------------------------------------------------------------------
+    */
+
+    const vendors =
+        window.currentRideVendorRefunds
+        || [];
+
+
+    vendors.forEach(
+        function (vendor) {
+
+            const option =
+                $('<option>')
+                    .val(
+                        vendor.id
+                    )
+                    .text(
+                        vendor.vendor_name
+                        || 'Vendor'
+                    )
+                    .attr(
+                        'data-vendor-amount',
+                        vendor.vendor_amount
+                        || 0
+                    )
+                    .attr(
+                        'data-total-paid',
+                        vendor.total_paid
+                        || 0
+                    )
+                    .attr(
+                        'data-total-refunded',
+                        vendor.total_refunded
+                        || 0
+                    )
+                    .attr(
+                        'data-cancellation-amount',
+                        vendor.cancellation_amount !== null
+                        &&
+                        vendor.cancellation_amount !== undefined
+                            ? vendor.cancellation_amount
+                            : ''
+                    );
+
+
+            $select.append(
+                option
+            );
+        }
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | If only one vendor exists, select automatically
+    |--------------------------------------------------------------------------
+    */
+
+    if (
+        vendors.length === 1
+    ) {
+
+        $select
+            .val(
+                vendors[0].id
+            )
+            .trigger(
+                'change'
+            );
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Default date
+    |--------------------------------------------------------------------------
+    */
+
+    if (
+        !$('#ride-vendor-refund-date').val()
+    ) {
+
+        const today =
+            new Date()
+                .toISOString()
+                .split('T')[0];
+
+
+        $('#ride-vendor-refund-date')
+            .val(
+                today
+            );
+    }
+}
+);
+
+
+$(document).on(
+    'click',
+    '#cancel-vendor-refund-btn',
+    function () {
+
+        hideVendorRefundInformationSection();
+    }
+);
     // Toggle filter section and clear filters helper
         function clearRideFilters() {
             window.location.href = '{{ route("admin.rides.ride-status") }}';
@@ -1050,7 +1661,8 @@
                             all_rides: response.all_rides || [], // Include multiple rides
                             followup_id: response.followup_id || null, // Include followup_id for refund operations
                             // carry over refund if API returns it so front-end can prefill old values
-                            refund: response.refund || null
+                            refund: response.refund || null,
+                            vendor_refunds: response.vendor_refunds || []
                         };
                         populateRideDetails(transformedData);
 
@@ -1103,6 +1715,13 @@
         }
 
         function populateRideDetails(data) {
+
+        window.currentRideVendorRefunds =
+    Array.isArray(
+        data.vendor_refunds
+    )
+        ? data.vendor_refunds
+        : [];
             // ...removed debug log...
 
             // Clear any previous edit form state
@@ -1239,6 +1858,9 @@ if (shouldFreezeStatus) {
                 $('#edit-dates-container').hide();
             }
 
+            window.currentVendorRefundData =
+    data.vendor_refunds || [];
+
             // Update action buttons based on status
             updateActionButtons(data.status);
 
@@ -1253,16 +1875,25 @@ if (shouldFreezeStatus) {
             }
 
             // Store existing refund data (if any) so refund form can be pre-filled
-            try {
-                window.currentRefundData = data.refund || null;
-            } catch (e) {
-                window.currentRefundData = null;
-            }
+           try {
+
+            window.currentVendorRefundData =
+                data.vendor_refunds || [];
+
+        } catch (e) {
+
+            window.currentVendorRefundData = [];
+        }
         }
 
         function updateActionButtons(status) {
             // Hide all buttons initially
-            $('#action-buttons, #generate-invoice-btn, #refund-note-btn').hide();
+        $(
+            '#action-buttons, ' +
+            '#generate-invoice-btn, ' +
+            '#refund-note-btn, ' +
+            '#vendor-refund-btn'
+        ).hide();
 
             // Status-based button display logic:
             // Status 0 (Initiated) - No buttons
@@ -1276,9 +1907,32 @@ if (shouldFreezeStatus) {
 
             const statusInt = parseInt(status);
 
-            if (statusInt === 2) { // Cancelled - show refund note
-                $('#action-buttons, #refund-note-btn').show();
-            }
+            if (statusInt === 2) {
+
+    $('#action-buttons').show();
+
+    $('#refund-note-btn').show();
+
+    /*
+     * Show Vendor Refund only if this Lead
+     * actually has vendor-payment records.
+     */
+
+    if (
+        Array.isArray(
+            window.currentVendorRefundData
+        )
+        &&
+        window.currentVendorRefundData.length > 0
+    ) {
+
+        $('#vendor-refund-btn').show();
+
+    } else {
+
+        $('#vendor-refund-btn').hide();
+    }
+}
             // Status 5 (Complete) no longer shows Generate Invoice button
             // because invoice is auto-generated when status changes to completed
             // For all other statuses (0,1,3,4,5,6,7), no buttons are shown at the bottom
@@ -2180,6 +2834,589 @@ if (shouldFreezeStatus) {
             // Clear preview data attribute
             $('#ride-preview-proof-btn').data('preview-url', '').hide();
         }
+
+        function showVendorRefundInformationSection()
+{
+    if (!currentRideId) {
+        return;
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Close Customer Refund
+    |--------------------------------------------------------------------------
+    */
+
+    $('#refund-information-section')
+        .slideUp();
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Prepare vendor dropdown
+    |--------------------------------------------------------------------------
+    */
+
+    const vendors =
+        window.currentVendorRefundData || [];
+
+
+    const $select =
+        $('#ride-vendor-refund-payment-id');
+
+
+    $select.empty();
+
+    $select.append(
+        '<option value="">Select vendor...</option>'
+    );
+
+
+    vendors.forEach(function (vendor) {
+
+     const option =
+    $('<option>')
+        .val(
+            vendor.id
+        )
+        .text(
+            vendor.vendor_name
+            || 'Vendor'
+        )
+        .attr(
+            'data-vendor-amount',
+            vendor.vendor_amount || 0
+        )
+        .attr(
+            'data-total-paid',
+            vendor.total_paid || 0
+        )
+        .attr(
+            'data-total-refunded',
+            vendor.total_refunded || 0
+        )
+        .attr(
+            'data-cancellation-amount',
+            vendor.cancellation_amount !== null
+                &&
+                vendor.cancellation_amount !== undefined
+                    ? vendor.cancellation_amount
+                    : ''
+        );
+
+
+        $select.append(option);
+    });
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Reset fields
+    |--------------------------------------------------------------------------
+    */
+
+    $('#ride-vendor-original-amount')
+        .text('₹0.00');
+
+    $('#ride-vendor-paid-amount')
+        .text('₹0.00');
+
+    $('#ride-vendor-refund-amount')
+        .val('0')
+        .attr(
+            'max',
+            0
+        );
+
+    $('#ride-vendor-refund-type')
+        .val('');
+
+    $('#ride-vendor-refund-date')
+        .val(
+            new Date()
+                .toISOString()
+                .split('T')[0]
+        );
+
+    $('#ride-vendor-refund-proof')
+        .val('');
+
+    $('#ride-vendor-refund-reason')
+        .val('');
+
+
+    updateVendorRefundFields();
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Open box
+    |--------------------------------------------------------------------------
+    */
+
+    $('#vendor-refund-information-section')
+        .slideDown();
+}
+
+
+function hideVendorRefundInformationSection()
+{
+    $('#vendor-refund-information-section')
+        .slideUp();
+
+
+    const form =
+        $('#ride-vendor-refund-form')[0];
+
+
+    if (form) {
+        form.reset();
+    }
+
+
+    $('#ride-vendor-original-amount')
+        .text('₹0.00');
+
+    $('#ride-vendor-paid-amount')
+        .text('₹0.00');
+
+
+    updateVendorRefundFields();
+}
+
+$(document).on(
+    'change',
+    '#ride-vendor-refund-payment-id',
+    function () {
+
+        const $selected =
+            $(this)
+                .find(
+                    'option:selected'
+                );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | No vendor selected
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            !$(this).val()
+        ) {
+
+            $('#ride-vendor-original-amount')
+                .val('0.00');
+
+            $('#ride-vendor-paid-amount')
+                .text('₹0.00');
+
+            $('#ride-vendor-cancellation-amount')
+                .val('0.00');
+
+            $('#ride-vendor-refund-amount')
+                .val('0.00');
+
+            return;
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Original vendor amount
+        |--------------------------------------------------------------------------
+        */
+
+        const vendorAmount =
+            parseFloat(
+                $selected.attr(
+                    'data-vendor-amount'
+                )
+                || 0
+            );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Gross paid to vendor
+        |--------------------------------------------------------------------------
+        */
+
+        const totalPaid =
+            parseFloat(
+                $selected.attr(
+                    'data-total-paid'
+                )
+                || 0
+            );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Existing cancellation settlement
+        |--------------------------------------------------------------------------
+        */
+
+        const cancellationRaw =
+            $selected.attr(
+                'data-cancellation-amount'
+            );
+
+
+        const cancellationAmount =
+            cancellationRaw !== ''
+            &&
+            cancellationRaw !== undefined
+                ?
+                parseFloat(
+                    cancellationRaw
+                )
+                :
+                null;
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Populate UI
+        |--------------------------------------------------------------------------
+        */
+
+        $('#ride-vendor-original-amount')
+            .val(
+                vendorAmount.toFixed(2)
+            );
+
+
+        $('#ride-vendor-paid-amount')
+            .text(
+                '₹' +
+                totalPaid.toFixed(2)
+            );
+
+
+        if (
+            Number.isFinite(
+                cancellationAmount
+            )
+        ) {
+
+            $('#ride-vendor-cancellation-amount')
+                .val(
+                    cancellationAmount.toFixed(2)
+                );
+
+        } else {
+
+            /*
+             * Default:
+             *
+             * Vendor keeps the original amount until Accounts
+             * explicitly specifies cancellation liability.
+             *
+             * This default is safer than assuming ₹0.
+             */
+
+            $('#ride-vendor-cancellation-amount')
+                .val(
+                    vendorAmount.toFixed(2)
+                );
+        }
+
+
+        calculateVendorRefund();
+    }
+);
+
+function calculateVendorRefund()
+{
+    const $selected =
+        $('#ride-vendor-refund-payment-id')
+            .find(
+                'option:selected'
+            );
+
+
+    const totalPaid =
+        parseFloat(
+            $selected.attr(
+                'data-total-paid'
+            )
+            || 0
+        );
+
+
+    const alreadyRefunded =
+        parseFloat(
+            $selected.attr(
+                'data-total-refunded'
+            )
+            || 0
+        );
+
+
+    const cancellationAmount =
+        parseFloat(
+            $('#ride-vendor-cancellation-amount')
+                .val()
+            || 0
+        );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Vendor Refund Due
+    |--------------------------------------------------------------------------
+    |
+    | Paid to Vendor
+    | - Final cancellation liability
+    | - Previous actual refunds
+    |
+    */
+
+    let refundDue =
+        totalPaid
+        -
+        cancellationAmount
+        -
+        alreadyRefunded;
+
+
+    refundDue =
+        Math.max(
+            0,
+            refundDue
+        );
+
+
+    $('#ride-vendor-refund-amount')
+        .val(
+            refundDue.toFixed(2)
+        );
+
+
+    updateVendorRefundMoneyFields(
+        refundDue
+    );
+}
+
+$(document).on(
+    'input change',
+    '#ride-vendor-cancellation-amount',
+    function () {
+
+        calculateVendorRefund();
+    }
+);
+
+function updateVendorRefundMoneyFields(
+    refundAmount
+)
+{
+    const hasMoney =
+        parseFloat(
+            refundAmount || 0
+        ) > 0;
+
+
+    $('#ride-vendor-refund-type')
+        .prop(
+            'required',
+            hasMoney
+        );
+
+
+    $('#ride-vendor-refund-date')
+        .prop(
+            'required',
+            hasMoney
+        );
+
+
+    $('#ride-vendor-refund-proof')
+        .prop(
+            'required',
+            hasMoney
+        );
+
+
+    $('.vendor-refund-money-required')
+        .toggle(
+            hasMoney
+        );
+}
+
+function updateVendorRefundFields()
+{
+    const amount =
+        parseFloat(
+            $('#ride-vendor-refund-amount')
+                .val()
+            || 0
+        );
+
+
+    const hasMoneyMovement =
+        amount > 0;
+
+
+    $('#ride-vendor-refund-type')
+        .prop(
+            'required',
+            hasMoneyMovement
+        );
+
+
+    $('#ride-vendor-refund-date')
+        .prop(
+            'required',
+            hasMoneyMovement
+        );
+
+
+    $('#ride-vendor-refund-proof')
+        .prop(
+            'required',
+            hasMoneyMovement
+        );
+
+
+    if (hasMoneyMovement) {
+
+        $('#ride-vendor-refund-type-wrapper')
+            .show();
+
+        $('#ride-vendor-refund-date-wrapper')
+            .show();
+
+        $('#ride-vendor-refund-proof-wrapper')
+            .show();
+
+    } else {
+
+        $('#ride-vendor-refund-type')
+            .val('');
+
+        $('#ride-vendor-refund-proof')
+            .val('');
+
+
+        $('#ride-vendor-refund-type-wrapper')
+            .hide();
+
+        $('#ride-vendor-refund-proof-wrapper')
+            .hide();
+
+        /*
+         * Keep date visible because this is still
+         * a settlement record.
+         */
+
+        $('#ride-vendor-refund-date-wrapper')
+            .show();
+    }
+}
+
+
+$(document).on(
+    'input change',
+    '#ride-vendor-refund-amount',
+    updateVendorRefundFields
+);
+
+$(document).on(
+    'change',
+    '#ride-vendor-refund-proof',
+    function () {
+
+        const file =
+            this.files &&
+            this.files[0];
+
+        if (window.currentVendorRefundObjectUrl) {
+
+            try {
+                URL.revokeObjectURL(
+                    window.currentVendorRefundObjectUrl
+                );
+            } catch (e) {}
+
+            window.currentVendorRefundObjectUrl = null;
+        }
+
+
+        if (!file) {
+
+            $('#ride-vendor-proof-filename')
+                .text('No file selected');
+
+            $('#ride-vendor-proof-hint')
+                .text('');
+
+            $('#ride-vendor-preview-proof-btn')
+                .removeData('preview-url')
+                .hide();
+
+            return;
+        }
+
+
+        const objectUrl =
+            URL.createObjectURL(file);
+
+        window.currentVendorRefundObjectUrl =
+            objectUrl;
+
+
+        $('#ride-vendor-proof-filename')
+            .text(file.name);
+
+
+        $('#ride-vendor-proof-hint')
+            .text(
+                'Selected file — click Preview to open in a new tab.'
+            );
+
+
+        $('#ride-vendor-preview-proof-btn')
+            .data(
+                'preview-url',
+                objectUrl
+            )
+            .show();
+    }
+);
+
+
+$(document).on(
+    'click',
+    '#ride-vendor-preview-proof-btn',
+    function (e) {
+
+        e.preventDefault();
+
+        const previewUrl =
+            $(this).data(
+                'preview-url'
+            );
+
+        if (!previewUrl) {
+
+            showError(
+                'No vendor refund receipt selected'
+            );
+
+            return;
+        }
+
+
+        window.open(
+            previewUrl,
+            '_blank'
+        );
+    }
+);
 
         // function saveRideRefundData() {
         //     // Check if we have a valid ride ID
