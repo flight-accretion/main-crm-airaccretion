@@ -1237,47 +1237,121 @@ if (
     |--------------------------------------------------------------------------
     */
 
-    private function findActiveLead(
-        CallSummaryIntegration $integration
-    ): ?Lead {
+   private function findActiveLead(
+    CallSummaryIntegration $integration
+): ?Lead {
+    try {
+        $phone = preg_replace(
+            '/\D+/',
+            '',
+            (string) $integration->normalized_phone
+        );
 
-        if (
-            empty(
-                $integration
-                    ->normalized_phone
+        if (empty($phone)) {
+            return null;
+        }
+
+        // Keep only last 10 digits so these all match:
+        // +91-8976168115
+        // 918976168115
+        // 8976168115
+        if (strlen($phone) > 10) {
+            $phone = substr($phone, -10);
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | 1. First prefer the existing ActiveLeadService
+        |--------------------------------------------------------------------------
+        |
+        | If an ACTIVE lead exists, this remains the safest match.
+        |
+        */
+        $activeLead = app(
+            ActiveLeadService::class
+        )->findByPhone($phone);
+
+        if ($activeLead) {
+            return $activeLead;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | 2. Fall back to latest existing CRM lead
+        |--------------------------------------------------------------------------
+        |
+        | Call summaries belong to existing calls/leads even if the latest
+        | follow-up is Cancelled/Closed/etc.
+        |
+        | This fallback is ONLY for call-summary matching.
+        | It does not change CRM duplicate-lead protection.
+        |
+        */
+
+        if (config('database.default') === 'pgsql') {
+
+            $phoneExpression =
+                "regexp_replace(clients.contact_number, '[^0-9]', '', 'g')";
+
+            $alternatePhoneExpression =
+                "regexp_replace(clients.alternate_number, '[^0-9]', '', 'g')";
+
+        } else {
+
+            $phoneExpression =
+                "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(" .
+                "clients.contact_number, '+', ''), '-', ''), ' ', ''), '(', ''), ')', '')";
+
+            $alternatePhoneExpression =
+                "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(" .
+                "clients.alternate_number, '+', ''), '-', ''), ' ', ''), '(', ''), ')', '')";
+        }
+
+        return Lead::query()
+            ->join(
+                'clients',
+                'clients.id',
+                '=',
+                'leads.client_id'
             )
-        ) {
+            ->where(function ($query) use (
+                $phoneExpression,
+                $alternatePhoneExpression,
+                $phone
+            ) {
+                $query
+                    ->whereRaw(
+                        "{$phoneExpression} LIKE ?",
+                        ['%' . $phone]
+                    )
+                    ->orWhereRaw(
+                        "{$alternatePhoneExpression} LIKE ?",
+                        ['%' . $phone]
+                    );
+            })
+            ->select('leads.*')
+            ->orderByDesc('leads.created_at')
+            ->first();
 
-            return null;
-        }
+    } catch (\Throwable $e) {
 
+        Log::warning(
+            'Call summary lead lookup failed',
+            [
+                'integration_id' =>
+                    $integration->id,
 
-        try {
+                'phone' =>
+                    $integration->normalized_phone,
 
-            return app(
-                ActiveLeadService::class
-            )->findByPhone(
-                $integration
-                    ->normalized_phone
-            );
+                'error' =>
+                    $e->getMessage(),
+            ]
+        );
 
-        } catch (\Throwable $e) {
-
-            Log::warning(
-                'Active Lead fallback failed during Call Summary matching.',
-                [
-                    'integration_id' =>
-                        $integration->id,
-
-                    'error' =>
-                        $e->getMessage(),
-                ]
-            );
-
-
-            return null;
-        }
+        return null;
     }
+}
 
 
     /*
