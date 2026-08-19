@@ -182,7 +182,7 @@
                                         ₹{{ number_format($vendor['paid_amount'], 2) }}<br>
                                         @endforeach
                                 </td>
-                                 <td class="text-center text-success">
+                                 <!-- <td class="text-center text-success">
 
                                     @foreach (
                                         $payment['vendors']
@@ -201,7 +201,7 @@
 
                                     @endforeach
 
-                                </td>
+                                </td> -->
                                 <td class="text-center">
                                     @foreach ($payment['vendors'] as $vendor)
                                     {{ $vendor['paid_date'] }}<br>
