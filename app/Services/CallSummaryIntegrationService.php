@@ -39,6 +39,13 @@ class CallSummaryIntegrationService
             );
 
 
+        $recordingId =
+            $this->normalizeRecordingId(
+                $payload['followup_recording_id']
+                ?? null
+            );
+
+
         $start =
             Carbon::parse(
                 $payload['call_start_at']
@@ -65,10 +72,9 @@ class CallSummaryIntegrationService
         | Generate deterministic unique fingerprint
         |--------------------------------------------------------------------------
         |
-        | Third party has no unique call ID.
-        |
-        | This prevents duplicate followups if webhook
-        | is retried.
+        | Keep the old fingerprint stable for backward compatibility.
+        | followup_recording_id is used after lead matching to update
+        | the exact CRM follow-up for that lead.
         |
         */
 
@@ -91,9 +97,93 @@ class CallSummaryIntegrationService
         );
 
 
+        $attributes = [
+
+            'phone_number' =>
+                trim(
+                    (string)
+                    $payload[
+                        'phone_number'
+                    ]
+                ),
+
+            'normalized_phone' =>
+                $phone,
+
+            'summary' =>
+                trim(
+                    (string)
+                    $payload['summary']
+                ),
+
+            'followup_date' =>
+                !empty(
+                    $payload[
+                        'followup_date'
+                    ]
+                )
+                    ? Carbon::parse(
+                        $payload[
+                            'followup_date'
+                        ]
+                    )
+                    : null,
+
+            'call_start_at' =>
+                $start,
+
+            'call_end_at' =>
+                $end,
+
+            'agent_name' =>
+                trim(
+                    (string)
+                    $payload[
+                        'agent_name'
+                    ]
+                ),
+
+            'normalized_agent_name' =>
+                $agent,
+
+            'direction' =>
+                $direction,
+
+            'sentiment_score' =>
+                array_key_exists(
+                    'sentiment_score',
+                    $payload
+                )
+                    ? $payload[
+                        'sentiment_score'
+                    ]
+                    : null,
+
+            'payload' =>
+                $payload,
+        ];
+
+
+        if ($recordingId !== null) {
+
+            $attributes['followup_recording_id'] =
+                $recordingId;
+        }
+
+
+        if (!empty($payload['lead_id'])) {
+
+            $attributes['lead_id'] =
+                trim(
+                    (string)
+                    $payload['lead_id']
+                );
+        }
+
+
         /*
         |--------------------------------------------------------------------------
-        | Idempotency
+        | Idempotency / payload refresh
         |--------------------------------------------------------------------------
         */
 
@@ -108,7 +198,15 @@ class CallSummaryIntegrationService
 
         if ($existing) {
 
-            return $existing;
+            $existing->fill(
+                $attributes
+            );
+
+            $existing->save();
+
+            return $this->process(
+                $existing->fresh()
+            );
         }
 
 
@@ -119,80 +217,21 @@ class CallSummaryIntegrationService
         */
 
         $integration =
-            CallSummaryIntegration::create([
+            CallSummaryIntegration::create(
+                array_merge(
+                    $attributes,
+                    [
+                        'call_fingerprint' =>
+                            $fingerprint,
 
-                'call_fingerprint' =>
-                    $fingerprint,
+                        'status' =>
+                            'received',
 
-                'phone_number' =>
-                    trim(
-                        (string)
-                        $payload[
-                            'phone_number'
-                        ]
-                    ),
-
-                'normalized_phone' =>
-                    $phone,
-
-                'summary' =>
-                    trim(
-                        (string)
-                        $payload['summary']
-                    ),
-
-                'followup_date' =>
-                    !empty(
-                        $payload[
-                            'followup_date'
-                        ]
-                    )
-                        ? Carbon::parse(
-                            $payload[
-                                'followup_date'
-                            ]
-                        )
-                        : null,
-
-                'call_start_at' =>
-                    $start,
-
-                'call_end_at' =>
-                    $end,
-
-                'agent_name' =>
-                    trim(
-                        (string)
-                        $payload[
-                            'agent_name'
-                        ]
-                    ),
-
-                'normalized_agent_name' =>
-                    $agent,
-
-                'direction' =>
-                    $direction,
-
-                'sentiment_score' =>
-                    array_key_exists(
-                        'sentiment_score',
-                        $payload
-                    )
-                        ? $payload[
-                            'sentiment_score'
-                        ]
-                        : null,
-
-                'status' =>
-                    'received',
-
-                'attempt_count' =>
-                    0,
-
-                'payload' =>
-                    $payload,
-            ]);
+                        'attempt_count' =>
+                            0,
+                    ]
+                )
+            );
 
 
         /*
@@ -205,7 +244,6 @@ class CallSummaryIntegrationService
             $integration
         );
     }
-
 
     /*
     |--------------------------------------------------------------------------
@@ -226,10 +264,24 @@ class CallSummaryIntegrationService
     |
     */
 
+    $recordingId =
+        $this->normalizeRecordingId(
+            $integration->followup_recording_id
+        );
+
     if (
-        $integration->status === 'followup_created'
+        in_array(
+            $integration->status,
+            [
+                'followup_created',
+                'followup_updated',
+            ],
+            true
+        )
         &&
         !empty($integration->followup_id)
+        &&
+        empty($recordingId)
     ) {
         return $integration;
     }
@@ -269,6 +321,95 @@ class CallSummaryIntegrationService
                 $agentUser->id;
 
             $integration->save();
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | PRIORITY 0
+        | Exact CRM lead supplied by Skyrack
+        |--------------------------------------------------------------------------
+        |
+        | The outbound lead sync sends our CRM UUID. When Skyrack returns a
+        | call summary with that same lead_id, it is the strongest match, but
+        | we still compare the customer phone when the CRM lead has a phone.
+        |
+        */
+
+        if (!empty($integration->lead_id)) {
+
+            $providedLead =
+                Lead::query()
+                    ->with('client')
+                    ->find(
+                        $integration->lead_id
+                    );
+
+
+            if (!$providedLead) {
+
+                $integration->status =
+                    'pending_lead';
+
+                $integration->match_method =
+                    'provided_lead_id_missing';
+
+                $integration->last_error =
+                    'Call summary supplied a CRM lead_id, but that lead does not currently exist.';
+
+                $integration->save();
+
+
+                return $integration;
+            }
+
+
+            if (
+                !$this->leadPhoneMatches(
+                    $providedLead,
+                    $integration->normalized_phone
+                )
+            ) {
+
+                $integration->status =
+                    'ambiguous_match';
+
+                $integration->match_method =
+                    'provided_lead_id_phone_mismatch';
+
+                $integration->match_score =
+                    0;
+
+                $integration->last_error =
+                    'Call summary supplied a CRM lead_id, but the phone number does not match that lead client.';
+
+                $integration->save();
+
+
+                return $integration;
+            }
+
+
+            $integration->match_score =
+                100;
+
+            $integration->match_method =
+                'provided_lead_id';
+
+            $integration->status =
+                'matched';
+
+            $integration->last_error =
+                null;
+
+            $integration->save();
+
+
+            return $this->createOrUpdateFollowup(
+                $integration,
+                $providedLead,
+                $agentUser
+            );
         }
 
 
@@ -332,7 +473,7 @@ class CallSummaryIntegrationService
                     $integration->save();
 
 
-                    return $this->createFollowup(
+                    return $this->createOrUpdateFollowup(
                         $integration,
                         $lead,
                         $agentUser
@@ -449,7 +590,7 @@ class CallSummaryIntegrationService
                 |--------------------------------------------------------------------------
                 */
 
-                return $this->createFollowup(
+                return $this->createOrUpdateFollowup(
                     $integration,
                     $activeLead,
                     $agentUser
@@ -553,7 +694,7 @@ class CallSummaryIntegrationService
             $integration->save();
 
 
-            return $this->createFollowup(
+            return $this->createOrUpdateFollowup(
                 $integration,
                 $activeLead,
                 $agentUser
@@ -1354,71 +1495,75 @@ if (
 }
 
 
+    private function leadPhoneMatches(
+        Lead $lead,
+        ?string $normalizedPhone
+    ): bool {
+
+        $phone =
+            $this->normalizePhone(
+                $normalizedPhone
+            );
+
+
+        if ($phone === '') {
+
+            return false;
+        }
+
+
+        $lead->loadMissing(
+            'client'
+        );
+
+
+        $crmPhones =
+            collect(
+                [
+                    optional($lead->client)->contact_number,
+                    optional($lead->client)->alternate_number,
+                ]
+            )
+                ->map(function ($crmPhone) {
+                    return $this->normalizePhone(
+                        $crmPhone
+                    );
+                })
+                ->filter()
+                ->values()
+                ->all();
+
+
+        if (empty($crmPhones)) {
+
+            return true;
+        }
+
+
+        return in_array(
+            $phone,
+            $crmPhones,
+            true
+        );
+    }
+
+
     /*
     |--------------------------------------------------------------------------
-    | Create NEW follow-up
+    | Create or update follow-up
     |--------------------------------------------------------------------------
     |
-    | IMPORTANT:
-    |
-    | This never updates an existing followup.
+    | lead_id alone is not enough for duplicate checks because one lead can
+    | have multiple follow-ups. When followup_recording_id is supplied,
+    | lead_id + followup_recording_id identifies the CRM follow-up to update.
     |
     */
 
-    private function createFollowup(
+    private function createOrUpdateFollowup(
         CallSummaryIntegration $integration,
         Lead $lead,
         ?User $agentUser
     ): CallSummaryIntegration {
-
-        /*
-        |--------------------------------------------------------------------------
-        | Final idempotency guard
-        |--------------------------------------------------------------------------
-        */
-
-        if (
-            !empty(
-                $integration
-                    ->followup_id
-            )
-        ) {
-
-            $existing =
-                LeadFollowup::find(
-                    $integration
-                        ->followup_id
-                );
-
-
-            if ($existing) {
-
-                $integration
-                    ->status =
-                        'followup_created';
-
-                $integration
-                    ->processed_at =
-                        now();
-
-                $integration
-                    ->save();
-
-
-                return $integration;
-            }
-        }
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | Resolve followed_by
-        |--------------------------------------------------------------------------
-        |
-        | First: mapped call agent
-        | Fallback: current lead representative
-        |
-        */
 
         $followedBy =
             $agentUser
@@ -1426,36 +1571,6 @@ if (
                 : $lead
                     ->representative_user_id;
 
-
-        /*
-         * Don't invent/fake a CRM user.
-         */
-        if (empty($followedBy)) {
-
-            $integration->status =
-                'pending_lead';
-
-            $integration
-                ->last_error =
-                    'Lead matched but no CRM user could be resolved for followed_by.';
-
-            $integration->save();
-
-            return $integration;
-        }
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | Preserve current lead status
-        |--------------------------------------------------------------------------
-        |
-        | A call summary should NOT silently change
-        | lead status.
-        |
-        | Use latest followup status if one exists.
-        |
-        */
 
         $latestFollowup =
             LeadFollowup::query()
@@ -1475,12 +1590,6 @@ if (
                 : 1;
 
 
-        /*
-        |--------------------------------------------------------------------------
-        | Transaction
-        |--------------------------------------------------------------------------
-        */
-
         DB::transaction(
             function () use (
                 $integration,
@@ -1488,13 +1597,6 @@ if (
                 $followedBy,
                 $status
             ) {
-
-                /*
-                |--------------------------------------------------------------------------
-                | Lock integration row to stop two simultaneous
-                | retries from creating two followups.
-                |--------------------------------------------------------------------------
-                */
 
                 $locked =
                     CallSummaryIntegration::query()
@@ -1506,22 +1608,111 @@ if (
                         ->firstOrFail();
 
 
+                $recordingId =
+                    $this->normalizeRecordingId(
+                        $locked->followup_recording_id
+                    );
+
+
+                if ($recordingId !== null) {
+
+                    Lead::query()
+                        ->where(
+                            'id',
+                            $lead->id
+                        )
+                        ->lockForUpdate()
+                        ->first();
+                }
+
+
+                $followup = null;
+
+
+                if (!empty($locked->followup_id)) {
+
+                    $followup =
+                        LeadFollowup::query()
+                            ->where(
+                                'id',
+                                $locked->followup_id
+                            )
+                            ->lockForUpdate()
+                            ->first();
+                }
+
+
                 if (
-                    !empty(
-                        $locked
-                            ->followup_id
-                    )
+                    $followup
+                    &&
+                    (string) $followup->lead_id !== (string) $lead->id
                 ) {
+
+                    $followup = null;
+                }
+
+
+                if (
+                    !$followup
+                    &&
+                    $recordingId !== null
+                ) {
+
+                    $followup =
+                        LeadFollowup::query()
+                            ->where(
+                                'lead_id',
+                                $lead->id
+                            )
+                            ->where(
+                                'followup_recording_id',
+                                $recordingId
+                            )
+                            ->lockForUpdate()
+                            ->first();
+                }
+
+
+                if ($followup) {
+
+                    $effectiveFollowedBy =
+                        $followedBy
+                            ?: $followup->followed_by;
+
+                    $this->applyCallSummaryToFollowup(
+                        $followup,
+                        $locked,
+                        $effectiveFollowedBy,
+                        $recordingId
+                    );
+
+                    $this->completeIntegrationWithFollowup(
+                        $locked,
+                        $lead,
+                        $followup,
+                        $effectiveFollowedBy,
+                        $recordingId !== null
+                            ? 'followup_updated'
+                            : 'followup_created'
+                    );
 
                     return;
                 }
 
 
-                /*
-                |--------------------------------------------------------------------------
-                | Create a completely NEW CRM followup
-                |--------------------------------------------------------------------------
-                */
+                if (empty($followedBy)) {
+
+                    $locked->status =
+                        'pending_lead';
+
+                    $locked->last_error =
+                        'Lead matched but no CRM user could be resolved for followed_by.';
+
+                    $locked->save();
+
+                    return;
+                }
+
 
                 $followup =
                     LeadFollowup::create([
@@ -1533,80 +1724,32 @@ if (
                         'lead_id' =>
                             $lead->id,
 
-                        /*
-                         * Summary and note are the SAME field.
-                         */
+                        'followup_recording_id' =>
+                            $recordingId,
+
                         'followup_note' =>
-                            $integration
+                            $locked
                                 ->summary,
 
                         'next_followup_date' =>
-                            $integration
+                            $locked
                                 ->followup_date,
 
-                        /*
-                         * Existing CRM salesperson.
-                         */
                         'followed_by' =>
                             $followedBy,
 
-                        /*
-                         * Preserve existing pipeline status.
-                         */
                         'status' =>
                             $status,
                     ]);
 
 
-                /*
-                |--------------------------------------------------------------------------
-                | Complete integration
-                |--------------------------------------------------------------------------
-                */
-
-                $locked->lead_id =
-                    $lead->id;
-
-                $locked->agent_user_id =
-                    $followedBy;
-
-                $locked->followup_id =
-                    $followup->id;
-
-                $locked->status =
-                    'followup_created';
-
-                $locked->processed_at =
-                    now();
-
-                $locked->last_error =
-                    null;
-
-                $locked->save();
-
-
-                /*
-                 * Keep local model synchronized.
-                 */
-
-                $integration
-                    ->followup_id =
-                        $followup->id;
-
-                $integration
-                    ->lead_id =
-                        $lead->id;
-
-                $integration
-                    ->agent_user_id =
-                        $followedBy;
-
-                $integration->status =
-                    'followup_created';
-
-                $integration
-                    ->processed_at =
-                        now();
+                $this->completeIntegrationWithFollowup(
+                    $locked,
+                    $lead,
+                    $followup,
+                    $followedBy,
+                    'followup_created'
+                );
             }
         );
 
@@ -1615,11 +1758,93 @@ if (
     }
 
 
+    private function applyCallSummaryToFollowup(
+        LeadFollowup $followup,
+        CallSummaryIntegration $integration,
+        ?string $followedBy,
+        ?string $recordingId
+    ): void {
+
+        $followup->followup_note =
+            $integration->summary;
+
+        $followup->next_followup_date =
+            $integration->followup_date;
+
+        if (!empty($followedBy)) {
+
+            $followup->followed_by =
+                $followedBy;
+        }
+
+        if ($recordingId !== null) {
+
+            $followup->followup_recording_id =
+                $recordingId;
+        }
+
+        $followup->save();
+    }
+
+
+    private function completeIntegrationWithFollowup(
+        CallSummaryIntegration $integration,
+        Lead $lead,
+        LeadFollowup $followup,
+        ?string $followedBy,
+        string $status
+    ): void {
+
+        $integration->lead_id =
+            $lead->id;
+
+        $integration->agent_user_id =
+            $followedBy;
+
+        $integration->followup_id =
+            $followup->id;
+
+        $integration->status =
+            $status;
+
+        $integration->processed_at =
+            now();
+
+        $integration->last_error =
+            null;
+
+        $integration->save();
+    }
+
     /*
     |--------------------------------------------------------------------------
     | Normalization
     |--------------------------------------------------------------------------
     */
+
+    private function normalizeRecordingId(
+        $recordingId
+    ): ?string {
+
+        $recordingId =
+            trim(
+                (string)
+                $recordingId
+            );
+
+
+        if ($recordingId === '') {
+
+            return null;
+        }
+
+
+        return mb_substr(
+            $recordingId,
+            0,
+            191
+        );
+    }
 
     private function normalizePhone(
         ?string $phone

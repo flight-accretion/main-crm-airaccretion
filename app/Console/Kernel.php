@@ -72,6 +72,18 @@ class Kernel extends ConsoleKernel
                 'logs/call-summary-processing.log'
             )
         );
+
+        $schedule
+        ->command(
+            'skyrack:sync-leads'
+        )
+        ->everyMinute()
+        ->withoutOverlapping()
+        ->appendOutputTo(
+            storage_path(
+                'logs/skyrack-lead-sync.log'
+            )
+        );
     }
 
     /**

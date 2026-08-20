@@ -55,6 +55,14 @@ return [
         'booking_whatsapp_template' => env('WHATSCRM_BOOKING_WHATSAPP_TEMPLATE', 'extra_service_template'),
     ],
 
+    'skyrack' => [
+        'leads_api_url' => env('SKYRACK_LEADS_API_URL', 'https://call.skyrack.ai/api/v1/leads'),
+        'leads_api_token' => env('SKYRACK_LEADS_API_TOKEN'),
+        'enabled' => env('SKYRACK_LEADS_API_ENABLED', false),
+        'timeout' => env('SKYRACK_LEADS_API_TIMEOUT', 10),
+        'backfill_limit' => env('SKYRACK_LEADS_BACKFILL_LIMIT', 1000),
+    ],
+
     // ═══════════════════════════════════════════════════════════════════════
     // VOUCHER WHATSCRM ACCOUNT (SEPARATE)
     // Different business account with different credentials

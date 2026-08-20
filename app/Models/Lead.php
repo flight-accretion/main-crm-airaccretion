@@ -17,6 +17,7 @@ class Lead extends Model
 
     protected $fillable = [
         'id',
+        'crm_lead_code',
         'client_id',
         'representative_user_id',
         'service_ids',

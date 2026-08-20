@@ -18,6 +18,8 @@ class CallSummaryIntegration extends Model
 
         'call_fingerprint',
 
+        'followup_recording_id',
+
         'phone_number',
         'normalized_phone',
 

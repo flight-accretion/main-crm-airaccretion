@@ -35,6 +35,13 @@ class CallSummaryController extends Controller
                             'max:50',
                         ],
 
+                    'lead_id' =>
+                        [
+                            'nullable',
+                            'uuid',
+                            'exists:leads,id',
+                        ],
+
                     'summary' =>
                         [
                             'required',
@@ -82,6 +89,13 @@ class CallSummaryController extends Controller
                             'min:0',
                             'max:100',
                         ],
+
+                    'followup_recording_id' =>
+                        [
+                            'nullable',
+                            'string',
+                            'max:191',
+                        ],
                 ],
                 [
                     'phone_number.required' =>
@@ -107,6 +121,9 @@ class CallSummaryController extends Controller
 
                     'sentiment_score.max' =>
                         'sentiment_score must be between 0 and 100.',
+
+                    'followup_recording_id.max' =>
+                        'followup_recording_id may not be greater than 191 characters.',
                 ]
             );
 
@@ -229,6 +246,18 @@ class CallSummaryController extends Controller
                         $integration
                             ->followup_id,
 
+                    'followup_recording_id' =>
+                        $integration
+                            ->followup_recording_id,
+
+                    'lead_followup_status' =>
+                        $integration
+                            ->followup
+                            ? $integration
+                                ->followup
+                                ->status
+                            : null,
+
                     'match_score' =>
                         $integration
                             ->match_score,
@@ -292,6 +321,12 @@ class CallSummaryController extends Controller
 
                 return
                     'Call summary was matched and a new CRM follow-up was created.';
+
+
+            case 'followup_updated':
+
+                return
+                    'Call summary was matched and the existing CRM follow-up was updated.';
 
 
             case 'pending_lead':

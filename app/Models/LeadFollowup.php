@@ -14,6 +14,7 @@ class LeadFollowup extends Model
     protected $fillable = [
         'id',
         'parent_followup_id',
+        'followup_recording_id',
         'lead_id',
         'next_followup_date',
         'followup_note',
