@@ -79,15 +79,16 @@ class CallSummaryIntegrationServiceTest extends TestCase
             'agent_name' => 'Pallavi Singh',
             'direction' => 'incoming',
             'sentiment_score' => 82,
-            'followup_recording_id' => 'REC-1001',
+            'followup_recording_id' => '1001',
         ]);
 
         $createdFollowup = LeadFollowup::query()
             ->where('lead_id', $lead->id)
-            ->where('followup_recording_id', 'REC-1001')
+            ->where('followup_recording_id', 1001)
             ->firstOrFail();
 
         $this->assertSame('followup_created', $first->status);
+        $this->assertSame(1001, $first->followup_recording_id);
         $this->assertSame(1, (int) $createdFollowup->status);
 
         $second = $service->receive([
@@ -99,7 +100,7 @@ class CallSummaryIntegrationServiceTest extends TestCase
             'agent_name' => 'Pallavi Singh',
             'direction' => 'incoming',
             'sentiment_score' => 90,
-            'followup_recording_id' => 'REC-1001',
+            'followup_recording_id' => 1001,
         ]);
 
         $createdFollowup->refresh();
@@ -110,7 +111,7 @@ class CallSummaryIntegrationServiceTest extends TestCase
             1,
             LeadFollowup::query()
                 ->where('lead_id', $lead->id)
-                ->where('followup_recording_id', 'REC-1001')
+                ->where('followup_recording_id', 1001)
                 ->count()
         );
         $this->assertSame(
@@ -165,7 +166,7 @@ class CallSummaryIntegrationServiceTest extends TestCase
             'agent_name' => 'Pallavi Singh',
             'direction' => 'incoming',
             'sentiment_score' => 82,
-            'followup_recording_id' => 'REC-SKYRACK-1001',
+            'followup_recording_id' => 2001,
         ]);
 
         $this->assertSame('followup_created', $integration->status);
@@ -174,7 +175,7 @@ class CallSummaryIntegrationServiceTest extends TestCase
         $this->assertSame(100, (int) $integration->match_score);
         $this->assertDatabaseHas('lead_followups', [
             'lead_id' => $lead->id,
-            'followup_recording_id' => 'REC-SKYRACK-1001',
+            'followup_recording_id' => 2001,
             'followup_note' => 'Customer asked Skyrack to send a revised quotation.',
             'status' => 1,
         ]);
@@ -212,7 +213,7 @@ class CallSummaryIntegrationServiceTest extends TestCase
         Schema::create('lead_followups', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('parent_followup_id')->nullable();
-            $table->string('followup_recording_id', 191)->nullable();
+            $table->unsignedBigInteger('followup_recording_id')->nullable();
             $table->uuid('lead_id');
             $table->timestamp('next_followup_date')->nullable();
             $table->text('followup_note')->nullable();
@@ -255,7 +256,7 @@ class CallSummaryIntegrationServiceTest extends TestCase
         Schema::create('call_summary_integrations', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->string('call_fingerprint', 64)->unique();
-            $table->string('followup_recording_id', 191)->nullable();
+            $table->unsignedBigInteger('followup_recording_id')->nullable();
             $table->string('phone_number', 50);
             $table->string('normalized_phone', 20)->nullable();
             $table->text('summary');

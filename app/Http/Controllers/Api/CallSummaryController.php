@@ -93,8 +93,8 @@ class CallSummaryController extends Controller
                     'followup_recording_id' =>
                         [
                             'nullable',
-                            'string',
-                            'max:191',
+                            'integer',
+                            'min:0',
                         ],
                 ],
                 [
@@ -122,8 +122,8 @@ class CallSummaryController extends Controller
                     'sentiment_score.max' =>
                         'sentiment_score must be between 0 and 100.',
 
-                    'followup_recording_id.max' =>
-                        'followup_recording_id may not be greater than 191 characters.',
+                    'followup_recording_id.integer' =>
+                        'followup_recording_id must be an integer.',
                 ]
             );
 

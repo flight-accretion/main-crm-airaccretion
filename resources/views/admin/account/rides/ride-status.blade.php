@@ -580,12 +580,13 @@
 
                         <input
                             type="number"
-                            class="form-control"
+                            class="form-control bg-gray-100"
                             id="ride-vendor-original-amount"
                             name="vendor_amount"
                             min="0"
                             step="0.01"
                             value="0.00"
+                            readonly
                             required
                         >
 
@@ -787,7 +788,10 @@
 
                 <!-- Refund Date -->
 
-                <div class="col-span-12 md:col-span-6">
+                <div
+                    class="col-span-12 md:col-span-6"
+                    id="ride-vendor-refund-date-wrapper"
+                >
 
                     <label class="ti-form-label">
 
@@ -813,7 +817,10 @@
 
                 <!-- Refund Receipt -->
 
-                <div class="col-span-12 md:col-span-6">
+                <div
+                    class="col-span-12 md:col-span-6"
+                    id="ride-vendor-refund-proof-wrapper"
+                >
 
                     <label class="ti-form-label">
 
@@ -2917,6 +2924,7 @@ if (shouldFreezeStatus) {
     */
 
     $('#ride-vendor-original-amount')
+        .val('0.00')
         .text('₹0.00');
 
     $('#ride-vendor-paid-amount')
@@ -2976,6 +2984,7 @@ function hideVendorRefundInformationSection()
 
 
     $('#ride-vendor-original-amount')
+        .val('0.00')
         .text('₹0.00');
 
     $('#ride-vendor-paid-amount')
@@ -3018,6 +3027,8 @@ $(document).on(
 
             $('#ride-vendor-refund-amount')
                 .val('0.00');
+
+            updateVendorRefundFields();
 
             return;
         }
@@ -3199,6 +3210,8 @@ function calculateVendorRefund()
     updateVendorRefundMoneyFields(
         refundDue
     );
+
+    updateVendorRefundFields();
 }
 
 $(document).on(
@@ -3415,6 +3428,312 @@ $(document).on(
             previewUrl,
             '_blank'
         );
+    }
+);
+
+$(document).on(
+    'submit',
+    '#ride-vendor-refund-form',
+    function (e) {
+
+        e.preventDefault();
+
+        if (!currentRideId) {
+
+            showError(
+                'Error: Ride ID not found. Please close and reopen the modal.'
+            );
+
+            return;
+        }
+
+
+        const selectedVendorPaymentId =
+            $('#ride-vendor-refund-payment-id')
+                .val();
+
+
+        if (!selectedVendorPaymentId) {
+
+            showError(
+                'Please select a vendor.'
+            );
+
+            return;
+        }
+
+
+        calculateVendorRefund();
+
+
+        const vendorAmount =
+            parseFloat(
+                $('#ride-vendor-original-amount')
+                    .val()
+                || 0
+            );
+
+
+        const cancellationAmount =
+            parseFloat(
+                $('#ride-vendor-cancellation-amount')
+                    .val()
+                || 0
+            );
+
+
+        const refundAmount =
+            parseFloat(
+                $('#ride-vendor-refund-amount')
+                    .val()
+                || 0
+            );
+
+
+        if (
+            !Number.isFinite(
+                cancellationAmount
+            )
+            ||
+            cancellationAmount < 0
+        ) {
+
+            showError(
+                'Please enter a valid cancellation amount.'
+            );
+
+            return;
+        }
+
+
+        if (
+            cancellationAmount
+            >
+            vendorAmount
+            +
+            0.01
+        ) {
+
+            showError(
+                'Cancellation amount cannot be greater than vendor amount.'
+            );
+
+            return;
+        }
+
+
+        if (
+            !Number.isFinite(
+                refundAmount
+            )
+            ||
+            refundAmount < 0
+        ) {
+
+            showError(
+                'Please enter a valid vendor refund amount.'
+            );
+
+            return;
+        }
+
+
+        if (
+            !$('#ride-vendor-refund-reason')
+                .val()
+                .trim()
+        ) {
+
+            showError(
+                'Please enter the vendor refund reason.'
+            );
+
+            return;
+        }
+
+
+        if (refundAmount > 0) {
+
+            const missing = [];
+
+            if (
+                !$('#ride-vendor-refund-type')
+                    .val()
+            ) {
+
+                missing.push(
+                    'Refund Type'
+                );
+            }
+
+
+            if (
+                !$('#ride-vendor-refund-date')
+                    .val()
+            ) {
+
+                missing.push(
+                    'Refund Date'
+                );
+            }
+
+
+            const proofInput =
+                $('#ride-vendor-refund-proof')[0];
+
+            const proofFile =
+                proofInput
+                &&
+                proofInput.files
+                &&
+                proofInput.files[0];
+
+
+            if (!proofFile) {
+
+                missing.push(
+                    'Refund Proof'
+                );
+            }
+
+
+            if (missing.length > 0) {
+
+                showError(
+                    'Please fill in all required fields: '
+                    +
+                    missing.join(', ')
+                    +
+                    '.'
+                );
+
+                return;
+            }
+        }
+
+
+        const formData =
+            new FormData(
+                this
+            );
+
+        formData.set(
+            'refund_amount',
+            refundAmount.toFixed(2)
+        );
+
+        formData.append(
+            '_token',
+            '{{ csrf_token() }}'
+        );
+
+
+        const $saveBtn =
+            $('#ride-vendor-refund-form button[type="submit"]');
+
+
+        $.ajax({
+            url: "{{ route('admin.rides.ride-status.save-vendor-refund', ':rideId') }}"
+                .replace(
+                    ':rideId',
+                    currentRideId
+                ),
+            method: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            beforeSend: function () {
+
+                $saveBtn
+                    .prop(
+                        'disabled',
+                        true
+                    )
+                    .html(
+                        '<i class="ri-loader-2-line animate-spin me-2"></i>Saving...'
+                    );
+            },
+            success: function (response) {
+
+                if (response.success) {
+
+                    showSuccess(
+                        response.message
+                        ||
+                        'Vendor refund saved successfully.'
+                    );
+
+                    hideVendorRefundInformationSection();
+
+                    if (currentRideId) {
+
+                        loadRideDetails(
+                            currentRideId
+                        );
+                    }
+
+                    return;
+                }
+
+
+                showError(
+                    response.message
+                    ||
+                    'Error saving vendor refund data.'
+                );
+            },
+            error: function (xhr) {
+
+                let errorMessage =
+                    'Error saving vendor refund data.';
+
+                if (xhr.status === 422) {
+
+                    const errors =
+                        xhr.responseJSON
+                            ? xhr.responseJSON.errors
+                            : null;
+
+                    errorMessage =
+                        errors
+                            ? Object.values(
+                                errors
+                            )
+                                .flat()
+                                .join(', ')
+                            : (
+                                xhr.responseJSON
+                                    ? xhr.responseJSON.message
+                                    : 'Validation failed. Please check the form.'
+                            );
+
+                } else if (
+                    xhr.responseJSON
+                    &&
+                    xhr.responseJSON.message
+                ) {
+
+                    errorMessage =
+                        xhr.responseJSON.message;
+                }
+
+
+                showError(
+                    errorMessage
+                );
+            },
+            complete: function () {
+
+                $saveBtn
+                    .prop(
+                        'disabled',
+                        false
+                    )
+                    .html(
+                        '<i class="ri-save-line me-1"></i>Save Vendor Refund'
+                    );
+            },
+        });
     }
 );
 

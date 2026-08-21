@@ -59,6 +59,8 @@ class CallSummaryIntegration extends Model
 
         'payload' => 'array',
 
+        'followup_recording_id' => 'integer',
+
         'followup_date' => 'datetime',
 
         'call_start_at' => 'datetime',

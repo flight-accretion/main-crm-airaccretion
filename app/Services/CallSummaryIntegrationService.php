@@ -281,7 +281,7 @@ class CallSummaryIntegrationService
         &&
         !empty($integration->followup_id)
         &&
-        empty($recordingId)
+        $recordingId === null
     ) {
         return $integration;
     }
@@ -1762,7 +1762,7 @@ if (
         LeadFollowup $followup,
         CallSummaryIntegration $integration,
         ?string $followedBy,
-        ?string $recordingId
+        ?int $recordingId
     ): void {
 
         $followup->followup_note =
@@ -1824,7 +1824,13 @@ if (
 
     private function normalizeRecordingId(
         $recordingId
-    ): ?string {
+    ): ?int {
+
+        if ($recordingId === null) {
+
+            return null;
+        }
+
 
         $recordingId =
             trim(
@@ -1833,17 +1839,17 @@ if (
             );
 
 
-        if ($recordingId === '') {
+        if (
+            $recordingId === ''
+            ||
+            !preg_match('/^\d+$/', $recordingId)
+        ) {
 
             return null;
         }
 
 
-        return mb_substr(
-            $recordingId,
-            0,
-            191
-        );
+        return (int) $recordingId;
     }
 
     private function normalizePhone(

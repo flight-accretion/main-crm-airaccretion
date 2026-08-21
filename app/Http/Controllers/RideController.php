@@ -4176,57 +4176,92 @@ public function saveVendorRefundFromRideStatus(
 
                 if ($refundAmount == 0) {
 
-                    $existingZeroSettlement =
+                    $existingVendorSettlement =
                         VendorRefund::query()
                             ->where(
                                 'lead_vendor_payment_id',
                                 $leadVendorPayment->id
                             )
-                            ->where(
-                                'no_refund_required',
-                                true
+                            ->latest(
+                                'created_at'
                             )
                             ->first();
 
 
-                    if ($existingZeroSettlement) {
+                    if ($existingVendorSettlement) {
 
-                        $existingZeroSettlement
-                            ->update([
-                                'lead_id' =>
-                                    $lead->id,
+                        $hasActualRefund =
+                            round(
+                                (float)
+                                $existingVendorSettlement
+                                    ->refund_amount,
+                                2
+                            ) > 0;
 
-                                'vendor_id' =>
-                                    $leadVendorPayment->vendor_id,
 
-                                'ride_id' =>
-                                    $ride->id,
+                        $settlementPayload = [
+                            'lead_id' =>
+                                $lead->id,
 
-                                'cancellation_amount' =>
-                                    $cancellationAmount,
+                            'vendor_id' =>
+                                $leadVendorPayment->vendor_id,
 
-                                'refund_amount' =>
-                                    0,
+                            'ride_id' =>
+                                $ride->id,
 
-                                'refund_date' =>
-                                    $request->refund_date
-                                    ?: now(),
+                            'cancellation_amount' =>
+                                $cancellationAmount,
 
-                                'refund_type' =>
-                                    null,
+                            'refund_date' =>
+                                $request->refund_date
+                                    ? Carbon::parse(
+                                        $request->refund_date
+                                    )
+                                    : (
+                                        $existingVendorSettlement
+                                            ->refund_date
+                                        ?: now()
+                                    ),
 
-                                'refund_reason' =>
-                                    $request->refund_reason,
+                            'refund_reason' =>
+                                $request->refund_reason,
 
-                                'refund_proof' =>
-                                    null,
+                            'created_by' =>
+                                auth()->id(),
+                        ];
 
-                                'no_refund_required' =>
-                                    true,
 
-                                'created_by' =>
-                                    auth()->id(),
-                            ]);
+                        if (!$hasActualRefund) {
+
+                            $settlementPayload = array_merge(
+                                $settlementPayload,
+                                [
+                                    'refund_amount' =>
+                                        0,
+
+                                    'refund_type' =>
+                                        null,
+
+                                    'refund_proof' =>
+                                        null,
+
+                                    'no_refund_required' =>
+                                        true,
+                                ]
+                            );
+
+                        } else {
+
+                            $settlementPayload[
+                                'no_refund_required'
+                            ] = false;
+                        }
+
+
+                        $existingVendorSettlement
+                            ->update(
+                                $settlementPayload
+                            );
 
 
                         /*
@@ -4277,6 +4312,46 @@ public function saveVendorRefundFromRideStatus(
                             );
 
 
+                        if ($cancellationAmount <= 0) {
+
+                            $paymentStatus =
+                                'paid';
+
+                        } elseif ($netPaidToVendor <= 0) {
+
+                            $paymentStatus =
+                                'unpaid';
+
+                        } elseif (
+                            $netPaidToVendor
+                            >=
+                            $cancellationAmount
+                        ) {
+
+                            $paymentStatus =
+                                'paid';
+
+                        } else {
+
+                            $paymentStatus =
+                                'partial';
+                        }
+
+
+                        $leadVendorPayment
+                            ->update([
+                                'payment_status' =>
+                                    $paymentStatus,
+                            ]);
+
+
+                        $refundStatus =
+                            $hasActualRefund
+                                ? $leadVendorPayment
+                                    ->vendor_refund_status
+                                : 'no_refund_required';
+
+
                         return response()->json([
                             'success' =>
                                 true,
@@ -4285,10 +4360,13 @@ public function saveVendorRefundFromRideStatus(
                                 'Vendor settlement updated successfully.',
 
                             'vendor_refund_id' =>
-                                $existingZeroSettlement->id,
+                                $existingVendorSettlement->id,
 
                             'status' =>
-                                'no_refund_required',
+                                $refundStatus,
+
+                            'payment_status' =>
+                                $paymentStatus,
 
                             'original_vendor_amount' =>
                                 $originalVendorAmount,

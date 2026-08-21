@@ -15,7 +15,7 @@ class AddFollowupRecordingIdToCallSummaryFollowups extends Migration
         ) {
             Schema::table('lead_followups', function (Blueprint $table) {
                 $table
-                    ->string('followup_recording_id', 191)
+                    ->unsignedBigInteger('followup_recording_id')
                     ->nullable()
                     ->after('parent_followup_id');
 
@@ -36,7 +36,7 @@ class AddFollowupRecordingIdToCallSummaryFollowups extends Migration
         ) {
             Schema::table('call_summary_integrations', function (Blueprint $table) {
                 $table
-                    ->string('followup_recording_id', 191)
+                    ->unsignedBigInteger('followup_recording_id')
                     ->nullable()
                     ->after('call_fingerprint');
 

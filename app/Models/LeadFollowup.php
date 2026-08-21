@@ -34,6 +34,7 @@ class LeadFollowup extends Model
 
     protected $casts = [
         'next_followup_date' => 'datetime',
+        'followup_recording_id' => 'integer',
         'service_ids' => 'array',
         'extra_service_ids' => 'array',
         'service_details' => 'array',
