@@ -944,6 +944,7 @@ class ReportController extends Controller
                 'paymentDetails.service',
                 'paymentDetails.extraService',
                 'vendorPayments',
+                'vendorRefunds',
                 'lead.leadFollowups.paymentAuditTrail'
             ]);
 
@@ -1001,9 +1002,20 @@ class ReportController extends Controller
                 $productNames = $lead->product_names ?? [];
                 $productDisplay = is_array($productNames) ? implode(', ', $productNames) : (is_string($productNames) ? $productNames : 'N/A');
                 $vendorName = $vp->vendor->name ?? 'N/A';
-                $vendorServiceCost = $vp->total_vendor_service_amount ?? 0;
-                $paidAmount = $vp->vendorPayments->sum('paid_amount') ?? 0;
-                $balance = $vendorServiceCost - $paidAmount;
+                $originalVendorAmount = round((float) (
+                    $vp->total_vendor_service_amount
+                    ?? $vp->total_service_amount
+                    ?? 0
+                ), 2);
+                $vendorServiceCost = round((float) $vp->adjusted_vendor_payable, 2);
+                $grossPaidAmount = round((float) $vp->total_paid, 2);
+                $refundedAmount = round((float) $vp->total_refunded, 2);
+                $paidAmount = round((float) $vp->net_paid_to_vendor, 2);
+                $balance = round((float) $vp->vendor_payment_balance, 2);
+                $refundDueAmount = round((float) $vp->vendor_refund_due, 2);
+                $paymentStatus = $vp->derived_payment_status === 'paid'
+                    ? 'Full Paid'
+                    : ($vp->derived_payment_status === 'partial' ? 'Partial Paid' : 'Unpaid');
                 $paidDate = $vp->vendorPayments->pluck('paid_date')->filter()->sort()->last() ?? 'Not Paid';
 
                 // service date from first ride
@@ -1097,9 +1109,14 @@ class ReportController extends Controller
                     'product' => $productDisplay,
                     'client_name' => $clientName,
                     'client_contact' => $clientContact,
+                    'original_vendor_amount' => $originalVendorAmount,
                     'vendor_service_cost' => $vendorServiceCost,
                     'balance_amount' => $balance,
+                    'gross_paid_amount' => $grossPaidAmount,
+                    'refunded_amount' => $refundedAmount,
                     'paid_amount' => $paidAmount,
+                    'refund_due_amount' => $refundDueAmount,
+                    'status' => $paymentStatus,
                     'paid_date' => $paidDate,
                     'ride_status' => $rideStatus,
                     'service_date' => $serviceDate,
@@ -1172,7 +1189,7 @@ class ReportController extends Controller
         $statusArray = [
             // 0 => 'Initiated',
             // 1 => 'Active',
-            // 2 => 'Cancelled',
+            2 => 'Cancelled',
             3 => 'Full Payment Received',
             4 => 'Partial Payment Received',
             5 => 'Confirmed',
@@ -1190,8 +1207,9 @@ class ReportController extends Controller
             'enquiry.representative.userType',
             'enquiry.leadVendorPayments.vendor',
             'enquiry.leadVendorPayments.vendorPayments',
+            'enquiry.leadVendorPayments.vendorRefunds',
             'followedBy.userType'
-        ])->whereIn('status', [3, 4, 5, 6, 7, 8]);
+        ])->whereIn('status', [2, 3, 4, 5, 6, 7, 8]);
 
         // Apply filters
         if ($request->filled('from_payment_date')) {
@@ -1314,7 +1332,7 @@ class ReportController extends Controller
             }
 
             // Also skip if latest followup status is not in qualifying statuses
-            if (!in_array($latest->status, [3, 4, 5, 6, 7, 8])) {
+            if (!in_array($latest->status, [2, 3, 4, 5, 6, 7, 8])) {
                 return null;
             }
 
@@ -1336,7 +1354,7 @@ class ReportController extends Controller
             $vendorNames = [];
 
             foreach ($vendorPayments as $vp) {
-                $vendorAmount = $vp->total_vendor_service_amount ?? 0;
+                $vendorAmount = round((float) $vp->adjusted_vendor_payable, 2);
                 $totalVendorAmount += $vendorAmount;
                 if ($vp->vendor) {
                     $vendorNames[] = $vp->vendor->name;

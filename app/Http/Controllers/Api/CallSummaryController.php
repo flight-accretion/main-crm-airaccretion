@@ -17,6 +17,19 @@ class CallSummaryController extends Controller
         CallSummaryIntegrationService $service
     ) {
 
+        Log::info(
+            'Call Summary API received payload.',
+            [
+                'ip' =>
+                    $request->ip(),
+
+                'payload_debug' =>
+                    $this->payloadDebugContext(
+                        $request->all()
+                    ),
+            ]
+        );
+
         /*
         |--------------------------------------------------------------------------
         | Validation
@@ -132,6 +145,21 @@ class CallSummaryController extends Controller
             $validator->fails()
         ) {
 
+            Log::warning(
+                'Call Summary API validation failed.',
+                [
+                    'errors' =>
+                        $validator
+                            ->errors()
+                            ->toArray(),
+
+                    'payload_debug' =>
+                        $this->payloadDebugContext(
+                            $request->all()
+                        ),
+                ]
+            );
+
             return response()->json(
                 [
                     'success' => false,
@@ -154,6 +182,15 @@ class CallSummaryController extends Controller
                 $validator
                     ->validated();
 
+            Log::info(
+                'Call Summary API validated payload.',
+                [
+                    'payload_debug' =>
+                        $this->payloadDebugContext(
+                            $validated
+                        ),
+                ]
+            );
 
             /*
             |--------------------------------------------------------------------------
@@ -178,6 +215,80 @@ class CallSummaryController extends Controller
                     $validated
                 );
 
+            if (
+                $integration
+                    ->followup_id
+            ) {
+
+                $integration
+                    ->loadMissing(
+                        'followup'
+                    );
+            }
+
+            Log::info(
+                'Call Summary API processed payload.',
+                [
+                    'integration_id' =>
+                        $integration
+                            ->id,
+
+                    'status' =>
+                        $integration
+                            ->status,
+
+                    'lead_id' =>
+                        $integration
+                            ->lead_id,
+
+                    'followup_id' =>
+                        $integration
+                            ->followup_id,
+
+                    'followup_recording_id' =>
+                        $integration
+                            ->followup_recording_id,
+
+                    'integration_summary_preview' =>
+                        $this->previewForLog(
+                            $integration
+                                ->summary
+                        ),
+
+                    'integration_followup_date' =>
+                        optional(
+                            $integration
+                                ->followup_date
+                        )->format(
+                            'Y-m-d H:i:s'
+                        ),
+
+                    'saved_followup_note_preview' =>
+                        $integration
+                            ->followup
+                            ? $this->previewForLog(
+                                $integration
+                                    ->followup
+                                    ->followup_note
+                            )
+                            : null,
+
+                    'saved_next_followup_date' =>
+                        $integration
+                            ->followup
+                            &&
+                        $integration
+                            ->followup
+                            ->next_followup_date
+                            ? $integration
+                                ->followup
+                                ->next_followup_date
+                                ->format(
+                                    'Y-m-d H:i:s'
+                                )
+                            : null,
+                ]
+            );
 
             /*
             |--------------------------------------------------------------------------
@@ -220,7 +331,6 @@ class CallSummaryController extends Controller
                 )
                     ? 202
                     : 200;
-
 
             return response()->json(
                 [
@@ -352,5 +462,137 @@ class CallSummaryController extends Controller
                 return
                     'Call summary was received.';
         }
+    }
+
+
+    private function payloadDebugContext(
+        array $payload
+    ): array {
+
+        $keys =
+            array_keys(
+                $payload
+            );
+
+        return [
+            'keys' =>
+                $keys,
+
+            'lead_id' =>
+                $payload['lead_id']
+                ?? null,
+
+            'phone_number' =>
+                $payload['phone_number']
+                ?? null,
+
+            'agent_name' =>
+                $payload['agent_name']
+                ?? null,
+
+            'direction' =>
+                $payload['direction']
+                ?? null,
+
+            'call_start_at' =>
+                $payload['call_start_at']
+                ?? null,
+
+            'call_end_at' =>
+                $payload['call_end_at']
+                ?? null,
+
+            'followup_recording_id_present' =>
+                array_key_exists(
+                    'followup_recording_id',
+                    $payload
+                ),
+
+            'followup_recording_id' =>
+                $payload['followup_recording_id']
+                ?? null,
+
+            'summary_present' =>
+                array_key_exists(
+                    'summary',
+                    $payload
+                ),
+
+            'summary_length' =>
+                array_key_exists(
+                    'summary',
+                    $payload
+                )
+                    ? mb_strlen(
+                        (string)
+                        $payload['summary']
+                    )
+                    : null,
+
+            'summary_preview' =>
+                $this->previewForLog(
+                    $payload['summary']
+                    ?? null
+                ),
+
+            'followup_date_present' =>
+                array_key_exists(
+                    'followup_date',
+                    $payload
+                ),
+
+            'followup_date' =>
+                $payload['followup_date']
+                ?? null,
+
+            'possible_summary_fields' =>
+                array_values(
+                    array_intersect(
+                        [
+                            'summary',
+                            'call_summary',
+                            'followup_summary',
+                            'followup_note',
+                            'notes',
+                            'note',
+                        ],
+                        $keys
+                    )
+                ),
+
+            'possible_date_fields' =>
+                array_values(
+                    array_intersect(
+                        [
+                            'followup_date',
+                            'next_followup_date',
+                            'next_follow_up',
+                            'follow_up_date',
+                            'date',
+                        ],
+                        $keys
+                    )
+                ),
+        ];
+    }
+
+
+    private function previewForLog(
+        $value
+    ): ?string {
+
+        if ($value === null) {
+
+            return null;
+        }
+
+        return mb_substr(
+            trim(
+                (string)
+                $value
+            ),
+            0,
+            500
+        );
     }
 }

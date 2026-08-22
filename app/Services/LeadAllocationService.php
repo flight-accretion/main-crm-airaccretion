@@ -58,44 +58,51 @@ class LeadAllocationService
                     $settings
                 );
             } else {
-               $whatsAppIntegration =
-    \App\Models\WhatsAppLeadIntegration::query()
-        ->where('lead_id', $lead->id)
-        ->first();
+                $whatsAppIntegration =
+                    \App\Models\WhatsAppLeadIntegration::query()
+                        ->where('lead_id', $lead->id)
+                        ->first();
 
-        if (
-            $whatsAppIntegration
-            && $whatsAppIntegration->product_id
-        ) {
+                if ($whatsAppIntegration) {
 
-            $salesperson =
-                app(
-                    \App\Services\WhatsAppProductAllocationService::class
-                )->findUser(
-                    $whatsAppIntegration->product_id
-                );
+                    $whatsAppAllocator =
+                        app(
+                            \App\Services\WhatsAppProductAllocationService::class
+                        );
 
-        } elseif ($whatsAppIntegration) {
+                    if (
+                        $whatsAppIntegration->product_id
+                        &&
+                        $whatsAppAllocator
+                            ->hasConfiguredProductMapping(
+                                $whatsAppIntegration->product_id
+                            )
+                    ) {
 
-            /*
-            * WhatsApp product was not resolved.
-            *
-            * Do NOT give it to a random salesperson.
-            */
-            $salesperson = null;
+                        $salesperson =
+                            $whatsAppAllocator->findUser(
+                                $whatsAppIntegration->product_id
+                            );
 
-        } else {
+                    } else {
 
-            /*
-            * Existing IVR / Email / manual queue behavior
-            * remains exactly as before.
-            */
-            $salesperson =
-                $this->pickSalesperson(
-                    $lead,
-                    $settings
-                );
-        }
+                        $salesperson =
+                            $whatsAppAllocator
+                                ->findRetailUser();
+                    }
+
+                } else {
+
+                    /*
+                    * Existing IVR / Email / manual queue behavior
+                    * remains exactly as before.
+                    */
+                    $salesperson =
+                        $this->pickSalesperson(
+                            $lead,
+                            $settings
+                        );
+                }
             }
             if (!$salesperson) {
                 $queueItem->attempt_count += 1;

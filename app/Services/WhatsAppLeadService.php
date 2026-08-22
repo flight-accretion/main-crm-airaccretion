@@ -291,14 +291,42 @@ class WhatsAppLeadService
                  */
 
                 $user = null;
+                $isRetailAssignment =
+                    false;
 
                 if ($product) {
 
+                    if (
+                        $this->allocator
+                            ->hasConfiguredProductMapping(
+                                $product->id
+                            )
+                    ) {
+
+                        $user =
+                            $this->allocator
+                                ->findUser(
+                                    $product->id
+                                );
+
+                    } else {
+
+                        $isRetailAssignment =
+                            true;
+
+                        $user =
+                            $this->allocator
+                                ->findRetailUser();
+                    }
+
+                } else {
+
+                    $isRetailAssignment =
+                        true;
+
                     $user =
                         $this->allocator
-                            ->findUser(
-                                $product->id
-                            );
+                            ->findRetailUser();
                 }
 
 
@@ -324,7 +352,9 @@ class WhatsAppLeadService
                             'success',
 
                         'details' =>
-                            'Assigned from WhatCRM using dynamic product routing.',
+                            $isRetailAssignment
+                                ? 'Assigned from WhatCRM using retail empty-product routing.'
+                                : 'Assigned from WhatCRM using dynamic product routing.',
                     ]);
 
 
@@ -357,10 +387,10 @@ class WhatsAppLeadService
                                 $lead->id,
 
                             'product_id' =>
-                                $product->id,
+                                optional($product)->id,
 
                             'product' =>
-                                $product->product,
+                                optional($product)->product,
 
                             'agent' =>
                                 $user->name,
@@ -384,15 +414,23 @@ class WhatsAppLeadService
                 $this->leadAllocationService
                     ->queueLead(
                         $lead,
-                        $product
-                            ? 'whatsapp_product_waiting'
-                            : 'whatsapp_product_unmatched'
+                        $isRetailAssignment
+                            ? 'whatsapp_retail_waiting'
+                            : (
+                                $product
+                                    ? 'whatsapp_product_waiting'
+                                    : 'whatsapp_product_unmatched'
+                            )
                     );
 
 
                 $integration->update([
                     'status' =>
-                        $product
+                        (
+                            $product
+                            ||
+                            $isRetailAssignment
+                        )
                             ? 'queued'
                             : 'product_unmatched',
                 ]);
@@ -406,7 +444,11 @@ class WhatsAppLeadService
                         'success' => true,
 
                         'status' =>
-                            $product
+                            (
+                                $product
+                                ||
+                                $isRetailAssignment
+                            )
                                 ? 'queued'
                                 : 'product_unmatched',
 
@@ -427,9 +469,13 @@ class WhatsAppLeadService
                         'agent_user_id' => null,
 
                         'message' =>
-                            $product
-                                ? 'Lead created. Waiting for an eligible mapped salesperson.'
-                                : 'Lead created, but the incoming service did not match a CRM product.',
+                            $isRetailAssignment
+                                ? 'Lead created. Waiting for an eligible retail salesperson.'
+                                : (
+                                    $product
+                                        ? 'Lead created. Waiting for an eligible mapped salesperson.'
+                                        : 'Lead created, but the incoming service did not match a CRM product.'
+                                ),
                     ],
                 ];
             }
@@ -611,7 +657,7 @@ class WhatsAppLeadService
 
         return
             "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(" .
-            "{$column}, '+', ''), '-', ''), ' ', ''), '(', ''), ')')";
+            "{$column}, '+', ''), '-', ''), ' ', ''), '(', ''), ')', '')";
     }
 
 

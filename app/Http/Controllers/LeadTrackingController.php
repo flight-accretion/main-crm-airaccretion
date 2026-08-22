@@ -279,26 +279,81 @@ class LeadTrackingController extends Controller
     private function getVendorPaymentSummary($lead)
     {
         $vendorPayments = LeadVendorPayment::where('lead_id', $lead->id)
-            ->with(['vendor', 'paymentDetails', 'vendorPayments'])
+            ->with(['vendor', 'paymentDetails', 'vendorPayments', 'vendorRefunds'])
             ->get();
 
+        $totalOriginalVendorAmount = 0;
         $totalVendorAmount = 0;
+        $grossPaidVendorAmount = 0;
+        $refundedVendorAmount = 0;
         $paidVendorAmount = 0;
+        $balanceVendorAmount = 0;
+        $refundDueVendorAmount = 0;
 
         foreach ($vendorPayments as $vp) {
-            $totalVendorAmount += $vp->total_vendor_service_amount ?? 0;
+            $originalVendorAmount = round(
+                (float) ($vp->total_vendor_service_amount ?? 0),
+                2
+            );
 
-            // Calculate paid amount from vendorPayments (actual payments made to vendor)
-            if ($vp->vendorPayments && $vp->vendorPayments->count() > 0) {
-                $paidVendorAmount += $vp->vendorPayments->sum('paid_amount');
-            }
+            $adjustedVendorPayable = round(
+                (float) $vp->adjusted_vendor_payable,
+                2
+            );
+
+            $grossPaidAmount = round(
+                (float) $vp->total_paid,
+                2
+            );
+
+            $refundedAmount = round(
+                (float) $vp->total_refunded,
+                2
+            );
+
+            $netPaidAmount = round(
+                (float) $vp->net_paid_to_vendor,
+                2
+            );
+
+            $balanceAmount = round(
+                (float) $vp->vendor_payment_balance,
+                2
+            );
+
+            $refundDueAmount = round(
+                (float) $vp->vendor_refund_due,
+                2
+            );
+
+            $vp->setAttribute('original_vendor_amount', $originalVendorAmount);
+            $vp->setAttribute('adjusted_vendor_payable_amount', $adjustedVendorPayable);
+            $vp->setAttribute('gross_paid_amount', $grossPaidAmount);
+            $vp->setAttribute('refunded_amount', $refundedAmount);
+            $vp->setAttribute('net_paid_amount', $netPaidAmount);
+            $vp->setAttribute('balance_amount', $balanceAmount);
+            $vp->setAttribute('refund_due_amount', $refundDueAmount);
+            $vp->setAttribute('display_payment_status', $vp->derived_payment_status);
+            $vp->setAttribute('display_refund_status', $vp->vendor_refund_status);
+
+            $totalOriginalVendorAmount += $originalVendorAmount;
+            $totalVendorAmount += $adjustedVendorPayable;
+            $grossPaidVendorAmount += $grossPaidAmount;
+            $refundedVendorAmount += $refundedAmount;
+            $paidVendorAmount += $netPaidAmount;
+            $balanceVendorAmount += $balanceAmount;
+            $refundDueVendorAmount += $refundDueAmount;
         }
 
         return [
             'vendor_payments' => $vendorPayments,
-            'total' => $totalVendorAmount,
-            'paid' => $paidVendorAmount,
-            'balance' => $totalVendorAmount - $paidVendorAmount
+            'original_total' => round($totalOriginalVendorAmount, 2),
+            'total' => round($totalVendorAmount, 2),
+            'gross_paid' => round($grossPaidVendorAmount, 2),
+            'refunded' => round($refundedVendorAmount, 2),
+            'paid' => round($paidVendorAmount, 2),
+            'balance' => round($balanceVendorAmount, 2),
+            'refund_due' => round($refundDueVendorAmount, 2),
         ];
     }
 

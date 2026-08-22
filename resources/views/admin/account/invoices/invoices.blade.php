@@ -1164,11 +1164,14 @@
         }
 
         function renderVendorSections(vendors, perVendorHistories = {}) {
-            // vendors is expected to be an array of {name, total_amount, paid_amount, balance, payment_status}
             let html = '';
             vendors.forEach((v, idx) => {
-                const paid = perVendorHistories[v.id]?.paid_total ?? v.paid_amount ?? 0;
-                const balance = (v.total_amount || 0) - (paid || 0);
+                const grossPaid = parseFloat(v.gross_paid_amount ?? perVendorHistories[v.id]?.paid_total ?? v.paid_amount ?? 0) || 0;
+                const refunded = parseFloat(v.refunded_amount ?? perVendorHistories[v.id]?.refunded_total ?? 0) || 0;
+                const finalPayable = parseFloat(v.total_amount ?? 0) || 0;
+                const paid = parseFloat(v.paid_amount ?? Math.max(0, grossPaid - refunded)) || 0;
+                const balance = parseFloat(v.balance ?? Math.max(0, finalPayable - paid)) || 0;
+                const refundDue = parseFloat(v.refund_due_amount ?? Math.max(0, grossPaid - finalPayable - refunded)) || 0;
                 html += `
             <div class="box vendor-section" data-vendor-id="${v.id}">
                 <div class="box-header flex justify-between items-center">
@@ -1181,16 +1184,32 @@
                             <p class="text-gray-800 dark:text-white">${v.name || 'N/A'}</p>
                         </div>
                         <div class="xl:col-span-4 col-span-12">
-                            <label class="ti-form-label">Total Amount</label>
-                            <p class="text-gray-800">₹${formatNumber(v.total_amount || 0)}</p>
+                            <label class="ti-form-label">Original Amount</label>
+                            <p class="text-gray-800">₹${formatNumber(v.original_amount ?? v.total_amount ?? 0)}</p>
                         </div>
                         <div class="xl:col-span-4 col-span-12">
-                            <label class="ti-form-label">Paid Amount</label>
-                            <p class="text-success">₹${formatNumber(paid || 0)}</p>
+                            <label class="ti-form-label">Final Payable</label>
+                            <p class="text-gray-800">₹${formatNumber(finalPayable)}</p>
+                        </div>
+                        <div class="xl:col-span-4 col-span-12">
+                            <label class="ti-form-label">Gross Paid</label>
+                            <p class="text-gray-800">₹${formatNumber(grossPaid)}</p>
+                        </div>
+                        <div class="xl:col-span-4 col-span-12">
+                            <label class="ti-form-label">Vendor Refund</label>
+                            <p class="text-success">₹${formatNumber(refunded)}</p>
+                        </div>
+                        <div class="xl:col-span-4 col-span-12">
+                            <label class="ti-form-label">Net Paid</label>
+                            <p class="text-success">₹${formatNumber(paid)}</p>
                         </div>
                         <div class="xl:col-span-4 col-span-12">
                             <label class="ti-form-label">Balance</label>
                             <p class="text-danger">₹${formatNumber(balance)}</p>
+                        </div>
+                        <div class="xl:col-span-4 col-span-12">
+                            <label class="ti-form-label">Refund Due</label>
+                            <p class="text-danger">₹${formatNumber(refundDue)}</p>
                         </div>
                     </div>
                 </div>

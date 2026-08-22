@@ -193,8 +193,9 @@ class ProfitLossReportExport implements FromCollection, WithHeadings, WithMappin
         'enquiry.representative.userType',
         'enquiry.leadVendorPayments.vendor',
         'enquiry.leadVendorPayments.vendorPayments',
+        'enquiry.leadVendorPayments.vendorRefunds',
         'followedBy.userType'
-    ])->whereIn('status', [3, 4, 5, 6, 7, 8]);
+    ])->whereIn('status', [2, 3, 4, 5, 6, 7, 8]);
 
     if (!empty($this->filters['from_date'])) {
         $fromDate = Carbon::parse($this->filters['from_date'])->startOfDay();
@@ -293,7 +294,7 @@ class ProfitLossReportExport implements FromCollection, WithHeadings, WithMappin
         }
 
         // Skip if latest status is not qualifying
-        if (!in_array($latest->status, [3, 4, 5, 6, 7, 8])) {
+        if (!in_array($latest->status, [2, 3, 4, 5, 6, 7, 8])) {
             return null;
         }
 
@@ -312,7 +313,7 @@ class ProfitLossReportExport implements FromCollection, WithHeadings, WithMappin
         $totalVendorAmount = 0;
         $vendorNames = [];
         foreach ($vendorPayments as $vp) {
-            $totalVendorAmount += $vp->total_vendor_service_amount ?? 0;
+            $totalVendorAmount += round((float) $vp->adjusted_vendor_payable, 2);
             if ($vp->vendor) $vendorNames[] = $vp->vendor->name;
         }
 

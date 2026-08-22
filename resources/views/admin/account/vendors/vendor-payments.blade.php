@@ -133,7 +133,8 @@
                                 <th>Vendor Service Cost</th>
                                 <th>Balance Amount</th>
                                 <th>Paid Amount</th>
-                                <!-- <th>Refunded Amount</th> -->
+                                <!-- <th>Refunded Amount</th>
+                                <th>Refund Due</th> -->
                                 <th>Date Paid</th>
                                 <th>Status</th>
                                 <th>Actions</th>
@@ -179,10 +180,10 @@
                                 </td>
                                 <td class="text-center">
                                         @foreach ($payment['vendors'] as $vendor)
-                                        ₹{{ number_format($vendor['paid_amount'], 2) }}<br>
+                                        ₹{{ number_format($vendor['net_paid_amount'] ?? $vendor['paid_amount'], 2) }}<br>
                                         @endforeach
                                 </td>
-                                 <!-- <td class="text-center text-success">
+                                <!-- <td class="text-center text-success">
 
                                     @foreach (
                                         $payment['vendors']
@@ -201,6 +202,11 @@
 
                                     @endforeach
 
+                                </td>
+                                <td class="text-center text-danger">
+                                    @foreach ($payment['vendors'] as $vendor)
+                                        ₹{{ number_format($vendor['refund_due_amount'] ?? 0, 2) }}<br>
+                                    @endforeach
                                 </td> -->
                                 <td class="text-center">
                                     @foreach ($payment['vendors'] as $vendor)
@@ -977,10 +983,21 @@
             let vendorSectionsHtml = '';
 
             vendorPayments.forEach((vendorPayment, index) => {
-                // determine paid amount from perVendorHistories if available, else fallback to vendorPayment.paid_amount
-                const paidFromHist = (perVendorHistories && perVendorHistories[vendorPayment.id]) ? parseFloat(
-                    perVendorHistories[vendorPayment.id].paid_total || 0) : (vendorPayment.paid_amount || 0);
-                const balance = (vendorPayment.total_vendor_service_amount || 0) - (paidFromHist || 0);
+                const vendorHistory = (perVendorHistories && perVendorHistories[vendorPayment.id]) ?
+                    perVendorHistories[vendorPayment.id] : {};
+                const refundHistory = vendorHistory.refund_history || vendorPayment.vendor_refunds || [];
+                const latestRefund = Array.isArray(refundHistory) && refundHistory.length ?
+                    refundHistory.slice().sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))[0] :
+                    null;
+                const originalVendorAmount = parseFloat(vendorPayment.total_vendor_service_amount || 0) || 0;
+                const finalPayable = latestRefund && latestRefund.cancellation_amount !== undefined && latestRefund.cancellation_amount !== null ?
+                    (parseFloat(latestRefund.cancellation_amount || 0) || 0) :
+                    originalVendorAmount;
+                const paidFromHist = parseFloat(vendorHistory.paid_total || vendorPayment.paid_amount || 0) || 0;
+                const refundedAmount = parseFloat(vendorHistory.refunded_total || 0) || 0;
+                const netPaidAmount = Math.max(0, paidFromHist - refundedAmount);
+                const balance = Math.max(0, finalPayable - netPaidAmount);
+                const refundDue = Math.max(0, paidFromHist - finalPayable - refundedAmount);
                 
                 // Handle null vendor safely
                 const vendorName = vendorPayment.vendor?.name || 'N/A';
@@ -993,7 +1010,7 @@
                         <button type="button" class="ti-btn bg-theme ti-btn-primary-full !py-1 !px-2 add-payment-btn" 
                                 data-vendor-payment-id="${vendorPayment.id}"
                                 data-vendor-name="${vendorName}"
-                                data-total-amount="${vendorPayment.total_vendor_service_amount || 0}"
+                                data-total-amount="${finalPayable}"
                                 data-balance-amount="${balance}">
                             Add Vendor Payment
                         </button>
@@ -1007,16 +1024,32 @@
                         </div>
                        
                         <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Total Amount</label>
-                            <p class="text-gray-800 dark:text-white vendor-total-amount" data-vendor-id="${vendorPayment.id}">₹${formatNumber(vendorPayment.total_vendor_service_amount || 0)}</p>
+                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Original Amount</label>
+                            <p class="text-gray-800 dark:text-white">₹${formatNumber(originalVendorAmount)}</p>
+                        </div>
+                        <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
+                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Final Payable</label>
+                            <p class="text-gray-800 dark:text-white vendor-total-amount" data-vendor-id="${vendorPayment.id}">₹${formatNumber(finalPayable)}</p>
+                        </div>
+                        <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
+                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Gross Paid</label>
+                            <p class="text-gray-800 dark:text-white">₹${formatNumber(paidFromHist)}</p>
+                        </div>
+                        <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
+                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Vendor Refund</label>
+                            <p class="text-gray-800 dark:text-white text-success">₹${formatNumber(refundedAmount)}</p>
+                        </div>
+                        <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
+                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Net Paid</label>
+                            <p class="text-gray-800 dark:text-white text-success">₹<span class="vendor-paid-amount" data-vendor-id="${vendorPayment.id}">${formatNumber(netPaidAmount)}</span></p>
                         </div>
                         <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
                             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Balance</label>
                             <p class="text-danger-800 dark:text-white text-danger">₹${formatNumber(balance)}</p>
                         </div>
                         <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Paid Amount</label>
-                            <p class="text-gray-800 dark:text-white text-success">₹<span class="vendor-paid-amount" data-vendor-id="${vendorPayment.id}">${formatNumber(paidFromHist || 0)}</span></p>
+                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Refund Due</label>
+                            <p class="text-danger-800 dark:text-white text-danger">₹${formatNumber(refundDue)}</p>
                         </div>
 
                         <!-- Inline Add Payment Form (hidden by default) -->

@@ -116,8 +116,13 @@
                 <th>Customer Name</th>
                 <th>Number</th>
                 <th>Vendor Service Cost</th>
+                <th>Final Vendor Payable</th>
                 <th>Balance Amount</th>
                 <th>Paid Amount</th>
+                <th>Vendor Refund Received</th>
+                <th>Paid Amount</th>
+                <th>Refund Due</th>
+                <th>Status</th>
                 <th>Paid Date</th>
                 <th>Ride Status</th>
                 <th>Service Date</th>
@@ -135,9 +140,14 @@
                 <td>{{ $row->product }}</td>
                 <td>{{ $row->client_name }}</td>
                 <td>{{ $row->client_contact }}</td>
+                <td>{{ number_format($row->original_vendor_amount, 2) }}</td>
                 <td>{{ number_format($row->vendor_service_cost, 2) }}</td>
                 <td>{{ number_format($row->balance_amount, 2) }}</td>
+                <td>{{ number_format($row->gross_paid_amount, 2) }}</td>
+                <td>{{ number_format($row->refunded_amount, 2) }}</td>
                 <td>{{ number_format($row->paid_amount, 2) }}</td>
+                <td>{{ number_format($row->refund_due_amount, 2) }}</td>
+                <td>{{ $row->status }}</td>
                 <td>{{ $row->paid_date }}</td>
                 <td>{{ $row->ride_status }}</td>
                 <td>{{ $row->service_date }}</td>
@@ -147,7 +157,7 @@
               @endforeach
               @else
               <tr>
-                <td colspan="14" class="text-center">No vendor payments found</td>
+                <td colspan="19" class="text-center">No vendor payments found</td>
               </tr>
               @endif
             </tbody>

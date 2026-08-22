@@ -97,6 +97,16 @@ public function getTotalRefundedAttribute()
             ->sum('refund_amount');
 }
 
+public function getNetPaidToVendorAttribute()
+{
+    return max(
+        0,
+        $this->total_paid
+        -
+        $this->total_refunded
+    );
+}
+
 public function getAdjustedVendorPayableAttribute()
 {
     /*
@@ -128,6 +138,42 @@ public function getAdjustedVendorPayableAttribute()
     );
 }
 
+public function getVendorPaymentBalanceAttribute()
+{
+    return max(
+        0,
+        $this->adjusted_vendor_payable
+        -
+        $this->net_paid_to_vendor
+    );
+}
+
+public function getDerivedPaymentStatusAttribute()
+{
+    $adjustedPayable =
+        $this->adjusted_vendor_payable;
+
+    $netPaid =
+        $this->net_paid_to_vendor;
+
+    if ($adjustedPayable <= 0) {
+
+        return 'paid';
+    }
+
+    if ($netPaid <= 0) {
+
+        return 'unpaid';
+    }
+
+    if ($netPaid >= $adjustedPayable) {
+
+        return 'paid';
+    }
+
+    return 'partial';
+}
+
 
 public function getNetVendorCostAttribute()
 {
@@ -141,6 +187,11 @@ public function getNetVendorCostAttribute()
         0,
         $this->adjusted_vendor_payable
     );
+}
+
+public function getVendorRefundDueAttribute()
+{
+    return $this->available_refund;
 }
 
 

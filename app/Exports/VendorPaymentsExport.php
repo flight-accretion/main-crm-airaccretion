@@ -33,7 +33,8 @@ class VendorPaymentsExport implements FromCollection, WithHeadings, WithMapping,
             'voucher.invoice',
             'paymentDetails.service',
             'paymentDetails.extraService',
-            'vendorPayments'
+            'vendorPayments',
+            'vendorRefunds'
         ]);
 
         // Apply filters (capture values locally so closures can use them)
@@ -93,9 +94,17 @@ class VendorPaymentsExport implements FromCollection, WithHeadings, WithMapping,
                 // Get vendor specific service info
                 $vendorServiceInfo = $this->getVendorSpecificServiceInfo($vendorPayment);
                 
-                $vendorServiceCost = $vendorPayment->total_vendor_service_amount ?? 0;
-                $paidAmount = $vendorPayment->vendorPayments->sum('paid_amount') ?? 0;
-                $balanceAmount = $vendorServiceCost - $paidAmount;
+                $originalVendorAmount = round((float) (
+                    $vendorPayment->total_vendor_service_amount
+                    ?? $vendorPayment->total_service_amount
+                    ?? 0
+                ), 2);
+                $vendorServiceCost = round((float) $vendorPayment->adjusted_vendor_payable, 2);
+                $grossPaidAmount = round((float) $vendorPayment->total_paid, 2);
+                $refundedAmount = round((float) $vendorPayment->total_refunded, 2);
+                $paidAmount = round((float) $vendorPayment->net_paid_to_vendor, 2);
+                $balanceAmount = round((float) $vendorPayment->vendor_payment_balance, 2);
+                $refundDueAmount = round((float) $vendorPayment->vendor_refund_due, 2);
                 
                 // Get latest paid date
                 $vendorPaidDates = $vendorPayment->vendorPayments->pluck('paid_date')->filter();
@@ -109,13 +118,7 @@ class VendorPaymentsExport implements FromCollection, WithHeadings, WithMapping,
                     }
                 }
                 
-                // Determine status
-                $status = 'Unpaid';
-                if ($paidAmount >= $vendorServiceCost && $vendorServiceCost > 0) {
-                    $status = 'Full Paid';
-                } elseif ($paidAmount > 0) {
-                    $status = 'Partial Paid';
-                }
+                $status = $this->formatVendorPaymentStatus($vendorPayment->derived_payment_status);
                 
                 $serviceDisplay = $vendorServiceInfo['service_display'];
                 if (!empty($vendorServiceInfo['extra_service_display'])) {
@@ -224,9 +227,13 @@ class VendorPaymentsExport implements FromCollection, WithHeadings, WithMapping,
                     'client_paid_amount' => $clientPaidAmount,
                     'vendor_name' => $vendorName,
                     'service_display' => $serviceDisplay,
+                    'original_vendor_amount' => $originalVendorAmount,
                     'vendor_service_cost' => $vendorServiceCost,
                     'balance_amount' => $balanceAmount,
+                    'gross_paid_amount' => $grossPaidAmount,
+                    'refunded_amount' => $refundedAmount,
                     'paid_amount' => $paidAmount,
+                    'refund_due_amount' => $refundDueAmount,
                     'paid_date' => $latestPaidDate,
                     'status' => $status,
                     'booking_slip_number' => $bookingSlipNumber,
@@ -252,9 +259,13 @@ class VendorPaymentsExport implements FromCollection, WithHeadings, WithMapping,
             'Client Received Amount (INR)',
             'Vendor Name',
             'Service (Including Extra)',
-            'Vendor Service Cost (INR)',
+            'Original Vendor Amount (INR)',
+            'Final Vendor Payable (INR)',
             'Balance Amount (INR)',
-            'Paid Amount (INR)',
+            'Gross Paid Amount (INR)',
+            'Vendor Refund Received (INR)',
+            'Net Paid Amount (INR)',
+            'Refund Due (INR)',
             'Date Paid',
             'Status',
             'Booking Slip Number',
@@ -276,12 +287,16 @@ class VendorPaymentsExport implements FromCollection, WithHeadings, WithMapping,
             $row['client_name'],
             $row['client_email'],
             $this->formatPhoneNumber($row['client_contact']),
-            '₹' . number_format($row['client_paid_amount'], 2),
+            $this->formatCurrency($row['client_paid_amount']),
             $row['vendor_name'],
             $row['service_display'],
-            '₹' . number_format($row['vendor_service_cost'], 2),
-            '₹' . number_format($row['balance_amount'], 2),
-            '₹' . number_format($row['paid_amount'], 2),
+            $this->formatCurrency($row['original_vendor_amount']),
+            $this->formatCurrency($row['vendor_service_cost']),
+            $this->formatCurrency($row['balance_amount']),
+            $this->formatCurrency($row['gross_paid_amount']),
+            $this->formatCurrency($row['refunded_amount']),
+            $this->formatCurrency($row['paid_amount']),
+            $this->formatCurrency($row['refund_due_amount']),
             $row['paid_date'],
             $row['status'],
             $row['booking_slip_number'],
@@ -320,6 +335,24 @@ class VendorPaymentsExport implements FromCollection, WithHeadings, WithMapping,
         return $digits;
     }
 
+    private function formatCurrency($amount): string
+    {
+        return "\u{20B9}" . number_format((float) $amount, 2);
+    }
+
+    private function formatVendorPaymentStatus(?string $status): string
+    {
+        if ($status === 'paid') {
+            return 'Full Paid';
+        }
+
+        if ($status === 'partial') {
+            return 'Partial Paid';
+        }
+
+        return 'Unpaid';
+    }
+
     /**
      * Register events to style sheet after it's created (column widths, autofilter, alignments)
      */
@@ -330,7 +363,7 @@ class VendorPaymentsExport implements FromCollection, WithHeadings, WithMapping,
                 $sheet = $event->sheet->getDelegate();
 
                 // Apply header style: bold white text on blue background
-                $sheet->getStyle('A1:R1')->applyFromArray([
+                $sheet->getStyle('A1:V1')->applyFromArray([
                     'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
                     'fill' => [
                         'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
@@ -346,33 +379,37 @@ class VendorPaymentsExport implements FromCollection, WithHeadings, WithMapping,
                 $sheet->getColumnDimension('E')->setWidth(20);  // Client Received Amount
                 $sheet->getColumnDimension('F')->setWidth(25);  // Vendor Name
                 $sheet->getColumnDimension('G')->setWidth(45);  // Service
-                $sheet->getColumnDimension('H')->setWidth(18);  // Vendor Service Cost
-                $sheet->getColumnDimension('I')->setWidth(18);  // Balance Amount
-                $sheet->getColumnDimension('J')->setWidth(18);  // Paid Amount
-                $sheet->getColumnDimension('K')->setWidth(16);  // Date Paid
-                $sheet->getColumnDimension('L')->setWidth(14);  // Status
-                $sheet->getColumnDimension('M')->setWidth(18);  // Booking Slip Number
-                $sheet->getColumnDimension('N')->setWidth(20);  // Lead Created By
-                $sheet->getColumnDimension('O')->setWidth(15);  // Ride Status
-                $sheet->getColumnDimension('P')->setWidth(18);  // No. of Passengers
-                $sheet->getColumnDimension('Q')->setWidth(16);  // Booking Date
-                $sheet->getColumnDimension('R')->setWidth(16);  // Service Date
+                $sheet->getColumnDimension('H')->setWidth(18);  // Original Vendor Amount
+                $sheet->getColumnDimension('I')->setWidth(18);  // Final Vendor Payable
+                $sheet->getColumnDimension('J')->setWidth(18);  // Balance Amount
+                $sheet->getColumnDimension('K')->setWidth(18);  // Gross Paid Amount
+                $sheet->getColumnDimension('L')->setWidth(18);  // Vendor Refund Received
+                $sheet->getColumnDimension('M')->setWidth(18);  // Net Paid Amount
+                $sheet->getColumnDimension('N')->setWidth(18);  // Refund Due
+                $sheet->getColumnDimension('O')->setWidth(16);  // Date Paid
+                $sheet->getColumnDimension('P')->setWidth(14);  // Status
+                $sheet->getColumnDimension('Q')->setWidth(18);  // Booking Slip Number
+                $sheet->getColumnDimension('R')->setWidth(20);  // Lead Created By
+                $sheet->getColumnDimension('S')->setWidth(15);  // Ride Status
+                $sheet->getColumnDimension('T')->setWidth(18);  // No. of Passengers
+                $sheet->getColumnDimension('U')->setWidth(16);  // Booking Date
+                $sheet->getColumnDimension('V')->setWidth(16);  // Service Date
 
                 // Apply number formats and alignment for data rows
                 $highestRow = $sheet->getHighestRow();
-                $dataRange = 'A2:R' . $highestRow;
+                $dataRange = 'A2:V' . $highestRow;
 
-                // Right align numeric currency columns (E, H, I, J) and center A, P
+                // Right align numeric currency columns (E, H:N) and center A, T
                 $sheet->getStyle('A2:A' . $highestRow)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
                 $sheet->getStyle('E2:E' . $highestRow)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_RIGHT);
-                $sheet->getStyle('H2:J' . $highestRow)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_RIGHT);
-                $sheet->getStyle('P2:P' . $highestRow)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+                $sheet->getStyle('H2:N' . $highestRow)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_RIGHT);
+                $sheet->getStyle('T2:T' . $highestRow)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
 
                 // Wrap text for service column
                 $sheet->getStyle('G2:G' . $highestRow)->getAlignment()->setWrapText(true)->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT);
 
                 // Apply autofilter
-                $sheet->setAutoFilter('A1:R' . $highestRow);
+                $sheet->setAutoFilter('A1:V' . $highestRow);
 
                 // Freeze the header row
                 $sheet->freezePane('A2');

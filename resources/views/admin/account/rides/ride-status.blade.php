@@ -500,9 +500,9 @@
                 Vendor Refund / Settlement
             </h5>
 
-            <p class="text-xs text-gray-500 mb-0 mt-1">
+            <!-- <p class="text-xs text-gray-500 mb-0 mt-1">
                 Record vendor cancellation charges and money returned by the vendor against this lead.
-            </p>
+            </p> -->
         </div>
 
         <button
@@ -530,7 +530,7 @@
                  VENDOR SELECT
                  ===================================================== -->
 
-            <div class="mb-4">
+            <div class="vendor-refund-form-band mb-4">
 
                 <label class="ti-form-label">
                     Vendor
@@ -561,11 +561,11 @@
                  AMOUNTS
                  ===================================================== -->
 
-            <div class="grid grid-cols-12 gap-4">
+            <div class="vendor-refund-form-band grid grid-cols-12 gap-4">
 
                 <!-- Vendor Amount -->
 
-                <div class="col-span-12 md:col-span-4">
+                <div class="vendor-refund-field col-span-12 md:col-span-6">
 
                     <label class="ti-form-label">
                         Vendor Amount
@@ -601,7 +601,7 @@
 
                 <!-- Paid To Vendor -->
 
-                <div class="col-span-12 md:col-span-4">
+                <div class="vendor-refund-field col-span-12 md:col-span-6">
 
                     <label class="ti-form-label">
                         Paid To Vendor
@@ -623,7 +623,7 @@
 
                 <!-- Cancellation Amount -->
 
-                <div class="col-span-12 md:col-span-4">
+                <div class="vendor-refund-field col-span-12">
 
                     <label class="ti-form-label">
 
@@ -668,16 +668,51 @@
                  REFUND DETAILS
                  ===================================================== -->
 
-            <div class="grid grid-cols-12 gap-4 mt-5">
+            <div class="vendor-refund-form-band grid grid-cols-12 gap-4 mt-5">
 
 
-                <!-- Vendor Refund Amount -->
+                <!-- Vendor Refund Due -->
 
-                <div class="col-span-12 md:col-span-6">
+                <div class="vendor-refund-field col-span-12 md:col-span-6">
 
                     <label class="ti-form-label">
 
-                        Refund Amount
+                        Refund Due
+
+                    </label>
+
+                    <div class="input-group">
+
+                        <span class="input-group-text">
+                            ₹
+                        </span>
+
+                        <input
+                            type="number"
+                            class="form-control bg-gray-100"
+                            id="ride-vendor-refund-due"
+                            min="0"
+                            step="0.01"
+                            value="0.00"
+                            readonly
+                        >
+
+                    </div>
+
+                    <small class="text-muted">
+                        Pending amount vendor still needs to return.
+                    </small>
+
+                </div>
+
+
+                <!-- Vendor Received Amount -->
+
+                <div class="vendor-refund-field col-span-12 md:col-span-6">
+
+                    <label class="ti-form-label">
+
+                        Received Amount
 
                         <span class="text-danger">
                             *
@@ -693,19 +728,18 @@
 
                         <input
                             type="number"
-                            class="form-control bg-gray-100"
+                            class="form-control"
                             id="ride-vendor-refund-amount"
                             name="refund_amount"
                             min="0"
                             step="0.01"
                             value="0.00"
-                            readonly
                         >
 
                     </div>
 
                     <small class="text-muted">
-                        Auto-calculated from paid amount and cancellation amount.
+                        Enter 0.00 if only cancellation is being saved now.
                     </small>
 
                 </div>
@@ -714,7 +748,7 @@
                 <!-- Payment / Refund Mode -->
 
                 <div
-                    class="col-span-12 md:col-span-6"
+                    class="vendor-refund-field col-span-12"
                     id="vendor-refund-type-wrapper"
                 >
 
@@ -789,7 +823,7 @@
                 <!-- Refund Date -->
 
                 <div
-                    class="col-span-12 md:col-span-6"
+                    class="vendor-refund-field col-span-12"
                     id="ride-vendor-refund-date-wrapper"
                 >
 
@@ -818,13 +852,13 @@
                 <!-- Refund Receipt -->
 
                 <div
-                    class="col-span-12 md:col-span-6"
+                    class="vendor-refund-field col-span-12"
                     id="ride-vendor-refund-proof-wrapper"
                 >
 
                     <label class="ti-form-label">
 
-                        Upload Refund Proof
+                        Upload Payment Proof
 
                         <span
                             class="text-danger vendor-refund-money-required"
@@ -835,7 +869,7 @@
                     </label>
 
 
-                    <div class="flex items-center gap-3">
+                    <div class="vendor-refund-proof-row flex items-center gap-3">
 
                         <input
                             type="file"
@@ -879,7 +913,7 @@
 
                 <!-- Refund Reason -->
 
-                <div class="col-span-12">
+                <div class="vendor-refund-field col-span-12">
 
                     <label class="ti-form-label">
 
@@ -907,7 +941,7 @@
 
             <!-- Save -->
 
-            <div class="mt-4">
+            <div class="mt-4 flex justify-end">
 
                 <button
                     type="submit"
@@ -1225,9 +1259,11 @@
     '#vendor-refund-btn',
     function showVendorRefundInformationSection()
 {
+    syncRefundTabButtons();
+
     /*
     |--------------------------------------------------------------------------
-    | Hide Customer Refund
+    | Close Customer Refund Panel
     |--------------------------------------------------------------------------
     */
 
@@ -1891,6 +1927,21 @@ if (shouldFreezeStatus) {
 
             window.currentVendorRefundData = [];
         }
+        }
+
+        function syncRefundTabButtons() {
+            $('#action-buttons').show();
+            $('#refund-note-btn').show();
+
+            if (
+                Array.isArray(window.currentVendorRefundData)
+                &&
+                window.currentVendorRefundData.length > 0
+            ) {
+                $('#vendor-refund-btn').show();
+            } else {
+                $('#vendor-refund-btn').hide();
+            }
         }
 
         function updateActionButtons(status) {
@@ -2734,8 +2785,8 @@ if (shouldFreezeStatus) {
             //     currentFollowupId: window.currentFollowupId
             // });
 
-            // Hide refund note button and show refund section
-            $('#refund-note-btn').hide();
+            syncRefundTabButtons();
+            $('#vendor-refund-information-section').slideUp();
             $('#refund-information-section').slideDown();
 
             // Get current ride data to populate the form
@@ -2829,7 +2880,7 @@ if (shouldFreezeStatus) {
 
         function hideRefundInformationSection() {
             $('#refund-information-section').slideUp();
-            $('#refund-note-btn').show();
+            syncRefundTabButtons();
             
             // Clear form
             $('#ride-refund-form')[0].reset();
@@ -2842,16 +2893,17 @@ if (shouldFreezeStatus) {
             $('#ride-preview-proof-btn').data('preview-url', '').hide();
         }
 
-        function showVendorRefundInformationSection()
+function showVendorRefundInformationSection()
 {
     if (!currentRideId) {
         return;
     }
 
+    syncRefundTabButtons();
 
     /*
     |--------------------------------------------------------------------------
-    | Close Customer Refund
+    | Close Customer Refund Panel
     |--------------------------------------------------------------------------
     */
 
@@ -2930,8 +2982,11 @@ if (shouldFreezeStatus) {
     $('#ride-vendor-paid-amount')
         .text('₹0.00');
 
+    $('#ride-vendor-refund-due')
+        .val('0.00');
+
     $('#ride-vendor-refund-amount')
-        .val('0')
+        .val('0.00')
         .attr(
             'max',
             0
@@ -2973,6 +3028,8 @@ function hideVendorRefundInformationSection()
     $('#vendor-refund-information-section')
         .slideUp();
 
+    syncRefundTabButtons();
+
 
     const form =
         $('#ride-vendor-refund-form')[0];
@@ -2990,6 +3047,16 @@ function hideVendorRefundInformationSection()
     $('#ride-vendor-paid-amount')
         .text('₹0.00');
 
+
+    $('#ride-vendor-refund-due')
+        .val('0.00');
+
+    $('#ride-vendor-refund-amount')
+        .val('0.00')
+        .attr(
+            'max',
+            0
+        );
 
     updateVendorRefundFields();
 }
@@ -3027,6 +3094,15 @@ $(document).on(
 
             $('#ride-vendor-refund-amount')
                 .val('0.00');
+
+            $('#ride-vendor-refund-due')
+                .val('0.00');
+
+            $('#ride-vendor-refund-amount')
+                .attr(
+                    'max',
+                    0
+                );
 
             updateVendorRefundFields();
 
@@ -3136,6 +3212,9 @@ $(document).on(
         }
 
 
+        $('#ride-vendor-refund-amount')
+            .val('0.00');
+
         calculateVendorRefund();
     }
 );
@@ -3201,15 +3280,17 @@ function calculateVendorRefund()
         );
 
 
-    $('#ride-vendor-refund-amount')
+    $('#ride-vendor-refund-due')
         .val(
             refundDue.toFixed(2)
         );
 
+    $('#ride-vendor-refund-amount')
+        .attr(
+            'max',
+            refundDue.toFixed(2)
+        );
 
-    updateVendorRefundMoneyFields(
-        refundDue
-    );
 
     updateVendorRefundFields();
 }
@@ -3222,43 +3303,6 @@ $(document).on(
         calculateVendorRefund();
     }
 );
-
-function updateVendorRefundMoneyFields(
-    refundAmount
-)
-{
-    const hasMoney =
-        parseFloat(
-            refundAmount || 0
-        ) > 0;
-
-
-    $('#ride-vendor-refund-type')
-        .prop(
-            'required',
-            hasMoney
-        );
-
-
-    $('#ride-vendor-refund-date')
-        .prop(
-            'required',
-            hasMoney
-        );
-
-
-    $('#ride-vendor-refund-proof')
-        .prop(
-            'required',
-            hasMoney
-        );
-
-
-    $('.vendor-refund-money-required')
-        .toggle(
-            hasMoney
-        );
-}
 
 function updateVendorRefundFields()
 {
@@ -3489,6 +3533,15 @@ $(document).on(
                 || 0
             );
 
+        const refundDue =
+            parseFloat(
+                $('#ride-vendor-refund-amount')
+                    .attr(
+                        'max'
+                    )
+                || 0
+            );
+
 
         if (
             !Number.isFinite(
@@ -3531,7 +3584,22 @@ $(document).on(
         ) {
 
             showError(
-                'Please enter a valid vendor refund amount.'
+                'Please enter a valid received amount.'
+            );
+
+            return;
+        }
+
+        if (
+            refundAmount
+            >
+            refundDue
+            +
+            0.01
+        ) {
+
+            showError(
+                'Received amount cannot be greater than refund due.'
             );
 
             return;
@@ -3592,7 +3660,7 @@ $(document).on(
             if (!proofFile) {
 
                 missing.push(
-                    'Refund Proof'
+                    'Payment Proof'
                 );
             }
 
@@ -4809,6 +4877,72 @@ function hideStatusLoader() {
 
 </script>
 <style>
+    #vendor-refund-information-section .box-header {
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    #vendor-refund-information-section .box-body {
+        padding: 1.25rem;
+    }
+
+    #ride-vendor-refund-form .vendor-refund-form-band {
+        background: #fff;
+        border: 1px solid rgba(148, 163, 184, 0.24);
+        border-radius: 8px;
+        padding: 1rem;
+    }
+
+    #ride-vendor-refund-form .vendor-refund-field {
+        min-width: 0;
+    }
+
+    #ride-vendor-refund-form .ti-form-label {
+        margin-bottom: 0.35rem;
+        line-height: 1.25;
+    }
+
+    #ride-vendor-refund-form .form-control,
+    #ride-vendor-refund-form .input-group-text {
+        min-height: 42px;
+    }
+
+    #ride-vendor-refund-form small,
+    #ride-vendor-proof-filename,
+    #ride-vendor-proof-hint {
+        line-height: 1.35;
+    }
+
+    #ride-vendor-refund-form .vendor-refund-proof-row {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    #ride-vendor-refund-proof {
+        flex: 1 1 280px;
+        min-width: 0;
+    }
+
+    #ride-vendor-preview-proof-btn {
+        flex: 0 0 auto;
+        min-height: 42px;
+    }
+
+    @media (max-width: 767px) {
+        #vendor-refund-information-section .box-body {
+            padding: 1rem;
+        }
+
+        #ride-vendor-refund-form .vendor-refund-form-band {
+            padding: 0.875rem;
+        }
+
+        #ride-vendor-preview-proof-btn,
+        #ride-vendor-refund-form button[type="submit"] {
+            width: 100%;
+        }
+    }
+
     #refund-modal-edit-btn[disabled],
     #refund-modal-edit-btn:disabled {
         opacity: 0.4 !important;

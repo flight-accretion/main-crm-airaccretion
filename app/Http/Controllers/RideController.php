@@ -4017,10 +4017,12 @@ public function saveVendorRefundFromRideStatus(
 
                 /*
                 |--------------------------------------------------------------------------
-                | Validate browser amount against server amount
+                | Validate received amount against server refund due
                 |--------------------------------------------------------------------------
                 |
                 | Never trust a financial value calculated only in JavaScript.
+                | The browser submits actual money received now, which may be
+                | less than the total refund still due from the vendor.
                 |
                 */
 
@@ -4033,18 +4035,16 @@ public function saveVendorRefundFromRideStatus(
 
 
                 if (
-                    abs(
-                        $submittedRefundAmount
-                        -
-                        $calculatedRefundAmount
-                    )
+                    $submittedRefundAmount
                     >
+                    $calculatedRefundAmount
+                    +
                     0.01
                 ) {
 
                     throw ValidationException::withMessages([
                         'refund_amount' =>
-                            'Vendor refund calculation has changed. Expected refund is ₹'
+                            'Received amount cannot exceed pending vendor refund of ₹'
                             .
                             number_format(
                                 $calculatedRefundAmount,
@@ -4063,7 +4063,7 @@ public function saveVendorRefundFromRideStatus(
                 */
 
                 $refundAmount =
-                    $calculatedRefundAmount;
+                    $submittedRefundAmount;
 
 
                 /*
@@ -4246,7 +4246,7 @@ public function saveVendorRefundFromRideStatus(
                                         null,
 
                                     'no_refund_required' =>
-                                        true,
+                                        $calculatedRefundAmount <= 0.01,
                                 ]
                             );
 
@@ -4346,10 +4346,8 @@ public function saveVendorRefundFromRideStatus(
 
 
                         $refundStatus =
-                            $hasActualRefund
-                                ? $leadVendorPayment
-                                    ->vendor_refund_status
-                                : 'no_refund_required';
+                            $leadVendorPayment
+                                ->vendor_refund_status;
 
 
                         return response()->json([
@@ -4439,7 +4437,9 @@ public function saveVendorRefundFromRideStatus(
                             $proofPath,
 
                         'no_refund_required' =>
-                            $refundAmount == 0,
+                            $refundAmount == 0
+                            &&
+                            $calculatedRefundAmount <= 0.01,
 
                         'created_by' =>
                             auth()->id(),
@@ -4574,27 +4574,9 @@ public function saveVendorRefundFromRideStatus(
                 |--------------------------------------------------------------------------
                 */
 
-                if ($refundAmount <= 0) {
-
-                    $refundStatus =
-                        'no_refund_required';
-
-                } elseif (
-                    $balanceAmount <= 0
-                    &&
-                    $netPaidToVendor
-                    <=
-                    $cancellationAmount
-                ) {
-
-                    $refundStatus =
-                        'settled';
-
-                } else {
-
-                    $refundStatus =
-                        'partial_refund';
-                }
+                $refundStatus =
+                    $leadVendorPayment
+                        ->vendor_refund_status;
 
 
                 return response()->json([

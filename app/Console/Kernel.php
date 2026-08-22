@@ -42,6 +42,12 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping()
             ->appendOutputTo(storage_path('logs/booking-reminders.log'));
 
+        $schedule->command('lead:auto-cancel-expired-active-rides')
+            ->dailyAt('00:30')
+            ->timezone('Asia/Kolkata')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/lead-auto-cancel.log'));
+
         // Auto allocate queued leads every 5 minutes during office hours
         $schedule->command('lead:process-allocation')
             ->everyFiveMinutes()

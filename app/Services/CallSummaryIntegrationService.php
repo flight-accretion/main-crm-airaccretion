@@ -181,6 +181,36 @@ class CallSummaryIntegrationService
         }
 
 
+        Log::info(
+            'Call Summary integration normalized payload.',
+            [
+                'payload_debug' =>
+                    $this->payloadDebugContext(
+                        $payload
+                    ),
+
+                'normalized_phone' =>
+                    $phone,
+
+                'normalized_agent_name' =>
+                    $agent,
+
+                'normalized_recording_id' =>
+                    $recordingId,
+
+                'parsed_followup_date' =>
+                    $this->dateForLog(
+                        $attributes[
+                            'followup_date'
+                        ]
+                    ),
+
+                'call_fingerprint' =>
+                    $fingerprint,
+            ]
+        );
+
+
         /*
         |--------------------------------------------------------------------------
         | Idempotency / payload refresh
@@ -197,6 +227,44 @@ class CallSummaryIntegrationService
 
 
         if ($existing) {
+
+            Log::info(
+                'Call Summary integration existing record found; refreshing payload.',
+                [
+                    'integration_id' =>
+                        $existing
+                            ->id,
+
+                    'status_before' =>
+                        $existing
+                            ->status,
+
+                    'followup_id_before' =>
+                        $existing
+                            ->followup_id,
+
+                    'followup_recording_id_before' =>
+                        $existing
+                            ->followup_recording_id,
+
+                    'incoming_followup_recording_id' =>
+                        $recordingId,
+
+                    'incoming_summary_preview' =>
+                        $this->previewForLog(
+                            $attributes[
+                                'summary'
+                            ]
+                        ),
+
+                    'incoming_followup_date' =>
+                        $this->dateForLog(
+                            $attributes[
+                                'followup_date'
+                            ]
+                        ),
+                ]
+            );
 
             $existing->fill(
                 $attributes
@@ -232,6 +300,31 @@ class CallSummaryIntegrationService
                     ]
                 )
             );
+
+        Log::info(
+            'Call Summary integration stored new record.',
+            [
+                'integration_id' =>
+                    $integration
+                        ->id,
+
+                'followup_recording_id' =>
+                    $integration
+                        ->followup_recording_id,
+
+                'summary_preview' =>
+                    $this->previewForLog(
+                        $integration
+                            ->summary
+                    ),
+
+                'followup_date' =>
+                    $this->dateForLog(
+                        $integration
+                            ->followup_date
+                    ),
+            ]
+        );
 
 
         /*
@@ -269,6 +362,42 @@ class CallSummaryIntegrationService
             $integration->followup_recording_id
         );
 
+    Log::info(
+        'Call Summary integration processing started.',
+        [
+            'integration_id' =>
+                $integration
+                    ->id,
+
+            'status' =>
+                $integration
+                    ->status,
+
+            'lead_id' =>
+                $integration
+                    ->lead_id,
+
+            'followup_id' =>
+                $integration
+                    ->followup_id,
+
+            'followup_recording_id' =>
+                $recordingId,
+
+            'summary_preview' =>
+                $this->previewForLog(
+                    $integration
+                        ->summary
+                ),
+
+            'followup_date' =>
+                $this->dateForLog(
+                    $integration
+                        ->followup_date
+                ),
+        ]
+    );
+
     if (
         in_array(
             $integration->status,
@@ -283,6 +412,27 @@ class CallSummaryIntegrationService
         &&
         $recordingId === null
     ) {
+
+        Log::info(
+            'Call Summary integration already completed; skipping duplicate follow-up creation.',
+            [
+                'integration_id' =>
+                    $integration
+                        ->id,
+
+                'status' =>
+                    $integration
+                        ->status,
+
+                'followup_id' =>
+                    $integration
+                        ->followup_id,
+
+                'followup_recording_id' =>
+                    $recordingId,
+            ]
+        );
+
         return $integration;
     }
 
@@ -1589,6 +1739,56 @@ if (
                 ? $latestFollowup->status
                 : 1;
 
+        Log::info(
+            'Call Summary follow-up sync entered.',
+            [
+                'integration_id' =>
+                    $integration
+                        ->id,
+
+                'lead_id' =>
+                    $lead
+                        ->id,
+
+                'incoming_followup_id' =>
+                    $integration
+                        ->followup_id,
+
+                'incoming_followup_recording_id' =>
+                    $this->normalizeRecordingId(
+                        $integration
+                            ->followup_recording_id
+                    ),
+
+                'incoming_summary_preview' =>
+                    $this->previewForLog(
+                        $integration
+                            ->summary
+                    ),
+
+                'incoming_followup_date' =>
+                    $this->dateForLog(
+                        $integration
+                            ->followup_date
+                    ),
+
+                'candidate_followed_by' =>
+                    $followedBy,
+
+                'latest_followup_id' =>
+                    $latestFollowup
+                        ? $latestFollowup
+                            ->id
+                        : null,
+
+                'latest_followup_status' =>
+                    $latestFollowup
+                        ? $latestFollowup
+                            ->status
+                        : null,
+            ]
+        );
+
 
         DB::transaction(
             function () use (
@@ -1628,6 +1828,8 @@ if (
 
                 $followup = null;
 
+                $lookupMethod = null;
+
 
                 if (!empty($locked->followup_id)) {
 
@@ -1639,6 +1841,12 @@ if (
                             )
                             ->lockForUpdate()
                             ->first();
+
+                    if ($followup) {
+
+                        $lookupMethod =
+                            'integration_followup_id';
+                    }
                 }
 
 
@@ -1670,7 +1878,55 @@ if (
                             )
                             ->lockForUpdate()
                             ->first();
+
+                    if ($followup) {
+
+                        $lookupMethod =
+                            'lead_recording_id';
+                    }
                 }
+
+
+                Log::info(
+                    'Call Summary follow-up lookup completed.',
+                    [
+                        'integration_id' =>
+                            $locked
+                                ->id,
+
+                        'lead_id' =>
+                            $lead
+                                ->id,
+
+                        'locked_followup_id' =>
+                            $locked
+                                ->followup_id,
+
+                        'followup_recording_id' =>
+                            $recordingId,
+
+                        'lookup_method' =>
+                            $lookupMethod,
+
+                        'found_followup_id' =>
+                            $followup
+                                ? $followup
+                                    ->id
+                                : null,
+
+                        'incoming_summary_preview' =>
+                            $this->previewForLog(
+                                $locked
+                                    ->summary
+                            ),
+
+                        'incoming_followup_date' =>
+                            $this->dateForLog(
+                                $locked
+                                    ->followup_date
+                            ),
+                    ]
+                );
 
 
                 if ($followup) {
@@ -1678,6 +1934,56 @@ if (
                     $effectiveFollowedBy =
                         $followedBy
                             ?: $followup->followed_by;
+
+                    Log::info(
+                        'Call Summary follow-up update target found.',
+                        [
+                            'integration_id' =>
+                                $locked
+                                    ->id,
+
+                            'lead_id' =>
+                                $lead
+                                    ->id,
+
+                            'followup_id' =>
+                                $followup
+                                    ->id,
+
+                            'lookup_method' =>
+                                $lookupMethod,
+
+                            'followup_recording_id' =>
+                                $recordingId,
+
+                            'current_followup_note_preview' =>
+                                $this->previewForLog(
+                                    $followup
+                                        ->followup_note
+                                ),
+
+                            'incoming_summary_preview' =>
+                                $this->previewForLog(
+                                    $locked
+                                        ->summary
+                                ),
+
+                            'current_next_followup_date' =>
+                                $this->dateForLog(
+                                    $followup
+                                        ->next_followup_date
+                                ),
+
+                            'incoming_followup_date' =>
+                                $this->dateForLog(
+                                    $locked
+                                        ->followup_date
+                                ),
+
+                            'effective_followed_by' =>
+                                $effectiveFollowedBy,
+                        ]
+                    );
 
                     $this->applyCallSummaryToFollowup(
                         $followup,
@@ -1702,6 +2008,34 @@ if (
 
                 if (empty($followedBy)) {
 
+                    Log::warning(
+                        'Call Summary follow-up could not be saved because followed_by is missing.',
+                        [
+                            'integration_id' =>
+                                $locked
+                                    ->id,
+
+                            'lead_id' =>
+                                $lead
+                                    ->id,
+
+                            'followup_recording_id' =>
+                                $recordingId,
+
+                            'incoming_summary_preview' =>
+                                $this->previewForLog(
+                                    $locked
+                                        ->summary
+                                ),
+
+                            'incoming_followup_date' =>
+                                $this->dateForLog(
+                                    $locked
+                                        ->followup_date
+                                ),
+                        ]
+                    );
+
                     $locked->status =
                         'pending_lead';
 
@@ -1712,6 +2046,37 @@ if (
 
                     return;
                 }
+
+                Log::info(
+                    'Call Summary follow-up target not found; creating new follow-up.',
+                    [
+                        'integration_id' =>
+                            $locked
+                                ->id,
+
+                        'lead_id' =>
+                            $lead
+                                ->id,
+
+                        'followup_recording_id' =>
+                            $recordingId,
+
+                        'incoming_summary_preview' =>
+                            $this->previewForLog(
+                                $locked
+                                    ->summary
+                            ),
+
+                        'incoming_followup_date' =>
+                            $this->dateForLog(
+                                $locked
+                                    ->followup_date
+                            ),
+
+                        'followed_by' =>
+                            $followedBy,
+                    ]
+                );
 
 
                 $followup =
@@ -1742,6 +2107,39 @@ if (
                             $status,
                     ]);
 
+                Log::info(
+                    'Call Summary follow-up created from API summary.',
+                    [
+                        'integration_id' =>
+                            $locked
+                                ->id,
+
+                        'lead_id' =>
+                            $lead
+                                ->id,
+
+                        'followup_id' =>
+                            $followup
+                                ->id,
+
+                        'followup_recording_id' =>
+                            $followup
+                                ->followup_recording_id,
+
+                        'saved_followup_note_preview' =>
+                            $this->previewForLog(
+                                $followup
+                                    ->followup_note
+                            ),
+
+                        'saved_next_followup_date' =>
+                            $this->dateForLog(
+                                $followup
+                                    ->next_followup_date
+                            ),
+                    ]
+                );
+
 
                 $this->completeIntegrationWithFollowup(
                     $locked,
@@ -1765,6 +2163,53 @@ if (
         ?int $recordingId
     ): void {
 
+        Log::info(
+            'Call Summary follow-up applying update.',
+            [
+                'integration_id' =>
+                    $integration
+                        ->id,
+
+                'followup_id' =>
+                    $followup
+                        ->id,
+
+                'lead_id' =>
+                    $followup
+                        ->lead_id,
+
+                'followup_recording_id' =>
+                    $recordingId,
+
+                'before_followup_note_preview' =>
+                    $this->previewForLog(
+                        $followup
+                            ->followup_note
+                    ),
+
+                'incoming_summary_preview' =>
+                    $this->previewForLog(
+                        $integration
+                            ->summary
+                    ),
+
+                'before_next_followup_date' =>
+                    $this->dateForLog(
+                        $followup
+                            ->next_followup_date
+                    ),
+
+                'incoming_followup_date' =>
+                    $this->dateForLog(
+                        $integration
+                            ->followup_date
+                    ),
+
+                'incoming_followed_by' =>
+                    $followedBy,
+            ]
+        );
+
         $followup->followup_note =
             $integration->summary;
 
@@ -1784,6 +2229,45 @@ if (
         }
 
         $followup->save();
+
+        $followup->refresh();
+
+        Log::info(
+            'Call Summary follow-up update saved.',
+            [
+                'integration_id' =>
+                    $integration
+                        ->id,
+
+                'followup_id' =>
+                    $followup
+                        ->id,
+
+                'lead_id' =>
+                    $followup
+                        ->lead_id,
+
+                'followup_recording_id' =>
+                    $followup
+                        ->followup_recording_id,
+
+                'saved_followup_note_preview' =>
+                    $this->previewForLog(
+                        $followup
+                            ->followup_note
+                    ),
+
+                'saved_next_followup_date' =>
+                    $this->dateForLog(
+                        $followup
+                            ->next_followup_date
+                    ),
+
+                'saved_followed_by' =>
+                    $followup
+                        ->followed_by,
+            ]
+        );
     }
 
 
@@ -1814,6 +2298,206 @@ if (
             null;
 
         $integration->save();
+
+        Log::info(
+            'Call Summary integration completed with follow-up.',
+            [
+                'integration_id' =>
+                    $integration
+                        ->id,
+
+                'status' =>
+                    $integration
+                        ->status,
+
+                'lead_id' =>
+                    $integration
+                        ->lead_id,
+
+                'followup_id' =>
+                    $integration
+                        ->followup_id,
+
+                'followup_recording_id' =>
+                    $integration
+                        ->followup_recording_id,
+
+                'saved_followup_note_preview' =>
+                    $this->previewForLog(
+                        $followup
+                            ->followup_note
+                    ),
+
+                'saved_next_followup_date' =>
+                    $this->dateForLog(
+                        $followup
+                            ->next_followup_date
+                    ),
+            ]
+        );
+    }
+
+    private function payloadDebugContext(
+        array $payload
+    ): array {
+
+        $keys =
+            array_keys(
+                $payload
+            );
+
+        return [
+            'keys' =>
+                $keys,
+
+            'lead_id' =>
+                $payload['lead_id']
+                ?? null,
+
+            'phone_number' =>
+                $payload['phone_number']
+                ?? null,
+
+            'agent_name' =>
+                $payload['agent_name']
+                ?? null,
+
+            'direction' =>
+                $payload['direction']
+                ?? null,
+
+            'call_start_at' =>
+                $payload['call_start_at']
+                ?? null,
+
+            'call_end_at' =>
+                $payload['call_end_at']
+                ?? null,
+
+            'followup_recording_id_present' =>
+                array_key_exists(
+                    'followup_recording_id',
+                    $payload
+                ),
+
+            'followup_recording_id' =>
+                $payload['followup_recording_id']
+                ?? null,
+
+            'summary_present' =>
+                array_key_exists(
+                    'summary',
+                    $payload
+                ),
+
+            'summary_length' =>
+                array_key_exists(
+                    'summary',
+                    $payload
+                )
+                    ? mb_strlen(
+                        (string)
+                        $payload['summary']
+                    )
+                    : null,
+
+            'summary_preview' =>
+                $this->previewForLog(
+                    $payload['summary']
+                    ?? null
+                ),
+
+            'followup_date_present' =>
+                array_key_exists(
+                    'followup_date',
+                    $payload
+                ),
+
+            'followup_date' =>
+                $payload['followup_date']
+                ?? null,
+
+            'possible_summary_fields' =>
+                array_values(
+                    array_intersect(
+                        [
+                            'summary',
+                            'call_summary',
+                            'followup_summary',
+                            'followup_note',
+                            'notes',
+                            'note',
+                        ],
+                        $keys
+                    )
+                ),
+
+            'possible_date_fields' =>
+                array_values(
+                    array_intersect(
+                        [
+                            'followup_date',
+                            'next_followup_date',
+                            'next_follow_up',
+                            'follow_up_date',
+                            'date',
+                        ],
+                        $keys
+                    )
+                ),
+        ];
+    }
+
+
+    private function previewForLog(
+        $value
+    ): ?string {
+
+        if ($value === null) {
+
+            return null;
+        }
+
+        return mb_substr(
+            trim(
+                (string)
+                $value
+            ),
+            0,
+            500
+        );
+    }
+
+
+    private function dateForLog(
+        $value
+    ): ?string {
+
+        if (empty($value)) {
+
+            return null;
+        }
+
+        if ($value instanceof Carbon) {
+
+            return $value->format(
+                'Y-m-d H:i:s'
+            );
+        }
+
+        try {
+
+            return Carbon::parse(
+                $value
+            )->format(
+                'Y-m-d H:i:s'
+            );
+
+        } catch (\Throwable $e) {
+
+            return (string)
+                $value;
+        }
     }
 
     /*

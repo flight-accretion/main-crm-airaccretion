@@ -808,29 +808,84 @@ class InvoiceController extends Controller
      */
     private function getVendorInformation($voucher)
     {
+        $voucher->loadMissing([
+            'vendorPayments.vendor',
+            'vendorPayments.vendorPayments',
+            'vendorPayments.vendorRefunds',
+        ]);
+
         $vendorPayments = $voucher->vendorPayments;
         $totalVendorCost = 0;
+        $totalOriginalVendorCost = 0;
+        $totalGrossPaid = 0;
+        $totalRefunded = 0;
         $totalPaid = 0;
+        $totalBalance = 0;
+        $totalRefundDue = 0;
         $vendors = [];
 
 
         foreach ($vendorPayments as $vendorPayment) {
-            // Prefer different possible column names depending on model/source
-            $vendorCost = $vendorPayment->total_vendor_service_amount ?? $vendorPayment->total_service_amount ?? $vendorPayment->total_service_amount ?? 0;
-            // VendorPayment records store paid_amount on child records
-            $paidAmount = ($vendorPayment->vendorPayments->sum('paid_amount')) ?? 0;
+            $originalVendorCost = round(
+                (float) (
+                    $vendorPayment->total_vendor_service_amount
+                    ?? $vendorPayment->total_service_amount
+                    ?? 0
+                ),
+                2
+            );
 
+            $vendorCost = round(
+                (float) $vendorPayment->adjusted_vendor_payable,
+                2
+            );
+
+            $grossPaidAmount = round(
+                (float) $vendorPayment->total_paid,
+                2
+            );
+
+            $refundedAmount = round(
+                (float) $vendorPayment->total_refunded,
+                2
+            );
+
+            $paidAmount = round(
+                (float) $vendorPayment->net_paid_to_vendor,
+                2
+            );
+
+            $balanceAmount = round(
+                (float) $vendorPayment->vendor_payment_balance,
+                2
+            );
+
+            $refundDueAmount = round(
+                (float) $vendorPayment->vendor_refund_due,
+                2
+            );
+
+            $totalOriginalVendorCost += $originalVendorCost;
             $totalVendorCost += $vendorCost;
+            $totalGrossPaid += $grossPaidAmount;
+            $totalRefunded += $refundedAmount;
             $totalPaid += $paidAmount;
+            $totalBalance += $balanceAmount;
+            $totalRefundDue += $refundDueAmount;
 
             if ($vendorPayment->vendor) {
                 $vendors[] = [
                     'id' => $vendorPayment->id,
                     'name' => $vendorPayment->vendor->name,
+                    'original_amount' => $originalVendorCost,
                     'total_amount' => $vendorCost,
+                    'gross_paid_amount' => $grossPaidAmount,
+                    'refunded_amount' => $refundedAmount,
                     'paid_amount' => $paidAmount,
-                    'balance' => $vendorCost - $paidAmount,
-                    'payment_status' => $vendorPayment->payment_status ?? 'unpaid',
+                    'balance' => $balanceAmount,
+                    'refund_due_amount' => $refundDueAmount,
+                    'payment_status' => $vendorPayment->derived_payment_status,
+                    'refund_status' => $vendorPayment->vendor_refund_status,
                     // expose original field if present
                     'raw_total_service_amount' => $vendorPayment->total_service_amount ?? null,
                     'raw_total_vendor_service_amount' => $vendorPayment->total_vendor_service_amount ?? null
@@ -840,11 +895,15 @@ class InvoiceController extends Controller
 
         return [
             'vendors' => $vendors,
-            'totalVendorCost' => $totalVendorCost,
-            'totalPaid' => $totalPaid,
-            'totalBalance' => $totalVendorCost - $totalPaid,
+            'totalOriginalVendorCost' => round($totalOriginalVendorCost, 2),
+            'totalVendorCost' => round($totalVendorCost, 2),
+            'totalGrossPaid' => round($totalGrossPaid, 2),
+            'totalRefunded' => round($totalRefunded, 2),
+            'totalPaid' => round($totalPaid, 2),
+            'totalBalance' => round($totalBalance, 2),
+            'totalRefundDue' => round($totalRefundDue, 2),
             // legacy key to make it explicit in invoice templates
-            'total_service_amount' => $totalVendorCost
+            'total_service_amount' => round($totalVendorCost, 2)
         ];
     }
 

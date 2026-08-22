@@ -266,6 +266,26 @@ GREATEST(
 
 /*
 |--------------------------------------------------------------------------
+| Refund still expected from vendor
+|--------------------------------------------------------------------------
+*/
+
+$rawRefundDue = "
+GREATEST(
+    0,
+    (
+        $rawPaid
+        -
+        $rawAdjustedPayable
+        -
+        $rawRefunded
+    )
+)
+";
+
+
+/*
+|--------------------------------------------------------------------------
 | Initial dashboard
 |--------------------------------------------------------------------------
 |
@@ -279,7 +299,10 @@ if (!$request->filled('status')) {
 
     $query->whereIn(
         'lead_id',
-        function ($sub) {
+        function ($sub) use (
+            $rawBalance,
+            $rawRefundDue
+        ) {
 
             $sub->select(
                 'lead_id'
@@ -287,57 +310,9 @@ if (!$request->filled('status')) {
             ->from(
                 'lead_vendor_payments'
             )
-            ->whereRaw("
-                GREATEST(
-                    0,
-                    (
-                        COALESCE(
-                            (
-                                SELECT vr.cancellation_amount
-                                FROM vendor_refunds vr
-                                WHERE
-                                    vr.lead_vendor_payment_id
-                                    =
-                                    lead_vendor_payments.id
-                                ORDER BY
-                                    vr.created_at DESC
-                                LIMIT 1
-                            ),
-                            lead_vendor_payments.total_vendor_service_amount,
-                            0
-                        )
-                        -
-                        GREATEST(
-                            0,
-                            (
-                                (
-                                    SELECT COALESCE(
-                                        SUM(vp.paid_amount),
-                                        0
-                                    )
-                                    FROM vendor_payments vp
-                                    WHERE
-                                        vp.lead_vendor_payment_id
-                                        =
-                                        lead_vendor_payments.id
-                                )
-                                -
-                                (
-                                    SELECT COALESCE(
-                                        SUM(vr2.refund_amount),
-                                        0
-                                    )
-                                    FROM vendor_refunds vr2
-                                    WHERE
-                                        vr2.lead_vendor_payment_id
-                                        =
-                                        lead_vendor_payments.id
-                                )
-                            )
-                        )
-                    )
-                ) > 0
-            ");
+            ->whereRaw(
+                "($rawBalance > 0 OR $rawRefundDue > 0)"
+            );
         }
     );
 }
@@ -659,6 +634,17 @@ $netVendorCost = $netPaidToVendor;
                         'net_paid_amount' =>
                             $netPaidToVendor,
 
+                        'gross_paid_amount' =>
+                            $paidAmount,
+
+                        'refund_due_amount' =>
+                            round(
+                                (float)
+                                $vendorPayment
+                                    ->vendor_refund_due,
+                                2
+                            ),
+
                         'refund_status' =>
                             $vendorPayment
                                 ->vendor_refund_status,
@@ -703,6 +689,7 @@ $netVendorCost = $netPaidToVendor;
                     'lead.client',
                     'vendor',
                     'leadVendorPayment.vendorPayments',
+                    'leadVendorPayment.vendorRefunds',
                     'leadVendorPayment.paymentDetails.service',
                     'leadVendorPayment.paymentDetails.extraService',
                     'createdBy',

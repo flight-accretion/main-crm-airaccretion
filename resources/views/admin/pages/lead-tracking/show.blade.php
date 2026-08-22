@@ -436,29 +436,42 @@
                             <tr>
                                 <th>S.No</th>
                                 <th>Vendor Name</th>
-                                <th>Total Amount</th>
-                                <th>Paid Amount</th>
+                                <th>Original Amount</th>
+                                <th>Final Payable</th>
+                                <th>Gross Paid</th>
+                                <th>Vendor Refund</th>
+                                <th>Net Paid</th>
                                 <th>Balance</th>
+                                <th>Refund Due</th>
                                 <th>Status</th>
                             </tr>
                         </thead>
                         <tbody>
                             @foreach($vendorPaymentSummary['vendor_payments'] as $index => $vp)
                             @php
-                            $vendorTotal = $vp->total_vendor_service_amount ?? 0;
-                            $vendorPaid = $vp->vendorPayments->sum('paid_amount') ?? 0;
-                            $vendorBalance = $vendorTotal - $vendorPaid;
+                            $vendorOriginal = $vp->original_vendor_amount ?? ($vp->total_vendor_service_amount ?? 0);
+                            $vendorTotal = $vp->adjusted_vendor_payable_amount ?? $vp->adjusted_vendor_payable ?? $vendorOriginal;
+                            $vendorGrossPaid = $vp->gross_paid_amount ?? ($vp->vendorPayments->sum('paid_amount') ?? 0);
+                            $vendorRefunded = $vp->refunded_amount ?? $vp->total_refunded ?? 0;
+                            $vendorPaid = $vp->net_paid_amount ?? max(0, $vendorGrossPaid - $vendorRefunded);
+                            $vendorBalance = $vp->balance_amount ?? max(0, $vendorTotal - $vendorPaid);
+                            $vendorRefundDue = $vp->refund_due_amount ?? max(0, $vendorGrossPaid - $vendorTotal - $vendorRefunded);
+                            $vendorStatus = $vp->display_payment_status ?? ($vendorBalance <= 0 ? 'paid' : ($vendorPaid > 0 ? 'partial' : 'unpaid'));
                             @endphp
                             <tr>
                                 <td>{{ $index + 1 }}</td>
                                 <td>{{ $vp->vendor->name ?? 'N/A' }}</td>
+                                <td>₹{{ number_format($vendorOriginal, 2) }}</td>
                                 <td>₹{{ number_format($vendorTotal, 2) }}</td>
+                                <td>₹{{ number_format($vendorGrossPaid, 2) }}</td>
+                                <td class="text-success">₹{{ number_format($vendorRefunded, 2) }}</td>
                                 <td>₹{{ number_format($vendorPaid, 2) }}</td>
                                 <td>₹{{ number_format($vendorBalance, 2) }}</td>
+                                <td class="text-danger">₹{{ number_format($vendorRefundDue, 2) }}</td>
                                 <td>
-                                    @if($vendorBalance <= 0)
+                                    @if($vendorStatus === 'paid')
                                         <span class="badge bg-success-transparent">Paid</span>
-                                        @elseif($vendorPaid > 0)
+                                        @elseif($vendorStatus === 'partial')
                                         <span class="badge bg-warning-transparent">Partial</span>
                                         @else
                                         <span class="badge bg-danger-transparent">Pending</span>
@@ -481,22 +494,40 @@
 
                 <!-- Vendor Payment Summary Cards -->
                 <div class="grid grid-cols-12 gap-4">
-                    <div class="xl:col-span-4 col-span-12">
+                    <div class="xl:col-span-3 col-span-12">
                         <div class="border p-4 rounded bg-info-transparent">
-                            <p class="text-muted mb-1">Total Vendor Amount</p>
+                            <p class="text-muted mb-1">Original Vendor Amount</p>
+                            <h4 class="font-bold">₹{{ number_format($vendorPaymentSummary['original_total'] ?? $vendorPaymentSummary['total'], 2) }}</h4>
+                        </div>
+                    </div>
+                    <div class="xl:col-span-3 col-span-12">
+                        <div class="border p-4 rounded bg-info-transparent">
+                            <p class="text-muted mb-1">Final Vendor Payable</p>
                             <h4 class="font-bold">₹{{ number_format($vendorPaymentSummary['total'], 2) }}</h4>
                         </div>
                     </div>
-                    <div class="xl:col-span-4 col-span-12">
+                    <div class="xl:col-span-3 col-span-12">
                         <div class="border p-4 rounded bg-success-transparent">
-                            <p class="text-muted mb-1">Paid to Vendors</p>
+                            <p class="text-muted mb-1">Net Paid to Vendors</p>
                             <h4 class="font-bold">₹{{ number_format($vendorPaymentSummary['paid'], 2) }}</h4>
                         </div>
                     </div>
-                    <div class="xl:col-span-4 col-span-12">
+                    <div class="xl:col-span-3 col-span-12">
+                        <div class="border p-4 rounded bg-success-transparent">
+                            <p class="text-muted mb-1">Vendor Refund</p>
+                            <h4 class="font-bold">₹{{ number_format($vendorPaymentSummary['refunded'] ?? 0, 2) }}</h4>
+                        </div>
+                    </div>
+                    <div class="xl:col-span-3 col-span-12">
                         <div class="border p-4 rounded bg-warning-transparent">
                             <p class="text-muted mb-1">Vendor Balance</p>
                             <h4 class="font-bold">₹{{ number_format($vendorPaymentSummary['balance'], 2) }}</h4>
+                        </div>
+                    </div>
+                    <div class="xl:col-span-3 col-span-12">
+                        <div class="border p-4 rounded bg-warning-transparent">
+                            <p class="text-muted mb-1">Refund Due</p>
+                            <h4 class="font-bold">₹{{ number_format($vendorPaymentSummary['refund_due'] ?? 0, 2) }}</h4>
                         </div>
                     </div>
                 </div>

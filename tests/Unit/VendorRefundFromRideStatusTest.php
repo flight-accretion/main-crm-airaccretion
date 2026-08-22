@@ -3,6 +3,8 @@
 namespace Tests\Unit;
 
 use App\Http\Controllers\RideController;
+use App\Http\Controllers\InvoiceController;
+use App\Http\Controllers\LeadTrackingController;
 use App\Models\Lead;
 use App\Models\LeadRide;
 use App\Models\LeadVendorPayment;
@@ -11,6 +13,7 @@ use App\Models\UserType;
 use App\Models\Vendor;
 use App\Models\VendorPayment;
 use App\Models\VendorRefund;
+use App\Models\Voucher;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -84,6 +87,108 @@ class VendorRefundFromRideStatusTest extends TestCase
         ]);
     }
 
+    public function test_partial_vendor_refund_received_amount_can_be_less_than_refund_due(): void
+    {
+        [$ride, $leadVendorPayment] = $this->createVendorPaymentScenario([
+            'vendor_amount' => 70000,
+            'paid_amount' => 50000,
+        ]);
+
+        try {
+            $response = $this->saveVendorRefund($ride->id, [
+                'lead_vendor_payment_id' => $leadVendorPayment->id,
+                'cancellation_amount' => '10000.00',
+                'refund_amount' => '15000.00',
+                'refund_type' => 'Bank Transfer',
+                'refund_date' => '2026-08-20',
+                'refund_reason' => 'Vendor sent part of the refundable amount.',
+                'refund_proof' => UploadedFile::fake()->create('vendor-refund.pdf', 100, 'application/pdf'),
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            $this->fail(
+                'Partial vendor refund received amount should be accepted. Validation errors: '
+                . json_encode($e->errors())
+            );
+        }
+
+        $payload = $response->getData(true);
+
+        $leadVendorPayment
+            ->refresh()
+            ->load([
+                'vendorPayments',
+                'vendorRefunds',
+            ]);
+
+        $this->assertTrue($payload['success']);
+        $this->assertSame('partial_refund', $payload['status']);
+        $this->assertSame('paid', $payload['payment_status']);
+        $this->assertSame(50000.0, (float) $payload['total_paid']);
+        $this->assertSame(15000.0, (float) $payload['total_refunded']);
+        $this->assertSame(35000.0, (float) $payload['net_paid_to_vendor']);
+        $this->assertSame(0.0, (float) $payload['balance_amount']);
+        $this->assertSame(25000.0, (float) $leadVendorPayment->vendor_refund_due);
+        $this->assertSame('partial_refund', $leadVendorPayment->vendor_refund_status);
+
+        $this->assertDatabaseHas('vendor_refunds', [
+            'lead_vendor_payment_id' => $leadVendorPayment->id,
+            'cancellation_amount' => 10000,
+            'refund_amount' => 15000,
+            'refund_type' => 'Bank Transfer',
+            'no_refund_required' => false,
+        ]);
+    }
+
+    public function test_zero_vendor_refund_received_amount_saves_cancellation_without_payment_proof(): void
+    {
+        [$ride, $leadVendorPayment] = $this->createVendorPaymentScenario([
+            'vendor_amount' => 70000,
+            'paid_amount' => 30000,
+        ]);
+
+        try {
+            $response = $this->saveVendorRefund($ride->id, [
+                'lead_vendor_payment_id' => $leadVendorPayment->id,
+                'cancellation_amount' => '10000.00',
+                'refund_amount' => '0.00',
+                'refund_reason' => 'Cancellation saved before vendor refund is received.',
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            $this->fail(
+                'Zero vendor refund received amount should save cancellation without proof. Validation errors: '
+                . json_encode($e->errors())
+            );
+        }
+
+        $payload = $response->getData(true);
+
+        $leadVendorPayment
+            ->refresh()
+            ->load([
+                'vendorPayments',
+                'vendorRefunds',
+            ]);
+
+        $this->assertTrue($payload['success']);
+        $this->assertSame('refund_pending', $payload['status']);
+        $this->assertSame('paid', $payload['payment_status']);
+        $this->assertSame(30000.0, (float) $payload['total_paid']);
+        $this->assertSame(0.0, (float) $payload['total_refunded']);
+        $this->assertSame(30000.0, (float) $payload['net_paid_to_vendor']);
+        $this->assertSame(0.0, (float) $payload['balance_amount']);
+        $this->assertSame(20000.0, (float) $leadVendorPayment->vendor_refund_due);
+        $this->assertSame('refund_pending', $leadVendorPayment->vendor_refund_status);
+
+        $this->assertDatabaseHas('vendor_refunds', [
+            'lead_vendor_payment_id' => $leadVendorPayment->id,
+            'cancellation_amount' => 10000,
+            'refund_amount' => 0,
+            'refund_type' => null,
+            'refund_proof' => null,
+            'no_refund_required' => false,
+        ]);
+    }
+
     public function test_zero_due_after_existing_vendor_refund_updates_latest_refund_without_duplicate(): void
     {
         [$ride, $leadVendorPayment, $lead, $vendor] = $this->createVendorPaymentScenario([
@@ -126,6 +231,117 @@ class VendorRefundFromRideStatusTest extends TestCase
         $this->assertSame('vendor-refunds/initial.pdf', $existingRefund->refund_proof);
     }
 
+    public function test_lead_tracking_vendor_summary_uses_refund_adjusted_amounts(): void
+    {
+        [$ride, $leadVendorPayment, $lead, $vendor] = $this->createVendorPaymentScenario([
+            'vendor_amount' => 70000,
+            'paid_amount' => 30000,
+        ]);
+
+        VendorRefund::create([
+            'lead_id' => $lead->id,
+            'lead_vendor_payment_id' => $leadVendorPayment->id,
+            'vendor_id' => $vendor->id,
+            'ride_id' => $ride->id,
+            'cancellation_amount' => 10000,
+            'refund_amount' => 20000,
+            'refund_date' => '2026-08-20',
+            'refund_type' => 'Bank Transfer',
+            'refund_reason' => 'Vendor returned overpaid amount.',
+            'refund_proof' => 'vendor-refunds/refund.pdf',
+            'no_refund_required' => false,
+            'created_by' => auth()->id(),
+        ]);
+
+        $summary = $this->invokePrivateMethod(
+            app(LeadTrackingController::class),
+            'getVendorPaymentSummary',
+            [$lead]
+        );
+
+        $vendorRow = $summary['vendor_payments']->first();
+
+        $this->assertSame(10000.0, (float) $summary['total']);
+        $this->assertSame(30000.0, (float) $summary['gross_paid']);
+        $this->assertSame(20000.0, (float) $summary['refunded']);
+        $this->assertSame(10000.0, (float) $summary['paid']);
+        $this->assertSame(0.0, (float) $summary['balance']);
+        $this->assertSame(0.0, (float) $summary['refund_due']);
+
+        $this->assertSame(70000.0, (float) $vendorRow->original_vendor_amount);
+        $this->assertSame(10000.0, (float) $vendorRow->adjusted_vendor_payable_amount);
+        $this->assertSame(30000.0, (float) $vendorRow->gross_paid_amount);
+        $this->assertSame(20000.0, (float) $vendorRow->refunded_amount);
+        $this->assertSame(10000.0, (float) $vendorRow->net_paid_amount);
+        $this->assertSame(0.0, (float) $vendorRow->balance_amount);
+        $this->assertSame(0.0, (float) $vendorRow->refund_due_amount);
+        $this->assertSame('paid', $vendorRow->display_payment_status);
+    }
+
+    public function test_invoice_vendor_summary_uses_refund_adjusted_amounts(): void
+    {
+        [$ride, $leadVendorPayment, $lead, $vendor] = $this->createVendorPaymentScenario([
+            'vendor_amount' => 70000,
+            'paid_amount' => 30000,
+        ]);
+
+        $voucher = Voucher::forceCreate([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $lead->id,
+            'status' => 1,
+            'created_by' => auth()->id(),
+        ]);
+
+        $leadVendorPayment->update([
+            'voucher_id' => $voucher->id,
+        ]);
+
+        VendorRefund::create([
+            'lead_id' => $lead->id,
+            'lead_vendor_payment_id' => $leadVendorPayment->id,
+            'vendor_id' => $vendor->id,
+            'ride_id' => $ride->id,
+            'cancellation_amount' => 10000,
+            'refund_amount' => 20000,
+            'refund_date' => '2026-08-20',
+            'refund_type' => 'Bank Transfer',
+            'refund_reason' => 'Vendor returned overpaid amount.',
+            'refund_proof' => 'vendor-refunds/refund.pdf',
+            'no_refund_required' => false,
+            'created_by' => auth()->id(),
+        ]);
+
+        $voucher->load([
+            'vendorPayments.vendor',
+            'vendorPayments.vendorPayments',
+            'vendorPayments.vendorRefunds',
+        ]);
+
+        $summary = $this->invokePrivateMethod(
+            app(InvoiceController::class),
+            'getVendorInformation',
+            [$voucher]
+        );
+
+        $vendorRow = $summary['vendors'][0];
+
+        $this->assertSame(10000.0, (float) $summary['totalVendorCost']);
+        $this->assertSame(30000.0, (float) $summary['totalGrossPaid']);
+        $this->assertSame(20000.0, (float) $summary['totalRefunded']);
+        $this->assertSame(10000.0, (float) $summary['totalPaid']);
+        $this->assertSame(0.0, (float) $summary['totalBalance']);
+        $this->assertSame(0.0, (float) $summary['totalRefundDue']);
+
+        $this->assertSame(70000.0, (float) $vendorRow['original_amount']);
+        $this->assertSame(10000.0, (float) $vendorRow['total_amount']);
+        $this->assertSame(30000.0, (float) $vendorRow['gross_paid_amount']);
+        $this->assertSame(20000.0, (float) $vendorRow['refunded_amount']);
+        $this->assertSame(10000.0, (float) $vendorRow['paid_amount']);
+        $this->assertSame(0.0, (float) $vendorRow['balance']);
+        $this->assertSame(0.0, (float) $vendorRow['refund_due_amount']);
+        $this->assertSame('paid', $vendorRow['payment_status']);
+    }
+
     private function saveVendorRefund(string $rideId, array $data)
     {
         $file = $data['refund_proof'] ?? null;
@@ -143,6 +359,14 @@ class VendorRefundFromRideStatusTest extends TestCase
 
         return app(RideController::class)
             ->saveVendorRefundFromRideStatus($request, $rideId);
+    }
+
+    private function invokePrivateMethod(object $object, string $method, array $arguments = [])
+    {
+        $reflection = new \ReflectionMethod($object, $method);
+        $reflection->setAccessible(true);
+
+        return $reflection->invokeArgs($object, $arguments);
     }
 
     private function createAccountsUser(): User
@@ -273,6 +497,28 @@ class VendorRefundFromRideStatusTest extends TestCase
             $table->decimal('total_service_amount', 15, 2)->nullable();
             $table->decimal('total_vendor_service_amount', 15, 2)->nullable();
             $table->string('payment_status')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('lead_vendor_payment_details', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('lead_vendor_payment_id')->nullable();
+            $table->uuid('service_id')->nullable();
+            $table->uuid('extra_service_id')->nullable();
+            $table->decimal('service_amount', 15, 2)->nullable();
+            $table->decimal('vendor_service_amount', 15, 2)->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('vouchers', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('lead_id')->nullable();
+            $table->uuid('operation_team_user_id')->nullable();
+            $table->text('extra_upload')->nullable();
+            $table->text('naration')->nullable();
+            $table->integer('status')->default(1);
+            $table->uuid('created_by')->nullable();
+            $table->string('registration_token')->nullable();
             $table->timestamps();
         });
 

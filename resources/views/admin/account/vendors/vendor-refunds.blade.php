@@ -63,11 +63,19 @@
                         </th>
 
                         <th>
-                            Paid To Vendor
+                            Gross Paid
                         </th>
 
                         <th>
-                            Refund Amount
+                            Received Amount
+                        </th>
+
+                        <th>
+                            Net Paid
+                        </th>
+
+                        <th>
+                            Refund Due
                         </th>
 
                         <th>
@@ -114,6 +122,27 @@
                                         )
                                     : 0;
 
+                            $netPaid =
+                                $lvp
+                                    ? $lvp
+                                        ->net_paid_to_vendor
+                                    : max(
+                                        0,
+                                        $paid
+                                        -
+                                        (
+                                            $refund
+                                                ->refund_amount
+                                            ?? 0
+                                        )
+                                    );
+
+                            $refundDue =
+                                $lvp
+                                    ? $lvp
+                                        ->vendor_refund_due
+                                    : 0;
+
                         @endphp
 
 
@@ -130,7 +159,6 @@
 
                             </td>
 
-
                             <td>
 
                                 {{
@@ -144,7 +172,6 @@
                                 }}
 
                             </td>
-
 
                             <td>
 
@@ -206,6 +233,28 @@
                                         $refund
                                             ->refund_amount
                                         ?? 0,
+                                        2
+                                    )
+                                }}
+
+                            </td>
+
+                            <td>
+
+                                ₹{{
+                                    number_format(
+                                        $netPaid,
+                                        2
+                                    )
+                                }}
+
+                            </td>
+
+                            <td class="text-danger">
+
+                                ₹{{
+                                    number_format(
+                                        $refundDue,
                                         2
                                     )
                                 }}
@@ -289,7 +338,7 @@
                         <tr>
 
                             <td
-                                colspan="11"
+                                colspan="13"
                                 class="text-center"
                             >
 

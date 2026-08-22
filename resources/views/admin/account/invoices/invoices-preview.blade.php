@@ -457,16 +457,32 @@
                                         <td style="text-align: right; color: #3B3B3B;">{{ $vendor['name'] ?? 'N/A' }}</td>
                                     </tr>
                                     <tr>
-                                        <td style="color: #6A6A6A; padding: 6px 0;">Service Cost :</td>
+                                        <td style="color: #6A6A6A; padding: 6px 0;">Original Amount :</td>
+                                        <td style="text-align: right; color: #3B3B3B;">Rs.{{ number_format($vendor['original_amount'] ?? $vendor['total_amount'] ?? 0, 0) }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td style="color: #6A6A6A; padding: 6px 0;">Final Payable :</td>
                                         <td style="text-align: right; color: #3B3B3B;">Rs.{{ number_format($vendor['total_amount'] ?? 0, 0) }}</td>
                                     </tr>
                                     <tr>
-                                        <td style="color: #6A6A6A; padding: 6px 0;">Amount Paid :</td>
+                                        <td style="color: #6A6A6A; padding: 6px 0;">Gross Paid :</td>
+                                        <td style="text-align: right; color: #3B3B3B;">Rs.{{ number_format($vendor['gross_paid_amount'] ?? $vendor['paid_amount'] ?? 0, 0) }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td style="color: #6A6A6A; padding: 6px 0;">Vendor Refund :</td>
+                                        <td style="text-align: right; color: #059509;">Rs.{{ number_format($vendor['refunded_amount'] ?? 0, 0) }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td style="color: #6A6A6A; padding: 6px 0;">Net Paid :</td>
                                         <td style="text-align: right; color: #059509;">Rs.{{ number_format($vendor['paid_amount'] ?? 0, 0) }}</td>
                                     </tr>
                                     <tr>
                                         <td style="color: #6A6A6A; padding: 6px 0;">Balance :</td>
                                         <td class="{{ (($vendor['balance'] ?? 0) > 0) ? 'balance-positive' : 'balance-negative' }}" style="text-align: right;">Rs.{{ number_format($vendor['balance'] ?? 0, 0) }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td style="color: #6A6A6A; padding: 6px 0;">Refund Due :</td>
+                                        <td style="text-align: right; color: #b42318;">Rs.{{ number_format($vendor['refund_due_amount'] ?? 0, 0) }}</td>
                                     </tr>
                                 </table>
                             </td>

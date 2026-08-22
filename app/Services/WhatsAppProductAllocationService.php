@@ -7,6 +7,7 @@ use App\Models\Lead;
 use App\Models\LeadAllocationSetting;
 use App\Models\SalespersonAvailability;
 use App\Models\User;
+use App\Models\UserType;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -49,12 +50,9 @@ class WhatsAppProductAllocationService
          * from CRM Email Lead Product Assignment.
          */
         $mappedUserIds =
-            EmailLeadProductUserAssignment::query()
-                ->where('product_id', $productId)
-                ->pluck('user_id')
-                ->filter()
-                ->unique()
-                ->values();
+            $this->mappedUserIdsForProduct(
+                $productId
+            );
 
         if ($mappedUserIds->isEmpty()) {
 
@@ -104,6 +102,92 @@ class WhatsAppProductAllocationService
         return $this->balancedUser($users);
     }
 
+    public function hasConfiguredProductMapping(
+        string $productId
+    ): bool {
+        return $this
+            ->mappedUserIdsForProduct(
+                $productId
+            )
+            ->isNotEmpty();
+    }
+
+    public function findRetailUser(): ?User
+    {
+        $settings =
+            LeadAllocationSetting::getActiveSettings();
+
+        if (
+            !$this->leadAllocationService
+                ->isOfficeOpenForDebug(
+                    $settings,
+                    now()
+                )
+        ) {
+            return null;
+        }
+
+        $mappedUserIds =
+            EmailLeadProductUserAssignment::query()
+                ->where('is_active', true)
+                ->pluck('user_id')
+                ->filter()
+                ->unique()
+                ->values();
+
+        $users = User::query()
+            ->where('status', 1)
+            ->whereHas('userType', function ($query) {
+                $query->whereIn(
+                    'user_type',
+                    UserType::SALES_ROLES
+                );
+            })
+            ->when(
+                $mappedUserIds->isNotEmpty(),
+                function ($query) use ($mappedUserIds) {
+                    $query->whereNotIn(
+                        'id',
+                        $mappedUserIds
+                    );
+                }
+            )
+            ->get();
+
+        $availableUserIds =
+            SalespersonAvailability::query()
+                ->whereIn(
+                    'user_id',
+                    $users->pluck('id')
+                )
+                ->where('is_available', true)
+                ->where('is_opted_in', true)
+                ->whereDate(
+                    'last_response_at',
+                    Carbon::today()
+                )
+                ->pluck('user_id');
+
+        $users =
+            $users
+                ->whereIn(
+                    'id',
+                    $availableUserIds
+                )
+                ->values();
+
+        if ($users->isEmpty()) {
+
+            Log::info(
+                'WhatsApp retail lead has no eligible empty-product salesperson today.'
+            );
+
+            return null;
+        }
+
+        return $this->balancedUser($users);
+    }
+
 
     /**
      * Balance only between users mapped to this product.
@@ -136,5 +220,17 @@ class WhatsAppProductAllocationService
                 );
             })
             ->first();
+    }
+
+    private function mappedUserIdsForProduct(
+        string $productId
+    ): Collection {
+        return EmailLeadProductUserAssignment::query()
+            ->where('product_id', $productId)
+            ->where('is_active', true)
+            ->pluck('user_id')
+            ->filter()
+            ->unique()
+            ->values();
     }
 }
