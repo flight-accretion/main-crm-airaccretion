@@ -11,6 +11,8 @@ class LeadFollowup extends Model
     public $incrementing = false;
     protected $keyType = 'string';
 
+    public const SALES_AMOUNT_STATUSES = [2, 3, 4, 5, 7, 8];
+
     protected $fillable = [
         'id',
         'parent_followup_id',
@@ -51,6 +53,11 @@ class LeadFollowup extends Model
 // 7=reschedule
 // 8=approve
 // 9=reject
+
+    public static function salesAmountStatuses(): array
+    {
+        return self::SALES_AMOUNT_STATUSES;
+    }
 
     public function followedBy()
     {

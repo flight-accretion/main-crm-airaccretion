@@ -205,7 +205,7 @@ class DashboardController extends Controller
 
         return (float) $allFollowups->groupBy('lead_id')->map(function ($group) {
             $qualifying = $group->filter(function ($followup) {
-                return in_array($followup->status, [2, 5, 7, 8]);
+                return in_array((int) $followup->status, LeadFollowup::salesAmountStatuses(), true);
             });
 
             return $qualifying->sortByDesc('created_at')->first();

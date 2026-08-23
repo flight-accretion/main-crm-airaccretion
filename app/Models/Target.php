@@ -118,7 +118,7 @@ class Target extends Model
         // Filter to qualifying statuses FIRST, then take latest (matches Sales Report)
         $achievedAmount = $allFollowups->groupBy('lead_id')->map(function ($group) {
             $qualifying = $group->filter(function ($f) {
-                return in_array($f->status, [2, 5, 7, 8]);
+                return in_array((int) $f->status, LeadFollowup::salesAmountStatuses(), true);
             });
             return $qualifying->sortByDesc('created_at')->first();
         })->filter()->sum(function ($f) {

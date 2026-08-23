@@ -185,7 +185,7 @@ class SalesExecutiveNotificationController extends Controller
             ->get();
 
         $achieved = $allFollowups->groupBy('lead_id')->map(function ($group) {
-            $qualifying = $group->filter(fn($f) => in_array($f->status, [2, 5, 7, 8]));
+            $qualifying = $group->filter(fn($f) => in_array((int) $f->status, LeadFollowup::salesAmountStatuses(), true));
             return $qualifying->sortByDesc('created_at')->first();
         })->filter()->sum(function ($f) {
             $followupIds = LeadFollowup::where('lead_id', $f->lead_id)->pluck('id');

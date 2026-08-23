@@ -148,9 +148,9 @@ trait KpiReportTargetHelper
             ->get()
             ->groupBy('lead_followup_id');
 
-        // Step 6: per-lead — latest qualifying followup [2,5,7,8], subtract refunds
+        // Step 6: per-lead — latest qualifying followup, subtract refunds
         $achievedAmount = $allFollowups->groupBy('lead_id')->map(function ($group) use ($allFollowupIdsByLead, $refundsByFollowupId) {
-            $qualifying = $group->filter(fn($f) => in_array($f->status, [2, 5, 7, 8]));
+            $qualifying = $group->filter(fn($f) => in_array((int) $f->status, LeadFollowup::salesAmountStatuses(), true));
             $latest = $qualifying->sortByDesc('created_at')->first();
 
             if (!$latest) return 0;

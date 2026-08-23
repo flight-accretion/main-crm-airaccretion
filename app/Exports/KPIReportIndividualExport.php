@@ -120,10 +120,10 @@ class KPIReportIndividualExport implements FromCollection, WithHeadings, WithMap
             })
             ->get();
 
-        // Step 4: per-lead — latest qualifying followup [2,5,7,8], subtract refunds
+        // Step 4: per-lead — latest qualifying followup, subtract refunds
         $achievedAmount = $allFollowups->groupBy('lead_id')->map(function ($group) {
             $qualifying = $group->filter(function ($f) {
-                return in_array($f->status, [2, 5, 7, 8]);
+                return in_array((int) $f->status, LeadFollowup::salesAmountStatuses(), true);
             });
             return $qualifying->sortByDesc('created_at')->first();
         })->filter()->sum(function ($f) {

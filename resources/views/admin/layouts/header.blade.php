@@ -690,7 +690,7 @@
                         @endif
                         <!-- End::slide -->
 
-                           @if ($userType === UserType::SUPER_ADMIN || canAccess($userType, $salesRoles))
+                           @if ($userType === UserType::SUPER_ADMIN || canAccess($userType, $adminRoles) || canAccess($userType, $salesRoles) || canAccess($userType, $operationsRoles))
                             <li class="slide {{ Route::is('admin.whatsapp.*') ? 'active' : '' }}">
                                 <a href="{{ route('admin.whatsapp.index') }}" class="side-menu__item">
                                     <i class="bx bxl-whatsapp side-menu__icon"></i>

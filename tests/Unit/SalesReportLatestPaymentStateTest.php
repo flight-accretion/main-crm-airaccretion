@@ -3,12 +3,14 @@
 namespace Tests\Unit;
 
 use App\Exports\SalesReportExport;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ReportController;
 use App\Models\Client;
 use App\Models\Lead;
 use App\Models\LeadFollowup;
 use App\Models\LeadRide;
 use App\Models\PaymentAuditTrail;
+use App\Models\Target;
 use App\Models\User;
 use App\Models\UserType;
 use Illuminate\Database\Schema\Blueprint;
@@ -81,6 +83,41 @@ class SalesReportLatestPaymentStateTest extends TestCase
         $this->assertSame(14000.0, (float) $row->total_amount);
         $this->assertSame(0.0, (float) $row->pending_amount);
         $this->assertSame('Full Payment Received', $row->ride_status);
+    }
+
+    public function test_sales_dashboard_target_progress_uses_latest_payment_amounts_after_discount_is_removed(): void
+    {
+        $admin = $this->createUser(UserType::SUPER_ADMIN, 'Admin User');
+        $salesperson = $this->createUser(UserType::SALES_EXECUTIVE, 'Samarpit Sharma');
+        $this->createTarget($salesperson, 50000);
+        $this->createDiscountRemovedScenario($salesperson);
+
+        $this->actingAs($admin);
+
+        $response = app(DashboardController::class)
+            ->getTargetProgressData(Request::create('/sales-dashboard/target-progress', 'GET', [
+                'user_id' => $salesperson->id,
+                'target_month' => 8,
+                'target_year' => 2026,
+            ]));
+
+        $data = $response->getData(true);
+
+        $this->assertSame(14000.0, (float) $data['data']['achieved_amount']);
+        $this->assertSame(36000.0, (float) $data['data']['remaining_amount']);
+        $this->assertSame(14000.0, (float) $data['team_member_progress'][0]['achieved_amount']);
+    }
+
+    public function test_target_model_update_uses_latest_payment_amounts_after_discount_is_removed(): void
+    {
+        $salesperson = $this->createUser(UserType::SALES_EXECUTIVE, 'Samarpit Sharma');
+        $target = $this->createTarget($salesperson, 50000);
+        $this->createDiscountRemovedScenario($salesperson);
+
+        $achieved = $target->updateAchievedAmount();
+
+        $this->assertSame(14000.0, (float) $achieved);
+        $this->assertSame(14000.0, (float) $target->fresh()->achieved_amount);
     }
 
     private function createDiscountRemovedScenario(User $salesperson): void
@@ -177,6 +214,19 @@ class SalesReportLatestPaymentStateTest extends TestCase
             'paid_date' => '2026-08-23 13:33:57',
             'payment_method' => 'Online Payment',
             'payment_status' => 1,
+        ]);
+    }
+
+    private function createTarget(User $salesperson, float $targetAmount): Target
+    {
+        return Target::forceCreate([
+            'id' => (string) Str::uuid(),
+            'sales_executive_id' => $salesperson->id,
+            'year' => 2026,
+            'month' => 8,
+            'target_amount' => $targetAmount,
+            'achieved_amount' => 0,
+            'status' => 'active',
         ]);
     }
 
@@ -335,6 +385,19 @@ class SalesReportLatestPaymentStateTest extends TestCase
             $table->uuid('id')->primary();
             $table->string('product');
             $table->integer('status')->default(1);
+            $table->timestamps();
+        });
+
+        Schema::create('targets', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('sales_executive_id');
+            $table->uuid('assigned_by')->nullable();
+            $table->integer('year');
+            $table->integer('month');
+            $table->decimal('target_amount', 15, 2)->default(0);
+            $table->decimal('achieved_amount', 15, 2)->default(0);
+            $table->text('description')->nullable();
+            $table->string('status')->default('active');
             $table->timestamps();
         });
 
