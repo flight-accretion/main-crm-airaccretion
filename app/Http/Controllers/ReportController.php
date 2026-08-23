@@ -566,9 +566,11 @@ class ReportController extends Controller
         $currentUser = auth()->user();
         $representatives = getRepresentativeIds($currentUser);
 
-        // Status array - ONLY show these statuses in sales report
+        // Status array - show payment/reportable ride states in sales report
         $statusArray = [
             2 => 'Cancelled',
+            3 => 'Full Payment Received',
+            4 => 'Partial Payment Received',
             5 => 'completed',
             7 => 'Rescheduled',
             8 => 'Approved'
@@ -590,14 +592,14 @@ class ReportController extends Controller
         $salesData = collect();
 
         if ($hasFilters) {
-            // Base query for sales data - ONLY show Cancelled, Confirmed, Rescheduled
+            // Base query for sales data - include submitted and approved payment states
             $query = LeadFollowup::with([
                 'enquiry.client.country',
                 'enquiry.client.city',
                 'enquiry.rideSegments',
                 'enquiry.representative.userType',
                 'followedBy.userType'
-            ])->whereIn('status', [2, 5, 7, 8]); // 2=Cancelled, 5=Confirmed, 7=Rescheduled, 8=Approved
+            ])->whereIn('status', array_keys($statusArray));
 
             // Apply month/year filter based on PAID DATE (from PaymentAuditTrail)
             // Only show leads that received approved payment in the selected month/year
