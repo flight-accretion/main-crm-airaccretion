@@ -21,9 +21,9 @@ class LeadAllocationServicePopupTest extends TestCase
         $service = new LeadAllocationService();
         $lastPromptAt = Carbon::create(2026, 7, 28, 10, 30, 0);
 
-        $this->assertTrue($service->shouldShowPopup($user, true, null, Carbon::create(2026, 7, 28, 10, 35, 0), 120));
-        $this->assertFalse($service->shouldShowPopup($user, true, $lastPromptAt, Carbon::create(2026, 7, 28, 10, 40, 0), 120));
-        $this->assertTrue($service->shouldShowPopup($user, true, $lastPromptAt, Carbon::create(2026, 7, 28, 12, 40, 0), 120));
+        $this->assertTrue($service->shouldShowPopup($user, true, null, Carbon::create(2026, 7, 28, 10, 35, 0), 120, false, false));
+        $this->assertFalse($service->shouldShowPopup($user, true, $lastPromptAt, Carbon::create(2026, 7, 28, 10, 40, 0), 120, false, false));
+        $this->assertTrue($service->shouldShowPopup($user, true, $lastPromptAt, Carbon::create(2026, 7, 28, 12, 40, 0), 120, false, false));
     }
 
     public function test_popup_shows_after_prior_day_last_prompt(): void
@@ -37,6 +37,6 @@ class LeadAllocationServicePopupTest extends TestCase
         $service = new LeadAllocationService();
         $lastPromptAt = Carbon::create(2026, 7, 27, 17, 00, 0);
 
-        $this->assertTrue($service->shouldShowPopup($user, true, $lastPromptAt, Carbon::create(2026, 7, 28, 10, 40, 0), 120));
+        $this->assertTrue($service->shouldShowPopup($user, true, $lastPromptAt, Carbon::create(2026, 7, 28, 10, 40, 0), 120, false, false));
     }
 }

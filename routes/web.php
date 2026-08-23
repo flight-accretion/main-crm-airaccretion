@@ -36,6 +36,7 @@ use App\Http\Controllers\SalesExecutiveManagementController;
 use App\Http\Controllers\IvrCallTypeController;
 use App\Http\Controllers\IvrDtmfRuleController;
 use App\Http\Controllers\IvrAgentController;
+use App\Http\Controllers\WhatsAppInboxController;
 use App\Http\Controllers\LeadTransferController;
 use App\Http\Controllers\LeadAllocationSettingController;
 use App\Http\Controllers\VendorExtraServiceController;
@@ -102,6 +103,19 @@ Route::middleware('auth')->group(function () {
     Route::post('/sales-dashboard/popup/accept', [DashboardController::class, 'acceptPopup'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard.popup.accept');
     Route::post('/sales-dashboard/popup/decline', [DashboardController::class, 'declinePopup'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard.popup.decline');
     Route::post('/sales-dashboard/daily-update', [DashboardController::class, 'storeDailyUpdate'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard.daily-update.store');
+
+    Route::prefix('admin/whatsapp')
+        ->name('admin.whatsapp.')
+        ->group(function () {
+            Route::get('/', [WhatsAppInboxController::class, 'index'])
+                ->name('index');
+            Route::get('/conversations', [WhatsAppInboxController::class, 'conversations'])
+                ->name('conversations');
+            Route::get('/conversations/{conversation}/messages', [WhatsAppInboxController::class, 'messages'])
+                ->name('messages');
+            Route::post('/conversations/{conversation}/read', [WhatsAppInboxController::class, 'read'])
+                ->name('read');
+        });
 
 
         Route::post(

@@ -690,6 +690,15 @@
                         @endif
                         <!-- End::slide -->
 
+                           @if ($userType === UserType::SUPER_ADMIN || canAccess($userType, $salesRoles))
+                            <li class="slide {{ Route::is('admin.whatsapp.*') ? 'active' : '' }}">
+                                <a href="{{ route('admin.whatsapp.index') }}" class="side-menu__item">
+                                    <i class="bx bxl-whatsapp side-menu__icon"></i>
+                                    <span class="side-menu__label">WhatsApp Inbox</span>
+                                </a>
+                            </li>
+                        @endif
+
                         <!-- Upcoming Rides Section -->
                         @if (canAccess($userType, $adminRoles) || canAccess($userType, $operationsRoles) || canAccess($userType, $salesRoles))
                             <li class="slide {{ Route::is('admin.rides.upcoming') ? 'active' : '' }}">

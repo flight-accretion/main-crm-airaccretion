@@ -2,6 +2,8 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\WhatCrmMessageController;
+use App\Http\Controllers\Api\WhatCrmSendMessageController;
 use App\Http\Controllers\Api\WhatsAppLeadController;
 use App\Http\Controllers\Api\CallSummaryController;
 
@@ -38,6 +40,26 @@ Route::post(
 )
 ->middleware('whatcrm.auth')
 ->name('api.whatsapp-leads.store');
+
+Route::post(
+    '/whatcrm/messages',
+    [
+        WhatCrmMessageController::class,
+        'store'
+    ]
+)
+->middleware('whatcrm.auth')
+->name('api.whatcrm.messages.store');
+
+Route::post(
+    '/whatcrm/send-message',
+    [
+        WhatCrmSendMessageController::class,
+        'store'
+    ]
+)
+->middleware('whatcrm.auth')
+->name('api.whatcrm.send-message.store');
 
 Route::post(
     '/call-summaries',
