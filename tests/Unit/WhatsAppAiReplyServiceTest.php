@@ -267,7 +267,7 @@ class WhatsAppAiReplyServiceTest extends TestCase
                 );
         });
 
-        Http::assertSent(function ($request) use ($productAgent) {
+        Http::assertSent(function ($request) {
             if (
                 !str_contains(
                     $request->url(),
@@ -278,13 +278,19 @@ class WhatsAppAiReplyServiceTest extends TestCase
             }
 
             $payload = $request->data();
+            $expectedPayload = [
+                'messageObject' => [
+                    'messaging_product' => 'whatsapp',
+                    'to' => '919876543219',
+                    'type' => 'text',
+                    'text' => [
+                        'body' =>
+                            'Yes, we can help with the Gangtok to Bagdogra helicopter.',
+                    ],
+                ],
+            ];
 
-            return $payload['messageObject']['to'] === '+919876543219'
-                && $payload['messageObject']['text']['body']
-                    === 'Yes, we can help with the Gangtok to Bagdogra helicopter.'
-                && $payload['messageObject']['text']['pass'] === 'yes'
-                && $payload['messageObject']['text']['assigned']
-                    === $productAgent->name;
+            return $payload === $expectedPayload;
         });
     }
 

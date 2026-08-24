@@ -15,25 +15,48 @@ use Illuminate\Support\Str;
 
 class DtmfAllocationService
 {
-    public function mappedUserForSuccessfulAgent(?string $agentName): ?User
+    public function mappedUserForSuccessfulAgent(?string $agentNumber, ?string $agentName = null): ?User
     {
-        $needle = $this->normalizeText($agentName);
-        if ($needle === '') {
-            return null;
-        }
-
-        $mapping = IvrAgent::with('mappedUser')
-            ->where('is_active', true)
-            ->get()
-            ->first(function (IvrAgent $agent) use ($needle) {
-                return $this->normalizeText($agent->vi_agent_name) === $needle;
-            });
+        $normalizedNumber = $this->normalizePhone($agentNumber);
+        $mapping = $normalizedNumber !== ''
+            ? $this->mappedAgentByNumber($normalizedNumber)
+            : $this->mappedAgentByName($agentName);
 
         if (!$mapping || !$mapping->mappedUser || (int) $mapping->mappedUser->status !== 1) {
             return null;
         }
 
         return $mapping->mappedUser;
+    }
+
+    private function mappedAgentByNumber(?string $agentNumber): ?IvrAgent
+    {
+        $needle = $this->normalizePhone($agentNumber);
+        if ($needle === '') {
+            return null;
+        }
+
+        return IvrAgent::with('mappedUser')
+            ->where('is_active', true)
+            ->get()
+            ->first(function (IvrAgent $agent) use ($needle) {
+                return $this->normalizePhone($agent->vi_agent_number) === $needle;
+            });
+    }
+
+    private function mappedAgentByName(?string $agentName): ?IvrAgent
+    {
+        $needle = $this->normalizeText($agentName);
+        if ($needle === '') {
+            return null;
+        }
+
+        return IvrAgent::with('mappedUser')
+            ->where('is_active', true)
+            ->get()
+            ->first(function (IvrAgent $agent) use ($needle) {
+                return $this->normalizeText($agent->vi_agent_name) === $needle;
+            });
     }
 
     public function resolvePool(?string $callTypeId, ?string $rawDtmf): array
@@ -175,5 +198,16 @@ class DtmfAllocationService
     private function normalizeText($value): string
     {
         return Str::lower(trim((string) $value));
+    }
+
+    private function normalizePhone($value): string
+    {
+        $digits = preg_replace('/\D+/', '', (string) $value);
+
+        if ($digits === '') {
+            return '';
+        }
+
+        return strlen($digits) > 10 ? substr($digits, -10) : $digits;
     }
 }

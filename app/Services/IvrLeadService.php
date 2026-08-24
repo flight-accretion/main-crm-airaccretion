@@ -87,7 +87,10 @@ class IvrLeadService
 
             $representative = null;
             if ($this->followupService->isSuccessfulStatus($callLog->dial_status)) {
-                $representative = $this->allocationService->mappedUserForSuccessfulAgent($callLog->agent_name);
+                $representative = $this->allocationService->mappedUserForSuccessfulAgent(
+                    $callLog->agent_number,
+                    $callLog->agent_name
+                );
             }
 
             if (!$representative && $this->isOfficeOpen()) {
@@ -165,7 +168,7 @@ class IvrLeadService
             return "regexp_replace({$column}, '[^0-9]', '', 'g')";
         }
 
-        return "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE({$column}, '+', ''), '-', ''), ' ', ''), '(', ''), ')')";
+        return "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE({$column}, '+', ''), '-', ''), ' ', ''), '(', ''), ')', '')";
     }
 
     private function isOfficeOpen(): bool

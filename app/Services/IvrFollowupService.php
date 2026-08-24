@@ -57,6 +57,7 @@ public function isSuccessfulStatus(
             'DTMF: ' . ($callLog->raw_dtmf ?: 'N/A'),
             'Dial Status: ' . ($callLog->dial_status ?: 'N/A'),
             'Agent: ' . ($callLog->agent_name ?: 'N/A'),
+            'Agent Number: ' . ($callLog->agent_number ?: 'N/A'),
         ];
 
         if ($callLog->voice_url) {

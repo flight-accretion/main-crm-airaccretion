@@ -43,6 +43,7 @@ class IvrImportService
                 $canonical = $this->selectCanonicalAttempt($attempts);
                 $data = $this->normalizeKeys($canonical);
                 $phone = $this->normalizePhone($data['CLI'] ?? null);
+                $agentNumber = $this->agentNumberFrom($data);
 
                 $callLog = IvrCallLog::create([
                     'provider_call_id' => $callId,
@@ -53,6 +54,7 @@ class IvrImportService
                     'normalized_phone' => $phone,
                     'raw_dtmf' => $data['DTMF'] ?? null,
                     'agent_name' => $data['AGENTNAME'] ?? null,
+                    'agent_number' => $agentNumber,
                    'dial_status' =>
                     $data['DIALSTATUS']
                     ?? $data['BPARTYSTATUS']
@@ -126,6 +128,24 @@ class IvrImportService
             $normalized[$normalizedKey] = $value;
         }
         return $normalized;
+    }
+
+    private function agentNumberFrom(array $data): ?string
+    {
+        foreach ([
+            'BPARTYNO',
+            'BPARTYNUMBER',
+            'BPARTYDIALNO',
+            'BPARTYDIALNUMBER',
+            'AGENTNUMBER',
+            'AGENTMOBILE',
+        ] as $key) {
+            if (!empty($data[$key])) {
+                return $this->normalizePhone($data[$key]);
+            }
+        }
+
+        return null;
     }
 
     private function normalizePhone($value): ?string

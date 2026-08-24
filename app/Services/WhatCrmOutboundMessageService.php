@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\User;
 use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
 
@@ -229,17 +228,6 @@ class WhatCrmOutboundMessageService
             $data
         );
 
-        $assignment = $this->assignmentMetadata($data);
-
-        if (is_array($content) && !array_is_list($content)) {
-            $content['pass'] = $assignment['pass'];
-            $content['assigned'] = $assignment['assigned'];
-        } else {
-            $payload['messageObject']['pass'] = $assignment['pass'];
-            $payload['messageObject']['assigned'] =
-                $assignment['assigned'];
-        }
-
         $payload['messageObject'][$contentKey] = $content;
 
         return $payload;
@@ -397,39 +385,6 @@ class WhatCrmOutboundMessageService
         return $messageType;
     }
 
-    private function assignmentMetadata(array $data): array
-    {
-        $assigned = trim(
-            (string) (
-                $data['assigned']
-                ?? $data['assigned_agent']
-                ?? $data['agent_name']
-                ?? ''
-            )
-        );
-
-        if ($assigned === '') {
-            $userId =
-                $data['assigned_agent_user_id']
-                ?? $data['agent_user_id']
-                ?? $data['crm_user_id']
-                ?? null;
-
-            if ($userId) {
-                $assigned = (string) optional(
-                    User::query()
-                        ->whereKey($userId)
-                        ->first()
-                )->name;
-            }
-        }
-
-        return [
-            'pass' => $assigned !== '' ? 'yes' : 'no',
-            'assigned' => $assigned,
-        ];
-    }
-
     private function formatOutboundPhone(string $phone): string
     {
         $digits = preg_replace('/\D+/', '', $phone);
@@ -452,7 +407,7 @@ class WhatCrmOutboundMessageService
                 . $digits;
         }
 
-        return '+' . $digits;
+        return $digits;
     }
 
     private function urlWithToken(

@@ -80,16 +80,23 @@ class WhatCrmOutboundMessageServiceTest extends TestCase
 
         Http::assertSent(function ($request) {
             $payload = $request->data();
+            $expectedPayload = [
+                'messageObject' => [
+                    'messaging_product' => 'whatsapp',
+                    'to' => '919876543215',
+                    'type' => 'text',
+                    'text' => [
+                        'body' => 'Hello from CRM',
+                    ],
+                ],
+            ];
 
             return $request->method() === 'POST'
                 && str_contains(
                     $request->url(),
                     'https://web.airaccretion.com/api/v1/send-message?token=test-token'
                 )
-                && $payload['messageObject']['messaging_product'] === 'whatsapp'
-                && $payload['messageObject']['to'] === '+919876543215'
-                && $payload['messageObject']['type'] === 'text'
-                && $payload['messageObject']['text']['body'] === 'Hello from CRM';
+                && $payload === $expectedPayload;
         });
 
         $this->assertDatabaseHas(
@@ -112,7 +119,7 @@ class WhatCrmOutboundMessageServiceTest extends TestCase
         );
     }
 
-    public function test_sends_text_message_with_assignment_metadata_to_whatcrm(): void
+    public function test_text_message_payload_does_not_include_assignment_metadata(): void
     {
         $agent = $this->createSalesUser('Assigned Agent');
 
@@ -150,9 +157,14 @@ class WhatCrmOutboundMessageServiceTest extends TestCase
             return $payload['messageObject']['type'] === 'text'
                 && $payload['messageObject']['text']['body']
                     === 'I can help you with this booking.'
-                && $payload['messageObject']['text']['pass'] === 'yes'
-                && $payload['messageObject']['text']['assigned']
-                    === 'Assigned Agent';
+                && $payload['messageObject']['to'] === '919876543216'
+                && !array_key_exists('pass', $payload['messageObject'])
+                && !array_key_exists('assigned', $payload['messageObject'])
+                && !array_key_exists('pass', $payload['messageObject']['text'])
+                && !array_key_exists(
+                    'assigned',
+                    $payload['messageObject']['text']
+                );
         });
     }
 
@@ -198,9 +210,11 @@ class WhatCrmOutboundMessageServiceTest extends TestCase
                     === 'https://example.test/quote.jpg'
                 && $payload['messageObject']['image']['caption']
                     === 'Helicopter quote'
-                && $payload['messageObject']['image']['pass'] === 'yes'
-                && $payload['messageObject']['image']['assigned']
-                    === 'Media Agent';
+                && !array_key_exists('pass', $payload['messageObject']['image'])
+                && !array_key_exists(
+                    'assigned',
+                    $payload['messageObject']['image']
+                );
         });
 
         $this->assertDatabaseHas(
@@ -315,8 +329,10 @@ class WhatCrmOutboundMessageServiceTest extends TestCase
             return $payload['messageObject']['type'] === 'video'
                 && $payload['messageObject']['video']['link']
                     === 'https://example.test/video.mp4'
-                && $payload['messageObject']['video']['assigned']
-                    === 'Multi Type Agent';
+                && !array_key_exists(
+                    'assigned',
+                    $payload['messageObject']['video']
+                );
         });
 
         Http::assertSent(function ($request) {
@@ -325,7 +341,7 @@ class WhatCrmOutboundMessageServiceTest extends TestCase
             return $payload['messageObject']['type'] === 'audio'
                 && $payload['messageObject']['audio']['link']
                     === 'https://example.test/audio.mp3'
-                && $payload['messageObject']['audio']['pass'] === 'yes';
+                && !array_key_exists('pass', $payload['messageObject']['audio']);
         });
 
         Http::assertSent(function ($request) {
@@ -334,8 +350,7 @@ class WhatCrmOutboundMessageServiceTest extends TestCase
             return $payload['messageObject']['type'] === 'contacts'
                 && $payload['messageObject']['contacts'][0]['name']['formatted_name']
                     === 'Accretion Support'
-                && $payload['messageObject']['assigned']
-                    === 'Multi Type Agent';
+                && !array_key_exists('assigned', $payload['messageObject']);
         });
 
         Http::assertSent(function ($request) {
@@ -346,8 +361,10 @@ class WhatCrmOutboundMessageServiceTest extends TestCase
                     === 27.3314
                 && $payload['messageObject']['location']['longitude']
                     === 88.6138
-                && $payload['messageObject']['location']['assigned']
-                    === 'Multi Type Agent';
+                && !array_key_exists(
+                    'assigned',
+                    $payload['messageObject']['location']
+                );
         });
     }
 

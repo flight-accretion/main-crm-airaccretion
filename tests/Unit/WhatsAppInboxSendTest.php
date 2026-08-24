@@ -93,18 +93,22 @@ class WhatsAppInboxSendTest extends TestCase
 
         Http::assertSent(function ($request) {
             $payload = $request->data();
+            $expectedPayload = [
+                'messageObject' => [
+                    'messaging_product' => 'whatsapp',
+                    'to' => '919876543218',
+                    'type' => 'text',
+                    'text' => [
+                        'body' => 'Hello from the CRM inbox',
+                    ],
+                ],
+            ];
 
             return str_contains(
                 $request->url(),
                 'https://web.airaccretion.com/api/v1/send-message?token=test-token'
             )
-                && $payload['messageObject']['to'] === '+919876543218'
-                && $payload['messageObject']['type'] === 'text'
-                && $payload['messageObject']['text']['body']
-                    === 'Hello from the CRM inbox'
-                && $payload['messageObject']['text']['pass'] === 'yes'
-                && $payload['messageObject']['text']['assigned']
-                    === 'Super Admin Sender';
+                && $payload === $expectedPayload;
         });
 
         $this->assertDatabaseHas(
