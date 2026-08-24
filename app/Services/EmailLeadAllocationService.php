@@ -11,10 +11,14 @@ use App\Models\User;
 use App\Models\UserType;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 
 class EmailLeadAllocationService
 {
+    public function __construct(
+        private LeadProductRoutingService $productRouter
+    ) {
+    }
+
     /**
      * Select salesperson for EMAIL LEAD only.
      */
@@ -59,6 +63,13 @@ class EmailLeadAllocationService
             $emailLog->service_name
         );
 
+        $isCharterProduct =
+            $this->productRouter
+                ->isCharterProduct(
+                    $product,
+                    $emailLog->service_name
+                );
+
 
         /*
         |--------------------------------------------------------------------------
@@ -70,6 +81,24 @@ class EmailLeadAllocationService
         */
 
         if (!$product) {
+
+            if ($isCharterProduct) {
+
+                Log::info(
+                    'Email charter product not resolved. Trying charter keyword mapping before retail fallback.',
+                    [
+                        'lead_id' => $lead->id,
+                        'service_name' =>
+                            $emailLog->service_name,
+                    ]
+                );
+
+                if ($this->hasConfiguredCharterMapping()) {
+                    return $this->pickCharterSalesperson();
+                }
+
+                return $this->pickRetailSalesperson();
+            }
 
             Log::info(
                 'Email product not resolved. Using retail allocation.',
@@ -91,21 +120,9 @@ class EmailLeadAllocationService
         */
 
         $mappedUserIds =
-            EmailLeadProductUserAssignment::query()
-
-                ->where(
-                    'product_id',
-                    $product->id
-                )
-
-                ->where(
-                    'is_active',
-                    true
-                )
-
-                ->pluck(
-                    'user_id'
-                );
+            $this->mappedUserIdsForProduct(
+                $product->id
+            );
 
 
         /*
@@ -118,6 +135,20 @@ class EmailLeadAllocationService
         */
 
         if ($mappedUserIds->isEmpty()) {
+
+            if ($isCharterProduct) {
+
+                Log::info(
+                    'Email charter product has no configured salesperson. Using retail fallback allocation.',
+                    [
+                        'lead_id' => $lead->id,
+                        'product_id' => $product->id,
+                        'product' => $product->product,
+                    ]
+                );
+
+                return $this->pickRetailSalesperson();
+            }
 
             Log::info(
                 'Email product has no configured salesperson. Using retail allocation.',
@@ -245,87 +276,10 @@ class EmailLeadAllocationService
         }
 
 
-        /*
-        |--------------------------------------------------------------------------
-        | 2. Fallback to Email Service name
-        |--------------------------------------------------------------------------
-        */
-
-        $emailName = $this->normalize(
-            $emailServiceName
-        );
-
-
-        if ($emailName === '') {
-            return null;
-        }
-
-
-        $products = Product::query()
-            ->where('status', 1)
-            ->get([
-                'id',
-                'product',
-            ]);
-
-
-        /*
-         * Exact match first.
-         */
-
-        foreach ($products as $product) {
-
-            $productName = $this->normalize(
-                $product->product
+        return $this->productRouter
+            ->resolveProduct(
+                $emailServiceName
             );
-
-
-            if (
-                $productName !== ''
-                &&
-                $emailName === $productName
-            ) {
-                return $product;
-            }
-        }
-
-
-        /*
-         * Controlled phrase match second.
-         *
-         * Example:
-         *
-         * CRM:
-         * Private Jet
-         *
-         * Email:
-         * Private Jet Mumbai
-         */
-
-        foreach ($products as $product) {
-
-            $productName = $this->normalize(
-                $product->product
-            );
-
-
-            if ($productName === '') {
-                continue;
-            }
-
-
-            if (
-                Str::contains(
-                    $emailName,
-                    $productName
-                )
-            ) {
-                return $product;
-            }
-        }
-
-
-        return null;
     }
 
 
@@ -396,6 +350,105 @@ class EmailLeadAllocationService
     }
 
 
+    private function pickCharterSalesperson(
+        ?string $preferredProductId = null
+    ): ?User {
+        $productIds =
+            $this->productRouter
+                ->charterProductIds();
+
+        if ($preferredProductId) {
+            $productIds =
+                $productIds
+                    ->prepend($preferredProductId)
+                    ->filter()
+                    ->unique()
+                    ->values();
+        }
+
+        if ($productIds->isEmpty()) {
+            return null;
+        }
+
+        $mappedUserIds =
+            EmailLeadProductUserAssignment::query()
+                ->whereIn(
+                    'product_id',
+                    $productIds
+                )
+                ->where(
+                    'is_active',
+                    true
+                )
+                ->pluck('user_id')
+                ->filter()
+                ->unique()
+                ->values();
+
+        if ($mappedUserIds->isEmpty()) {
+            return null;
+        }
+
+        $eligibleUsers = User::query()
+            ->with('userType')
+            ->whereIn(
+                'id',
+                $mappedUserIds
+            )
+            ->where(
+                'status',
+                1
+            )
+            ->get()
+            ->filter(function ($user) {
+                return $this->isEligibleToday(
+                    $user
+                );
+            })
+            ->values();
+
+        if ($eligibleUsers->isEmpty()) {
+            return null;
+        }
+
+        return $this->pickBalanced(
+            $eligibleUsers
+        );
+    }
+
+    private function hasConfiguredCharterMapping(
+        ?string $preferredProductId = null
+    ): bool {
+        $productIds =
+            $this->productRouter
+                ->charterProductIds();
+
+        if ($preferredProductId) {
+            $productIds =
+                $productIds
+                    ->prepend($preferredProductId)
+                    ->filter()
+                    ->unique()
+                    ->values();
+        }
+
+        if ($productIds->isEmpty()) {
+            return false;
+        }
+
+        return EmailLeadProductUserAssignment::query()
+            ->whereIn(
+                'product_id',
+                $productIds
+            )
+            ->where(
+                'is_active',
+                true
+            )
+            ->exists();
+    }
+
+
     /**
      * Retail email lead.
      *
@@ -403,6 +456,17 @@ class EmailLeadAllocationService
      */
     private function pickRetailSalesperson(): ?User
     {
+        $mappedUserIds =
+            EmailLeadProductUserAssignment::query()
+                ->where(
+                    'is_active',
+                    true
+                )
+                ->pluck('user_id')
+                ->filter()
+                ->unique()
+                ->values();
+
         $users = User::query()
 
             ->with('userType')
@@ -418,6 +482,16 @@ class EmailLeadAllocationService
                         UserType::SALES_ROLES
                     );
 
+                }
+            )
+
+            ->when(
+                $mappedUserIds->isNotEmpty(),
+                function ($query) use ($mappedUserIds) {
+                    $query->whereNotIn(
+                        'id',
+                        $mappedUserIds
+                    );
                 }
             )
 
@@ -447,6 +521,24 @@ class EmailLeadAllocationService
         return $this->pickBalanced(
             $users
         );
+    }
+
+    private function mappedUserIdsForProduct(
+        string $productId
+    ): Collection {
+        return EmailLeadProductUserAssignment::query()
+            ->where(
+                'product_id',
+                $productId
+            )
+            ->where(
+                'is_active',
+                true
+            )
+            ->pluck('user_id')
+            ->filter()
+            ->unique()
+            ->values();
     }
 
 
@@ -576,35 +668,6 @@ class EmailLeadAllocationService
             ->first();
     }
 
-
-    /**
-     * Normalize product/service text.
-     */
-    private function normalize(
-        ?string $value
-    ): string {
-
-        $value = trim(
-            (string) $value
-        );
-
-
-        if ($value === '') {
-            return '';
-        }
-
-
-        $value = preg_replace(
-            '/\s+/',
-            ' ',
-            $value
-        );
-
-
-        return Str::lower(
-            $value
-        );
-    }
 
     public function findUserForProduct(string $productId): ?\App\Models\User
 {

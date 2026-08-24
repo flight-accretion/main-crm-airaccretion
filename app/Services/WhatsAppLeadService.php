@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\Client;
 use App\Models\Lead;
 use App\Models\LeadAllocationLog;
-use App\Models\Product;
 use App\Models\WhatsAppLeadIntegration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -15,7 +14,8 @@ class WhatsAppLeadService
     public function __construct(
         private WhatsAppProductAllocationService $allocator,
         private LeadAllocationService $leadAllocationService,
-        private WhatCrmAssignmentWebhookService $callback
+        private WhatCrmAssignmentWebhookService $callback,
+        private LeadProductRoutingService $productRouter
     ) {
     }
 
@@ -204,11 +204,15 @@ class WhatsAppLeadService
                  * --------------------------------------------------
                  */
 
+                $serviceText =
+                    $data['service']
+                    ?? null;
+
                 $product =
-                    $this->resolveProduct(
-                        $data['service']
-                            ?? null
-                    );
+                    $this->productRouter
+                        ->resolveProduct(
+                            $serviceText
+                        );
 
 
                 /*
@@ -291,8 +295,14 @@ class WhatsAppLeadService
                  */
 
                 $user = null;
-                $isRetailAssignment =
-                    false;
+                $assignmentRoute =
+                    'retail';
+                $isCharterAssignment =
+                    $this->productRouter
+                        ->isCharterProduct(
+                            $product,
+                            $serviceText
+                        );
 
                 if ($product) {
 
@@ -303,6 +313,11 @@ class WhatsAppLeadService
                             )
                     ) {
 
+                        $assignmentRoute =
+                            $isCharterAssignment
+                                ? 'charter'
+                                : 'product';
+
                         $user =
                             $this->allocator
                                 ->findUser(
@@ -311,8 +326,30 @@ class WhatsAppLeadService
 
                     } else {
 
-                        $isRetailAssignment =
-                            true;
+                        $assignmentRoute =
+                            'retail';
+
+                        $user =
+                            $this->allocator
+                                ->findRetailUser();
+                    }
+
+                } elseif ($isCharterAssignment) {
+
+                    if (
+                        $this->allocator
+                            ->hasConfiguredCharterMapping()
+                    ) {
+                        $assignmentRoute =
+                            'charter';
+
+                        $user =
+                            $this->allocator
+                                ->findCharterUser();
+                    } else {
+
+                        $assignmentRoute =
+                            'retail';
 
                         $user =
                             $this->allocator
@@ -321,8 +358,8 @@ class WhatsAppLeadService
 
                 } else {
 
-                    $isRetailAssignment =
-                        true;
+                    $assignmentRoute =
+                        'retail';
 
                     $user =
                         $this->allocator
@@ -352,9 +389,9 @@ class WhatsAppLeadService
                             'success',
 
                         'details' =>
-                            $isRetailAssignment
-                                ? 'Assigned from WhatCRM using retail empty-product routing.'
-                                : 'Assigned from WhatCRM using dynamic product routing.',
+                            $this->assignmentDetails(
+                                $assignmentRoute
+                            ),
                     ]);
 
 
@@ -414,25 +451,15 @@ class WhatsAppLeadService
                 $this->leadAllocationService
                     ->queueLead(
                         $lead,
-                        $isRetailAssignment
-                            ? 'whatsapp_retail_waiting'
-                            : (
-                                $product
-                                    ? 'whatsapp_product_waiting'
-                                    : 'whatsapp_product_unmatched'
-                            )
+                        $this->queueReason(
+                            $assignmentRoute
+                        )
                     );
 
 
                 $integration->update([
-                    'status' =>
-                        (
-                            $product
-                            ||
-                            $isRetailAssignment
-                        )
-                            ? 'queued'
-                            : 'product_unmatched',
+                        'status' =>
+                            'queued',
                 ]);
 
 
@@ -444,13 +471,7 @@ class WhatsAppLeadService
                         'success' => true,
 
                         'status' =>
-                            (
-                                $product
-                                ||
-                                $isRetailAssignment
-                            )
-                                ? 'queued'
-                                : 'product_unmatched',
+                            'queued',
 
                         'existing_lead' =>
                             false,
@@ -469,13 +490,9 @@ class WhatsAppLeadService
                         'agent_user_id' => null,
 
                         'message' =>
-                            $isRetailAssignment
-                                ? 'Lead created. Waiting for an eligible retail salesperson.'
-                                : (
-                                    $product
-                                        ? 'Lead created. Waiting for an eligible mapped salesperson.'
-                                        : 'Lead created, but the incoming service did not match a CRM product.'
-                                ),
+                            $this->queuedMessage(
+                                $assignmentRoute
+                            ),
                     ],
                 ];
             }
@@ -502,47 +519,46 @@ class WhatsAppLeadService
         return $result['response'];
     }
 
-
-    private function resolveProduct(
-        ?string $service
-    ): ?Product {
-        $service = trim(
-            (string) $service
-        );
-
-        if ($service === '') {
-            return null;
+    private function assignmentDetails(
+        string $assignmentRoute
+    ): string {
+        if ($assignmentRoute === 'charter') {
+            return 'Assigned from WhatCRM using charter product routing.';
         }
 
-        /*
-         * Exact match first.
-         */
-        $product = Product::query()
-            ->whereRaw(
-                'LOWER(product) = ?',
-                [
-                    mb_strtolower(
-                        $service
-                    )
-                ]
-            )
-            ->first();
-
-        if ($product) {
-            return $product;
+        if ($assignmentRoute === 'retail') {
+            return 'Assigned from WhatCRM using retail empty-product routing.';
         }
 
-        /*
-         * Same broad matching style already used
-         * elsewhere in your CRM imports.
-         */
-        return Product::query()
-            ->where(
-                'product',
-                'LIKE',
-                '%' . $service . '%'
-            )
-            ->first();
+        return 'Assigned from WhatCRM using dynamic product routing.';
+    }
+
+    private function queueReason(
+        string $assignmentRoute
+    ): string {
+        if ($assignmentRoute === 'charter') {
+            return 'whatsapp_charter_waiting';
+        }
+
+        if ($assignmentRoute === 'retail') {
+            return 'whatsapp_retail_waiting';
+        }
+
+        return 'whatsapp_product_waiting';
+    }
+
+    private function queuedMessage(
+        string $assignmentRoute
+    ): string {
+        if ($assignmentRoute === 'charter') {
+            return 'Lead created. Waiting for an eligible charter salesperson.';
+        }
+
+        if ($assignmentRoute === 'retail') {
+            return 'Lead created. Waiting for an eligible retail salesperson.';
+        }
+
+        return 'Lead created. Waiting for an eligible mapped salesperson.';
     }
 
 

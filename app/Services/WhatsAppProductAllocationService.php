@@ -15,7 +15,8 @@ use Illuminate\Support\Facades\Log;
 class WhatsAppProductAllocationService
 {
     public function __construct(
-        private LeadAllocationService $leadAllocationService
+        private LeadAllocationService $leadAllocationService,
+        private LeadProductRoutingService $productRouter
     ) {
     }
 
@@ -66,40 +67,9 @@ class WhatsAppProductAllocationService
             return null;
         }
 
-        /*
-         * Only salespeople who confirmed YES today.
-         */
-        $availableIds =
-            SalespersonAvailability::query()
-                ->whereIn(
-                    'user_id',
-                    $mappedUserIds
-                )
-                ->where('is_available', true)
-                ->where('is_opted_in', true)
-                ->whereDate(
-                    'last_response_at',
-                    Carbon::today()
-                )
-                ->pluck('user_id');
-
-        if ($availableIds->isEmpty()) {
-            return null;
-        }
-
-        /*
-         * User itself must still be active.
-         */
-        $users = User::query()
-            ->whereIn('id', $availableIds)
-            ->where('status', 1)
-            ->get();
-
-        if ($users->isEmpty()) {
-            return null;
-        }
-
-        return $this->balancedUser($users);
+        return $this->findAvailableBalancedUser(
+            $mappedUserIds
+        );
     }
 
     public function hasConfiguredProductMapping(
@@ -110,6 +80,83 @@ class WhatsAppProductAllocationService
                 $productId
             )
             ->isNotEmpty();
+    }
+
+    public function hasConfiguredCharterMapping(
+        ?string $preferredProductId = null
+    ): bool {
+        $productIds =
+            $this->productRouter
+                ->charterProductIds();
+
+        if ($preferredProductId) {
+            $productIds =
+                $productIds
+                    ->prepend($preferredProductId)
+                    ->filter()
+                    ->unique()
+                    ->values();
+        }
+
+        return $this->mappedUserIdsForProducts(
+            $productIds
+        )->isNotEmpty();
+    }
+
+    public function findCharterUser(
+        ?string $preferredProductId = null
+    ): ?User {
+        $settings =
+            LeadAllocationSetting::getActiveSettings();
+
+        if (
+            !$this->leadAllocationService
+                ->isOfficeOpenForDebug(
+                    $settings,
+                    now()
+                )
+        ) {
+            return null;
+        }
+
+        $productIds =
+            $this->productRouter
+                ->charterProductIds();
+
+        if ($preferredProductId) {
+            $productIds =
+                $productIds
+                    ->prepend($preferredProductId)
+                    ->filter()
+                    ->unique()
+                    ->values();
+        }
+
+        if ($productIds->isEmpty()) {
+            return null;
+        }
+
+        $mappedUserIds =
+            $this->mappedUserIdsForProducts(
+                $productIds
+            );
+
+        if ($mappedUserIds->isEmpty()) {
+
+            Log::info(
+                'WhatsApp charter lead has no configured charter salesperson mapping.',
+                [
+                    'product_ids' =>
+                        $productIds->values()->all(),
+                ]
+            );
+
+            return null;
+        }
+
+        return $this->findAvailableBalancedUser(
+            $mappedUserIds
+        );
     }
 
     public function findRetailUser(): ?User
@@ -232,5 +279,67 @@ class WhatsAppProductAllocationService
             ->filter()
             ->unique()
             ->values();
+    }
+
+    private function mappedUserIdsForProducts(
+        Collection $productIds
+    ): Collection {
+        if ($productIds->isEmpty()) {
+            return collect();
+        }
+
+        return EmailLeadProductUserAssignment::query()
+            ->whereIn(
+                'product_id',
+                $productIds
+            )
+            ->where('is_active', true)
+            ->pluck('user_id')
+            ->filter()
+            ->unique()
+            ->values();
+    }
+
+    private function findAvailableBalancedUser(
+        Collection $mappedUserIds
+    ): ?User {
+        if ($mappedUserIds->isEmpty()) {
+            return null;
+        }
+
+        /*
+         * Only salespeople who confirmed YES today.
+         */
+        $availableIds =
+            SalespersonAvailability::query()
+                ->whereIn(
+                    'user_id',
+                    $mappedUserIds
+                )
+                ->where('is_available', true)
+                ->where('is_opted_in', true)
+                ->whereDate(
+                    'last_response_at',
+                    Carbon::today()
+                )
+                ->pluck('user_id');
+
+        if ($availableIds->isEmpty()) {
+            return null;
+        }
+
+        /*
+         * User itself must still be active.
+         */
+        $users = User::query()
+            ->whereIn('id', $availableIds)
+            ->where('status', 1)
+            ->get();
+
+        if ($users->isEmpty()) {
+            return null;
+        }
+
+        return $this->balancedUser($users);
     }
 }

@@ -67,7 +67,7 @@ class LeadAllocationSettingController extends Controller
 
         /*
         |--------------------------------------------------------------------------
-        | Existing Email Product Assignments
+        | Existing Lead Product Assignments
         |--------------------------------------------------------------------------
         |
         | Result:
@@ -149,7 +149,7 @@ class LeadAllocationSettingController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | Email Product Mapping
+            | Lead Product Mapping
             |--------------------------------------------------------------------------
             */
 
@@ -172,7 +172,7 @@ class LeadAllocationSettingController extends Controller
 
         /*
         |--------------------------------------------------------------------------
-        | Separate Email Mapping
+        | Separate Lead Product Mapping
         |--------------------------------------------------------------------------
         |
         | This field does NOT belong to
@@ -217,7 +217,7 @@ class LeadAllocationSettingController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | Rebuild Email Product Mapping
+            | Rebuild Lead Product Mapping
             |--------------------------------------------------------------------------
             */
 
@@ -287,7 +287,7 @@ class LeadAllocationSettingController extends Controller
             )
             ->with(
                 'success',
-                'Lead allocation and email product assignments updated successfully.'
+                'Lead allocation and product assignments updated successfully.'
             );
     }
 

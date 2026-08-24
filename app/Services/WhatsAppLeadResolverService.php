@@ -15,7 +15,8 @@ class WhatsAppLeadResolverService
     public function __construct(
         private ActiveLeadService $activeLeadService,
         private WhatsAppProductAllocationService $allocator,
-        private LeadAllocationService $leadAllocationService
+        private LeadAllocationService $leadAllocationService,
+        private LeadProductRoutingService $productRouter
     ) {
     }
 
@@ -53,9 +54,14 @@ class WhatsAppLeadResolverService
             return $existingLead;
         }
 
-        $product = $this->resolveProduct(
-            $data['service'] ?? null
-        );
+        $serviceText =
+            $data['service']
+            ?? null;
+
+        $product = $this->productRouter
+            ->resolveProduct(
+                $serviceText
+            );
 
         $lead = Lead::create([
             'id' => (string) Str::uuid(),
@@ -68,7 +74,10 @@ class WhatsAppLeadResolverService
             'occasion' => $data['occasion'] ?? null,
         ]);
 
-        $salesperson = $this->resolveSalesperson($product);
+        $salesperson = $this->resolveSalesperson(
+            $product,
+            $serviceText
+        );
 
         if ($salesperson) {
             $lead->representative_user_id = $salesperson->id;
@@ -79,17 +88,19 @@ class WhatsAppLeadResolverService
                 'salesperson_id' => $salesperson->id,
                 'action' => 'whatsapp_message_assigned',
                 'result' => 'success',
-                'details' => $product
-                    ? 'Assigned from WhatCRM message using product routing.'
-                    : 'Assigned from WhatCRM message using retail routing.',
+                'details' => $this->assignmentDetails(
+                    $product,
+                    $serviceText
+                ),
             ]);
         } else {
             $this->leadAllocationService
                 ->queueLead(
                     $lead,
-                    $product
-                        ? 'whatsapp_message_product_waiting'
-                        : 'whatsapp_message_retail_waiting'
+                    $this->queueReason(
+                        $product,
+                        $serviceText
+                    )
                 );
         }
 
@@ -163,33 +174,20 @@ class WhatsAppLeadResolverService
             ->first();
     }
 
-    private function resolveProduct(?string $service): ?Product
+    private function resolveSalesperson(
+        ?Product $product,
+        ?string $serviceText
+    )
     {
-        $service = trim((string) $service);
+        $assignmentRoute =
+            $this->assignmentRoute(
+                $product,
+                $serviceText
+            );
 
-        if ($service === '') {
-            return null;
-        }
-
-        $product = Product::query()
-            ->whereRaw(
-                'LOWER(product) = ?',
-                [mb_strtolower($service)]
-            )
-            ->first();
-
-        if ($product) {
-            return $product;
-        }
-
-        return Product::query()
-            ->where('product', 'LIKE', '%' . $service . '%')
-            ->first();
-    }
-
-    private function resolveSalesperson(?Product $product)
-    {
         if (
+            $assignmentRoute !== 'retail'
+            &&
             $product
             && $this->allocator
                 ->hasConfiguredProductMapping($product->id)
@@ -197,7 +195,89 @@ class WhatsAppLeadResolverService
             return $this->allocator->findUser($product->id);
         }
 
+        if ($assignmentRoute === 'charter') {
+            return $this->allocator
+                ->findCharterUser(
+                    optional($product)->id
+                );
+        }
+
         return $this->allocator->findRetailUser();
+    }
+
+    private function assignmentRoute(
+        ?Product $product,
+        ?string $serviceText
+    ): string {
+        $isCharter =
+            $this->productRouter
+                ->isCharterProduct(
+                    $product,
+                    $serviceText
+                );
+
+        if (
+            $product
+            && $this->allocator
+                ->hasConfiguredProductMapping($product->id)
+        ) {
+            return $isCharter
+                ? 'charter'
+                : 'product';
+        }
+
+        if (
+            !$product
+            && $isCharter
+            && $this->allocator
+                ->hasConfiguredCharterMapping()
+        ) {
+            return 'charter';
+        }
+
+        return 'retail';
+    }
+
+    private function assignmentDetails(
+        ?Product $product,
+        ?string $serviceText
+    ): string {
+        $assignmentRoute =
+            $this->assignmentRoute(
+                $product,
+                $serviceText
+            );
+
+        if ($assignmentRoute === 'charter') {
+            return 'Assigned from WhatCRM message using charter product routing.';
+        }
+
+        if ($assignmentRoute === 'product') {
+            return 'Assigned from WhatCRM message using product routing.';
+        }
+
+        return 'Assigned from WhatCRM message using retail routing.';
+    }
+
+    private function queueReason(
+        ?Product $product,
+        ?string $serviceText
+    ): string {
+        $assignmentRoute =
+            $this->assignmentRoute(
+                $product,
+                $serviceText
+            );
+
+        if ($assignmentRoute === 'charter') {
+            return 'whatsapp_message_charter_waiting';
+        }
+
+        if ($assignmentRoute === 'product') {
+            return 'whatsapp_message_product_waiting';
+        }
+
+        return 'whatsapp_message_retail_waiting';
     }
 
     private function linkConversationToLead(

@@ -5,9 +5,7 @@ namespace App\Services;
 use App\Models\Client;
 use App\Models\EmailLeadLog;
 use App\Models\Lead;
-use App\Models\Product;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class EmailLeadService
@@ -16,7 +14,8 @@ class EmailLeadService
         private EmailLeadParserService $parser,
         private LeadAllocationService $allocationService,
         private EmailLeadFollowupService $followupService,
-        private ActiveLeadService $activeLeadService
+        private ActiveLeadService $activeLeadService,
+        private LeadProductRoutingService $productRouter
     ) {
     }
 
@@ -241,10 +240,21 @@ class EmailLeadService
                  * Match email "Services:"
                  * to Product.product.
                  */
+                $product =
+                    $this->productRouter
+                        ->resolveProduct(
+                            $parsed['service']
+                        );
+
                 $productId =
-                    $this->findProductId(
-                        $parsed['service']
-                    );
+                    optional($product)->id;
+
+                $isCharterProduct =
+                    $this->productRouter
+                        ->isCharterProduct(
+                            $product,
+                            $parsed['service']
+                        );
 
                 $descriptionParts = [
                     'Lead received automatically from Email.',
@@ -326,7 +336,9 @@ class EmailLeadService
                 $this->allocationService
                     ->queueLead(
                         $lead,
-                        'email_new_lead'
+                        $isCharterProduct
+                            ? 'email_charter_lead'
+                            : 'email_new_lead'
                     );
 
                 return [
@@ -354,55 +366,6 @@ class EmailLeadService
             "{$expr} LIKE ?",
             ['%' . $phone]
         )->first();
-    }
-
-    private function findProductId(
-        ?string $serviceName
-    ): ?string {
-        if (!$serviceName) {
-            return null;
-        }
-
-        $needle =
-            $this->normalizeText(
-                $serviceName
-            );
-
-        /*
-         * Load products and use exact normalized
-         * matching to prevent assigning the wrong
-         * product just because two names are similar.
-         *
-         * Your Lead model reads product names
-         * from Product.product.
-         */
-        return Product::query()
-            ->get([
-                'id',
-                'product',
-            ])
-            ->first(function ($product) use (
-                $needle
-            ) {
-                return $this->normalizeText(
-                    $product->product
-                ) === $needle;
-            })
-            ?->id;
-    }
-
-    private function normalizeText(
-        ?string $value
-    ): string {
-        return Str::lower(
-            preg_replace(
-                '/\s+/',
-                ' ',
-                trim(
-                    (string) $value
-                )
-            )
-        );
     }
 
     private function digitsSqlExpression(

@@ -11,7 +11,7 @@
             </h3>
 
             <p class="text-sm text-gray-500 mt-1">
-                Configure office allocation and email lead product routing.
+                Configure office allocation plus Email and WhatCRM product routing.
             </p>
 
         </div>
@@ -225,7 +225,7 @@
 
 
         {{-- ========================================================== --}}
-        {{-- EMAIL LEAD PRODUCT ROUTING --}}
+        {{-- EMAIL / WHATCRM LEAD PRODUCT ROUTING --}}
         {{-- ========================================================== --}}
 
         <div class="box mt-4">
@@ -235,13 +235,13 @@
                 <div>
 
                     <div class="box-title">
-                        Email Lead Product Assignment
+                        Lead Product Assignment
                     </div>
 
                     <p class="text-sm text-gray-500 mt-1">
-                        Select which email products each salesperson can receive.
+                        Select which CRM products each salesperson can receive for Email and WhatCRM leads.
                         The same product can be assigned to multiple Executive.
-                        These settings apply only to automatically fetched email leads.
+                        Leave products empty for retail fallback agents.
                         IVR and manual lead allocation remain unchanged.
                     </p>
 
@@ -348,7 +348,7 @@
                                             name="email_product_assignments[{{ $user->id }}][]"
                                             class="ti-form-select email-product-select"
                                             multiple
-                                            data-placeholder="Select Email Products"
+                                            data-placeholder="Select Lead Products"
                                         >
 
                                             @foreach($products as $product)

@@ -129,6 +129,209 @@ class WhatsAppLeadServiceTest extends TestCase
         );
     }
 
+    public function test_whatcrm_charter_keyword_maps_to_related_crm_product_and_charter_team(): void
+    {
+        $charterUser =
+            $this->createSalesUser(
+                'Charter Team User'
+            );
+
+        $emptyProductUser =
+            $this->createSalesUser(
+                'Retail Empty Product User'
+            );
+
+        $charterProduct =
+            $this->createProduct(
+                'Char Dham Yatra'
+            );
+
+        EmailLeadProductUserAssignment::create([
+            'user_id' =>
+                $charterUser->id,
+            'product_id' =>
+                $charterProduct->id,
+            'is_active' =>
+                true,
+        ]);
+
+        $this->makeAvailable($charterUser);
+        $this->makeAvailable($emptyProductUser);
+
+        $response =
+            app(WhatsAppLeadService::class)
+                ->process([
+                    'name' => 'Dham Customer',
+                    'number' => '9876543222',
+                    'service' => 'Dham booking',
+                    'guest' => 4,
+                    'external_id' => 'WA-CHARTER-1',
+                ]);
+
+        $lead =
+            Lead::query()
+                ->where(
+                    'id',
+                    $response['lead_id']
+                )
+                ->firstOrFail();
+
+        $this->assertSame(
+            'assigned',
+            $response['status']
+        );
+        $this->assertSame(
+            $charterProduct->id,
+            $response['product_id']
+        );
+        $this->assertSame(
+            $charterUser->id,
+            $response['agent_user_id']
+        );
+        $this->assertSame(
+            $charterUser->id,
+            $lead->representative_user_id
+        );
+        $this->assertSame(
+            [$charterProduct->id],
+            $lead->product_ids_array
+        );
+    }
+
+    public function test_unmapped_whatcrm_charter_keyword_falls_back_to_empty_product_salesperson(): void
+    {
+        $emptyProductUser =
+            $this->createSalesUser(
+                'Retail Empty Product User'
+            );
+
+        $charterProduct =
+            $this->createProduct(
+                'Char Dham Yatra'
+            );
+
+        $this->makeAvailable($emptyProductUser);
+
+        $response =
+            app(WhatsAppLeadService::class)
+                ->process([
+                    'name' => 'Unmapped Dham Customer',
+                    'number' => '9876543223',
+                    'service' => 'Dham booking',
+                    'guest' => 2,
+                    'external_id' => 'WA-CHARTER-UNMAPPED-1',
+                ]);
+
+        $lead =
+            Lead::query()
+                ->where(
+                    'id',
+                    $response['lead_id']
+                )
+                ->firstOrFail();
+
+        $this->assertSame(
+            'assigned',
+            $response['status']
+        );
+        $this->assertSame(
+            $charterProduct->id,
+            $response['product_id']
+        );
+        $this->assertSame(
+            $emptyProductUser->id,
+            $response['agent_user_id']
+        );
+        $this->assertSame(
+            $emptyProductUser->id,
+            $lead->representative_user_id
+        );
+    }
+
+    public function test_queued_whatcrm_charter_product_later_assigns_to_charter_team(): void
+    {
+        $charterUser =
+            $this->createSalesUser(
+                'Later Charter Team User'
+            );
+
+        $emptyProductUser =
+            $this->createSalesUser(
+                'Available Retail Empty Product User'
+            );
+
+        $charterProduct =
+            $this->createProduct(
+                'Char Dham Yatra'
+            );
+
+        EmailLeadProductUserAssignment::create([
+            'user_id' =>
+                $charterUser->id,
+            'product_id' =>
+                $charterProduct->id,
+            'is_active' =>
+                true,
+        ]);
+
+        $this->makeAvailable($emptyProductUser);
+
+        $response =
+            app(WhatsAppLeadService::class)
+                ->process([
+                    'name' => 'Queued Dham Customer',
+                    'number' => '9876543233',
+                    'service' => 'Dham booking',
+                    'guest' => 2,
+                    'external_id' => 'WA-CHARTER-2',
+                ]);
+
+        $this->assertSame(
+            'queued',
+            $response['status']
+        );
+        $this->assertSame(
+            $charterProduct->id,
+            $response['product_id']
+        );
+
+        $queue =
+            LeadAllocationQueue::query()
+                ->where(
+                    'lead_id',
+                    $response['lead_id']
+                )
+                ->firstOrFail();
+
+        $this->makeAvailable($charterUser);
+
+        $result =
+            app(LeadAllocationService::class)
+                ->processPendingLeads();
+
+        $lead =
+            Lead::findOrFail(
+                $response['lead_id']
+            );
+
+        $this->assertSame(
+            1,
+            $result['processed']
+        );
+        $this->assertSame(
+            $charterUser->id,
+            $lead->representative_user_id
+        );
+        $this->assertDatabaseHas(
+            'lead_allocation_queue',
+            [
+                'id' => $queue->id,
+                'status' => 'assigned',
+                'assigned_to' => $charterUser->id,
+            ]
+        );
+    }
+
     public function test_queued_unmapped_whatcrm_product_later_assigns_to_empty_product_salesperson(): void
     {
         $emptyProductUser =

@@ -22,7 +22,8 @@ class WhatsAppAiReplyService
         private WhatsAppOpenAiClient $openAi,
         private WhatCrmOutboundMessageService $outbound,
         private WhatsAppProductAllocationService $allocator,
-        private WhatsAppLeadFollowupService $followupService
+        private WhatsAppLeadFollowupService $followupService,
+        private LeadProductRoutingService $productRouter
     ) {
     }
 
@@ -241,7 +242,16 @@ class WhatsAppAiReplyService
         ?string $detectedProduct,
         Collection $messages
     ): ?User {
-        $product = $this->resolveProduct($detectedProduct);
+        $product =
+            $this->productRouter
+                ->resolveProduct($detectedProduct);
+
+        $isCharterProduct =
+            $this->productRouter
+                ->isCharterProduct(
+                    $product,
+                    $detectedProduct
+                );
         $lead = $conversation->lead;
         $user = null;
 
@@ -254,6 +264,13 @@ class WhatsAppAiReplyService
             } else {
                 $user = $this->allocator->findRetailUser();
             }
+        } elseif (
+            $isCharterProduct
+            && $this->allocator
+                ->hasConfiguredCharterMapping()
+        ) {
+            $user = $this->allocator
+                ->findCharterUser();
         } elseif (!$conversation->assigned_user_id) {
             $user = $this->allocator->findRetailUser();
         }
@@ -342,35 +359,6 @@ class WhatsAppAiReplyService
                 ]);
             }
         });
-    }
-
-    private function resolveProduct(?string $productName): ?Product
-    {
-        $productName = trim((string) $productName);
-
-        if (
-            $productName === ''
-            || mb_strtolower($productName) === 'n/a'
-        ) {
-            return null;
-        }
-
-        $product = Product::query()
-            ->whereRaw(
-                'LOWER(product) = ?',
-                [
-                    mb_strtolower($productName),
-                ]
-            )
-            ->first();
-
-        if ($product) {
-            return $product;
-        }
-
-        return Product::query()
-            ->where('product', 'LIKE', '%' . $productName . '%')
-            ->first();
     }
 
     private function followupData(

@@ -70,22 +70,229 @@ class LeadAllocationService
                             \App\Services\WhatsAppProductAllocationService::class
                         );
 
+                    $productRouter =
+                        app(
+                            \App\Services\LeadProductRoutingService::class
+                        );
+
+                    $sourceService =
+                        data_get(
+                            $whatsAppIntegration->payload,
+                            'service'
+                        );
+
+                    $product =
+                        $whatsAppIntegration->product;
+
                     if (
-                        $whatsAppIntegration->product_id
+                        !$product
+                        && $sourceService
+                    ) {
+                        $product =
+                            $productRouter
+                                ->resolveProduct(
+                                    $sourceService
+                                );
+
+                        if ($product) {
+                            $whatsAppIntegration->product_id =
+                                $product->id;
+                            $whatsAppIntegration->save();
+
+                            if (
+                                empty(
+                                    $lead->product_ids_array
+                                )
+                            ) {
+                                $lead->product_ids = [
+                                    $product->id,
+                                ];
+                                $lead->save();
+                            }
+                        }
+                    }
+
+                    $isRetailFallback =
+                        str_contains(
+                            (string) $queueItem->reason,
+                            'retail'
+                        );
+
+                    $isCharter =
+                        str_contains(
+                            (string) $queueItem->reason,
+                            'charter'
+                        )
+                        || $productRouter
+                            ->isCharterProduct(
+                                $product,
+                                $sourceService
+                            );
+
+                    if (
+                        !$isRetailFallback
+                        &&
+                        $product
                         &&
                         $whatsAppAllocator
                             ->hasConfiguredProductMapping(
-                                $whatsAppIntegration->product_id
+                                $product->id
                             )
                     ) {
 
                         $salesperson =
                             $whatsAppAllocator->findUser(
-                                $whatsAppIntegration->product_id
+                                $product->id
                             );
+
+                    } elseif (
+                        !$isRetailFallback
+                        && $isCharter
+                    ) {
+
+                        if (
+                            !$product
+                            && $whatsAppAllocator
+                                ->hasConfiguredCharterMapping()
+                        ) {
+                            $salesperson =
+                                $whatsAppAllocator
+                                    ->findCharterUser();
+                        } else {
+                            $salesperson =
+                                $whatsAppAllocator
+                                    ->findRetailUser();
+                        }
 
                     } else {
 
+                        $salesperson =
+                            $whatsAppAllocator
+                                ->findRetailUser();
+                    }
+
+                } elseif (
+                    str_starts_with(
+                        (string) $queueItem->reason,
+                        'whatsapp_'
+                    )
+                ) {
+
+                    $whatsAppAllocator =
+                        app(
+                            \App\Services\WhatsAppProductAllocationService::class
+                        );
+
+                    $productRouter =
+                        app(
+                            \App\Services\LeadProductRoutingService::class
+                        );
+
+                    $sourceService = null;
+
+                    if (
+                        \Illuminate\Support\Facades\Schema::hasTable(
+                            'whatsapp_conversations'
+                        )
+                    ) {
+                        $conversation =
+                            \App\Models\WhatsAppConversation::query()
+                                ->where(
+                                    'lead_id',
+                                    $lead->id
+                                )
+                                ->orderByDesc(
+                                    'last_message_at'
+                                )
+                                ->first();
+
+                        $sourceService =
+                            optional($conversation)
+                                ->last_message;
+                    }
+
+                    $product = null;
+                    $leadProductIds =
+                        $lead->product_ids_array;
+
+                    if (!empty($leadProductIds)) {
+                        $product =
+                            Product::query()
+                                ->whereIn(
+                                    'id',
+                                    $leadProductIds
+                                )
+                                ->first();
+                    }
+
+                    if (
+                        !$product
+                        && $sourceService
+                    ) {
+                        $product =
+                            $productRouter
+                                ->resolveProduct(
+                                    $sourceService
+                                );
+
+                        if ($product) {
+                            $lead->product_ids = [
+                                $product->id,
+                            ];
+                            $lead->save();
+                        }
+                    }
+
+                    $isRetailFallback =
+                        str_contains(
+                            (string) $queueItem->reason,
+                            'retail'
+                        );
+
+                    $isCharter =
+                        str_contains(
+                            (string) $queueItem->reason,
+                            'charter'
+                        )
+                        || $productRouter
+                            ->isCharterProduct(
+                                $product,
+                                $sourceService
+                            );
+
+                    if (
+                        !$isRetailFallback
+                        &&
+                        $product
+                        &&
+                        $whatsAppAllocator
+                            ->hasConfiguredProductMapping(
+                                $product->id
+                            )
+                    ) {
+                        $salesperson =
+                            $whatsAppAllocator
+                                ->findUser(
+                                    $product->id
+                                );
+                    } elseif (
+                        !$isRetailFallback
+                        && $isCharter
+                    ) {
+                        if (
+                            !$product
+                            && $whatsAppAllocator
+                                ->hasConfiguredCharterMapping()
+                        ) {
+                            $salesperson =
+                                $whatsAppAllocator
+                                    ->findCharterUser();
+                        } else {
+                            $salesperson =
+                                $whatsAppAllocator
+                                    ->findRetailUser();
+                        }
+                    } else {
                         $salesperson =
                             $whatsAppAllocator
                                 ->findRetailUser();
