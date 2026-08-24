@@ -48,12 +48,11 @@ class WhatsAppConversationVisibilityService
             ->where('id', $conversationId)
             ->first();
 
-        if (
-            !$conversation
-            || $conversation->assigned_user_id !== $user->id
-        ) {
+        if (!$conversation) {
             return false;
         }
+
+        $hadUnread = (int) $conversation->unread_count > 0;
 
         WhatsAppMessage::query()
             ->where('conversation_id', $conversation->id)
@@ -67,7 +66,7 @@ class WhatsAppConversationVisibilityService
         $conversation->unread_count = 0;
         $conversation->save();
 
-        return true;
+        return $hadUnread;
     }
 
     public function agentFilterUsers(User $user)

@@ -84,6 +84,7 @@ class WhatsAppAiReplyServiceTest extends TestCase
             'model' => 'gpt-4o-mini',
             'prompt' => 'Reply for Accretion Aviation and detect the product.',
             'buffer_seconds' => 10,
+            'context_message_limit' => 2,
         ]);
         $setting->setApiKey('openai-key');
         $setting->save();
@@ -145,6 +146,47 @@ class WhatsAppAiReplyServiceTest extends TestCase
                 'message_at' => now()->toIso8601String(),
                 'status' => 'delivered',
             ]);
+
+        DB::table('whatsapp_messages')->insert([
+            [
+                'id' => (string) Str::uuid(),
+                'conversation_id' => $result['conversation_id'],
+                'lead_followup_id' => null,
+                'ai_reply_batch_id' => null,
+                'ai_processed_at' => now()->subDay(),
+                'provider_message_id' => 'wamid.AI-OLD-1',
+                'direction' => 'incoming',
+                'sender_type' => 'customer',
+                'sender_user_id' => null,
+                'message_type' => 'text',
+                'body' => 'Very old message outside context window',
+                'provider_status' => 'delivered',
+                'message_at' => now()->subDays(2),
+                'crm_read_at' => null,
+                'raw_payload' => json_encode([]),
+                'created_at' => now()->subDays(2),
+                'updated_at' => now()->subDays(2),
+            ],
+            [
+                'id' => (string) Str::uuid(),
+                'conversation_id' => $result['conversation_id'],
+                'lead_followup_id' => null,
+                'ai_reply_batch_id' => null,
+                'ai_processed_at' => now()->subHour(),
+                'provider_message_id' => 'wamid.AI-OLD-2',
+                'direction' => 'incoming',
+                'sender_type' => 'customer',
+                'sender_user_id' => null,
+                'message_type' => 'text',
+                'body' => 'Previous context says 4 passengers',
+                'provider_status' => 'delivered',
+                'message_at' => now()->subHour(),
+                'crm_read_at' => null,
+                'raw_payload' => json_encode([]),
+                'created_at' => now()->subHour(),
+                'updated_at' => now()->subHour(),
+            ],
+        ]);
 
         $this->assertDatabaseHas(
             'whatsapp_ai_reply_batches',
@@ -214,6 +256,14 @@ class WhatsAppAiReplyServiceTest extends TestCase
                 && str_contains(
                     data_get($payload, 'input.0.content.0.text', ''),
                     'Need Gangtok to Bagdogra helicopter tomorrow'
+                )
+                && str_contains(
+                    data_get($payload, 'input.0.content.0.text', ''),
+                    'Previous context says 4 passengers'
+                )
+                && !str_contains(
+                    data_get($payload, 'input.0.content.0.text', ''),
+                    'Very old message outside context window'
                 );
         });
 
@@ -460,6 +510,7 @@ class WhatsAppAiReplyServiceTest extends TestCase
             $table->text('prompt')->nullable();
             $table->text('api_key_encrypted')->nullable();
             $table->unsignedInteger('buffer_seconds')->default(10);
+            $table->unsignedInteger('context_message_limit')->default(10000);
             $table->timestamps();
         });
 

@@ -14,7 +14,8 @@ class WhatsAppOpenAiClient
         WhatsAppAiAgentSetting $setting,
         WhatsAppConversation $conversation,
         Collection $messages,
-        Collection $products
+        Collection $products,
+        ?Collection $contextMessages = null
     ): array {
         $apiKey = $setting->apiKey();
 
@@ -49,7 +50,8 @@ class WhatsAppOpenAiClient
                                     'text' => $this->prompt(
                                         $conversation,
                                         $messages,
-                                        $products
+                                        $products,
+                                        $contextMessages
                                     ),
                                 ],
                             ],
@@ -79,9 +81,11 @@ class WhatsAppOpenAiClient
     private function prompt(
         WhatsAppConversation $conversation,
         Collection $messages,
-        Collection $products
+        Collection $products,
+        ?Collection $contextMessages = null
     ): string {
         $contact = $conversation->contact;
+        $contextMessages = $contextMessages ?: $messages;
 
         $lines = [
             'Customer name: ' . (optional($contact)->name ?: 'Unknown'),
@@ -98,13 +102,36 @@ class WhatsAppOpenAiClient
             $lines[] = '- ' . $product->product;
         }
 
-        $lines[] = 'Conversation:';
+        $lines[] = 'Conversation context, oldest to newest:';
+
+        foreach ($contextMessages as $message) {
+            $lines[] =
+                '['
+                . (
+                    $message->message_at
+                        ? $message->message_at->format('Y-m-d H:i:s')
+                        : '-'
+                )
+                . '] '
+                . strtoupper($message->direction)
+                . ' '
+                . ($message->message_type ?: 'text')
+                . ': '
+                . (
+                    $message->body
+                    ?: '[' . ($message->message_type ?: 'message') . ']'
+                );
+        }
+
+        $lines[] = 'New customer messages to answer now:';
 
         foreach ($messages as $message) {
             $lines[] =
-                strtoupper($message->direction)
-                . ': '
-                . ($message->body ?: '');
+                '- '
+                . (
+                    $message->body
+                    ?: '[' . ($message->message_type ?: 'message') . ']'
+                );
         }
 
         $lines[] =

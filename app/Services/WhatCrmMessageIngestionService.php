@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\WhatsAppContact;
+use App\Models\WhatsAppAiReplyBatch;
 use App\Models\WhatsAppConversation;
 use App\Models\WhatsAppMessage;
 use Illuminate\Support\Facades\DB;
@@ -21,6 +22,7 @@ class WhatCrmMessageIngestionService
 
     public function process(array $payload): array
     {
+        $this->aiBufferService->clearStatus();
         $data = $this->normalizer->normalize($payload);
 
         if (empty($data['normalized_phone'])) {
@@ -39,10 +41,16 @@ class WhatCrmMessageIngestionService
                 ->first();
 
             if ($duplicate) {
+                $aiBatch = $this->queueAiIfNeeded(
+                    $duplicate,
+                    $duplicate->conversation
+                );
+
                 return $this->response(
                     true,
                     $duplicate->conversation,
-                    $duplicate
+                    $duplicate,
+                    $aiBatch
                 );
             }
         }
@@ -58,10 +66,16 @@ class WhatCrmMessageIngestionService
                     ->first();
 
                 if ($duplicate) {
+                    $aiBatch = $this->queueAiIfNeeded(
+                        $duplicate,
+                        $duplicate->conversation
+                    );
+
                     return $this->response(
                         true,
                         $duplicate->conversation,
-                        $duplicate
+                        $duplicate,
+                        $aiBatch
                     );
                 }
             }
@@ -83,10 +97,16 @@ class WhatCrmMessageIngestionService
                     ->first();
 
                 if ($duplicate) {
+                    $aiBatch = $this->queueAiIfNeeded(
+                        $duplicate,
+                        $duplicate->conversation
+                    );
+
                     return $this->response(
                         true,
                         $duplicate->conversation,
-                        $duplicate
+                        $duplicate,
+                        $aiBatch
                     );
                 }
             }
@@ -142,6 +162,8 @@ class WhatCrmMessageIngestionService
                 'raw_payload' => $data['raw_payload'],
             ]);
 
+            $aiBatch = null;
+
             if ($data['direction'] === 'incoming') {
                 $lead = $this->leadResolver
                     ->resolveForIncoming(
@@ -163,9 +185,9 @@ class WhatCrmMessageIngestionService
                 $conversation->unread_count =
                     (int) $conversation->unread_count + 1;
 
-                $this->aiBufferService->queue(
-                    $conversation,
-                    $message
+                $aiBatch = $this->queueAiIfNeeded(
+                    $message,
+                    $conversation
                 );
             }
 
@@ -176,7 +198,8 @@ class WhatCrmMessageIngestionService
             return $this->response(
                 false,
                 $conversation,
-                $message
+                $message,
+                $aiBatch
             );
         });
     }
@@ -226,7 +249,8 @@ class WhatCrmMessageIngestionService
     private function response(
         bool $duplicate,
         ?WhatsAppConversation $conversation,
-        WhatsAppMessage $message
+        WhatsAppMessage $message,
+        ?WhatsAppAiReplyBatch $aiBatch = null
     ): array {
         return [
             'success' => true,
@@ -237,6 +261,34 @@ class WhatCrmMessageIngestionService
             'lead_id' => optional($conversation)->lead_id,
             'assigned_user_id' => optional($conversation)
                 ->assigned_user_id,
+            'ai_status' => $this->aiBufferService->lastStatus(),
+            'ai_reply_batch_id' => optional($aiBatch)->id,
         ];
+    }
+
+    private function queueAiIfNeeded(
+        WhatsAppMessage $message,
+        ?WhatsAppConversation $conversation = null
+    ): ?WhatsAppAiReplyBatch {
+        if (
+            $message->direction !== 'incoming'
+            || $message->ai_processed_at
+        ) {
+            return null;
+        }
+
+        $conversation = $conversation
+            ?: $message->conversation
+            ?: WhatsAppConversation::query()
+                ->find($message->conversation_id);
+
+        if (!$conversation) {
+            return null;
+        }
+
+        return $this->aiBufferService->queue(
+            $conversation,
+            $message
+        );
     }
 }

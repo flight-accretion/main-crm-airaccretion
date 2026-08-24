@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class WhatsAppAiAgentSetting extends Model
@@ -23,6 +24,7 @@ class WhatsAppAiAgentSetting extends Model
         'prompt',
         'api_key_encrypted',
         'buffer_seconds',
+        'context_message_limit',
     ];
 
     protected $hidden = [
@@ -37,6 +39,7 @@ class WhatsAppAiAgentSetting extends Model
         'enabled' => 'boolean',
         'auto_reply_enabled' => 'boolean',
         'buffer_seconds' => 'integer',
+        'context_message_limit' => 'integer',
     ];
 
     protected static function boot()
@@ -52,16 +55,26 @@ class WhatsAppAiAgentSetting extends Model
 
     public static function active(): self
     {
+        $defaults = [
+            'enabled' => false,
+            'auto_reply_enabled' => false,
+            'provider' => 'openai',
+            'model' => self::defaultModel(),
+            'prompt' => self::defaultPrompt(),
+            'buffer_seconds' => 10,
+        ];
+
+        if (Schema::hasColumn(
+            (new self())->getTable(),
+            'context_message_limit'
+        )) {
+            $defaults['context_message_limit'] =
+                self::defaultContextMessageLimit();
+        }
+
         $setting = self::query()->firstOrCreate(
             [],
-            [
-                'enabled' => false,
-                'auto_reply_enabled' => false,
-                'provider' => 'openai',
-                'model' => self::defaultModel(),
-                'prompt' => self::defaultPrompt(),
-                'buffer_seconds' => 10,
-            ]
+            $defaults
         );
 
         if ($setting->provider !== 'openai') {
@@ -88,6 +101,21 @@ class WhatsAppAiAgentSetting extends Model
             'Return JSON only with keys: reply, product.',
             'Use product as N/A when the product is unclear.',
         ]);
+    }
+
+    public static function defaultContextMessageLimit(): int
+    {
+        return 10000;
+    }
+
+    public function contextMessageLimit(): int
+    {
+        $limit = (int) (
+            $this->context_message_limit
+            ?: self::defaultContextMessageLimit()
+        );
+
+        return max(1, min(100000, $limit));
     }
 
     public function setApiKey(?string $apiKey): void

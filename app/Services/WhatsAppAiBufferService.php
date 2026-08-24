@@ -7,25 +7,48 @@ use App\Models\WhatsAppAiAgentSetting;
 use App\Models\WhatsAppAiReplyBatch;
 use App\Models\WhatsAppConversation;
 use App\Models\WhatsAppMessage;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
 class WhatsAppAiBufferService
 {
+    private ?string $lastStatus = null;
+
+    public function clearStatus(): void
+    {
+        $this->lastStatus = null;
+    }
+
+    public function lastStatus(): ?string
+    {
+        return $this->lastStatus;
+    }
+
     public function queue(
         WhatsAppConversation $conversation,
         WhatsAppMessage $message
     ): ?WhatsAppAiReplyBatch {
+        $this->lastStatus = null;
+
         if (
             !Schema::hasTable('whatsapp_ai_agent_settings')
             || !Schema::hasTable('whatsapp_ai_reply_batches')
         ) {
-            return null;
+            return $this->skip(
+                'ai_tables_missing',
+                $conversation,
+                $message
+            );
         }
 
         $setting = WhatsAppAiAgentSetting::active();
 
         if (!$setting->isReady()) {
-            return null;
+            return $this->skip(
+                'ai_disabled_or_not_configured',
+                $conversation,
+                $message
+            );
         }
 
         $processAfter = now()->addSeconds(
@@ -65,9 +88,29 @@ class WhatsAppAiBufferService
             ]);
         }
 
+        $this->lastStatus = 'queued';
         $this->dispatchIfEnabled($batch);
 
         return $batch;
+    }
+
+    private function skip(
+        string $status,
+        WhatsAppConversation $conversation,
+        WhatsAppMessage $message
+    ): ?WhatsAppAiReplyBatch {
+        $this->lastStatus = $status;
+
+        Log::info(
+            'WhatsApp AI buffer skipped',
+            [
+                'reason' => $status,
+                'conversation_id' => $conversation->id,
+                'message_id' => $message->id,
+            ]
+        );
+
+        return null;
     }
 
     private function dispatchIfEnabled(

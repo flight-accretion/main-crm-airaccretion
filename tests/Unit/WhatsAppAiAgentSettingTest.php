@@ -39,6 +39,7 @@ class WhatsAppAiAgentSettingTest extends TestCase
                 $table->text('prompt')->nullable();
                 $table->text('api_key_encrypted')->nullable();
                 $table->unsignedInteger('buffer_seconds')->default(10);
+                $table->unsignedInteger('context_message_limit')->default(10000);
                 $table->timestamps();
             }
         );
@@ -53,6 +54,7 @@ class WhatsAppAiAgentSettingTest extends TestCase
             'model' => 'gpt-4o-mini',
             'prompt' => 'Reply as Accretion Aviation.',
             'buffer_seconds' => 10,
+            'context_message_limit' => 10000,
         ]);
 
         $setting->setApiKey('openai-secret-key');
@@ -70,6 +72,10 @@ class WhatsAppAiAgentSettingTest extends TestCase
         $this->assertSame(
             'configured',
             $setting->fresh()->api_key_status
+        );
+        $this->assertSame(
+            10000,
+            $setting->fresh()->contextMessageLimit()
         );
     }
 }

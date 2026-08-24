@@ -53,6 +53,7 @@ class WhatsAppAiAgentSettingsControllerTest extends TestCase
                     'prompt' => 'Use this dynamic CRM prompt.',
                     'api_key' => 'openai-dashboard-key',
                     'buffer_seconds' => '12',
+                    'context_message_limit' => '4321',
                 ]
             )
             ->assertRedirect(
@@ -74,6 +75,7 @@ class WhatsAppAiAgentSettingsControllerTest extends TestCase
             $setting->prompt
         );
         $this->assertSame(12, (int) $setting->buffer_seconds);
+        $this->assertSame(4321, (int) $setting->context_message_limit);
         $this->assertNotSame(
             'openai-dashboard-key',
             $setting->api_key_encrypted
@@ -135,6 +137,7 @@ class WhatsAppAiAgentSettingsControllerTest extends TestCase
                 $table->text('prompt')->nullable();
                 $table->text('api_key_encrypted')->nullable();
                 $table->unsignedInteger('buffer_seconds')->default(10);
+                $table->unsignedInteger('context_message_limit')->default(10000);
                 $table->timestamps();
             }
         );

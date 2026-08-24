@@ -66,6 +66,12 @@ class WhatsAppAiAgentSettingController extends Controller
                 'min:1',
                 'max:300',
             ],
+            'context_message_limit' => [
+                'required',
+                'integer',
+                'min:1',
+                'max:100000',
+            ],
         ]);
 
         $setting = WhatsAppAiAgentSetting::active();
@@ -78,6 +84,8 @@ class WhatsAppAiAgentSettingController extends Controller
             'model' => $validated['model'],
             'prompt' => $validated['prompt'],
             'buffer_seconds' => (int) $validated['buffer_seconds'],
+            'context_message_limit' =>
+                (int) $validated['context_message_limit'],
         ]);
 
         if ($request->boolean('clear_api_key')) {

@@ -8,6 +8,7 @@ use App\Models\LeadFollowup;
 use App\Models\SalespersonAvailability;
 use App\Models\User;
 use App\Models\UserType;
+use App\Models\WhatsAppAiAgentSetting;
 use App\Services\WhatCrmMessageIngestionService;
 use Carbon\Carbon;
 use Illuminate\Database\Schema\Blueprint;
@@ -36,6 +37,7 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
                 'foreign_key_constraints' => false,
             ]
         );
+        config()->set('whatcrm.ai_auto_dispatch', false);
 
         DB::purge('sqlite');
         DB::reconnect('sqlite');
@@ -290,6 +292,59 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
         );
     }
 
+    public function test_duplicate_unprocessed_message_is_queued_for_ai_when_agent_becomes_ready(): void
+    {
+        $payload = [
+            'message_id' => 'wamid.AI-DUPLICATE-1',
+            'chat_id' => 'chat-ai-duplicate',
+            'number' => '+91 98765 43215',
+            'customer_name' => 'AI Retry Customer',
+            'message' => 'Need help with a charter booking',
+            'message_type' => 'text',
+            'direction' => 'incoming',
+            'message_at' => now()->toIso8601String(),
+            'status' => 'delivered',
+        ];
+
+        $first = app(WhatCrmMessageIngestionService::class)
+            ->process($payload);
+
+        $this->assertFalse($first['duplicate']);
+        $this->assertSame(
+            'ai_disabled_or_not_configured',
+            $first['ai_status']
+        );
+        $this->assertDatabaseCount('whatsapp_ai_reply_batches', 0);
+
+        $setting = WhatsAppAiAgentSetting::active();
+        $setting->fill([
+            'enabled' => true,
+            'auto_reply_enabled' => true,
+            'provider' => 'openai',
+            'model' => 'gpt-4o-mini',
+            'prompt' => 'Reply as Accretion Aviation.',
+            'buffer_seconds' => 10,
+            'context_message_limit' => 10000,
+        ]);
+        $setting->setApiKey('openai-key');
+        $setting->save();
+
+        $second = app(WhatCrmMessageIngestionService::class)
+            ->process($payload);
+
+        $this->assertTrue($second['duplicate']);
+        $this->assertSame('queued', $second['ai_status']);
+        $this->assertNotNull($second['ai_reply_batch_id']);
+        $this->assertDatabaseCount('whatsapp_messages', 1);
+        $this->assertDatabaseHas(
+            'whatsapp_ai_reply_batches',
+            [
+                'conversation_id' => $first['conversation_id'],
+                'status' => 'pending',
+            ]
+        );
+    }
+
     private function createSalesUser(string $name): User
     {
         $type = UserType::query()
@@ -516,6 +571,8 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
             $table->uuid('id')->primary();
             $table->uuid('conversation_id');
             $table->uuid('lead_followup_id')->nullable();
+            $table->uuid('ai_reply_batch_id')->nullable();
+            $table->timestamp('ai_processed_at')->nullable();
             $table->string('provider_message_id')->nullable()->unique();
             $table->string('direction', 20);
             $table->string('sender_type', 30);
@@ -526,6 +583,34 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
             $table->timestamp('message_at')->nullable();
             $table->timestamp('crm_read_at')->nullable();
             $table->json('raw_payload')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('whatsapp_ai_agent_settings', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->boolean('enabled')->default(false);
+            $table->boolean('auto_reply_enabled')->default(false);
+            $table->string('provider', 50)->default('openai');
+            $table->string('model')->default('gpt-4o-mini');
+            $table->text('prompt')->nullable();
+            $table->text('api_key_encrypted')->nullable();
+            $table->unsignedInteger('buffer_seconds')->default(10);
+            $table->unsignedInteger('context_message_limit')->default(10000);
+            $table->timestamps();
+        });
+
+        Schema::create('whatsapp_ai_reply_batches', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('conversation_id');
+            $table->string('status', 30)->default('pending');
+            $table->timestamp('process_after')->nullable();
+            $table->timestamp('locked_at')->nullable();
+            $table->timestamp('processed_at')->nullable();
+            $table->uuid('response_message_id')->nullable();
+            $table->uuid('assigned_user_id')->nullable();
+            $table->string('detected_product')->nullable();
+            $table->text('error')->nullable();
+            $table->json('message_ids')->nullable();
             $table->timestamps();
         });
     }

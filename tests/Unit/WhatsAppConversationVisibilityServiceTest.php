@@ -99,10 +99,11 @@ class WhatsAppConversationVisibilityServiceTest extends TestCase
         $this->assertFalse($service->canAccessConversation($admin, $conversationId));
     }
 
-    public function test_only_assigned_salesperson_marking_read_clears_unread(): void
+    public function test_visible_user_marking_read_clears_unread(): void
     {
         $manager = $this->createUser(UserType::SALES_MANAGER, 'Manager');
         $owner = $this->createUser(UserType::SALES_EXECUTIVE, 'Owner');
+        $outside = $this->createUser(UserType::SALES_EXECUTIVE, 'Outside');
 
         SalesExecutiveAssignment::create([
             'manager_id' => $manager->id,
@@ -111,19 +112,20 @@ class WhatsAppConversationVisibilityServiceTest extends TestCase
         ]);
 
         $conversationId = $this->createConversation($owner, 2);
+        $outsideConversationId = $this->createConversation($outside, 3);
 
         $service = app(WhatsAppConversationVisibilityService::class);
 
-        $this->assertFalse($service->markReadForUser($manager, $conversationId));
+        $this->assertFalse($service->markReadForUser($manager, $outsideConversationId));
         $this->assertDatabaseHas(
             'whatsapp_conversations',
             [
-                'id' => $conversationId,
-                'unread_count' => 2,
+                'id' => $outsideConversationId,
+                'unread_count' => 3,
             ]
         );
 
-        $this->assertTrue($service->markReadForUser($owner, $conversationId));
+        $this->assertTrue($service->markReadForUser($manager, $conversationId));
         $this->assertDatabaseHas(
             'whatsapp_conversations',
             [

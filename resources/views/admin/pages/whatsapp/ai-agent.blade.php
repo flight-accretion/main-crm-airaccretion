@@ -114,6 +114,22 @@
                         >
                     </div>
 
+                    <div class="xl:col-span-4 md:col-span-6 col-span-12">
+                        <label class="ti-form-label" for="context_message_limit">
+                            Context Messages
+                        </label>
+                        <input
+                            type="number"
+                            min="1"
+                            max="100000"
+                            name="context_message_limit"
+                            id="context_message_limit"
+                            class="form-control"
+                            value="{{ old('context_message_limit', $setting->contextMessageLimit()) }}"
+                            required
+                        >
+                    </div>
+
                     <div class="col-span-12">
                         <label class="ti-form-label" for="prompt">
                             Prompt

@@ -145,6 +145,11 @@ class WhatsAppAiReplyService
             return false;
         }
 
+        $contextMessages = $this->contextMessages(
+            $conversation,
+            $setting
+        );
+
         $aiResult = $this->openAi->generateReply(
             $setting,
             $conversation,
@@ -155,7 +160,8 @@ class WhatsAppAiReplyService
                 ->get([
                     'id',
                     'product',
-                ])
+                ]),
+            $contextMessages
         );
 
         $assignedUser = $this->applyProductAssignment(
@@ -214,6 +220,20 @@ class WhatsAppAiReplyService
             ->orderBy('message_at')
             ->orderBy('created_at')
             ->get();
+    }
+
+    private function contextMessages(
+        WhatsAppConversation $conversation,
+        WhatsAppAiAgentSetting $setting
+    ): Collection {
+        return WhatsAppMessage::query()
+            ->where('conversation_id', $conversation->id)
+            ->orderByDesc('message_at')
+            ->orderByDesc('created_at')
+            ->limit($setting->contextMessageLimit())
+            ->get()
+            ->reverse()
+            ->values();
     }
 
     private function applyProductAssignment(
