@@ -155,21 +155,7 @@ class ClientController extends Controller
             'representative:id,name,email',
             'rideSegments:id,lead_id,from_date,to_date,from_place,to_place'
         ])
-            ->select('leads.id', 'leads.client_id', 'leads.representative_user_id', 'leads.service_ids', 'leads.product_ids', 'leads.created_at', 'leads.updated_at')
-            ->where(function ($q) {
-                $q->where(function ($subQ) {
-                    $subQ->whereNotNull('service_ids')
-                        ->whereRaw("service_ids::text != '[]'");
-                })
-                    ->orWhere(function ($subQ) {
-                        $subQ->where(function ($nullServiceQ) {
-                            $nullServiceQ->whereNull('service_ids')
-                                ->orWhereRaw("service_ids::text = '[]'")
-                                ->orWhereRaw("service_ids::text = 'null'");
-                        })
-                            ->whereDoesntHave('rideSegments');
-                    });
-            });
+            ->select('leads.id', 'leads.client_id', 'leads.representative_user_id', 'leads.service_ids', 'leads.product_ids', 'leads.created_at', 'leads.updated_at');
 
         if ($representatives) {
             $query->whereIn('representative_user_id', $representatives);
@@ -4267,21 +4253,7 @@ try {
             //     // ignore logging failures
             // }
             // Build the same query as the index method but with filters
-            $query = Lead::with(['client', 'representative', 'rideSegments', 'leadFollowups.followedBy'])
-                ->where(function ($q) {
-                    $q->where(function ($subQ) {
-                        $subQ->whereNotNull('service_ids')
-                            ->whereRaw("service_ids::text != '[]'");
-                    })
-                        ->orWhere(function ($subQ) {
-                            $subQ->where(function ($nullServiceQ) {
-                                $nullServiceQ->whereNull('service_ids')
-                                    ->orWhereRaw("service_ids::text = '[]'")
-                                    ->orWhereRaw("service_ids::text = 'null'");
-                            })
-                                ->whereDoesntHave('rideSegments');
-                        });
-                });
+            $query = Lead::with(['client', 'representative', 'rideSegments', 'leadFollowups.followedBy']);
 
             // Apply the same filters as in index method
             // Restrict exported leads to the current user's representative hierarchy (same as index)
@@ -4352,10 +4324,13 @@ try {
             $dnpServiceId = $dnpService ? $dnpService->id : null;
             if ($dnpServiceId && !$request->filled('service_ids')) {
                 $pattern = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $dnpServiceId) . '%';
-                $query->whereRaw(
-                    "replace(trim(both '\"' from service_ids::text), '\\', '') NOT LIKE ?",
-                    [$pattern]
-                );
+                $query->where(function ($q) use ($pattern) {
+                    $q->whereNull('service_ids')
+                        ->orWhereRaw(
+                            "replace(trim(both '\"' from service_ids::text), '\\', '') NOT LIKE ?",
+                            [$pattern]
+                        );
+                });
             }
 
             // Date filters
