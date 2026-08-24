@@ -691,10 +691,19 @@
                         <!-- End::slide -->
 
                            @if ($userType === UserType::SUPER_ADMIN || canAccess($userType, $adminRoles) || canAccess($userType, $salesRoles) || canAccess($userType, $operationsRoles))
-                            <li class="slide {{ Route::is('admin.whatsapp.*') ? 'active' : '' }}">
+                            <li class="slide {{ Route::is('admin.whatsapp.index') ? 'active' : '' }}">
                                 <a href="{{ route('admin.whatsapp.index') }}" class="side-menu__item">
                                     <i class="bx bxl-whatsapp side-menu__icon"></i>
                                     <span class="side-menu__label">WhatsApp Inbox</span>
+                                </a>
+                            </li>
+                        @endif
+
+                        @if ($userType === UserType::SUPER_ADMIN)
+                            <li class="slide {{ Route::is('admin.whatsapp.ai-agent.*') ? 'active' : '' }}">
+                                <a href="{{ route('admin.whatsapp.ai-agent.edit') }}" class="side-menu__item">
+                                    <i class="bx bx-bot side-menu__icon"></i>
+                                    <span class="side-menu__label">WhatsApp AI Agent</span>
                                 </a>
                             </li>
                         @endif

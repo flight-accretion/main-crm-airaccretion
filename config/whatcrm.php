@@ -18,6 +18,21 @@ return [
     'assignment_webhook' =>
         env('WHATCRM_N8N_ASSIGNMENT_WEBHOOK'),
 
+    'ai_queue_connection' =>
+        env('WHATCRM_AI_QUEUE_CONNECTION', 'database'),
+
+    'ai_queue' =>
+        env('WHATCRM_AI_QUEUE', 'whatsapp-ai'),
+
+    'ai_auto_dispatch' =>
+        env('WHATCRM_AI_AUTO_DISPATCH', true),
+
+    'openai_responses_url' =>
+        env(
+            'WHATCRM_OPENAI_RESPONSES_URL',
+            'https://api.openai.com/v1/responses'
+        ),
+
     'timeout' => 10,
 
 ];

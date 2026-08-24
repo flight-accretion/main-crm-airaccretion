@@ -14,7 +14,8 @@ class WhatCrmMessageIngestionService
         private WhatCrmMessageNormalizer $normalizer,
         private WhatCrmAgentResolver $agentResolver,
         private WhatsAppLeadResolverService $leadResolver,
-        private WhatsAppLeadFollowupService $followupService
+        private WhatsAppLeadFollowupService $followupService,
+        private WhatsAppAiBufferService $aiBufferService
     ) {
     }
 
@@ -161,6 +162,11 @@ class WhatCrmMessageIngestionService
                 $conversation->refresh();
                 $conversation->unread_count =
                     (int) $conversation->unread_count + 1;
+
+                $this->aiBufferService->queue(
+                    $conversation,
+                    $message
+                );
             }
 
             $conversation->last_message = $data['body'];

@@ -37,6 +37,7 @@ use App\Http\Controllers\IvrCallTypeController;
 use App\Http\Controllers\IvrDtmfRuleController;
 use App\Http\Controllers\IvrAgentController;
 use App\Http\Controllers\WhatsAppInboxController;
+use App\Http\Controllers\WhatsAppAiAgentSettingController;
 use App\Http\Controllers\LeadTransferController;
 use App\Http\Controllers\LeadAllocationSettingController;
 use App\Http\Controllers\VendorExtraServiceController;
@@ -109,10 +110,16 @@ Route::middleware('auth')->group(function () {
         ->group(function () {
             Route::get('/', [WhatsAppInboxController::class, 'index'])
                 ->name('index');
+            Route::get('/ai-agent', [WhatsAppAiAgentSettingController::class, 'edit'])
+                ->name('ai-agent.edit');
+            Route::put('/ai-agent', [WhatsAppAiAgentSettingController::class, 'update'])
+                ->name('ai-agent.update');
             Route::get('/conversations', [WhatsAppInboxController::class, 'conversations'])
                 ->name('conversations');
             Route::get('/conversations/{conversation}/messages', [WhatsAppInboxController::class, 'messages'])
                 ->name('messages');
+            Route::post('/conversations/{conversation}/send', [WhatsAppInboxController::class, 'send'])
+                ->name('send');
             Route::post('/conversations/{conversation}/read', [WhatsAppInboxController::class, 'read'])
                 ->name('read');
         });

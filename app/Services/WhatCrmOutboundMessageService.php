@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\User;
 use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
 
@@ -14,12 +15,28 @@ class WhatCrmOutboundMessageService
 
     public function sendText(array $data): array
     {
+        return $this->sendMessage(
+            array_merge(
+                $data,
+                [
+                    'message_type' => 'text',
+                ]
+            )
+        );
+    }
+
+    public function sendMessage(array $data): array
+    {
         $body = trim(
             (string) (
                 $data['message']
                 ?? $data['body']
                 ?? ''
             )
+        );
+
+        $messageType = $this->normalizeMessageType(
+            $data['message_type'] ?? 'text'
         );
 
         $rawNumber = trim(
@@ -36,7 +53,7 @@ class WhatCrmOutboundMessageService
             );
         }
 
-        if ($body === '') {
+        if ($messageType === 'text' && $body === '') {
             throw new InvalidArgumentException(
                 'Message body is required.'
             );
@@ -64,16 +81,17 @@ class WhatCrmOutboundMessageService
 
         $toNumber = $this->formatOutboundPhone($rawNumber);
 
-        $payload = [
-            'messageObject' => [
-                'messaging_product' => 'whatsapp',
-                'to' => $toNumber,
-                'type' => 'text',
-                'text' => [
-                    'body' => $body,
-                ],
-            ],
-        ];
+        $payload = $this->messagePayload(
+            $toNumber,
+            $messageType,
+            $body,
+            $data
+        );
+        $storedBody = $this->storedBody(
+            $messageType,
+            $body,
+            $data
+        );
 
         $response = Http::timeout(
             (int) config('whatcrm.timeout', 10)
@@ -109,8 +127,8 @@ class WhatCrmOutboundMessageService
                     $data['name']
                     ?? $data['customer_name']
                     ?? null,
-                'message' => $body,
-                'message_type' => 'text',
+                'message' => $storedBody,
+                'message_type' => $messageType,
                 'direction' => 'outgoing',
                 'message_at' => now()->toIso8601String(),
                 'status' =>
@@ -148,6 +166,267 @@ class WhatCrmOutboundMessageService
                 false
             ),
             'whatcrm_response' => $result,
+        ];
+    }
+
+    private function storedBody(
+        string $messageType,
+        string $body,
+        array $data
+    ): string {
+        if ($messageType === 'text') {
+            return $body;
+        }
+
+        $caption = trim(
+            (string) (
+                $data['caption']
+                ?? $data['message']
+                ?? $data['body']
+                ?? ''
+            )
+        );
+
+        if ($caption !== '') {
+            return $caption;
+        }
+
+        if ($messageType === 'location') {
+            return trim(
+                (string) (
+                    $data['name']
+                    ?? data_get($data, 'location.name')
+                    ?? 'Shared location'
+                )
+            );
+        }
+
+        if ($messageType === 'contacts') {
+            return 'Shared contact';
+        }
+
+        return '[' . ucfirst($messageType) . ']';
+    }
+
+    private function messagePayload(
+        string $toNumber,
+        string $messageType,
+        string $body,
+        array $data
+    ): array {
+        $payload = [
+            'messageObject' => [
+                'messaging_product' => 'whatsapp',
+                'to' => $toNumber,
+                'type' => $messageType,
+            ],
+        ];
+
+        $contentKey = $this->contentKey($messageType);
+        $content = $this->contentForType(
+            $messageType,
+            $body,
+            $data
+        );
+
+        $assignment = $this->assignmentMetadata($data);
+
+        if (is_array($content) && !array_is_list($content)) {
+            $content['pass'] = $assignment['pass'];
+            $content['assigned'] = $assignment['assigned'];
+        } else {
+            $payload['messageObject']['pass'] = $assignment['pass'];
+            $payload['messageObject']['assigned'] =
+                $assignment['assigned'];
+        }
+
+        $payload['messageObject'][$contentKey] = $content;
+
+        return $payload;
+    }
+
+    private function contentForType(
+        string $messageType,
+        string $body,
+        array $data
+    ) {
+        if ($messageType === 'text') {
+            return [
+                'body' => $body,
+            ];
+        }
+
+        if (
+            in_array(
+                $messageType,
+                [
+                    'image',
+                    'video',
+                    'audio',
+                ],
+                true
+            )
+        ) {
+            $link = trim(
+                (string) (
+                    $data['media_url']
+                    ?? $data['link']
+                    ?? $data[$messageType . '_url']
+                    ?? ''
+                )
+            );
+
+            if ($link === '') {
+                throw new InvalidArgumentException(
+                    ucfirst($messageType) . ' URL is required.'
+                );
+            }
+
+            $content = [
+                'link' => $link,
+            ];
+
+            $caption = trim(
+                (string) (
+                    $data['caption']
+                    ?? $body
+                    ?? ''
+                )
+            );
+
+            if ($caption !== '') {
+                $content['caption'] = $caption;
+            }
+
+            return $content;
+        }
+
+        if ($messageType === 'contacts') {
+            $contacts =
+                $data['contacts']
+                ?? $data['contact']
+                ?? null;
+
+            if (is_string($contacts)) {
+                $decoded = json_decode($contacts, true);
+                $contacts = is_array($decoded) ? $decoded : null;
+            }
+
+            if (!is_array($contacts) || empty($contacts)) {
+                throw new InvalidArgumentException(
+                    'Contact payload is required.'
+                );
+            }
+
+            return array_is_list($contacts)
+                ? $contacts
+                : [$contacts];
+        }
+
+        if ($messageType === 'location') {
+            $latitude =
+                $data['latitude']
+                ?? data_get($data, 'location.latitude');
+            $longitude =
+                $data['longitude']
+                ?? data_get($data, 'location.longitude');
+
+            if (
+                !is_numeric($latitude)
+                || !is_numeric($longitude)
+            ) {
+                throw new InvalidArgumentException(
+                    'Location latitude and longitude are required.'
+                );
+            }
+
+            $location = [
+                'latitude' => (float) $latitude,
+                'longitude' => (float) $longitude,
+            ];
+
+            foreach (
+                [
+                    'name',
+                    'address',
+                ]
+                as $field
+            ) {
+                $value = trim(
+                    (string) (
+                        $data[$field]
+                        ?? data_get($data, 'location.' . $field)
+                        ?? ''
+                    )
+                );
+
+                if ($value !== '') {
+                    $location[$field] = $value;
+                }
+            }
+
+            return $location;
+        }
+
+        throw new InvalidArgumentException(
+            'Unsupported WhatsApp message type.'
+        );
+    }
+
+    private function contentKey(string $messageType): string
+    {
+        return $messageType === 'contacts'
+            ? 'contacts'
+            : $messageType;
+    }
+
+    private function normalizeMessageType($messageType): string
+    {
+        $messageType = strtolower(
+            trim((string) $messageType)
+        );
+
+        if ($messageType === '') {
+            return 'text';
+        }
+
+        if ($messageType === 'contact') {
+            return 'contacts';
+        }
+
+        return $messageType;
+    }
+
+    private function assignmentMetadata(array $data): array
+    {
+        $assigned = trim(
+            (string) (
+                $data['assigned']
+                ?? $data['assigned_agent']
+                ?? $data['agent_name']
+                ?? ''
+            )
+        );
+
+        if ($assigned === '') {
+            $userId =
+                $data['assigned_agent_user_id']
+                ?? $data['agent_user_id']
+                ?? $data['crm_user_id']
+                ?? null;
+
+            if ($userId) {
+                $assigned = (string) optional(
+                    User::query()
+                        ->whereKey($userId)
+                        ->first()
+                )->name;
+            }
+        }
+
+        return [
+            'pass' => $assigned !== '' ? 'yes' : 'no',
+            'assigned' => $assigned,
         ];
     }
 

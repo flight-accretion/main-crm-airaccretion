@@ -81,6 +81,18 @@ class Kernel extends ConsoleKernel
 
         $schedule
         ->command(
+            'whatsapp:process-ai-replies'
+        )
+        ->everyMinute()
+        ->withoutOverlapping()
+        ->appendOutputTo(
+            storage_path(
+                'logs/whatsapp-ai-replies.log'
+            )
+        );
+
+        $schedule
+        ->command(
             'skyrack:sync-leads'
         )
         ->everyMinute()

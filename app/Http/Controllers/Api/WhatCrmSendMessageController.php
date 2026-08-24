@@ -27,15 +27,39 @@ class WhatCrmSendMessageController extends Controller
                 'customer_name' =>
                     'nullable|string|max:255',
                 'message' =>
-                    'required_without:body|string|max:4096',
+                    'nullable|string|max:4096',
                 'body' =>
                     'nullable|string|max:4096',
+                'message_type' =>
+                    'nullable|in:text,image,video,audio,contact,contacts,location',
+                'caption' =>
+                    'nullable|string|max:4096',
+                'media_url' =>
+                    'nullable|url|max:2000',
+                'link' =>
+                    'nullable|url|max:2000',
+                'contacts' =>
+                    'nullable',
+                'contact' =>
+                    'nullable',
+                'latitude' =>
+                    'nullable|numeric',
+                'longitude' =>
+                    'nullable|numeric',
+                'address' =>
+                    'nullable|string|max:1000',
                 'chat_id' =>
                     'nullable|string|max:255',
                 'agent_user_id' =>
                     'nullable|string|max:100',
                 'crm_user_id' =>
                     'nullable|string|max:100',
+                'assigned_agent_user_id' =>
+                    'nullable|string|max:100',
+                'assigned_agent' =>
+                    'nullable|string|max:255',
+                'assigned' =>
+                    'nullable|string|max:255',
             ]
         );
 
@@ -49,7 +73,7 @@ class WhatCrmSendMessageController extends Controller
 
         try {
             return response()->json(
-                $service->sendText(
+                $service->sendMessage(
                     $validator->validated()
                 )
             );

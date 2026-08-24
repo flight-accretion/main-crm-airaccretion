@@ -4,9 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\UserType;
 use App\Models\WhatsAppConversation;
+use App\Services\WhatCrmOutboundMessageService;
 use App\Services\WhatsAppConversationVisibilityService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
+use InvalidArgumentException;
 
 class WhatsAppInboxController extends Controller
 {
@@ -207,6 +211,141 @@ class WhatsAppInboxController extends Controller
                     $conversation
                 ),
         ]);
+    }
+
+    public function send(
+        Request $request,
+        string $conversation,
+        WhatsAppConversationVisibilityService $visibility,
+        WhatCrmOutboundMessageService $outbound
+    ) {
+        $this->ensureInboxUser();
+
+        abort_unless(
+            $visibility->canAccessConversation(
+                Auth::user(),
+                $conversation
+            ),
+            403
+        );
+
+        $validated = $request->validate([
+            'message_type' => [
+                'nullable',
+                Rule::in([
+                    'text',
+                    'image',
+                    'video',
+                    'audio',
+                    'contact',
+                    'contacts',
+                    'location',
+                ]),
+            ],
+            'message' => [
+                'nullable',
+                'string',
+                'max:4096',
+            ],
+            'body' => [
+                'nullable',
+                'string',
+                'max:4096',
+            ],
+            'caption' => [
+                'nullable',
+                'string',
+                'max:4096',
+            ],
+            'media_url' => [
+                'nullable',
+                'url',
+                'max:2000',
+            ],
+            'link' => [
+                'nullable',
+                'url',
+                'max:2000',
+            ],
+            'contacts' => [
+                'nullable',
+            ],
+            'contact' => [
+                'nullable',
+            ],
+            'latitude' => [
+                'nullable',
+                'numeric',
+            ],
+            'longitude' => [
+                'nullable',
+                'numeric',
+            ],
+            'name' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
+            'address' => [
+                'nullable',
+                'string',
+                'max:1000',
+            ],
+        ]);
+
+        $conversationModel = WhatsAppConversation::query()
+            ->with([
+                'contact',
+                'assignedUser',
+            ])
+            ->findOrFail($conversation);
+
+        try {
+            $result = $outbound->sendMessage(
+                array_merge(
+                    $validated,
+                    [
+                        'number' =>
+                            optional(
+                                $conversationModel->contact
+                            )->normalized_phone
+                            ?: optional(
+                                $conversationModel->contact
+                            )->raw_phone,
+                        'name' =>
+                            optional(
+                                $conversationModel->contact
+                            )->name,
+                        'chat_id' =>
+                            $conversationModel->whatcrm_chat_id,
+                        'agent_user_id' => Auth::id(),
+                        'assigned_agent_user_id' =>
+                            $conversationModel->assigned_user_id
+                            ?: Auth::id(),
+                    ]
+                )
+            );
+        } catch (InvalidArgumentException $exception) {
+            return response()->json([
+                'success' => false,
+                'message' => $exception->getMessage(),
+            ], 422);
+        } catch (\Throwable $exception) {
+            Log::error(
+                'CRM inbox WhatCRM send failed',
+                [
+                    'conversation_id' => $conversation,
+                    'error' => $exception->getMessage(),
+                ]
+            );
+
+            return response()->json([
+                'success' => false,
+                'message' => 'CRM could not send the WhatsApp message.',
+            ], 500);
+        }
+
+        return response()->json($result);
     }
 
     private function conversationPayload(

@@ -5,9 +5,9 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
-class WhatsAppMessage extends Model
+class WhatsAppAiReplyBatch extends Model
 {
-    protected $table = 'whatsapp_messages';
+    protected $table = 'whatsapp_ai_reply_batches';
 
     public $incrementing = false;
 
@@ -16,26 +16,22 @@ class WhatsAppMessage extends Model
     protected $fillable = [
         'id',
         'conversation_id',
-        'lead_followup_id',
-        'ai_reply_batch_id',
-        'ai_processed_at',
-        'provider_message_id',
-        'direction',
-        'sender_type',
-        'sender_user_id',
-        'message_type',
-        'body',
-        'provider_status',
-        'message_at',
-        'crm_read_at',
-        'raw_payload',
+        'status',
+        'process_after',
+        'locked_at',
+        'processed_at',
+        'response_message_id',
+        'assigned_user_id',
+        'detected_product',
+        'error',
+        'message_ids',
     ];
 
     protected $casts = [
-        'message_at' => 'datetime',
-        'crm_read_at' => 'datetime',
-        'ai_processed_at' => 'datetime',
-        'raw_payload' => 'array',
+        'process_after' => 'datetime',
+        'locked_at' => 'datetime',
+        'processed_at' => 'datetime',
+        'message_ids' => 'array',
     ];
 
     protected static function boot()
@@ -57,19 +53,11 @@ class WhatsAppMessage extends Model
         );
     }
 
-    public function sender()
+    public function assignedUser()
     {
         return $this->belongsTo(
             User::class,
-            'sender_user_id'
-        );
-    }
-
-    public function leadFollowup()
-    {
-        return $this->belongsTo(
-            LeadFollowup::class,
-            'lead_followup_id'
+            'assigned_user_id'
         );
     }
 }
