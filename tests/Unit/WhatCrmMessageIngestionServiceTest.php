@@ -292,6 +292,53 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
         );
     }
 
+    public function test_wrapped_body_payload_from_whatcrm_flow_is_accepted_by_api(): void
+    {
+        config()->set('whatcrm.token', 'shared-secret');
+
+        $salesperson = $this->createSalesUser('Wrapped Payload Owner');
+        $this->makeAvailable($salesperson);
+
+        $response = $this
+            ->withHeaders([
+                'token' => 'shared-secret',
+            ])
+            ->postJson(
+                '/api/whatcrm/messages',
+                [
+                    'body' => [
+                        'name' => 'Suyog Kiran Jadhav',
+                        'message' =>
+                            'I actually want it in such a way where when she looks down from the helicopter she should see will you marry me',
+                        'number' => '918149505700',
+                    ],
+                ]
+            );
+
+        $response->assertCreated();
+        $response->assertJson([
+            'duplicate' => false,
+        ]);
+
+        $this->assertDatabaseHas(
+            'whatsapp_contacts',
+            [
+                'name' => 'Suyog Kiran Jadhav',
+                'normalized_phone' => '8149505700',
+                'raw_phone' => '918149505700',
+            ]
+        );
+
+        $this->assertDatabaseHas(
+            'whatsapp_messages',
+            [
+                'direction' => 'incoming',
+                'body' =>
+                    'I actually want it in such a way where when she looks down from the helicopter she should see will you marry me',
+            ]
+        );
+    }
+
     public function test_duplicate_unprocessed_message_is_queued_for_ai_when_agent_becomes_ready(): void
     {
         $payload = [

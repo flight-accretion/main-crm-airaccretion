@@ -24,6 +24,10 @@ class WhatCrmMessageController extends Controller
             $payload = $payload[0];
         }
 
+        $payload = $this->normalizeWrappedBodyPayload(
+            $payload
+        );
+
         $validator = Validator::make(
             $payload,
             [
@@ -144,5 +148,33 @@ class WhatCrmMessageController extends Controller
                 'message' => 'CRM could not process the message.',
             ], 500);
         }
+    }
+
+    private function normalizeWrappedBodyPayload(
+        array $payload
+    ): array {
+        if (
+            !isset($payload['body'])
+            || !is_array($payload['body'])
+        ) {
+            return $payload;
+        }
+
+        $originalPayload = $payload;
+        $bodyPayload = $payload['body'];
+
+        unset($payload['body']);
+
+        foreach ($bodyPayload as $key => $value) {
+            if (!array_key_exists($key, $payload)) {
+                $payload[$key] = $value;
+            }
+        }
+
+        if (!array_key_exists('raw_payload', $payload)) {
+            $payload['raw_payload'] = $originalPayload;
+        }
+
+        return $payload;
     }
 }
