@@ -11,6 +11,8 @@ use Illuminate\Support\Str;
 
 class WhatsAppLeadService
 {
+    private const NEW_LEAD_ALLOWED_FOLLOWUP_STATUSES = [2, 5];
+
     public function __construct(
         private WhatsAppProductAllocationService $allocator,
         private LeadAllocationService $leadAllocationService,
@@ -597,12 +599,17 @@ class WhatsAppLeadService
                     ->first();
 
             /*
-             * Same active-lead rule you were
-             * already using for IVR.
+             * Cancelled or confirmed/completed rides can start a new lead.
+             * Every other latest status keeps this WhatsApp request on
+             * the existing lead.
              */
             if (
                 $latest
-                && (int) $latest->status === 1
+                && !in_array(
+                    (int) $latest->status,
+                    self::NEW_LEAD_ALLOWED_FOLLOWUP_STATUSES,
+                    true
+                )
             ) {
                 return $lead;
             }

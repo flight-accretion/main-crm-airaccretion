@@ -6,7 +6,7 @@ use App\Models\Lead;
 
 class ActiveLeadService
 {
-    private const OPEN_FOLLOWUP_STATUSES = [0, 1];
+    private const NEW_LEAD_ALLOWED_FOLLOWUP_STATUSES = [2, 5];
 
     /**
      * Normalize any phone representation to digits only.
@@ -36,11 +36,12 @@ class ActiveLeadService
     }
 
     /**
-     * Find the latest ACTIVE lead for this phone.
+     * Find the latest duplicate-blocking lead for this phone.
      *
      * CRM rule:
-     * Latest follow-up status 0 (Initiated) or 1 (Active) means the lead
-     * is still open and should block duplicate lead creation.
+     * Latest follow-up status 2 (Cancelled) or 5 (Confirm/Complete) means
+     * a fresh lead can be created. Any other latest status is still treated
+     * as the same lead journey, so new activity should become a follow-up.
      *
      * A freshly-created unassigned lead without a follow-up is also
      * considered active so automation cannot create duplicates while
@@ -79,13 +80,14 @@ class ActiveLeadService
                 ->first();
 
             /*
-             * Existing open lead.
+             * Existing lead that should receive a follow-up instead
+             * of creating a duplicate.
              */
             if (
                 $latestFollowup &&
-                in_array(
+                !in_array(
                     (int) $latestFollowup->status,
-                    self::OPEN_FOLLOWUP_STATUSES,
+                    self::NEW_LEAD_ALLOWED_FOLLOWUP_STATUSES,
                     true
                 )
             ) {

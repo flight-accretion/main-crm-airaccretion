@@ -2,9 +2,11 @@
 
 namespace Tests\Unit;
 
+use App\Models\Client;
 use App\Models\EmailLeadProductUserAssignment;
 use App\Models\Lead;
 use App\Models\LeadAllocationQueue;
+use App\Models\LeadFollowup;
 use App\Models\Product;
 use App\Models\SalespersonAvailability;
 use App\Models\User;
@@ -403,6 +405,88 @@ class WhatsAppLeadServiceTest extends TestCase
         );
     }
 
+    public function test_whatcrm_duplicate_uses_existing_lead_until_ride_is_cancelled_or_confirmed(): void
+    {
+        $salesperson =
+            $this->createSalesUser(
+                'Existing Lead Owner'
+            );
+
+        $paidLead =
+            $this->createLeadWithFollowupStatus(
+                '9876543244',
+                $salesperson,
+                3
+            );
+
+        $paidResponse =
+            app(WhatsAppLeadService::class)
+                ->process([
+                    'name' => 'Paid Existing Customer',
+                    'number' => '9876543244',
+                    'message' => 'Need one more update',
+                    'external_id' => 'WA-DUPLICATE-PAID',
+                ]);
+
+        $this->assertSame(
+            'existing_lead',
+            $paidResponse['status']
+        );
+        $this->assertTrue(
+            $paidResponse['existing_lead']
+        );
+        $this->assertSame(
+            $paidLead->id,
+            $paidResponse['lead_id']
+        );
+        $this->assertSame(
+            1,
+            Lead::query()
+                ->whereHas('client', function ($query) {
+                    $query->where(
+                        'contact_number',
+                        '9876543244'
+                    );
+                })
+                ->count()
+        );
+
+        $confirmedLead =
+            $this->createLeadWithFollowupStatus(
+                '9876543245',
+                $salesperson,
+                5
+            );
+
+        $confirmedResponse =
+            app(WhatsAppLeadService::class)
+                ->process([
+                    'name' => 'Confirmed Existing Customer',
+                    'number' => '9876543245',
+                    'message' => 'Need a new booking',
+                    'external_id' => 'WA-DUPLICATE-CONFIRMED',
+                ]);
+
+        $this->assertFalse(
+            $confirmedResponse['existing_lead']
+        );
+        $this->assertNotSame(
+            $confirmedLead->id,
+            $confirmedResponse['lead_id']
+        );
+        $this->assertSame(
+            2,
+            Lead::query()
+                ->whereHas('client', function ($query) {
+                    $query->where(
+                        'contact_number',
+                        '9876543245'
+                    );
+                })
+                ->count()
+        );
+    }
+
     private function createSalesUser(
         string $name
     ): User {
@@ -426,6 +510,42 @@ class WhatsAppLeadServiceTest extends TestCase
             'user_type_id' => $userType->id,
             'status' => 1,
         ]);
+    }
+
+    private function createLeadWithFollowupStatus(
+        string $phone,
+        User $salesperson,
+        int $status
+    ): Lead {
+        $client =
+            Client::create([
+                'id' => (string) Str::uuid(),
+                'name' => 'Existing WhatsApp Customer',
+                'contact_number' => $phone,
+                'status' => 1,
+            ]);
+
+        $lead =
+            Lead::create([
+                'id' => (string) Str::uuid(),
+                'client_id' => $client->id,
+                'representative_user_id' => $salesperson->id,
+                'service_ids' => null,
+                'product_ids' => null,
+                'number_of_passengers' => 1,
+                'description' => 'Existing lead',
+            ]);
+
+        LeadFollowup::create([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $lead->id,
+            'next_followup_date' => now()->addDay(),
+            'followup_note' => 'Existing latest status',
+            'followed_by' => $salesperson->id,
+            'status' => $status,
+        ]);
+
+        return $lead;
     }
 
     private function createProduct(
@@ -497,6 +617,16 @@ class WhatsAppLeadServiceTest extends TestCase
             $table->integer('number_of_passengers')->nullable();
             $table->text('description')->nullable();
             $table->string('occasion')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('lead_followups', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('lead_id');
+            $table->timestamp('next_followup_date')->nullable();
+            $table->text('followup_note')->nullable();
+            $table->integer('status')->default(0);
+            $table->uuid('followed_by')->nullable();
             $table->timestamps();
         });
 

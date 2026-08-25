@@ -101,6 +101,77 @@ class LeadVisibilityAndDuplicateTest extends TestCase
         $this->assertSame($lead->id, $foundLead->id);
     }
 
+    public function test_full_payment_received_lead_blocks_duplicate_active_lead_lookup(): void
+    {
+        $salesperson = $this->createUser(UserType::SALES_EXECUTIVE, 'Sales User');
+        $lead = $this->createLeadWithClient([
+            'name' => 'Paid Lead Customer',
+            'contact_number' => '+91-9437938762',
+        ], [
+            'representative_user_id' => $salesperson->id,
+        ]);
+
+        LeadFollowup::create([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $lead->id,
+            'next_followup_date' => now()->addDay(),
+            'followup_note' => 'Full payment received',
+            'followed_by' => $salesperson->id,
+            'status' => 3,
+        ]);
+
+        $foundLead = app(ActiveLeadService::class)
+            ->findByPhone('+91-9437938762');
+
+        $this->assertNotNull($foundLead);
+        $this->assertSame($lead->id, $foundLead->id);
+    }
+
+    public function test_cancelled_and_confirmed_leads_do_not_block_duplicate_active_lead_lookup(): void
+    {
+        $salesperson = $this->createUser(UserType::SALES_EXECUTIVE, 'Sales User');
+        $cancelledLead = $this->createLeadWithClient([
+            'name' => 'Cancelled Lead Customer',
+            'contact_number' => '+91-9437938763',
+        ], [
+            'representative_user_id' => $salesperson->id,
+        ]);
+
+        LeadFollowup::create([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $cancelledLead->id,
+            'next_followup_date' => now()->addDay(),
+            'followup_note' => 'Lead cancelled',
+            'followed_by' => $salesperson->id,
+            'status' => 2,
+        ]);
+
+        $confirmedLead = $this->createLeadWithClient([
+            'name' => 'Confirmed Lead Customer',
+            'contact_number' => '+91-9437938764',
+        ], [
+            'representative_user_id' => $salesperson->id,
+        ]);
+
+        LeadFollowup::create([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $confirmedLead->id,
+            'next_followup_date' => now()->addDay(),
+            'followup_note' => 'Ride confirmed',
+            'followed_by' => $salesperson->id,
+            'status' => 5,
+        ]);
+
+        $this->assertNull(
+            app(ActiveLeadService::class)
+                ->findByPhone('+91-9437938763')
+        );
+        $this->assertNull(
+            app(ActiveLeadService::class)
+                ->findByPhone('+91-9437938764')
+        );
+    }
+
     private function createUser(string $role, string $name): User
     {
         $type = UserType::query()->create([
