@@ -392,6 +392,45 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
         );
     }
 
+    public function test_ai_buffer_default_queues_reply_after_four_seconds(): void
+    {
+        $setting = WhatsAppAiAgentSetting::active();
+        $setting->fill([
+            'enabled' => true,
+            'auto_reply_enabled' => true,
+            'provider' => 'openai',
+            'model' => 'gpt-4o-mini',
+            'prompt' => 'Reply as Accretion Aviation.',
+            'context_message_limit' => 10000,
+        ]);
+        $setting->setApiKey('openai-key');
+        $setting->save();
+
+        $result = app(WhatCrmMessageIngestionService::class)
+            ->process([
+                'message_id' => 'wamid.AI-FOUR-SECOND-1',
+                'chat_id' => 'chat-ai-four-second',
+                'number' => '+91 98765 43216',
+                'customer_name' => 'Fast AI Customer',
+                'message' => 'Need yacht in Goa today',
+                'message_type' => 'text',
+                'direction' => 'incoming',
+                'message_at' => now()->toIso8601String(),
+                'status' => 'delivered',
+            ]);
+
+        $this->assertSame('queued', $result['ai_status']);
+
+        $processAfter = DB::table('whatsapp_ai_reply_batches')
+            ->where('conversation_id', $result['conversation_id'])
+            ->value('process_after');
+
+        $this->assertSame(
+            now()->addSeconds(4)->format('Y-m-d H:i:s'),
+            Carbon::parse($processAfter)->format('Y-m-d H:i:s')
+        );
+    }
+
     private function createSalesUser(string $name): User
     {
         $type = UserType::query()

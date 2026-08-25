@@ -61,7 +61,7 @@ class WhatsAppAiAgentSetting extends Model
             'provider' => 'openai',
             'model' => self::defaultModel(),
             'prompt' => self::defaultPrompt(),
-            'buffer_seconds' => 10,
+            'buffer_seconds' => self::defaultBufferSeconds(),
         ];
 
         if (Schema::hasColumn(
@@ -106,6 +106,11 @@ class WhatsAppAiAgentSetting extends Model
     public static function defaultContextMessageLimit(): int
     {
         return 10000;
+    }
+
+    public static function defaultBufferSeconds(): int
+    {
+        return 4;
     }
 
     public function contextMessageLimit(): int

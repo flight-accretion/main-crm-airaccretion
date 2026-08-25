@@ -19,7 +19,7 @@ class CreateWhatsappAiAgentSettingsTable extends Migration
                     $table->string('model')->default('gpt-4o-mini');
                     $table->text('prompt')->nullable();
                     $table->text('api_key_encrypted')->nullable();
-                    $table->unsignedInteger('buffer_seconds')->default(10);
+                    $table->unsignedInteger('buffer_seconds')->default(4);
                     $table->unsignedInteger('context_message_limit')
                         ->default(10000);
                     $table->timestamps();

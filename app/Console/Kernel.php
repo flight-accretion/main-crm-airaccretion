@@ -82,9 +82,22 @@ class Kernel extends ConsoleKernel
         $schedule
         ->command(
             'whatsapp:process-ai-replies'
+            . ' --limit=' . max(
+                1,
+                (int) config('whatcrm.ai_process_limit', 25)
+            )
+            . ' --watch=' . max(
+                0,
+                (float) config('whatcrm.ai_scheduler_watch_seconds', 55)
+            )
+            . ' --sleep=' . max(
+                0.01,
+                (float) config('whatcrm.ai_scheduler_sleep_seconds', 0.5)
+            )
         )
         ->everyMinute()
         ->withoutOverlapping()
+        ->runInBackground()
         ->appendOutputTo(
             storage_path(
                 'logs/whatsapp-ai-replies.log'
