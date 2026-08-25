@@ -38,9 +38,11 @@ class WhatsAppOpenAiClient
                 (string) config('whatcrm.openai_responses_url'),
                 [
                     'model' => $model,
-                    'instructions' =>
-                        $setting->prompt
-                        ?: WhatsAppAiAgentSetting::defaultPrompt(),
+                    'instructions' => $this->instructions(
+                        $setting,
+                        $conversation,
+                        $products
+                    ),
                     'input' => [
                         [
                             'role' => 'user',
@@ -138,6 +140,69 @@ class WhatsAppOpenAiClient
             'Return JSON only: {"reply":"message to customer","product":"matching product name or N/A"}';
 
         return implode(PHP_EOL, $lines);
+    }
+
+    private function instructions(
+        WhatsAppAiAgentSetting $setting,
+        WhatsAppConversation $conversation,
+        Collection $products
+    ): string {
+        $instructions = trim(
+            (string) (
+                $setting->prompt
+                ?: WhatsAppAiAgentSetting::defaultPrompt()
+            )
+        );
+
+        $customerNumber = $this->customerNumber($conversation);
+        $currentDate = now()->format('d F Y');
+        $currentDateTime = now()->format('d F Y h:i A');
+
+        $instructions = preg_replace(
+            '/\{\{\s*\$\([\'"]Webhook[\'"]\)\.item\.json\.body\.number\s*\}\}/',
+            $customerNumber,
+            $instructions
+        );
+
+        $instructions = preg_replace(
+            '/\{\{\s*\$now\\\\?\.format\([\'"]dd MMMM yyyy[\'"]\)\s*\}\}/',
+            $currentDateTime,
+            $instructions
+        );
+
+        $lines = [
+            '',
+            'CRM Runtime Data:',
+            'Current CRM date: ' . $currentDate,
+            'Current CRM date/time: ' . $currentDateTime,
+            'Customer number: ' . $customerNumber,
+            'Customer name: '
+                . (optional($conversation->contact)->name ?: 'Unknown'),
+            'Available CRM products/services:',
+        ];
+
+        foreach ($products as $product) {
+            $name = trim((string) $product->product);
+
+            if ($name !== '') {
+                $lines[] = '- ' . $name;
+            }
+        }
+
+        $lines[] =
+            'Use CRM Runtime Data and available CRM products/services instead of n8n variables.';
+
+        return trim($instructions . PHP_EOL . implode(PHP_EOL, $lines));
+    }
+
+    private function customerNumber(
+        WhatsAppConversation $conversation
+    ): string {
+        return (string) (
+            optional($conversation->contact)->normalized_phone
+            ?: optional($conversation->contact)->raw_phone
+            ?: '-'
+        );
     }
 
     private function responseText(array $payload): string
