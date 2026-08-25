@@ -480,6 +480,7 @@
             };
 
             const csrfToken = @json(csrf_token());
+            const pollIntervalMs = 5000;
             const conversationsEl = document.getElementById('wa-conversations');
             const messagesEl = document.getElementById('wa-messages');
             const searchEl = document.getElementById('wa-search');
@@ -509,6 +510,8 @@
                 conversations: [],
                 selectedId: null,
                 searchTimer: null,
+                pollTimer: null,
+                isPolling: false,
             };
 
             const escapeHtml = (value) => String(value ?? '')
@@ -628,13 +631,18 @@
                     );
             };
 
-            const loadConversations = async ({ selectFirst = false } = {}) => {
+            const loadConversations = async ({
+                selectFirst = false,
+                silent = false,
+            } = {}) => {
                 const query = buildQuery();
                 const url = query
                     ? `${endpoints.conversations}?${query}`
                     : endpoints.conversations;
 
-                conversationsEl.innerHTML = '<div class="wa-empty-state">Loading conversations...</div>';
+                if (!silent) {
+                    conversationsEl.innerHTML = '<div class="wa-empty-state">Loading conversations...</div>';
+                }
 
                 const response = await fetch(url, {
                     headers: {
@@ -643,7 +651,10 @@
                 });
 
                 if (!response.ok) {
-                    conversationsEl.innerHTML = '<div class="wa-empty-state">Unable to load conversations.</div>';
+                    if (!silent) {
+                        conversationsEl.innerHTML = '<div class="wa-empty-state">Unable to load conversations.</div>';
+                    }
+
                     return;
                 }
 
@@ -661,7 +672,7 @@
                 renderConversations();
 
                 if (
-                    (selectFirst || !state.selectedId)
+                    (selectFirst || (!silent && !state.selectedId))
                     && state.conversations.length
                 ) {
                     selectConversation(state.conversations[0].id);
@@ -685,8 +696,21 @@
                 return Boolean(payload.read_cleared);
             };
 
-            const loadMessages = async (conversationId) => {
-                messagesEl.innerHTML = '<div class="wa-empty-state">Loading messages...</div>';
+            const loadMessages = async (
+                conversationId,
+                {
+                    silent = false,
+                } = {}
+            ) => {
+                const shouldStickToBottom =
+                    messagesEl.scrollHeight
+                    - messagesEl.scrollTop
+                    - messagesEl.clientHeight
+                    < 140;
+
+                if (!silent) {
+                    messagesEl.innerHTML = '<div class="wa-empty-state">Loading messages...</div>';
+                }
 
                 const response = await fetch(endpointFor(endpoints.messages, conversationId), {
                     headers: {
@@ -695,11 +719,19 @@
                 });
 
                 if (!response.ok) {
-                    messagesEl.innerHTML = '<div class="wa-empty-state">Unable to load messages.</div>';
+                    if (!silent) {
+                        messagesEl.innerHTML = '<div class="wa-empty-state">Unable to load messages.</div>';
+                    }
+
                     return;
                 }
 
                 const payload = await response.json();
+
+                if (state.selectedId !== conversationId) {
+                    return;
+                }
+
                 const conversation = payload.conversation || {};
                 const messages = payload.messages || [];
 
@@ -730,11 +762,13 @@
                         `;
                     }).join('');
 
-                    messagesEl.scrollTop = messagesEl.scrollHeight;
+                    if (!silent || shouldStickToBottom) {
+                        messagesEl.scrollTop = messagesEl.scrollHeight;
+                    }
                 }
 
                 if (await markRead(conversationId)) {
-                    loadConversations();
+                    loadConversations({ silent: true });
                 }
             };
 
@@ -823,6 +857,37 @@
                 sendButtonEl.disabled = false;
             };
 
+            const pollInbox = async () => {
+                if (document.hidden || state.isPolling) {
+                    return;
+                }
+
+                state.isPolling = true;
+
+                try {
+                    const selectedId = state.selectedId;
+
+                    await loadConversations({ silent: true });
+
+                    if (selectedId && state.selectedId === selectedId) {
+                        await loadMessages(selectedId, { silent: true });
+                    }
+                } finally {
+                    state.isPolling = false;
+                }
+            };
+
+            const startPolling = () => {
+                if (state.pollTimer) {
+                    window.clearInterval(state.pollTimer);
+                }
+
+                state.pollTimer = window.setInterval(
+                    pollInbox,
+                    pollIntervalMs
+                );
+            };
+
             conversationsEl.addEventListener('click', (event) => {
                 const row = event.target.closest('.wa-contact-row');
 
@@ -855,8 +920,15 @@
                 sendCurrentMessage();
             });
 
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden) {
+                    pollInbox();
+                }
+            });
+
             setComposerEnabled(false);
             loadConversations({ selectFirst: true });
+            startPolling();
         })();
     </script>
 @endsection

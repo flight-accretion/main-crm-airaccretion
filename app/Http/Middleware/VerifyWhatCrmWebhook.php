@@ -19,19 +19,16 @@ class VerifyWhatCrmWebhook
         | Accept token from either:
         |
         | 1. Authorization: Bearer TOKEN
-        | 2. X-WhatCRM-Token: TOKEN
+        | 2. Authorization: TOKEN
+        | 3. X-WhatCRM-Token: TOKEN
+        | 4. token: TOKEN
         |
         | X-WhatCRM-Token is useful because some web-server/FPM
         | configurations do not forward Authorization headers.
         |--------------------------------------------------------------------------
         */
 
-        $receivedToken = trim(
-            (string) (
-                $request->bearerToken()
-                ?: $request->header('X-WhatCRM-Token')
-            )
-        );
+        $receivedToken = $this->receivedToken($request);
 
         if ($expectedToken === '') {
 
@@ -64,12 +61,18 @@ class VerifyWhatCrmWebhook
                     'has_bearer_token' =>
                         !empty($request->bearerToken()),
 
+                    'has_authorization_header' =>
+                        !empty($request->header('Authorization')),
+
                     'has_custom_token' =>
                         !empty(
                             $request->header(
                                 'X-WhatCRM-Token'
                             )
                         ),
+
+                    'has_token_header' =>
+                        !empty($request->header('token')),
 
                     'received_length' =>
                         strlen($receivedToken),
@@ -90,5 +93,30 @@ class VerifyWhatCrmWebhook
 
 
         return $next($request);
+    }
+
+    private function receivedToken(Request $request): string
+    {
+        $authorization = trim(
+            (string) $request->header('Authorization')
+        );
+
+        $rawAuthorization = '';
+
+        if (
+            $authorization !== ''
+            && !preg_match('/^Bearer\s+/i', $authorization)
+        ) {
+            $rawAuthorization = $authorization;
+        }
+
+        return trim(
+            (string) (
+                $request->bearerToken()
+                ?: $request->header('X-WhatCRM-Token')
+                ?: $request->header('token')
+                ?: $rawAuthorization
+            )
+        );
     }
 }
