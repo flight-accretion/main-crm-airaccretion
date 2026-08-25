@@ -25,6 +25,8 @@ class WhatsAppLeadIntegration extends Model
         'callback_error',
         'payload',
         'assigned_at',
+        'assignment_message_sent_at',
+        'assignment_message_error',
     ];
 
     protected $casts = [
@@ -32,6 +34,7 @@ class WhatsAppLeadIntegration extends Model
         'callback_sent' => 'boolean',
         'callback_attempts' => 'integer',
         'assigned_at' => 'datetime',
+        'assignment_message_sent_at' => 'datetime',
     ];
 
     protected static function boot()

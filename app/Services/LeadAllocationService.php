@@ -371,6 +371,12 @@ class LeadAllocationService
             )->send(
                 $whatsAppIntegration
             );
+
+            app(
+                \App\Services\WhatCrmAssignmentCustomerMessageService::class
+            )->send(
+                $whatsAppIntegration
+            );
         }
 
         $ivrCallLog = $lead->ivrCallLogs()

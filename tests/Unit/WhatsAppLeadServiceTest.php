@@ -16,6 +16,7 @@ use App\Services\WhatsAppLeadService;
 use Carbon\Carbon;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -127,6 +128,100 @@ class WhatsAppLeadServiceTest extends TestCase
             'lead_allocation_queue',
             [
                 'lead_id' => $lead->id,
+            ]
+        );
+    }
+
+    public function test_assigned_whatcrm_lead_sends_representative_handoff_message_to_customer(): void
+    {
+        $salesperson =
+            $this->createSalesUser(
+                'Samarpit Sharma',
+                '9109152175'
+            );
+
+        $this->makeAvailable($salesperson);
+
+        config()->set(
+            'whatcrm.send_message_url',
+            'https://web.airaccretion.com/api/v1/send-message'
+        );
+        config()->set('whatcrm.send_message_token', 'test-token');
+
+        Http::fake([
+            'https://web.airaccretion.com/api/v1/send-message*' =>
+                Http::response(
+                    [
+                        'success' => true,
+                        'metaResponse' => [
+                            'messages' => [
+                                [
+                                    'id' => 'wamid.ASSIGNMENT-1',
+                                    'message_status' => 'accepted',
+                                ],
+                            ],
+                        ],
+                    ],
+                    200
+                ),
+        ]);
+
+        $response =
+            app(WhatsAppLeadService::class)
+                ->process([
+                    'name' => 'Assigned Customer',
+                    'number' => '9876543210',
+                    'service' => 'Retail Tour',
+                    'guest' => 2,
+                    'external_id' => 'WA-HANDOFF-1',
+                ]);
+
+        $this->assertSame('assigned', $response['status']);
+
+        Http::assertSent(function ($request) {
+            if (
+                !str_contains(
+                    $request->url(),
+                    'https://web.airaccretion.com/api/v1/send-message?token=test-token'
+                )
+            ) {
+                return false;
+            }
+
+            return $request->data() === [
+                'messageObject' => [
+                    'messaging_product' => 'whatsapp',
+                    'to' => '919876543210',
+                    'type' => 'text',
+                    'text' => [
+                        'body' =>
+                            'Our representative Samarpit Sharma (9109152175) will call you shortly.',
+                    ],
+                ],
+            ];
+        });
+
+        $integration = DB::table('whatsapp_lead_integrations')
+            ->where('external_id', 'WA-HANDOFF-1')
+            ->first();
+
+        $this->assertNotNull($integration);
+        $this->assertNotNull(
+            $integration->assignment_message_sent_at
+        );
+        $this->assertNull(
+            $integration->assignment_message_error
+        );
+
+        $this->assertDatabaseHas(
+            'whatsapp_messages',
+            [
+                'provider_message_id' => 'wamid.ASSIGNMENT-1',
+                'direction' => 'outgoing',
+                'sender_type' => 'agent',
+                'sender_user_id' => $salesperson->id,
+                'body' =>
+                    'Our representative Samarpit Sharma (9109152175) will call you shortly.',
             ]
         );
     }
@@ -334,6 +429,99 @@ class WhatsAppLeadServiceTest extends TestCase
         );
     }
 
+    public function test_queued_whatcrm_lead_sends_handoff_message_when_later_assigned(): void
+    {
+        $emptyProductUser =
+            $this->createSalesUser(
+                'Later Empty Product User',
+                '9988776655'
+            );
+
+        $this->createProduct(
+            'Retail Tour'
+        );
+
+        $response =
+            app(WhatsAppLeadService::class)
+                ->process([
+                    'name' => 'Queued Handoff Customer',
+                    'number' => '9876543212',
+                    'service' => 'Retail Tour',
+                    'guest' => 1,
+                    'external_id' => 'WA-HANDOFF-QUEUED-1',
+                ]);
+
+        $this->assertSame(
+            'queued',
+            $response['status']
+        );
+
+        config()->set(
+            'whatcrm.send_message_url',
+            'https://web.airaccretion.com/api/v1/send-message'
+        );
+        config()->set('whatcrm.send_message_token', 'test-token');
+
+        Http::fake([
+            'https://web.airaccretion.com/api/v1/send-message*' =>
+                Http::response(
+                    [
+                        'success' => true,
+                        'metaResponse' => [
+                            'messages' => [
+                                [
+                                    'id' => 'wamid.ASSIGNMENT-QUEUED-1',
+                                    'message_status' => 'accepted',
+                                ],
+                            ],
+                        ],
+                    ],
+                    200
+                ),
+        ]);
+
+        $this->makeAvailable($emptyProductUser);
+
+        $result =
+            app(LeadAllocationService::class)
+                ->processPendingLeads();
+
+        $this->assertSame(
+            1,
+            $result['processed']
+        );
+
+        Http::assertSent(function ($request) {
+            return str_contains(
+                    $request->url(),
+                    'https://web.airaccretion.com/api/v1/send-message?token=test-token'
+                )
+                && $request->data() === [
+                    'messageObject' => [
+                        'messaging_product' => 'whatsapp',
+                        'to' => '919876543212',
+                        'type' => 'text',
+                        'text' => [
+                            'body' =>
+                                'Our representative Later Empty Product User (9988776655) will call you shortly.',
+                        ],
+                    ],
+                ];
+        });
+
+        $integration = DB::table('whatsapp_lead_integrations')
+            ->where('external_id', 'WA-HANDOFF-QUEUED-1')
+            ->first();
+
+        $this->assertNotNull($integration);
+        $this->assertNotNull(
+            $integration->assignment_message_sent_at
+        );
+        $this->assertNull(
+            $integration->assignment_message_error
+        );
+    }
+
     public function test_queued_unmapped_whatcrm_product_later_assigns_to_empty_product_salesperson(): void
     {
         $emptyProductUser =
@@ -488,7 +676,8 @@ class WhatsAppLeadServiceTest extends TestCase
     }
 
     private function createSalesUser(
-        string $name
+        string $name,
+        ?string $contactNumber = null
     ): User {
         $userType =
             UserType::query()
@@ -508,6 +697,7 @@ class WhatsAppLeadServiceTest extends TestCase
             'email' => Str::uuid() . '@example.test',
             'password' => 'secret',
             'user_type_id' => $userType->id,
+            'contact_number' => $contactNumber,
             'status' => 1,
         ]);
     }
@@ -585,6 +775,7 @@ class WhatsAppLeadServiceTest extends TestCase
             $table->string('email')->nullable();
             $table->string('password')->nullable();
             $table->uuid('user_type_id')->nullable();
+            $table->string('contact_number')->nullable();
             $table->integer('status')->default(1);
             $table->timestamps();
         });
@@ -674,6 +865,8 @@ class WhatsAppLeadServiceTest extends TestCase
             $table->text('callback_error')->nullable();
             $table->json('payload')->nullable();
             $table->timestamp('assigned_at')->nullable();
+            $table->timestamp('assignment_message_sent_at')->nullable();
+            $table->text('assignment_message_error')->nullable();
             $table->timestamps();
         });
 
@@ -714,6 +907,51 @@ class WhatsAppLeadServiceTest extends TestCase
             $table->uuid('lead_id')->nullable();
             $table->timestamp('received_at')->nullable();
             $table->timestamp('followup_created_at')->nullable();
+            $table->timestamps();
+        });
+
+        $this->createWhatsAppTables();
+    }
+
+    private function createWhatsAppTables(): void
+    {
+        Schema::create('whatsapp_contacts', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('name')->nullable();
+            $table->string('normalized_phone', 30)->unique();
+            $table->string('raw_phone', 50)->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('whatsapp_conversations', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('contact_id');
+            $table->uuid('lead_id')->nullable();
+            $table->uuid('assigned_user_id')->nullable();
+            $table->string('whatcrm_chat_id')->nullable();
+            $table->string('status', 30)->default('open');
+            $table->text('last_message')->nullable();
+            $table->timestamp('last_message_at')->nullable();
+            $table->unsignedInteger('unread_count')->default(0);
+            $table->timestamps();
+        });
+
+        Schema::create('whatsapp_messages', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('conversation_id');
+            $table->uuid('lead_followup_id')->nullable();
+            $table->uuid('ai_reply_batch_id')->nullable();
+            $table->timestamp('ai_processed_at')->nullable();
+            $table->string('provider_message_id')->nullable()->unique();
+            $table->string('direction', 20);
+            $table->string('sender_type', 30);
+            $table->uuid('sender_user_id')->nullable();
+            $table->string('message_type', 30)->default('text');
+            $table->text('body')->nullable();
+            $table->string('provider_status', 50)->nullable();
+            $table->timestamp('message_at')->nullable();
+            $table->timestamp('crm_read_at')->nullable();
+            $table->json('raw_payload')->nullable();
             $table->timestamps();
         });
     }

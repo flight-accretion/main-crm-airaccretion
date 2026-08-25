@@ -17,6 +17,7 @@ class WhatsAppLeadService
         private WhatsAppProductAllocationService $allocator,
         private LeadAllocationService $leadAllocationService,
         private WhatCrmAssignmentWebhookService $callback,
+        private WhatCrmAssignmentCustomerMessageService $assignmentMessage,
         private LeadProductRoutingService $productRouter
     ) {
     }
@@ -513,6 +514,10 @@ class WhatsAppLeadService
             )
         ) {
             $this->callback->send(
+                $integration
+            );
+
+            $this->assignmentMessage->send(
                 $integration
             );
         }
