@@ -10,6 +10,11 @@ use RuntimeException;
 
 class WhatsAppOpenAiClient
 {
+    public function __construct(
+        private WhatsAppAiRuntimeDataService $runtimeData
+    ) {
+    }
+
     public function generateReply(
         WhatsAppAiAgentSetting $setting,
         WhatsAppConversation $conversation,
@@ -41,7 +46,9 @@ class WhatsAppOpenAiClient
                     'instructions' => $this->instructions(
                         $setting,
                         $conversation,
-                        $products
+                        $messages,
+                        $products,
+                        $contextMessages
                     ),
                     'input' => [
                         [
@@ -145,7 +152,9 @@ class WhatsAppOpenAiClient
     private function instructions(
         WhatsAppAiAgentSetting $setting,
         WhatsAppConversation $conversation,
-        Collection $products
+        Collection $messages,
+        Collection $products,
+        ?Collection $contextMessages = null
     ): string {
         $instructions = trim(
             (string) (
@@ -154,9 +163,17 @@ class WhatsAppOpenAiClient
             )
         );
 
-        $customerNumber = $this->customerNumber($conversation);
-        $currentDate = now()->format('d F Y');
-        $currentDateTime = now()->format('d F Y h:i A');
+        $runtimeData = $this->runtimeData->build(
+            $conversation,
+            $messages,
+            $products,
+            $contextMessages
+        );
+        $customerNumber = $runtimeData['CRM_CUSTOMER_NUMBER']
+            ?? $this->customerNumber($conversation);
+        $currentIst = now('Asia/Kolkata');
+        $currentDate = $currentIst->format('d F Y');
+        $currentDateTime = $currentIst->format('d F Y h:i A') . ' IST';
 
         $instructions = preg_replace(
             '/\{\{\s*\$\([\'"]Webhook[\'"]\)\.item\.json\.body\.number\s*\}\}/',
@@ -170,25 +187,61 @@ class WhatsAppOpenAiClient
             $instructions
         );
 
+        foreach ($runtimeData as $placeholder => $value) {
+            $instructions = preg_replace(
+                '/\{\{\s*' . preg_quote($placeholder, '/') . '\s*\}\}/',
+                $value,
+                $instructions
+            );
+        }
+
         $lines = [
             '',
             'CRM Runtime Data:',
             'Current CRM date: ' . $currentDate,
             'Current CRM date/time: ' . $currentDateTime,
+            'Current CRM timestamp (IST): '
+                . $runtimeData['CRM_CURRENT_DATETIME_IST'],
             'Customer number: ' . $customerNumber,
-            'Customer name: '
-                . (optional($conversation->contact)->name ?: 'Unknown'),
+            'Customer name: ' . $runtimeData['CRM_CUSTOMER_NAME'],
+            'Lead status: ' . $runtimeData['CRM_LEAD_STATUS'],
+            'Previous service: ' . $runtimeData['CRM_PREVIOUS_SERVICE'],
+            'Last booking date: ' . $runtimeData['CRM_LAST_BOOKING_DATE'],
+            'Lead qualification state: ' . $runtimeData['CRM_LEAD_STATE'],
+            'Missing qualification fields: '
+                . $runtimeData['CRM_MISSING_FIELDS'],
+            'CRM notes: ' . $runtimeData['CRM_NOTES'],
+            'Assigned agent name: '
+                . $runtimeData['CRM_ASSIGNED_AGENT_NAME'],
+            'Assigned agent number: '
+                . $runtimeData['CRM_ASSIGNED_AGENT_NUMBER'],
             'Available CRM products/services:',
         ];
 
-        foreach ($products as $product) {
-            $name = trim((string) $product->product);
+        foreach (explode(PHP_EOL, $runtimeData['CRM_ACTIVE_PRODUCTS']) as $name) {
+            $name = trim((string) $name);
 
-            if ($name !== '') {
-                $lines[] = '- ' . $name;
-            }
+            $lines[] = $name !== '' && $name !== 'Not provided by CRM'
+                ? '- ' . $name
+                : $name;
         }
 
+        $lines[] = 'CRM service data: '
+            . $runtimeData['CRM_SERVICE_DATA'];
+        $lines[] = 'CRM service cities/routes: '
+            . $runtimeData['CRM_SERVICE_LOCATIONS'];
+        $lines[] = 'CRM approved pricing data: '
+            . $runtimeData['CRM_PRICING_DATA'];
+        $lines[] = 'CRM confirmed availability data: '
+            . $runtimeData['CRM_AVAILABILITY_DATA'];
+        $lines[] = 'CRM approved product link: '
+            . $runtimeData['CRM_PRODUCT_LINK'];
+        $lines[] = 'CRM approved selling facts: '
+            . $runtimeData['CRM_APPROVED_SELLING_FACTS'];
+        $lines[] = 'CRM conversation history: '
+            . $runtimeData['CRM_CONVERSATION_HISTORY'];
+        $lines[] = 'Current customer message: '
+            . $runtimeData['CRM_CURRENT_CUSTOMER_MESSAGE'];
         $lines[] =
             'Use CRM Runtime Data and available CRM products/services instead of n8n variables.';
 

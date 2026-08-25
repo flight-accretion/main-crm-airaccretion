@@ -118,12 +118,20 @@ class WhatsAppAiReplyService
             'error' => null,
         ]);
 
+        $relations = [
+            'contact',
+            'lead.client',
+            'lead.representative',
+            'lead.leadFollowups',
+            'assignedUser',
+        ];
+
+        if (Schema::hasTable('lead_rides')) {
+            $relations[] = 'lead.rideSegments';
+        }
+
         $conversation = WhatsAppConversation::query()
-            ->with([
-                'contact',
-                'lead',
-                'assignedUser',
-            ])
+            ->with($relations)
             ->find($batch->conversation_id);
 
         if (!$conversation) {

@@ -33,6 +33,41 @@ return [
             'https://api.openai.com/v1/responses'
         ),
 
+    'pricing_sheet_csv_url' =>
+        env('WHATCRM_PRICING_SHEET_CSV_URL'),
+
+    'pricing_sheet_id' =>
+        env(
+            'WHATCRM_PRICING_SHEET_ID',
+            '1Hx1yLloKA-duKC0AKi2V1hzNsr1BHDpB3RNdr3LOVns'
+        ),
+
+    'pricing_sheet_gid' =>
+        env('WHATCRM_PRICING_SHEET_GID', '0'),
+
+    'pricing_sheet_cache_ttl' =>
+        (int) env('WHATCRM_PRICING_SHEET_CACHE_TTL', 86400),
+
+    'pricing_sheet_max_rows' =>
+        (int) env('WHATCRM_PRICING_SHEET_MAX_ROWS', 100),
+
+    'availability_data' =>
+        env('WHATCRM_AVAILABILITY_DATA'),
+
+    'approved_selling_facts' =>
+        array_filter(
+            array_map(
+                'trim',
+                explode('|', env('WHATCRM_APPROVED_SELLING_FACTS', ''))
+            )
+        ),
+
+    'product_links' =>
+        json_decode(
+            env('WHATCRM_PRODUCT_LINKS_JSON', '[]'),
+            true
+        ) ?: [],
+
     'timeout' => 10,
 
 ];
