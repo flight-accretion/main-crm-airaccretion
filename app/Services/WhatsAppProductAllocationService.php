@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\EmailLeadProductUserAssignment;
 use App\Models\Lead;
 use App\Models\LeadAllocationSetting;
+use App\Models\Product;
 use App\Models\SalespersonAvailability;
 use App\Models\User;
 use App\Models\UserType;
@@ -101,6 +102,69 @@ class WhatsAppProductAllocationService
         return $this->mappedUserIdsForProducts(
             $productIds
         )->isNotEmpty();
+    }
+
+    public function assignmentRoute(
+        ?Product $product,
+        ?string $sourceText
+    ): string {
+        $isCharter =
+            $this->productRouter
+                ->isCharterProduct(
+                    $product,
+                    $sourceText
+                );
+
+        if (
+            $product
+            && $this->hasConfiguredProductMapping(
+                $product->id
+            )
+        ) {
+            return $isCharter
+                ? 'charter'
+                : 'product';
+        }
+
+        if (
+            $isCharter
+            && $this->hasConfiguredCharterMapping(
+                $product ? $product->id : null
+            )
+        ) {
+            return 'charter';
+        }
+
+        return 'retail';
+    }
+
+    public function findUserForAssignment(
+        ?Product $product,
+        ?string $sourceText
+    ): ?User {
+        if (
+            $product
+            && $this->hasConfiguredProductMapping(
+                $product->id
+            )
+        ) {
+            return $this->findUser(
+                $product->id
+            );
+        }
+
+        if (
+            $this->assignmentRoute(
+                $product,
+                $sourceText
+            ) === 'charter'
+        ) {
+            return $this->findCharterUser(
+                $product ? $product->id : null
+            );
+        }
+
+        return $this->findRetailUser();
     }
 
     public function findCharterUser(

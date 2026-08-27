@@ -208,7 +208,9 @@ class WhatsAppLeadService
                  */
 
                 $serviceText =
-                    $data['service']
+                    $this->sourceServiceText(
+                        $data
+                    )
                     ?? null;
 
                 $product =
@@ -297,77 +299,19 @@ class WhatsAppLeadService
                  * --------------------------------------------------
                  */
 
-                $user = null;
                 $assignmentRoute =
-                    'retail';
-                $isCharterAssignment =
-                    $this->productRouter
-                        ->isCharterProduct(
+                    $this->allocator
+                        ->assignmentRoute(
                             $product,
                             $serviceText
                         );
 
-                if ($product) {
-
-                    if (
-                        $this->allocator
-                            ->hasConfiguredProductMapping(
-                                $product->id
-                            )
-                    ) {
-
-                        $assignmentRoute =
-                            $isCharterAssignment
-                                ? 'charter'
-                                : 'product';
-
-                        $user =
-                            $this->allocator
-                                ->findUser(
-                                    $product->id
-                                );
-
-                    } else {
-
-                        $assignmentRoute =
-                            'retail';
-
-                        $user =
-                            $this->allocator
-                                ->findRetailUser();
-                    }
-
-                } elseif ($isCharterAssignment) {
-
-                    if (
-                        $this->allocator
-                            ->hasConfiguredCharterMapping()
-                    ) {
-                        $assignmentRoute =
-                            'charter';
-
-                        $user =
-                            $this->allocator
-                                ->findCharterUser();
-                    } else {
-
-                        $assignmentRoute =
-                            'retail';
-
-                        $user =
-                            $this->allocator
-                                ->findRetailUser();
-                    }
-
-                } else {
-
-                    $assignmentRoute =
-                        'retail';
-
-                    $user =
-                        $this->allocator
-                            ->findRetailUser();
-                }
+                $user =
+                    $this->allocator
+                        ->findUserForAssignment(
+                            $product,
+                            $serviceText
+                        );
 
 
                 if ($user) {
@@ -686,6 +630,34 @@ class WhatsAppLeadService
         return
             "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(" .
             "{$column}, '+', ''), '-', ''), ' ', ''), '(', ''), ')', '')";
+    }
+
+
+    private function sourceServiceText(
+        array $data
+    ): ?string {
+        foreach (
+            [
+                'service',
+                'message',
+                'body',
+            ]
+            as $key
+        ) {
+            $value =
+                trim(
+                    (string) (
+                        $data[$key]
+                        ?? ''
+                    )
+                );
+
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return null;
     }
 
 

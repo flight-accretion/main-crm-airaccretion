@@ -96,14 +96,28 @@ class WhatsAppInboxController extends Controller
 
         $limit = min(
             100,
-            max(10, (int) $request->query('limit', 50))
+            max(1, (int) $request->query('limit', 50))
         );
 
+        $offset = max(
+            0,
+            (int) $request->query('offset', 0)
+        );
+
+        $total = (clone $query)->count();
+
         $conversations = $query
+            ->with([
+                'contact',
+                'assignedUser',
+            ])
             ->orderByDesc('last_message_at')
             ->orderByDesc('updated_at')
+            ->offset($offset)
             ->limit($limit)
             ->get();
+
+        $nextOffset = $offset + $conversations->count();
 
         return response()->json([
             'data' =>
@@ -112,6 +126,16 @@ class WhatsAppInboxController extends Controller
                         $conversation
                     );
                 })->values(),
+            'meta' => [
+                'limit' => $limit,
+                'offset' => $offset,
+                'next_offset' =>
+                    $nextOffset < $total
+                        ? $nextOffset
+                        : null,
+                'has_more' => $nextOffset < $total,
+                'total' => $total,
+            ],
         ]);
     }
 

@@ -64,6 +64,16 @@
             min-height: 0;
         }
 
+        .wa-show-more-wrap {
+            padding: 12px 14px;
+            background: #fff;
+        }
+
+        .wa-show-more {
+            width: 100%;
+            justify-content: center;
+        }
+
         .wa-contact-row {
             width: 100%;
             border: 0;
@@ -512,6 +522,11 @@
                 searchTimer: null,
                 pollTimer: null,
                 isPolling: false,
+                pageSize: 50,
+                nextOffset: 0,
+                hasMore: false,
+                total: 0,
+                isLoadingMore: false,
             };
 
             const escapeHtml = (value) => String(value ?? '')
@@ -529,9 +544,15 @@
                     ? conversation.contact_name
                     : (conversation.number || 'Unknown');
 
-            const buildQuery = () => {
+            const buildQuery = ({
+                limit = state.pageSize,
+                offset = 0,
+            } = {}) => {
                 const params = new URLSearchParams();
                 const search = searchEl.value.trim();
+
+                params.set('limit', String(limit));
+                params.set('offset', String(offset));
 
                 if (search) {
                     params.set('search', search);
@@ -548,13 +569,35 @@
                 return params.toString();
             };
 
+            const mergeConversations = (incoming, mode = 'replace') => {
+                if (mode === 'replace') {
+                    state.conversations = incoming;
+                    return;
+                }
+
+                if (mode === 'append') {
+                    const existingIds = new Set(state.conversations.map((conversation) => conversation.id));
+                    state.conversations = [
+                        ...state.conversations,
+                        ...incoming.filter((conversation) => !existingIds.has(conversation.id)),
+                    ];
+                    return;
+                }
+
+                const incomingIds = new Set(incoming.map((conversation) => conversation.id));
+                state.conversations = [
+                    ...incoming,
+                    ...state.conversations.filter((conversation) => !incomingIds.has(conversation.id)),
+                ];
+            };
+
             const renderConversations = () => {
                 if (!state.conversations.length) {
                     conversationsEl.innerHTML = '<div class="wa-empty-state">No conversations found.</div>';
                     return;
                 }
 
-                conversationsEl.innerHTML = state.conversations.map((conversation) => {
+                const rows = state.conversations.map((conversation) => {
                     const activeClass = conversation.id === state.selectedId ? ' is-active' : '';
                     const unread = Number(conversation.unread_count || 0);
                     const unreadBadge = unread > 0
@@ -576,6 +619,23 @@
                         </button>
                     `;
                 }).join('');
+
+                const showMore = state.hasMore
+                    ? `
+                        <div class="wa-show-more-wrap">
+                            <button
+                                type="button"
+                                class="ti-btn ti-btn-light wa-show-more"
+                                id="wa-show-more"
+                                ${state.isLoadingMore ? 'disabled' : ''}
+                            >
+                                ${state.isLoadingMore ? 'Loading...' : 'Show more'}
+                            </button>
+                        </div>
+                    `
+                    : '';
+
+                conversationsEl.innerHTML = rows + showMore;
             };
 
             const clearChat = () => {
@@ -634,8 +694,13 @@
             const loadConversations = async ({
                 selectFirst = false,
                 silent = false,
+                append = false,
+                preserveExisting = false,
+                offset = 0,
             } = {}) => {
-                const query = buildQuery();
+                const query = buildQuery({
+                    offset,
+                });
                 const url = query
                     ? `${endpoints.conversations}?${query}`
                     : endpoints.conversations;
@@ -659,7 +724,19 @@
                 }
 
                 const payload = await response.json();
-                state.conversations = payload.data || [];
+                const incoming = payload.data || [];
+                const meta = payload.meta || {};
+
+                mergeConversations(
+                    incoming,
+                    append
+                        ? 'append'
+                        : (preserveExisting ? 'preserve' : 'replace')
+                );
+
+                state.total = Number(meta.total || state.conversations.length);
+                state.nextOffset = state.conversations.length;
+                state.hasMore = state.nextOffset < state.total;
 
                 if (
                     state.selectedId
@@ -676,6 +753,29 @@
                     && state.conversations.length
                 ) {
                     selectConversation(state.conversations[0].id);
+                }
+            };
+
+            const loadMoreConversations = async () => {
+                if (
+                    !state.hasMore
+                    || state.isLoadingMore
+                ) {
+                    return;
+                }
+
+                state.isLoadingMore = true;
+                renderConversations();
+
+                try {
+                    await loadConversations({
+                        silent: true,
+                        append: true,
+                        offset: state.nextOffset,
+                    });
+                } finally {
+                    state.isLoadingMore = false;
+                    renderConversations();
                 }
             };
 
@@ -768,7 +868,10 @@
                 }
 
                 if (await markRead(conversationId)) {
-                    loadConversations({ silent: true });
+                    loadConversations({
+                        silent: true,
+                        preserveExisting: true,
+                    });
                 }
             };
 
@@ -853,7 +956,10 @@
                 resetComposer();
                 setStatus('Sent', 'success');
                 await loadMessages(state.selectedId);
-                await loadConversations();
+                await loadConversations({
+                    silent: true,
+                    preserveExisting: true,
+                });
                 sendButtonEl.disabled = false;
             };
 
@@ -867,7 +973,10 @@
                 try {
                     const selectedId = state.selectedId;
 
-                    await loadConversations({ silent: true });
+                    await loadConversations({
+                        silent: true,
+                        preserveExisting: true,
+                    });
 
                     if (selectedId && state.selectedId === selectedId) {
                         await loadMessages(selectedId, { silent: true });
@@ -889,6 +998,13 @@
             };
 
             conversationsEl.addEventListener('click', (event) => {
+                const showMoreButton = event.target.closest('#wa-show-more');
+
+                if (showMoreButton) {
+                    loadMoreConversations();
+                    return;
+                }
+
                 const row = event.target.closest('.wa-contact-row');
 
                 if (!row) {

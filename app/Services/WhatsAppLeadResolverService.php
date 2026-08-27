@@ -55,8 +55,7 @@ class WhatsAppLeadResolverService
         }
 
         $serviceText =
-            $data['service']
-            ?? null;
+            $this->sourceServiceText($data);
 
         $product = $this->productRouter
             ->resolveProduct(
@@ -179,63 +178,22 @@ class WhatsAppLeadResolverService
         ?string $serviceText
     )
     {
-        $assignmentRoute =
-            $this->assignmentRoute(
+        return $this->allocator
+            ->findUserForAssignment(
                 $product,
                 $serviceText
             );
-
-        if (
-            $assignmentRoute !== 'retail'
-            &&
-            $product
-            && $this->allocator
-                ->hasConfiguredProductMapping($product->id)
-        ) {
-            return $this->allocator->findUser($product->id);
-        }
-
-        if ($assignmentRoute === 'charter') {
-            return $this->allocator
-                ->findCharterUser(
-                    optional($product)->id
-                );
-        }
-
-        return $this->allocator->findRetailUser();
     }
 
     private function assignmentRoute(
         ?Product $product,
         ?string $serviceText
     ): string {
-        $isCharter =
-            $this->productRouter
-                ->isCharterProduct(
-                    $product,
-                    $serviceText
-                );
-
-        if (
-            $product
-            && $this->allocator
-                ->hasConfiguredProductMapping($product->id)
-        ) {
-            return $isCharter
-                ? 'charter'
-                : 'product';
-        }
-
-        if (
-            !$product
-            && $isCharter
-            && $this->allocator
-                ->hasConfiguredCharterMapping()
-        ) {
-            return 'charter';
-        }
-
-        return 'retail';
+        return $this->allocator
+            ->assignmentRoute(
+                $product,
+                $serviceText
+            );
     }
 
     private function assignmentDetails(
@@ -297,6 +255,31 @@ class WhatsAppLeadResolverService
         }
 
         return 1;
+    }
+
+    private function sourceServiceText(array $data): ?string
+    {
+        foreach (
+            [
+                'service',
+                'body',
+                'message',
+            ]
+            as $key
+        ) {
+            $value = trim(
+                (string) (
+                    $data[$key]
+                    ?? ''
+                )
+            );
+
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return null;
     }
 
     private function description(array $data): string

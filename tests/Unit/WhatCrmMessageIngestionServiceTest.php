@@ -3,8 +3,10 @@
 namespace Tests\Unit;
 
 use App\Models\Client;
+use App\Models\EmailLeadProductUserAssignment;
 use App\Models\Lead;
 use App\Models\LeadFollowup;
+use App\Models\Product;
 use App\Models\SalespersonAvailability;
 use App\Models\User;
 use App\Models\UserType;
@@ -292,6 +294,70 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
         );
     }
 
+    public function test_message_text_routes_to_mapped_product_salesperson_when_service_is_missing(): void
+    {
+        $mappedProductUser =
+            $this->createSalesUser(
+                'Mapped Yacht User'
+            );
+
+        $emptyProductUser =
+            $this->createSalesUser(
+                'Empty Product User'
+            );
+
+        $yachtProduct =
+            $this->createProduct(
+                'Yacht in Goa'
+            );
+
+        EmailLeadProductUserAssignment::create([
+            'user_id' => $mappedProductUser->id,
+            'product_id' => $yachtProduct->id,
+            'is_active' => true,
+        ]);
+
+        $this->makeAvailable($mappedProductUser);
+        $this->makeAvailable($emptyProductUser);
+
+        $result = app(WhatCrmMessageIngestionService::class)
+            ->process([
+                'message_id' => 'wamid.MESSAGE-PRODUCT-1',
+                'chat_id' => 'chat-message-product',
+                'number' => '919876543216',
+                'name' => 'Message Product Customer',
+                'message' => 'Need yacht in Goa tomorrow',
+                'message_type' => 'text',
+                'direction' => 'incoming',
+                'message_at' => now()->toIso8601String(),
+                'status' => 'delivered',
+            ]);
+
+        $lead = Lead::query()
+            ->whereKey($result['lead_id'])
+            ->firstOrFail();
+
+        $this->assertSame(
+            $mappedProductUser->id,
+            $result['assigned_user_id']
+        );
+        $this->assertSame(
+            $mappedProductUser->id,
+            $lead->representative_user_id
+        );
+        $this->assertSame(
+            [$yachtProduct->id],
+            $lead->product_ids_array
+        );
+        $this->assertDatabaseHas(
+            'whatsapp_conversations',
+            [
+                'id' => $result['conversation_id'],
+                'assigned_user_id' => $mappedProductUser->id,
+            ]
+        );
+    }
+
     public function test_wrapped_body_payload_from_whatcrm_flow_is_accepted_by_api(): void
     {
         config()->set('whatcrm.token', 'shared-secret');
@@ -495,6 +561,15 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
             'is_available' => true,
             'is_opted_in' => true,
             'last_response_at' => now(),
+        ]);
+    }
+
+    private function createProduct(string $name): Product
+    {
+        return Product::create([
+            'id' => (string) Str::uuid(),
+            'product' => $name,
+            'status' => 1,
         ]);
     }
 

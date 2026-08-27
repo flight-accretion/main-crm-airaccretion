@@ -345,6 +345,77 @@ class WhatsAppLeadServiceTest extends TestCase
         );
     }
 
+    public function test_unmapped_charter_product_uses_configured_charter_team_before_retail_fallback(): void
+    {
+        $charterUser =
+            $this->createSalesUser(
+                'Configured Charter User'
+            );
+
+        $emptyProductUser =
+            $this->createSalesUser(
+                'Retail Empty Product User'
+            );
+
+        $mappedCharterProduct =
+            $this->createProduct(
+                'Char Dham Yatra'
+            );
+
+        $requestedCharterProduct =
+            $this->createProduct(
+                'Flower Shower'
+            );
+
+        EmailLeadProductUserAssignment::create([
+            'user_id' =>
+                $charterUser->id,
+            'product_id' =>
+                $mappedCharterProduct->id,
+            'is_active' =>
+                true,
+        ]);
+
+        $this->makeAvailable($charterUser);
+        $this->makeAvailable($emptyProductUser);
+
+        $response =
+            app(WhatsAppLeadService::class)
+                ->process([
+                    'name' => 'Flower Shower Customer',
+                    'number' => '9876543224',
+                    'service' => 'Flower Shower proposal',
+                    'guest' => 2,
+                    'external_id' =>
+                        'WA-CHARTER-UNMAPPED-TEAM-1',
+                ]);
+
+        $lead =
+            Lead::query()
+                ->where(
+                    'id',
+                    $response['lead_id']
+                )
+                ->firstOrFail();
+
+        $this->assertSame(
+            'assigned',
+            $response['status']
+        );
+        $this->assertSame(
+            $requestedCharterProduct->id,
+            $response['product_id']
+        );
+        $this->assertSame(
+            $charterUser->id,
+            $response['agent_user_id']
+        );
+        $this->assertSame(
+            $charterUser->id,
+            $lead->representative_user_id
+        );
+    }
+
     public function test_queued_whatcrm_charter_product_later_assigns_to_charter_team(): void
     {
         $charterUser =

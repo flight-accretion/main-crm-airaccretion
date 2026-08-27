@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use App\Models\User;
 use App\Models\UserType;
+use Carbon\Carbon;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -122,6 +123,78 @@ class WhatsAppInboxSendTest extends TestCase
         );
     }
 
+    public function test_conversations_endpoint_paginates_previous_chats_with_show_more_metadata(): void
+    {
+        $agent = $this->createUser(
+            UserType::SUPER_ADMIN,
+            'Super Admin Viewer'
+        );
+
+        $oldConversationId = $this->createConversation(
+            $agent,
+            '9876543201',
+            'Old Customer',
+            Carbon::parse('2026-08-25 10:00:00'),
+            'Old message'
+        );
+        $middleConversationId = $this->createConversation(
+            $agent,
+            '9876543202',
+            'Middle Customer',
+            Carbon::parse('2026-08-25 11:00:00'),
+            'Middle message'
+        );
+        $newConversationId = $this->createConversation(
+            $agent,
+            '9876543203',
+            'New Customer',
+            Carbon::parse('2026-08-25 12:00:00'),
+            'New message'
+        );
+
+        $this->actingAs($agent);
+
+        $firstPage = $this->getJson(
+            route(
+                'admin.whatsapp.conversations',
+                [
+                    'limit' => 2,
+                ]
+            )
+        );
+
+        $firstPage
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.id', $newConversationId)
+            ->assertJsonPath('data.1.id', $middleConversationId)
+            ->assertJsonPath('meta.limit', 2)
+            ->assertJsonPath('meta.offset', 0)
+            ->assertJsonPath('meta.next_offset', 2)
+            ->assertJsonPath('meta.has_more', true)
+            ->assertJsonPath('meta.total', 3);
+
+        $secondPage = $this->getJson(
+            route(
+                'admin.whatsapp.conversations',
+                [
+                    'limit' => 2,
+                    'offset' => 2,
+                ]
+            )
+        );
+
+        $secondPage
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $oldConversationId)
+            ->assertJsonPath('meta.limit', 2)
+            ->assertJsonPath('meta.offset', 2)
+            ->assertJsonPath('meta.next_offset', null)
+            ->assertJsonPath('meta.has_more', false)
+            ->assertJsonPath('meta.total', 3);
+    }
+
     private function createUser(
         string $role,
         string $name
@@ -150,10 +223,13 @@ class WhatsAppInboxSendTest extends TestCase
     private function createConversation(
         User $assignedUser,
         string $phone,
-        string $name
+        string $name,
+        ?Carbon $lastMessageAt = null,
+        ?string $lastMessage = null
     ): string {
         $contactId = (string) Str::uuid();
         $conversationId = (string) Str::uuid();
+        $lastMessageAt = $lastMessageAt ?: now();
 
         DB::table('whatsapp_contacts')->insert([
             'id' => $contactId,
@@ -169,7 +245,8 @@ class WhatsAppInboxSendTest extends TestCase
             'contact_id' => $contactId,
             'assigned_user_id' => $assignedUser->id,
             'status' => 'open',
-            'last_message_at' => now(),
+            'last_message' => $lastMessage,
+            'last_message_at' => $lastMessageAt,
             'unread_count' => 0,
             'created_at' => now(),
             'updated_at' => now(),

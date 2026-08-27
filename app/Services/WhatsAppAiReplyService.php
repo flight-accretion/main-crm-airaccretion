@@ -254,33 +254,23 @@ class WhatsAppAiReplyService
             $this->productRouter
                 ->resolveProduct($detectedProduct);
 
-        $isCharterProduct =
-            $this->productRouter
-                ->isCharterProduct(
-                    $product,
-                    $detectedProduct
-                );
         $lead = $conversation->lead;
         $user = null;
 
-        if ($product) {
-            if (
-                $this->allocator
-                    ->hasConfiguredProductMapping($product->id)
-            ) {
-                $user = $this->allocator->findUser($product->id);
-            } else {
-                $user = $this->allocator->findRetailUser();
-            }
-        } elseif (
-            $isCharterProduct
-            && $this->allocator
-                ->hasConfiguredCharterMapping()
+        if (
+            $product
+            || !$conversation->assigned_user_id
+            || $this->allocator
+                ->assignmentRoute(
+                    $product,
+                    $detectedProduct
+                ) === 'charter'
         ) {
             $user = $this->allocator
-                ->findCharterUser();
-        } elseif (!$conversation->assigned_user_id) {
-            $user = $this->allocator->findRetailUser();
+                ->findUserForAssignment(
+                    $product,
+                    $detectedProduct
+                );
         }
 
         if (!$user && $conversation->assignedUser) {
