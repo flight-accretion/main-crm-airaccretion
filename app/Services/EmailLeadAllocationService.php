@@ -138,6 +138,16 @@ class EmailLeadAllocationService
 
             if ($isCharterProduct) {
 
+                if (
+                    $this->hasConfiguredCharterMapping(
+                        $product->id
+                    )
+                ) {
+                    return $this->pickCharterSalesperson(
+                        $product->id
+                    );
+                }
+
                 Log::info(
                     'Email charter product has no configured salesperson. Using retail fallback allocation.',
                     [

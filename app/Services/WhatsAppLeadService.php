@@ -18,7 +18,8 @@ class WhatsAppLeadService
         private LeadAllocationService $leadAllocationService,
         private WhatCrmAssignmentWebhookService $callback,
         private WhatCrmAssignmentCustomerMessageService $assignmentMessage,
-        private LeadProductRoutingService $productRouter
+        private LeadProductRoutingService $productRouter,
+        private LeadSourceDataHydrationService $sourceDataHydrator
     ) {
     }
 
@@ -268,6 +269,11 @@ class WhatsAppLeadService
                             ?? $data['ocassion']
                             ?? null,
                 ]);
+
+                $this->sourceDataHydrator->hydrate(
+                    $lead,
+                    $data
+                );
 
 
                 $integration =

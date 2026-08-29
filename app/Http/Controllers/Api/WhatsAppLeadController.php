@@ -14,6 +14,14 @@ class WhatsAppLeadController extends Controller
         Request $request,
         WhatsAppLeadService $service
     ) {
+        if (!config('whatcrm.legacy_lead_api_enabled', true)) {
+            return response()->json([
+                'success' => false,
+                'message' =>
+                    'Legacy WhatCRM lead API is disabled. Use /api/whatcrm/messages.',
+            ], 410);
+        }
+
         /*
          * Support both:
          *

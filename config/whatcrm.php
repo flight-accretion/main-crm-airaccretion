@@ -4,6 +4,9 @@ return [
 
     'token' => env('WHATCRM_WEBHOOK_TOKEN'),
 
+    'legacy_lead_api_enabled' =>
+        env('WHATCRM_LEGACY_LEAD_API_ENABLED', true),
+
     'send_message_url' => env(
         'WHATCRM_SEND_MESSAGE_URL',
         'https://web.airaccretion.com/api/v1/send-message'

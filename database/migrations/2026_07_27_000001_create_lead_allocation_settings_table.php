@@ -16,7 +16,7 @@ class CreateLeadAllocationSettingsTable extends Migration
         Schema::create('lead_allocation_settings', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->string('office_start_time')->default('10:30');
-            $table->string('office_end_time')->default('19:30');
+            $table->string('office_end_time')->default('19:20');
             $table->integer('popup_interval_minutes')->default(60);
             $table->integer('minimum_leads_before_popup')->default(1);
             $table->boolean('auto_allocation_enabled')->default(true);

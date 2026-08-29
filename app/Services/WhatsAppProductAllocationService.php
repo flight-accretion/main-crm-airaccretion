@@ -15,6 +15,12 @@ use Illuminate\Support\Facades\Log;
 
 class WhatsAppProductAllocationService
 {
+    private const RETAIL_FALLBACK_PRODUCT_NAMES = [
+        'empty',
+        'no requirement',
+        'incoming lead',
+    ];
+
     public function __construct(
         private LeadAllocationService $leadAllocationService,
         private LeadProductRoutingService $productRouter
@@ -238,6 +244,48 @@ class WhatsAppProductAllocationService
             return null;
         }
 
+        $fallbackProductIds =
+            $this->retailFallbackProductIds();
+
+        $fallbackMappedUserIds =
+            $this->mappedUserIdsForProducts(
+                $fallbackProductIds
+            );
+
+        if ($fallbackMappedUserIds->isNotEmpty()) {
+            $user =
+                $this->findAvailableBalancedUser(
+                    $fallbackMappedUserIds
+                );
+
+            if (!$user) {
+                Log::info(
+                    'WhatsApp retail lead has fallback products configured but no eligible fallback salesperson today.',
+                    [
+                        'fallback_product_ids' =>
+                            $fallbackProductIds
+                                ->values()
+                                ->all(),
+                        'mapped_user_ids' =>
+                            $fallbackMappedUserIds
+                                ->values()
+                                ->all(),
+                    ]
+                );
+            }
+
+            return $user;
+        }
+
+        Log::info(
+            'WhatsApp retail lead has no Empty/No Requirement/Incoming Lead fallback product mapping configured. Using legacy unmapped-salesperson fallback.'
+        );
+
+        return $this->findLegacyRetailUser();
+    }
+
+    private function findLegacyRetailUser(): ?User
+    {
         $mappedUserIds =
             EmailLeadProductUserAssignment::query()
                 ->where('is_active', true)
@@ -297,6 +345,28 @@ class WhatsAppProductAllocationService
         }
 
         return $this->balancedUser($users);
+    }
+
+    private function retailFallbackProductIds(): Collection
+    {
+        return Product::query()
+            ->where('status', 1)
+            ->get([
+                'id',
+                'product',
+            ])
+            ->filter(function (Product $product) {
+                return in_array(
+                    $this->productRouter
+                        ->normalize($product->product),
+                    self::RETAIL_FALLBACK_PRODUCT_NAMES,
+                    true
+                );
+            })
+            ->pluck('id')
+            ->filter()
+            ->unique()
+            ->values();
     }
 
 

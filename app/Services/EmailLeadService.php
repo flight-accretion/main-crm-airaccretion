@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Models\Client;
 use App\Models\EmailLeadLog;
 use App\Models\Lead;
+use App\Models\LeadAllocationLog;
+use App\Models\LeadAllocationSetting;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -15,7 +17,9 @@ class EmailLeadService
         private LeadAllocationService $allocationService,
         private EmailLeadFollowupService $followupService,
         private ActiveLeadService $activeLeadService,
-        private LeadProductRoutingService $productRouter
+        private LeadProductRoutingService $productRouter,
+        private EmailLeadAllocationService $emailAllocator,
+        private LeadSourceDataHydrationService $sourceDataHydrator
     ) {
     }
 
@@ -314,8 +318,109 @@ class EmailLeadService
                     'occasion' => null,
                 ]);
 
+                $this->sourceDataHydrator->hydrate(
+                    $lead,
+                    array_merge(
+                        $parsed['all_fields'] ?? [],
+                        [
+                            'service' =>
+                                $parsed['service'],
+
+                            'service_name' =>
+                                $parsed['service'],
+
+                            'date' =>
+                                $parsed['departure_date'],
+
+                            'departure_date' =>
+                                $parsed['departure_date'],
+
+                            'departure_time' =>
+                                $parsed['departure_time'],
+
+                            'guest' =>
+                                $parsed['passenger_count'],
+                        ]
+                    )
+                );
+
                 $emailLog->lead_id =
                     $lead->id;
+
+                $emailLog->save();
+
+                $settings =
+                    LeadAllocationSetting::getActiveSettings();
+
+                $salesperson = null;
+
+                if (
+                    $settings->auto_allocation_enabled
+                    && $this->allocationService
+                        ->isOfficeOpenForDebug(
+                            $settings,
+                            now()
+                        )
+                ) {
+                    $salesperson =
+                        $this->emailAllocator
+                            ->pickSalesperson(
+                                $lead,
+                                $settings
+                            );
+                }
+
+                if ($salesperson) {
+                    $lead->representative_user_id =
+                        $salesperson->id;
+
+                    $lead->save();
+
+                    LeadAllocationLog::create([
+                        'lead_id' => $lead->id,
+                        'salesperson_id' =>
+                            $salesperson->id,
+                        'action' =>
+                            'email_assigned',
+                        'result' =>
+                            'success',
+                        'details' =>
+                            'Assigned from Email using dynamic source lead routing.',
+                    ]);
+
+                    $emailLog->processing_status =
+                        'lead_created_assigned';
+
+                    $emailLog->processing_message =
+                        $productId
+                        ? 'New email lead created with matched product and assigned immediately.'
+                        : 'New email lead created. Product not matched; assigned to fallback retail allocation.';
+
+                    $emailLog->processed_at =
+                        now();
+
+                    $emailLog->save();
+
+                    $this->followupService
+                        ->createIfNeeded(
+                            $lead,
+                            $emailLog
+                        );
+
+                    return [
+                        'status' =>
+                            'created_assigned',
+
+                        'lead_id' =>
+                            $lead->id,
+
+                        'product_id' =>
+                            $productId,
+
+                        'agent_user_id' =>
+                            $salesperson->id,
+                    ];
+                }
 
                 $emailLog->processing_status =
                     'lead_created_queued';

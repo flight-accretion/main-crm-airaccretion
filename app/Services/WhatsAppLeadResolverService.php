@@ -16,7 +16,8 @@ class WhatsAppLeadResolverService
         private ActiveLeadService $activeLeadService,
         private WhatsAppProductAllocationService $allocator,
         private LeadAllocationService $leadAllocationService,
-        private LeadProductRoutingService $productRouter
+        private LeadProductRoutingService $productRouter,
+        private LeadSourceDataHydrationService $sourceDataHydrator
     ) {
     }
 
@@ -29,6 +30,11 @@ class WhatsAppLeadResolverService
             ->findByPhone($contact->normalized_phone);
 
         if ($existingLead) {
+            $this->sourceDataHydrator->hydrate(
+                $existingLead,
+                $data
+            );
+
             $this->linkConversationToLead(
                 $conversation,
                 $existingLead
@@ -46,6 +52,11 @@ class WhatsAppLeadResolverService
             ->findByPhone($contact->normalized_phone);
 
         if ($existingLead) {
+            $this->sourceDataHydrator->hydrate(
+                $existingLead,
+                $data
+            );
+
             $this->linkConversationToLead(
                 $conversation,
                 $existingLead
@@ -72,6 +83,11 @@ class WhatsAppLeadResolverService
             'description' => $this->description($data),
             'occasion' => $data['occasion'] ?? null,
         ]);
+
+        $this->sourceDataHydrator->hydrate(
+            $lead,
+            $data
+        );
 
         $salesperson = $this->resolveSalesperson(
             $product,

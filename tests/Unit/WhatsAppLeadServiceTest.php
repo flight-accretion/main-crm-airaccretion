@@ -132,6 +132,67 @@ class WhatsAppLeadServiceTest extends TestCase
         );
     }
 
+    public function test_unmatched_whatcrm_message_assigns_to_user_mapped_to_empty_product(): void
+    {
+        $emptyProductUser =
+            $this->createSalesUser(
+                'Mapped Empty Product User'
+            );
+
+        $emptyProduct =
+            $this->createProduct(
+                'Empty'
+            );
+
+        EmailLeadProductUserAssignment::create([
+            'user_id' =>
+                $emptyProductUser->id,
+            'product_id' =>
+                $emptyProduct->id,
+            'is_active' =>
+                true,
+        ]);
+
+        $this->makeAvailable($emptyProductUser);
+
+        $response =
+            app(WhatsAppLeadService::class)
+                ->process([
+                    'name' => 'Unknown Need Customer',
+                    'number' => '9876543228',
+                    'message' => 'Please call me with details',
+                    'guest' => 1,
+                    'external_id' => 'WA-EMPTY-MAPPED-1',
+                ]);
+
+        $lead =
+            Lead::query()
+                ->where(
+                    'id',
+                    $response['lead_id']
+                )
+                ->firstOrFail();
+
+        $this->assertSame(
+            'assigned',
+            $response['status']
+        );
+        $this->assertSame(
+            $emptyProductUser->id,
+            $response['agent_user_id']
+        );
+        $this->assertSame(
+            $emptyProductUser->id,
+            $lead->representative_user_id
+        );
+        $this->assertDatabaseMissing(
+            'lead_allocation_queue',
+            [
+                'lead_id' => $lead->id,
+            ]
+        );
+    }
+
     public function test_assigned_whatcrm_lead_sends_representative_handoff_message_to_customer(): void
     {
         $salesperson =

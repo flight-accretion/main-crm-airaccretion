@@ -59,7 +59,7 @@ class LeadAllocationSetting extends Model
         if (!$settings) {
             return self::create([
                 'office_start_time' => '10:30',
-                'office_end_time' => '19:30',
+                'office_end_time' => '19:20',
                 'popup_interval_minutes' => 120,
                 'minimum_leads_before_popup' => 1,
                 'auto_allocation_enabled' => true,
