@@ -144,7 +144,7 @@ class WhatsAppOpenAiClient
         }
 
         $lines[] =
-            'Return JSON only: {"reply":"message to customer","product":"matching product name or N/A"}';
+            'Return JSON only: {"reply":"message to customer","product":"matching CRM product name or N/A","service":"matching CRM service/package name or N/A","service_date":"DD-MMM-YYYY or N/A","guests":"number or N/A","route":"Origin to Destination or N/A","origin":"origin city or N/A","destination":"destination city or N/A","occasion":"occasion or N/A"}';
 
         return implode(PHP_EOL, $lines);
     }
@@ -303,17 +303,142 @@ class WhatsAppOpenAiClient
             );
         }
 
-        $product = trim(
-            (string) (
-                $decoded['product']
-                ?? $decoded['service']
-                ?? 'N/A'
-            )
+        $product = $this->firstText(
+            $decoded,
+            [
+                'product',
+                'product_name',
+                'crm_product',
+                'lead.product',
+            ]
         );
+
+        $service = $this->firstText(
+            $decoded,
+            [
+                'service',
+                'service_name',
+                'selected_service',
+                'service_code',
+                'lead.service',
+                'lead.service_code',
+            ]
+        );
+
+        if (!$product) {
+            $product = $service ?: 'N/A';
+        }
 
         return [
             'reply' => $reply,
             'product' => $product === '' ? 'N/A' : $product,
+            'service' => $service,
+            'service_date' => $this->firstText(
+                $decoded,
+                [
+                    'service_date',
+                    'date',
+                    'travel_date',
+                    'ride_date',
+                    'departure_date',
+                    'lead.date',
+                    'lead.service_date',
+                ]
+            ),
+            'guests' => $this->firstText(
+                $decoded,
+                [
+                    'guests',
+                    'guest',
+                    'number_of_guests',
+                    'number_of_passengers',
+                    'passengers',
+                    'pax',
+                    'lead.guests',
+                ]
+            ),
+            'route' => $this->firstText(
+                $decoded,
+                [
+                    'route',
+                    'travel_route',
+                    'city_or_route',
+                    'lead.route',
+                ]
+            ),
+            'origin' => $this->firstText(
+                $decoded,
+                [
+                    'origin',
+                    'from',
+                    'from_place',
+                    'departure_city',
+                    'lead.origin',
+                ]
+            ),
+            'destination' => $this->firstText(
+                $decoded,
+                [
+                    'destination',
+                    'to',
+                    'to_place',
+                    'arrival_city',
+                    'lead.destination',
+                ]
+            ),
+            'city' => $this->firstText(
+                $decoded,
+                [
+                    'city',
+                    'service_city',
+                    'location',
+                    'lead.city',
+                ]
+            ),
+            'occasion' => $this->firstText(
+                $decoded,
+                [
+                    'occasion',
+                    'ocassion',
+                    'event',
+                    'lead.occasion',
+                ]
+            ),
         ];
+    }
+
+    private function firstText(array $payload, array $keys): ?string
+    {
+        foreach ($keys as $key) {
+            $value = data_get($payload, $key);
+
+            if (!is_scalar($value)) {
+                continue;
+            }
+
+            $value = trim((string) $value);
+
+            if (
+                $value === ''
+                || in_array(
+                    strtolower($value),
+                    [
+                        'n/a',
+                        'na',
+                        'none',
+                        'null',
+                        'not provided',
+                        'not available',
+                    ],
+                    true
+                )
+            ) {
+                continue;
+            }
+
+            return $value;
+        }
+
+        return null;
     }
 }

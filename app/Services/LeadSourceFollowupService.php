@@ -8,6 +8,44 @@ use Illuminate\Support\Str;
 
 class LeadSourceFollowupService
 {
+    public function createIfMissing(
+        Lead $lead,
+        string $source,
+        string $message,
+        array $context = []
+    ): ?LeadFollowup {
+        if (
+            empty(
+                $lead->representative_user_id
+            )
+        ) {
+            return null;
+        }
+
+        $hasOpenFollowup =
+            $lead
+                ->leadFollowups()
+                ->whereNotNull(
+                    'next_followup_date'
+                )
+                ->whereNotIn(
+                    'status',
+                    [2, 5]
+                )
+                ->exists();
+
+        if ($hasOpenFollowup) {
+            return null;
+        }
+
+        return $this->create(
+            $lead,
+            $source,
+            $message,
+            $context
+        );
+    }
+
     public function create(
         Lead $lead,
         string $source,

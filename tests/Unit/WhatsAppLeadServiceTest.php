@@ -130,6 +130,14 @@ class WhatsAppLeadServiceTest extends TestCase
                 'lead_id' => $lead->id,
             ]
         );
+        $this->assertDatabaseHas(
+            'lead_followups',
+            [
+                'lead_id' => $lead->id,
+                'followed_by' => $emptyProductUser->id,
+                'status' => 1,
+            ]
+        );
     }
 
     public function test_unmatched_whatcrm_message_assigns_to_user_mapped_to_empty_product(): void
@@ -679,6 +687,10 @@ class WhatsAppLeadServiceTest extends TestCase
             'queued',
             $response['status']
         );
+        $this->assertDatabaseCount(
+            'lead_followups',
+            0
+        );
 
         $queue =
             LeadAllocationQueue::query()
@@ -721,6 +733,14 @@ class WhatsAppLeadServiceTest extends TestCase
                 'lead_id' => $lead->id,
                 'status' => 'assigned',
                 'assigned_user_id' => $emptyProductUser->id,
+            ]
+        );
+        $this->assertDatabaseHas(
+            'lead_followups',
+            [
+                'lead_id' => $lead->id,
+                'followed_by' => $emptyProductUser->id,
+                'status' => 1,
             ]
         );
     }

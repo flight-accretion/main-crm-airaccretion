@@ -253,6 +253,18 @@ class LeadAllocationService
                 ->where('lead_id', $lead->id)
                 ->first();
 
+        if (
+            str_starts_with(
+                (string) $queueItem->reason,
+                'whatsapp_'
+            )
+        ) {
+            $this->createWhatsAppAssignmentFollowup(
+                $lead,
+                $whatsAppIntegration
+            );
+        }
+
         if ($whatsAppIntegration) {
 
             $whatsAppIntegration->update([
@@ -369,6 +381,74 @@ if ($emailLeadLog) {
         }
 
         return null;
+    }
+
+    private function createWhatsAppAssignmentFollowup(
+        Lead $lead,
+        ?\App\Models\WhatsAppLeadIntegration $integration
+    ): void {
+        $context = [];
+        $message =
+            'Lead assigned automatically from WhatsApp / WhatCRM.';
+
+        if ($integration) {
+            $context = [
+                'phone' => $integration->phone,
+                'service' => $this->whatsAppSourceServiceText(
+                    $integration->payload
+                ),
+                'reference' => $integration->external_id,
+            ];
+
+            $message = trim(
+                (string) data_get(
+                    $integration->payload,
+                    'message',
+                    ''
+                )
+            ) ?: $message;
+        }
+
+        if (
+            !$integration
+            && \Illuminate\Support\Facades\Schema::hasTable(
+                'whatsapp_conversations'
+            )
+        ) {
+            $conversation =
+                \App\Models\WhatsAppConversation::query()
+                    ->with('contact')
+                    ->where('lead_id', $lead->id)
+                    ->orderByDesc('last_message_at')
+                    ->first();
+
+            if ($conversation) {
+                $message = trim(
+                    (string) $conversation->last_message
+                ) ?: $message;
+
+                $context = [
+                    'phone' => optional(
+                        $conversation->contact
+                    )->normalized_phone,
+                    'service' =>
+                        $conversation->last_message,
+                    'reference' =>
+                        $conversation->whatcrm_chat_id,
+                ];
+            }
+        }
+
+        app(LeadSourceFollowupService::class)
+            ->createIfMissing(
+                $lead,
+                'WhatsApp / WhatCRM',
+                $message,
+                array_filter(
+                    $context,
+                    fn($value) => filled($value)
+                )
+            );
     }
 
     public function acceptPopup(User $user): void
@@ -545,14 +625,8 @@ public function getPopupData(
         ->where('status', 1)
         ->get()
         ->filter(function ($user) {
-            $availability = SalespersonAvailability::where(
-                'user_id',
-                $user->id
-            )->first();
-
-            return $availability
-                && $availability->is_available
-                && $availability->is_opted_in;
+            return app(SalespersonPresenceService::class)
+                ->isPresentToday($user);
         })
         ->values();
 

@@ -33,12 +33,28 @@ use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use App\Services\AirpointsIntegrationService;
 use App\Services\LeadAllocationService;
+use App\Services\LeadSourceFollowupService;
 use App\Services\SalesAmountCalculator;
 use function App\Helpers\getRepresentativeIds;
 use App\Services\ActiveLeadService;
 
 class ClientController extends Controller
 {
+    private const UNASSIGNED_REPRESENTATIVE_FILTERS = [
+        'na',
+        'n/a',
+        'unassigned',
+    ];
+
+    private function isUnassignedRepresentativeFilter($value): bool
+    {
+        return in_array(
+            strtolower(trim((string) $value)),
+            self::UNASSIGNED_REPRESENTATIVE_FILTERS,
+            true
+        );
+    }
+
     /**
      * Helper method to get users in hierarchy based on user types and sales executive assignments
      */
@@ -135,6 +151,7 @@ class ClientController extends Controller
     {
         $currentUser = auth()->user();
         $representatives = getRepresentativeIds($currentUser);
+        $canFilterUnassignedLeads = $representatives === null;
 
         // Pagination settings
         $perPage = $request->input('per_page', 10);
@@ -217,7 +234,11 @@ class ClientController extends Controller
         }
 
         if ($request->filled('representative_user_id')) {
-            $query->where('representative_user_id', $request->representative_user_id);
+            if ($this->isUnassignedRepresentativeFilter($request->input('representative_user_id'))) {
+                $query->whereNull('representative_user_id');
+            } else {
+                $query->where('representative_user_id', $request->representative_user_id);
+            }
         }
 
         // Status filter (latest follow-up) - using subquery for efficiency
@@ -321,6 +342,7 @@ class ClientController extends Controller
             'products',
             'statusOptions',
             'staff',
+            'canFilterUnassignedLeads',
             'leadsWithApprovedPayments',
             'latestFollowups'
         ));
@@ -4262,8 +4284,16 @@ try {
             // If the user applied a specific staff filter, use that exact representative
             if ($request->filled('representative_user_id')) {
                 $repId = $request->input('representative_user_id');
+
+                if ($this->isUnassignedRepresentativeFilter($repId)) {
+                    if ($representatives === null) {
+                        $query->whereNull('representative_user_id');
+                    } else {
+                        $query->whereRaw('1 = 0');
+                    }
+                }
                 // Ensure the selected rep is allowed within the current user's hierarchy when applicable
-                if (is_array($representatives) && !empty($representatives)) {
+                elseif (is_array($representatives) && !empty($representatives)) {
                     if (in_array($repId, $representatives)) {
                         $query->where('representative_user_id', $repId);
                     } else {
@@ -4301,7 +4331,10 @@ try {
                 });
             }
 
-            if ($request->filled('representative_user_id')) {
+            if (
+                $request->filled('representative_user_id')
+                && !$this->isUnassignedRepresentativeFilter($request->input('representative_user_id'))
+            ) {
                 $query->where('representative_user_id', $request->representative_user_id);
             }
 
@@ -4965,6 +4998,22 @@ try {
                 }
             } catch (\Exception $e) {
                 Log::error('Failed to write lead audit trail: ' . $e->getMessage());
+            }
+
+            if (empty($oldRep) && !empty($lead->representative_user_id)) {
+                app(LeadSourceFollowupService::class)
+                    ->createIfMissing(
+                        $lead,
+                        'CRM Assignment',
+                        trim((string) ($request->requirement_description ?? ''))
+                            ?: 'Lead manually assigned from CRM.',
+                        [
+                            'phone' => $strContactNumber,
+                            'service' => $lead->product_names
+                                ? implode(', ', $lead->product_names)
+                                : null,
+                        ]
+                    );
             }
 
             // Sync requirement description to first followup

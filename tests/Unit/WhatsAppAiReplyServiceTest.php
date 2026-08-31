@@ -6,6 +6,7 @@ use App\Models\EmailLeadProductUserAssignment;
 use App\Models\Lead;
 use App\Models\Product;
 use App\Models\SalespersonAvailability;
+use App\Models\Service;
 use App\Models\User;
 use App\Models\UserType;
 use App\Models\WhatsAppAiAgentSetting;
@@ -294,6 +295,159 @@ class WhatsAppAiReplyServiceTest extends TestCase
         });
     }
 
+    public function test_ai_qualification_updates_lead_service_date_guests_and_whatsapp_note(): void
+    {
+        $productAgent = $this->createSalesUser('Charter Agent');
+        $this->makeAvailable($productAgent);
+
+        $product = Product::create([
+            'id' => (string) Str::uuid(),
+            'product' => 'Helicopter Charters',
+            'status' => 1,
+        ]);
+
+        $service = Service::create([
+            'id' => (string) Str::uuid(),
+            'service' => 'Helicopter Charter Indore to Ujjain',
+            'service_amount' => 0,
+            'product_ids' => [$product->id],
+            'status' => 1,
+        ]);
+
+        EmailLeadProductUserAssignment::create([
+            'user_id' => $productAgent->id,
+            'product_id' => $product->id,
+            'is_active' => true,
+        ]);
+
+        $setting = WhatsAppAiAgentSetting::create([
+            'enabled' => true,
+            'auto_reply_enabled' => true,
+            'provider' => 'openai',
+            'model' => 'gpt-4o-mini',
+            'prompt' => 'Reply for Accretion Aviation and detect lead details.',
+            'buffer_seconds' => 4,
+            'context_message_limit' => 20,
+        ]);
+        $setting->setApiKey('openai-key');
+        $setting->save();
+
+        Http::fake([
+            'https://api.openai.com/v1/responses' =>
+                Http::response([
+                    'output_text' => json_encode([
+                        'reply' =>
+                            'Thank you Abhishek, our team will share the exact itinerary shortly.',
+                        'product' => 'Helicopter Charters',
+                        'service' =>
+                            'Helicopter Charter Indore to Ujjain',
+                        'service_date' => '07-Sep-2026',
+                        'guests' => 2,
+                        'route' => 'Indore to Ujjain',
+                    ]),
+                ], 200),
+            'https://web.airaccretion.com/api/v1/send-message*' =>
+                Http::response([
+                    'success' => true,
+                    'metaResponse' => [
+                        'messages' => [
+                            [
+                                'id' => 'wamid.AI-QUALIFIED-OUT',
+                                'message_status' => 'accepted',
+                            ],
+                        ],
+                    ],
+                ], 200),
+        ]);
+
+        $messages = [
+            'Hi',
+            'Indore to ujjain temple in helicopter',
+            'From indore to ujjain round trip',
+            '2',
+            '07/09/26',
+            'Early morning bhasma aarti',
+        ];
+
+        $result = null;
+
+        foreach ($messages as $index => $body) {
+            Carbon::setTestNow(
+                Carbon::create(2026, 8, 31, 5, 25, 0)
+                    ->addMinutes($index)
+            );
+
+            $result = app(WhatCrmMessageIngestionService::class)
+                ->process([
+                    'message_id' =>
+                        'wamid.AI-QUALIFIED-IN-' . $index,
+                    'chat_id' => 'ai-qualified-chat',
+                    'number' => '+91 98765 43220',
+                    'customer_name' => 'Abhishek Zula',
+                    'message' => $body,
+                    'message_type' => 'text',
+                    'direction' => 'incoming',
+                    'message_at' => now()->toIso8601String(),
+                    'status' => 'delivered',
+                ]);
+        }
+
+        Carbon::setTestNow(
+            Carbon::create(2026, 8, 31, 5, 36, 0)
+        );
+
+        $summary = app(WhatsAppAiReplyService::class)
+            ->processDue();
+
+        $this->assertSame(1, $summary['processed']);
+
+        $lead = Lead::with('rideSegments')
+            ->findOrFail($result['lead_id']);
+
+        $this->assertSame([$product->id], $lead->product_ids_array);
+        $this->assertSame([$service->id], $lead->service_ids_array);
+        $this->assertSame(2, $lead->number_of_passengers);
+
+        $ride = $lead->rideSegments->first();
+
+        $this->assertNotNull($ride);
+        $this->assertSame(
+            '2026-09-07',
+            $ride->from_date->toDateString()
+        );
+        $this->assertSame('Indore', $ride->from_place);
+        $this->assertSame('Ujjain', $ride->to_place);
+
+        $this->assertStringContainsString(
+            'Customer: Abhishek Zula',
+            $lead->description
+        );
+        $this->assertStringContainsString(
+            'Product: Helicopter Charters',
+            $lead->description
+        );
+        $this->assertStringContainsString(
+            'Service: Helicopter Charter Indore to Ujjain',
+            $lead->description
+        );
+        $this->assertStringContainsString(
+            'Date: 07-Sep-2026',
+            $lead->description
+        );
+        $this->assertStringContainsString(
+            'Guests: 2',
+            $lead->description
+        );
+        $this->assertStringContainsString(
+            'Indore to ujjain temple in helicopter',
+            $lead->description
+        );
+        $this->assertStringContainsString(
+            'Early morning bhasma aarti',
+            $lead->description
+        );
+    }
+
     private function createSalesUser(string $name): User
     {
         $type = UserType::query()
@@ -371,6 +525,19 @@ class WhatsAppAiReplyServiceTest extends TestCase
             $table->timestamps();
         });
 
+        Schema::create('lead_rides', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('lead_id');
+            $table->timestamp('from_date')->nullable();
+            $table->timestamp('to_date')->nullable();
+            $table->string('from_place')->nullable();
+            $table->string('to_place')->nullable();
+            $table->uuid('service_address_id')->nullable();
+            $table->boolean('is_tba')->default(false);
+            $table->integer('total_time')->nullable();
+            $table->timestamps();
+        });
+
         Schema::create('lead_followups', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('lead_id');
@@ -386,6 +553,18 @@ class WhatsAppAiReplyServiceTest extends TestCase
             $table->string('product');
             $table->integer('status')->default(1);
             $table->json('user_ids')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('services', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('service');
+            $table->text('description')->nullable();
+            $table->integer('service_amount')->default(0);
+            $table->decimal('fees_percent', 5, 2)->default(0);
+            $table->text('terms_and_conditions')->nullable();
+            $table->json('product_ids')->nullable();
+            $table->integer('status')->default(1);
             $table->timestamps();
         });
 

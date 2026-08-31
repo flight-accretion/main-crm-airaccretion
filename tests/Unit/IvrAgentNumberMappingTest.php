@@ -6,6 +6,7 @@ use App\Models\IvrAgent;
 use App\Models\IvrCallType;
 use App\Models\Lead;
 use App\Models\LeadAllocationSetting;
+use App\Models\SalespersonAvailability;
 use App\Models\User;
 use App\Models\UserType;
 use App\Services\IvrImportService;
@@ -48,6 +49,7 @@ class IvrAgentNumberMappingTest extends TestCase
     public function test_successful_ivr_call_assigns_lead_by_b_party_number_not_agent_name(): void
     {
         $salesperson = $this->createSalesUser('Samarpit Sharma', '9109152175');
+        $this->markPresentToday($salesperson);
 
         IvrAgent::forceCreate([
             'id' => (string) Str::uuid(),
@@ -89,6 +91,55 @@ class IvrAgentNumberMappingTest extends TestCase
         ]);
         $this->assertDatabaseMissing('lead_allocation_queue', [
             'lead_id' => $lead->id,
+        ]);
+    }
+
+    public function test_successful_ivr_call_queues_when_mapped_agent_has_not_clicked_yes_today(): void
+    {
+        $salesperson = $this->createSalesUser('Pallavi Singh', '9575303162');
+
+        SalespersonAvailability::create([
+            'user_id' => $salesperson->id,
+            'state' => 'available',
+            'is_available' => true,
+            'is_opted_in' => true,
+            'last_response_at' => now()->copy()->subDay(),
+        ]);
+
+        IvrAgent::forceCreate([
+            'id' => (string) Str::uuid(),
+            'vi_agent_name' => 'Pallavi Singh',
+            'vi_agent_number' => '9575303162',
+            'mapped_user_id' => $salesperson->id,
+            'is_active' => true,
+        ]);
+
+        $callType = IvrCallType::create([
+            'id' => (string) Str::uuid(),
+            'code' => 'DEFAULT',
+            'name' => 'Default IVR',
+            'is_active' => true,
+        ]);
+
+        app(IvrImportService::class)->import($callType, [[
+            'CALLID' => '397568309',
+            'DNI' => '9575340786',
+            'CLI' => '9341526240',
+            'DTMF' => '3',
+            'B PARTY NO' => '9575303162',
+            'AGENTNAME' => 'Pallavi Singh',
+            'DIALSTATUS' => 'Success',
+            'CALLSTARTTIME' => '24/08/2026 15:45:21',
+            'CALLENDTIME' => '24/08/2026 15:46:36',
+            'DURATIONSEC' => '75',
+        ]]);
+
+        $lead = Lead::query()->firstOrFail();
+
+        $this->assertNull($lead->representative_user_id);
+        $this->assertDatabaseHas('lead_allocation_queue', [
+            'lead_id' => $lead->id,
+            'status' => 'queued',
         ]);
     }
 
@@ -149,6 +200,17 @@ class IvrAgentNumberMappingTest extends TestCase
             'user_type_id' => $userType->id,
             'contact_number' => $contactNumber,
             'status' => 1,
+        ]);
+    }
+
+    private function markPresentToday(User $user): void
+    {
+        SalespersonAvailability::create([
+            'user_id' => $user->id,
+            'state' => 'available',
+            'is_available' => true,
+            'is_opted_in' => true,
+            'last_response_at' => now(),
         ]);
     }
 
@@ -224,6 +286,17 @@ class IvrAgentNumberMappingTest extends TestCase
             'auto_allocation_enabled' => true,
             'allocation_method' => 'balanced',
         ]);
+
+        Schema::create('salesperson_availability', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('user_id')->unique();
+            $table->string('state')->default('unasked');
+            $table->boolean('is_available')->default(false);
+            $table->boolean('is_opted_in')->default(false);
+            $table->timestamp('last_popup_at')->nullable();
+            $table->timestamp('last_response_at')->nullable();
+            $table->timestamps();
+        });
 
         Schema::create('lead_allocation_queue', function (Blueprint $table) {
             $table->uuid('id')->primary();

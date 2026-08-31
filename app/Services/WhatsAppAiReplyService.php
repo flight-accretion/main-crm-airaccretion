@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Lead;
 use App\Models\LeadAllocationLog;
 use App\Models\Product;
+use App\Models\Service;
 use App\Models\User;
 use App\Models\WhatsAppAiAgentSetting;
 use App\Models\WhatsAppAiReplyBatch;
@@ -14,6 +15,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use RuntimeException;
 
 class WhatsAppAiReplyService
@@ -23,7 +25,8 @@ class WhatsAppAiReplyService
         private WhatCrmOutboundMessageService $outbound,
         private WhatsAppProductAllocationService $allocator,
         private WhatsAppLeadFollowupService $followupService,
-        private LeadProductRoutingService $productRouter
+        private LeadProductRoutingService $productRouter,
+        private LeadSourceDataHydrationService $sourceDataHydrator
     ) {
     }
 
@@ -175,8 +178,9 @@ class WhatsAppAiReplyService
 
         $assignedUser = $this->applyProductAssignment(
             $conversation,
-            $aiResult['product'],
-            $messages
+            $aiResult,
+            $messages,
+            $contextMessages
         );
 
         $outboundResult = $this->outbound->sendText([
@@ -247,12 +251,26 @@ class WhatsAppAiReplyService
 
     private function applyProductAssignment(
         WhatsAppConversation $conversation,
-        ?string $detectedProduct,
-        Collection $messages
+        array $aiResult,
+        Collection $messages,
+        Collection $contextMessages
     ): ?User {
+        $detectedProduct = $aiResult['product'] ?? null;
+        $assignmentText = $this->assignmentText(
+            $aiResult,
+            $messages,
+            $contextMessages
+        );
+
         $product =
             $this->productRouter
                 ->resolveProduct($detectedProduct);
+
+        if (!$product) {
+            $product =
+                $this->productRouter
+                    ->resolveProduct($assignmentText);
+        }
 
         $lead = $conversation->lead;
         $user = null;
@@ -263,13 +281,13 @@ class WhatsAppAiReplyService
             || $this->allocator
                 ->assignmentRoute(
                     $product,
-                    $detectedProduct
+                    $assignmentText
                 ) === 'charter'
         ) {
             $user = $this->allocator
                 ->findUserForAssignment(
                     $product,
-                    $detectedProduct
+                    $assignmentText
                 );
         }
 
@@ -287,7 +305,9 @@ class WhatsAppAiReplyService
                 $conversation,
                 $product,
                 $user,
-                $detectedProduct
+                $detectedProduct,
+                $aiResult,
+                $contextMessages
             );
 
             $lead->refresh();
@@ -316,14 +336,36 @@ class WhatsAppAiReplyService
         WhatsAppConversation $conversation,
         ?Product $product,
         ?User $user,
-        ?string $detectedProduct
+        ?string $detectedProduct,
+        array $aiResult,
+        Collection $contextMessages
     ): void {
+        $service = $this->resolveService(
+            $aiResult,
+            $product,
+            $contextMessages
+        );
+        $guestCount = $this->guestCountFromAi($aiResult);
+        $occasion = $this->cleanText(
+            $aiResult['occasion'] ?? null
+        );
+        $hydrationData = $this->hydrationData(
+            $aiResult,
+            $service
+        );
+
         DB::transaction(function () use (
             $lead,
             $conversation,
             $product,
+            $service,
             $user,
-            $detectedProduct
+            $detectedProduct,
+            $aiResult,
+            $contextMessages,
+            $guestCount,
+            $occasion,
+            $hydrationData
         ) {
             if ($product) {
                 $lead->product_ids = [
@@ -331,11 +373,54 @@ class WhatsAppAiReplyService
                 ];
             }
 
+            if (
+                $service
+                && empty($lead->service_ids_array)
+            ) {
+                $lead->service_ids = [
+                    $service->id,
+                ];
+            }
+
+            if (
+                $guestCount
+                && (
+                    empty($lead->number_of_passengers)
+                    || (int) $lead->number_of_passengers <= 1
+                )
+            ) {
+                $lead->number_of_passengers = $guestCount;
+            }
+
+            if (
+                $occasion
+                && trim((string) $lead->occasion) === ''
+            ) {
+                $lead->occasion = $occasion;
+            }
+
             if ($user) {
                 $lead->representative_user_id = $user->id;
             }
 
+            if ($this->shouldRefreshWhatsAppDescription($lead)) {
+                $lead->description =
+                    $this->leadDescription(
+                        $lead,
+                        $conversation,
+                        $aiResult,
+                        $product,
+                        $service,
+                        $contextMessages
+                    );
+            }
+
             $lead->save();
+
+            $this->sourceDataHydrator->hydrate(
+                $lead,
+                $hydrationData
+            );
 
             if ($user) {
                 $conversation->assigned_user_id = $user->id;
@@ -357,6 +442,419 @@ class WhatsAppAiReplyService
                 ]);
             }
         });
+    }
+
+    private function assignmentText(
+        array $aiResult,
+        Collection $messages,
+        Collection $contextMessages
+    ): string {
+        return collect([
+            $aiResult['product'] ?? null,
+            $aiResult['service'] ?? null,
+            $aiResult['route'] ?? null,
+            $aiResult['origin'] ?? null,
+            $aiResult['destination'] ?? null,
+            $aiResult['city'] ?? null,
+            $messages
+                ->pluck('body')
+                ->filter()
+                ->implode(' '),
+            $contextMessages
+                ->pluck('body')
+                ->filter()
+                ->implode(' '),
+        ])
+            ->filter(fn ($value) =>
+                trim((string) $value) !== ''
+            )
+            ->implode(' ');
+    }
+
+    private function resolveService(
+        array $aiResult,
+        ?Product $product,
+        Collection $contextMessages
+    ): ?Service {
+        if (!Schema::hasTable('services')) {
+            return null;
+        }
+
+        $services = Service::query()
+            ->where('status', 1)
+            ->orderBy('service')
+            ->get();
+
+        if ($services->isEmpty()) {
+            return null;
+        }
+
+        $productServices = $product
+            ? $services
+                ->filter(fn (Service $service) =>
+                    $this->serviceBelongsToProduct(
+                        $service,
+                        $product
+                    )
+                )
+                ->values()
+            : collect();
+
+        $candidateServices = $productServices->isNotEmpty()
+            ? $productServices
+            : $services;
+
+        $serviceText = $this->cleanText(
+            $aiResult['service'] ?? null
+        );
+        $contextText = $this->normalize(
+            collect([
+                $serviceText,
+                $aiResult['product'] ?? null,
+                $aiResult['route'] ?? null,
+                $aiResult['origin'] ?? null,
+                $aiResult['destination'] ?? null,
+                $aiResult['city'] ?? null,
+                $contextMessages
+                    ->pluck('body')
+                    ->filter()
+                    ->implode(' '),
+            ])
+                ->filter(fn ($value) =>
+                    trim((string) $value) !== ''
+                )
+                ->implode(' ')
+        );
+
+        if ($serviceText) {
+            $normalizedServiceText = $this->normalize($serviceText);
+            $exact = $candidateServices
+                ->first(fn (Service $service) =>
+                    $this->normalize($service->service)
+                        === $normalizedServiceText
+                );
+
+            if ($exact) {
+                return $exact;
+            }
+
+            $phrase = $candidateServices
+                ->first(function (Service $service) use (
+                    $normalizedServiceText
+                ) {
+                    $serviceName =
+                        $this->normalize($service->service);
+
+                    return $serviceName !== ''
+                        && (
+                            Str::contains(
+                                $normalizedServiceText,
+                                $serviceName
+                            )
+                            || (
+                                mb_strlen(
+                                    $normalizedServiceText
+                                ) >= 4
+                                && Str::contains(
+                                    $serviceName,
+                                    $normalizedServiceText
+                                )
+                            )
+                        );
+                });
+
+            if ($phrase) {
+                return $phrase;
+            }
+        }
+
+        $scored = $candidateServices
+            ->map(function (Service $service) use ($contextText) {
+                $serviceName = $this->normalize($service->service);
+
+                return [
+                    'service' => $service,
+                    'score' =>
+                        $this->matchScore(
+                            $serviceName,
+                            $contextText
+                        ),
+                ];
+            })
+            ->filter(fn ($item) => $item['score'] >= 2)
+            ->sortByDesc('score')
+            ->values();
+
+        if ($scored->isNotEmpty()) {
+            return $scored->first()['service'];
+        }
+
+        if (
+            !$serviceText
+            && $productServices->count() === 1
+        ) {
+            return $productServices->first();
+        }
+
+        return null;
+    }
+
+    private function serviceBelongsToProduct(
+        Service $service,
+        Product $product
+    ): bool {
+        $productIds = $service->product_ids;
+
+        if (is_string($productIds)) {
+            $productIds =
+                json_decode($productIds, true) ?: [];
+        }
+
+        return in_array(
+            (string) $product->id,
+            array_map('strval', (array) $productIds),
+            true
+        );
+    }
+
+    private function matchScore(
+        string $serviceName,
+        string $contextText
+    ): int {
+        if ($serviceName === '' || $contextText === '') {
+            return 0;
+        }
+
+        if (
+            Str::contains($contextText, $serviceName)
+            || Str::contains($serviceName, $contextText)
+        ) {
+            return 10;
+        }
+
+        $ignored = [
+            'a',
+            'an',
+            'and',
+            'by',
+            'for',
+            'from',
+            'in',
+            'of',
+            'ride',
+            'service',
+            'the',
+            'to',
+        ];
+
+        return collect(explode(' ', $serviceName))
+            ->filter(fn ($word) =>
+                mb_strlen($word) >= 3
+                && !in_array($word, $ignored, true)
+            )
+            ->unique()
+            ->filter(fn ($word) =>
+                Str::contains($contextText, $word)
+            )
+            ->count();
+    }
+
+    private function hydrationData(
+        array $aiResult,
+        ?Service $service
+    ): array {
+        return [
+            'service' =>
+                optional($service)->service
+                ?: ($aiResult['service'] ?? null),
+            'service_date' =>
+                $aiResult['service_date'] ?? null,
+            'date' =>
+                $aiResult['service_date']
+                ?? ($aiResult['date'] ?? null),
+            'guest' =>
+                $aiResult['guests'] ?? null,
+            'occasion' =>
+                $aiResult['occasion'] ?? null,
+            'route' =>
+                $aiResult['route'] ?? null,
+            'origin' =>
+                $aiResult['origin'] ?? null,
+            'destination' =>
+                $aiResult['destination'] ?? null,
+            'city' =>
+                $aiResult['city'] ?? null,
+        ];
+    }
+
+    private function guestCountFromAi(array $aiResult): ?int
+    {
+        $value = $aiResult['guests'] ?? null;
+
+        if (!is_scalar($value)) {
+            return null;
+        }
+
+        if (
+            preg_match(
+                '/\d+/',
+                (string) $value,
+                $matches
+            )
+        ) {
+            return max(1, (int) $matches[0]);
+        }
+
+        return null;
+    }
+
+    private function shouldRefreshWhatsAppDescription(
+        Lead $lead
+    ): bool {
+        $description = trim((string) $lead->description);
+
+        return $description === ''
+            || Str::startsWith(
+                $description,
+                [
+                    'Lead received automatically from WhatsApp / WhatCRM',
+                    'WhatsApp / WhatCRM lead qualification',
+                ]
+            );
+    }
+
+    private function leadDescription(
+        Lead $lead,
+        WhatsAppConversation $conversation,
+        array $aiResult,
+        ?Product $product,
+        ?Service $service,
+        Collection $contextMessages
+    ): string {
+        $contact = $conversation->contact;
+        $lines = [
+            'Lead received automatically from WhatsApp / WhatCRM message.',
+            'Customer: ' . (
+                optional($contact)->name
+                ?: optional($lead->client)->name
+                ?: '-'
+            ),
+            'Phone: ' . (
+                optional($contact)->normalized_phone
+                ?: optional($contact)->raw_phone
+                ?: optional($lead->client)->contact_number
+                ?: '-'
+            ),
+        ];
+
+        $detailLines = [
+            'Product' => optional($product)->product
+                ?: ($aiResult['product'] ?? null),
+            'Service' => optional($service)->service
+                ?: ($aiResult['service'] ?? null),
+            'Date' => $aiResult['service_date'] ?? null,
+            'Guests' => $aiResult['guests'] ?? null,
+            'Route' => $aiResult['route'] ?? null,
+            'From' => $aiResult['origin'] ?? null,
+            'To' => $aiResult['destination'] ?? null,
+            'City' => $aiResult['city'] ?? null,
+            'Occasion' => $aiResult['occasion'] ?? null,
+        ];
+
+        foreach ($detailLines as $label => $value) {
+            $value = $this->cleanText($value);
+
+            if ($value) {
+                $lines[] = $label . ': ' . $value;
+            }
+        }
+
+        $conversationLines = $contextMessages
+            ->take(-50)
+            ->map(function (WhatsAppMessage $message) {
+                $body = $this->cleanText($message->body)
+                    ?: '[' . ($message->message_type ?: 'message') . ']';
+
+                $date = $message->message_at
+                    ? $message->message_at->format('d-m-Y h:i A')
+                    : '-';
+
+                return sprintf(
+                    '[%s] %s: %s',
+                    $date,
+                    strtoupper((string) $message->direction),
+                    $body
+                );
+            })
+            ->filter()
+            ->values();
+
+        if ($conversationLines->isNotEmpty()) {
+            $lines[] = 'Conversation:';
+            $lines = array_merge(
+                $lines,
+                $conversationLines->all()
+            );
+        }
+
+        return $this->limitText(
+            implode(PHP_EOL, $lines),
+            60000
+        );
+    }
+
+    private function cleanText($value): ?string
+    {
+        if (!is_scalar($value)) {
+            return null;
+        }
+
+        $value = trim((string) $value);
+
+        if (
+            $value === ''
+            || in_array(
+                strtolower($value),
+                [
+                    'n/a',
+                    'na',
+                    'none',
+                    'null',
+                    'not provided',
+                    'not available',
+                ],
+                true
+            )
+        ) {
+            return null;
+        }
+
+        return preg_replace('/\s+/', ' ', $value) ?: null;
+    }
+
+    private function normalize($value): string
+    {
+        $value = Str::lower(trim((string) $value));
+
+        if ($value === '') {
+            return '';
+        }
+
+        $value = preg_replace('/[^a-z0-9]+/', ' ', $value)
+            ?: '';
+
+        return trim(
+            preg_replace('/\s+/', ' ', $value) ?: ''
+        );
+    }
+
+    private function limitText(string $value, int $limit): string
+    {
+        if (mb_strlen($value) <= $limit) {
+            return $value;
+        }
+
+        return mb_substr($value, 0, $limit - 3) . '...';
     }
 
     private function followupData(

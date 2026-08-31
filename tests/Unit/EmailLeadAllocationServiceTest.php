@@ -106,6 +106,74 @@ class EmailLeadAllocationServiceTest extends TestCase
         );
     }
 
+    public function test_email_retail_product_assigns_to_user_mapped_to_empty_product(): void
+    {
+        $mappedProductUser =
+            $this->createSalesUser(
+                'Mapped Product User'
+            );
+
+        $emptyProductUser =
+            $this->createSalesUser(
+                'Akshita Borakar'
+            );
+
+        $mappedProduct =
+            $this->createProduct(
+                'Private Jet'
+            );
+
+        $emptyProduct =
+            $this->createProduct(
+                'Empty'
+            );
+
+        $retailProduct =
+            $this->createProduct(
+                'Retail Tour'
+            );
+
+        EmailLeadProductUserAssignment::create([
+            'user_id' =>
+                $mappedProductUser->id,
+            'product_id' =>
+                $mappedProduct->id,
+            'is_active' =>
+                true,
+        ]);
+
+        EmailLeadProductUserAssignment::create([
+            'user_id' =>
+                $emptyProductUser->id,
+            'product_id' =>
+                $emptyProduct->id,
+            'is_active' =>
+                true,
+        ]);
+
+        $this->makeAvailable($mappedProductUser);
+        $this->makeAvailable($emptyProductUser);
+
+        $lead =
+            $this->createLeadWithEmailLog(
+                $retailProduct,
+                'Retail Tour'
+            );
+
+        $salesperson =
+            app(EmailLeadAllocationService::class)
+                ->pickSalesperson(
+                    $lead,
+                    LeadAllocationSetting::getActiveSettings()
+                );
+
+        $this->assertNotNull($salesperson);
+        $this->assertSame(
+            $emptyProductUser->id,
+            $salesperson->id
+        );
+    }
+
     public function test_email_charter_keyword_maps_to_related_crm_product_and_charter_team(): void
     {
         $charterUser =

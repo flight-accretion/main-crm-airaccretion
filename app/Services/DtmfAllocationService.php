@@ -7,7 +7,6 @@ use App\Models\IvrCallLog;
 use App\Models\IvrCallType;
 use App\Models\IvrDtmfRule;
 use App\Models\Lead;
-use App\Models\SalespersonAvailability;
 use App\Models\User;
 use App\Models\UserType;
 use Illuminate\Support\Collection;
@@ -23,6 +22,10 @@ class DtmfAllocationService
             : $this->mappedAgentByName($agentName);
 
         if (!$mapping || !$mapping->mappedUser || (int) $mapping->mappedUser->status !== 1) {
+            return null;
+        }
+
+        if (!app(SalespersonPresenceService::class)->isPresentToday($mapping->mappedUser)) {
             return null;
         }
 
@@ -135,8 +138,7 @@ class DtmfAllocationService
 
         $users = User::whereIn('id', $ids)->where('status', 1)->get();
         $users = $users->filter(function (User $user) {
-            $availability = SalespersonAvailability::where('user_id', $user->id)->first();
-            return $availability && $availability->is_available && $availability->is_opted_in;
+            return app(SalespersonPresenceService::class)->isPresentToday($user);
         })->values();
 
         if ($users->isEmpty()) {

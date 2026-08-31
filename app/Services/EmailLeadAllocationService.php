@@ -14,6 +14,12 @@ use Illuminate\Support\Facades\Log;
 
 class EmailLeadAllocationService
 {
+    private const RETAIL_FALLBACK_PRODUCT_NAMES = [
+        'empty',
+        'no requirement',
+        'incoming lead',
+    ];
+
     public function __construct(
         private LeadProductRoutingService $productRouter
     ) {
@@ -466,6 +472,62 @@ class EmailLeadAllocationService
      */
     private function pickRetailSalesperson(): ?User
     {
+        $fallbackProductIds =
+            $this->retailFallbackProductIds();
+
+        $fallbackMappedUserIds =
+            $this->mappedUserIdsForProducts(
+                $fallbackProductIds
+            );
+
+        if ($fallbackMappedUserIds->isNotEmpty()) {
+            $eligibleUsers = User::query()
+                ->with('userType')
+                ->whereIn(
+                    'id',
+                    $fallbackMappedUserIds
+                )
+                ->where('status', 1)
+                ->get()
+                ->filter(function ($user) {
+                    return $this->isEligibleToday(
+                        $user
+                    );
+                })
+                ->values();
+
+            if ($eligibleUsers->isEmpty()) {
+                Log::info(
+                    'Retail email lead has fallback products configured but no eligible fallback salesperson today.',
+                    [
+                        'fallback_product_ids' =>
+                            $fallbackProductIds
+                                ->values()
+                                ->all(),
+                        'mapped_user_ids' =>
+                            $fallbackMappedUserIds
+                                ->values()
+                                ->all(),
+                    ]
+                );
+
+                return null;
+            }
+
+            return $this->pickBalanced(
+                $eligibleUsers
+            );
+        }
+
+        Log::info(
+            'Retail email lead has no Empty/No Requirement/Incoming Lead fallback product mapping configured. Using legacy unmapped-salesperson fallback.'
+        );
+
+        return $this->pickLegacyRetailSalesperson();
+    }
+
+    private function pickLegacyRetailSalesperson(): ?User
+    {
         $mappedUserIds =
             EmailLeadProductUserAssignment::query()
                 ->where(
@@ -531,6 +593,50 @@ class EmailLeadAllocationService
         return $this->pickBalanced(
             $users
         );
+    }
+
+    private function retailFallbackProductIds(): Collection
+    {
+        return Product::query()
+            ->where('status', 1)
+            ->get([
+                'id',
+                'product',
+            ])
+            ->filter(function (Product $product) {
+                return in_array(
+                    $this->productRouter
+                        ->normalize($product->product),
+                    self::RETAIL_FALLBACK_PRODUCT_NAMES,
+                    true
+                );
+            })
+            ->pluck('id')
+            ->filter()
+            ->unique()
+            ->values();
+    }
+
+    private function mappedUserIdsForProducts(
+        Collection $productIds
+    ): Collection {
+        if ($productIds->isEmpty()) {
+            return collect();
+        }
+
+        return EmailLeadProductUserAssignment::query()
+            ->whereIn(
+                'product_id',
+                $productIds
+            )
+            ->where(
+                'is_active',
+                true
+            )
+            ->pluck('user_id')
+            ->filter()
+            ->unique()
+            ->values();
     }
 
     private function mappedUserIdsForProduct(

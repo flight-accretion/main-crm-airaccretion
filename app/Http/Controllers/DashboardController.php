@@ -16,6 +16,7 @@ use App\Services\LeadAllocationService;
 use App\Services\SalesAmountCalculator;
 use App\Models\SalesDailyUpdate;
 use Illuminate\Http\Request;
+use App\Services\SalespersonPresenceService;
 use function App\Helpers\getRepresentativeIds;
 
 class DashboardController extends Controller
@@ -651,6 +652,8 @@ class DashboardController extends Controller
         }
 
         $popupData = app(LeadAllocationService::class)->getPopupData($currentUser, now());
+        $salesPresenceRows = app(SalespersonPresenceService::class)->rowsForDashboard($currentUser);
+        $canViewAllSalesPresence = ($currentUser->userType->user_type ?? null) === UserType::SUPER_ADMIN;
 
         $dailyUpdate = null;
         $managerUpdates = collect();
@@ -672,7 +675,7 @@ class DashboardController extends Controller
                 ->get();
         }
 
-        return view('admin.pages.dashboards.sales-dashboard', compact('currentMonth', 'leads', 'todayFollowUps', 'todayFollowUpsCount', 'services', 'dnpLeads', 'nextWeekDnpLeads', 'productSummary', 'currentMonthTarget', 'targetProgress', 'assignedExecutives', 'teamTargetProgress', 'teamMemberProgress', 'assignedExecutivesAll', 'assignedExecutivesToday', 'popupData', 'dailyUpdate', 'managerUpdates', 'manager'));
+        return view('admin.pages.dashboards.sales-dashboard', compact('currentMonth', 'leads', 'todayFollowUps', 'todayFollowUpsCount', 'services', 'dnpLeads', 'nextWeekDnpLeads', 'productSummary', 'currentMonthTarget', 'targetProgress', 'assignedExecutives', 'teamTargetProgress', 'teamMemberProgress', 'assignedExecutivesAll', 'assignedExecutivesToday', 'popupData', 'salesPresenceRows', 'canViewAllSalesPresence', 'dailyUpdate', 'managerUpdates', 'manager'));
     }
 
     public function acceptPopup(Request $request)

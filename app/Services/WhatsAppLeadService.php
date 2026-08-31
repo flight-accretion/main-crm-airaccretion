@@ -19,7 +19,8 @@ class WhatsAppLeadService
         private WhatCrmAssignmentWebhookService $callback,
         private WhatCrmAssignmentCustomerMessageService $assignmentMessage,
         private LeadProductRoutingService $productRouter,
-        private LeadSourceDataHydrationService $sourceDataHydrator
+        private LeadSourceDataHydrationService $sourceDataHydrator,
+        private LeadSourceFollowupService $sourceFollowups
     ) {
     }
 
@@ -358,6 +359,21 @@ class WhatsAppLeadService
                         'assigned_at' =>
                             now(),
                     ]);
+
+                    $this->sourceFollowups
+                        ->createIfMissing(
+                            $lead,
+                            'WhatsApp / WhatCRM',
+                            trim(
+                                (string) ($data['message'] ?? '')
+                            ) ?: 'Lead assigned automatically from WhatsApp / WhatCRM.',
+                            array_filter([
+                                'phone' => $phone,
+                                'service' => $serviceText,
+                                'reference' =>
+                                    $data['external_id'] ?? null,
+                            ])
+                        );
 
 
                     return [

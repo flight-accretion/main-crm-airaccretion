@@ -254,6 +254,9 @@
                 <label for="staff" class="ti-form-label mb-1">Staff</label>
                 <select name="representative_user_id" class="js-example-basic-single w-full form-control-sm">
                     <option value="">Select Staff</option>
+                    @if ($canFilterUnassignedLeads ?? false)
+                        <option value="na" {{ in_array(strtolower(trim((string) request('representative_user_id'))), ['na', 'n/a', 'unassigned'], true) ? 'selected' : '' }}>N/A</option>
+                    @endif
                     @foreach ($staff as $user)
                         <option value="{{ $user->id }}" {{ request('representative_user_id') == $user->id ? 'selected' : '' }}>{{ $user->name }}</option>
                     @endforeach

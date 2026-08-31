@@ -123,6 +123,11 @@
 </div>
 @endif
 
+@include('admin.pages.dashboards.partials.sales-presence', [
+    'salesPresenceRows' => $salesPresenceRows ?? collect(),
+    'canViewAllSalesPresence' => $canViewAllSalesPresence ?? false,
+])
+
 <div class="grid grid-cols-12 gap-x-6">
     <div class="xxl:col-span-9 col-span-12">
         <div class="grid grid-cols-12 gap-x-6">
