@@ -1058,19 +1058,20 @@
             // Export functionality - attach to header buttons and include all filters
             function buildExportUrl(isCsv = false) {
                 const filters = {
-                    search: $('#global-search').val(),
-                    name: $('input[name="name"]').val(),
-                    email: $('input[name="email"]').val(),
-                    phone: $('input[name="phone"]').val(),
-                    representative_user_id: $('select[name="representative_user_id"]').val(),
-                    from_date: $('input[name="from_date"]').val(),
-                    to_date: $('input[name="to_date"]').val(),
-                    from_created_date: $('input[name="from_created_date"]').val(),
-                    to_created_date: $('input[name="to_created_date"]').val(),
-                    status: $('select[name="status"]').val(),
-                    service_ids: $('select[name="service_ids"]').val(),
-                    product_ids: $('select[name="product_ids"]').val()
-                };
+                search: $('#global-search').val(),
+                name: $('input[name="name"]').val(),
+                email: $('input[name="email"]').val(),
+                phone: $('input[name="phone"]').val(),
+                representative_user_id: $('select[name="representative_user_id"]').val(),
+                from_date: $('input[name="from_date"]').val(),
+                to_date: $('input[name="to_date"]').val(),
+                from_created_date: $('input[name="from_created_date"]').val(),
+                to_created_date: $('input[name="to_created_date"]').val(),
+                status: $('select[name="status"]').val(),
+                allocation_status: $('select[name="allocation_status"]').val(),
+                service_ids: $('select[name="service_ids"]').val(),
+                product_ids: $('select[name="product_ids"]').val()
+            };
 
                 const exportPath = '{{ route('admin.leads.export') }}';
                 const params = new URLSearchParams();
