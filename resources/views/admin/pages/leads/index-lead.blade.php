@@ -415,7 +415,7 @@
             <div class="box-header flex justify-between items-center">
                 <div class="box-title">Leads List</div>
                 <div class="flex gap-3 items-center">
-                    @if ($isSuperAdmin ?? false)
+                    <!-- @if ($isSuperAdmin ?? false)
 
                     <a
                         href="{{
@@ -433,7 +433,7 @@
                         {{ $queuedLeadCount ?? 0 }}
                     </a>
 
-                    @endif
+                    @endif -->
                     <!-- Show Entries Dropdown -->
                     <div class="flex items-center gap-2">
                         <label for="per-page-select" class="text-sm whitespace-nowrap">Show</label>
