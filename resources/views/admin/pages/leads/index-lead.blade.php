@@ -262,15 +262,118 @@
                     @endforeach
                 </select>
             </div>
+            
             <div class="xl:col-span-2 lg:col-span-6 md:col-span-6 col-span-12">
                 <label for="status-filter" class="ti-form-label mb-1">Status</label>
-                <select name="status" class="js-example-basic-single w-full form-control-sm" id="status-filter">
-                    <option value="" {{ (string) request('status') === '' ? 'selected' : '' }}>Select Status</option>
-                    @foreach ($statusOptions as $statusValue => $statusLabel)
-                        <option value="{{ $statusValue }}" {{ (string) request('status') === (string) $statusValue ? 'selected' : '' }}>{{ $statusLabel }}</option>
-                    @endforeach
-                </select>
+               <select
+                name="status"
+                class="js-example-basic-single w-full form-control-sm"
+                id="status-filter"
+            >
+                <option
+                    value=""
+                    {{ (string) request('status') === '' ? 'selected' : '' }}
+                >
+                    Select Status
+                </option>
+
+                <option
+                    value="na"
+                    {{
+                        in_array(
+                            strtolower(
+                                trim(
+                                    (string) request('status')
+                                )
+                            ),
+                            ['na', 'n/a'],
+                            true
+                        )
+                            ? 'selected'
+                            : ''
+                    }}
+                >
+                    N/A
+                </option>
+
+                @foreach (
+                    $statusOptions as
+                    $statusValue => $statusLabel
+                )
+                    <option
+                        value="{{ $statusValue }}"
+                        {{
+                            (string) request('status') ===
+                            (string) $statusValue
+                                ? 'selected'
+                                : ''
+                        }}
+                    >
+                        {{ $statusLabel }}
+                    </option>
+                @endforeach
+            </select>
             </div>
+@if ($isSuperAdmin ?? false)
+
+<div
+    class="xl:col-span-2 lg:col-span-6 md:col-span-6 col-span-12"
+>
+    <label
+        for="allocation-status-filter"
+        class="ti-form-label mb-1"
+    >
+        Allocation Status
+    </label>
+
+    <select
+        name="allocation_status"
+        class="js-example-basic-single w-full form-control-sm"
+        id="allocation-status-filter"
+    >
+        <option
+            value=""
+            {{
+                (string) request(
+                    'allocation_status'
+                ) === ''
+                    ? 'selected'
+                    : ''
+            }}
+        >
+            All
+        </option>
+
+        <option
+            value="queued"
+            {{
+                request(
+                    'allocation_status'
+                ) === 'queued'
+                    ? 'selected'
+                    : ''
+            }}
+        >
+            Queued
+        </option>
+
+        <option
+            value="not_queued"
+            {{
+                request(
+                    'allocation_status'
+                ) === 'not_queued'
+                    ? 'selected'
+                    : ''
+            }}
+        >
+            Not Queued
+        </option>
+    </select>
+</div>
+
+@endif
+
             <div class="xl:col-span-2 lg:col-span-6 md:col-span-6 col-span-12">
                 <label for="service-filter" class="ti-form-label mb-1">Service</label>
                 <select name="service_ids" class="js-example-basic-single w-full form-control-sm" id="service-filter">
@@ -312,6 +415,25 @@
             <div class="box-header flex justify-between items-center">
                 <div class="box-title">Leads List</div>
                 <div class="flex gap-3 items-center">
+                    @if ($isSuperAdmin ?? false)
+
+                    <a
+                        href="{{
+                            route(
+                                'admin.clients.index',
+                                ['allocation_status' => 'queued']
+                            )
+                        }}"
+                        class="ti-btn ti-btn-warning-full ti-btn-sm whitespace-nowrap"
+                        title="Show leads currently waiting in allocation queue"
+                    >
+                        <i class="ri-time-line"></i>
+
+                        Leads in Queue:
+                        {{ $queuedLeadCount ?? 0 }}
+                    </a>
+
+                    @endif
                     <!-- Show Entries Dropdown -->
                     <div class="flex items-center gap-2">
                         <label for="per-page-select" class="text-sm whitespace-nowrap">Show</label>

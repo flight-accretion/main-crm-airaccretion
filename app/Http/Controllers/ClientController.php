@@ -37,6 +37,7 @@ use App\Services\LeadSourceFollowupService;
 use App\Services\SalesAmountCalculator;
 use function App\Helpers\getRepresentativeIds;
 use App\Services\ActiveLeadService;
+use App\Models\LeadAllocationQueue;
 
 class ClientController extends Controller
 {
@@ -150,8 +151,16 @@ class ClientController extends Controller
     public function index(Request $request)
     {
         $currentUser = auth()->user();
+
+        $isSuperAdmin = (bool) (
+            $currentUser &&
+            $currentUser->isSuperAdmin()
+        );
+
         $representatives = getRepresentativeIds($currentUser);
-        $canFilterUnassignedLeads = $representatives === null;
+
+        $canFilterUnassignedLeads =
+        $representatives === null;
 
         // Pagination settings
         $perPage = $request->input('per_page', 10);
@@ -243,14 +252,152 @@ class ClientController extends Controller
 
         // Status filter (latest follow-up) - using subquery for efficiency
         // Note: Using created_at instead of MAX(id) because id is UUID type which doesn't support MAX() in PostgreSQL
-        if ($request->filled('status')) {
-            $query->whereIn('id', function ($subQuery) use ($request) {
-                $subQuery->select('lf.lead_id')
+       /*
+|--------------------------------------------------------------------------
+| Follow-up Status Filter
+|--------------------------------------------------------------------------
+|
+| Normal numeric values filter by the latest follow-up status.
+|
+| "na" / "n/a" means the lead does not yet have any follow-up,
+| which matches the N/A displayed in the Leads table.
+|
+*/
+if ($request->filled('status')) {
+
+    $statusFilter = strtolower(
+        trim(
+            (string) $request->input('status')
+        )
+    );
+
+    if (
+        in_array(
+            $statusFilter,
+            ['na', 'n/a'],
+            true
+        )
+    ) {
+
+        $query->whereNotExists(
+            function ($subQuery) {
+
+                $subQuery
+                    ->select(DB::raw(1))
                     ->from('lead_followups as lf')
-                    ->where('lf.status', $request->status)
-                    ->whereRaw('lf.created_at = (SELECT MAX(lf2.created_at) FROM lead_followups as lf2 WHERE lf2.lead_id = lf.lead_id)');
-            });
-        }
+                    ->whereColumn(
+                        'lf.lead_id',
+                        'leads.id'
+                    );
+            }
+        );
+
+    } else {
+
+        $query->whereIn(
+            'id',
+            function ($subQuery) use ($request) {
+
+                $subQuery
+                    ->select('lf.lead_id')
+                    ->from('lead_followups as lf')
+                    ->where(
+                        'lf.status',
+                        $request->status
+                    )
+                    ->whereRaw(
+                        'lf.created_at = (
+                            SELECT MAX(lf2.created_at)
+                            FROM lead_followups as lf2
+                            WHERE lf2.lead_id = lf.lead_id
+                        )'
+                    );
+            }
+        );
+    }
+}
+
+/*
+|--------------------------------------------------------------------------
+| Allocation Queue Filter - Super Admin Only
+|--------------------------------------------------------------------------
+|
+| Even if another user manually puts allocation_status in the URL,
+| this filter is ignored unless they are Super Admin.
+|
+*/
+if (
+    $isSuperAdmin &&
+    $request->filled('allocation_status')
+) {
+
+    $allocationStatus = strtolower(
+        trim(
+            (string) $request->input(
+                'allocation_status'
+            )
+        )
+    );
+
+    if ($allocationStatus === 'queued') {
+
+        /*
+         * Waiting queue:
+         *
+         * - queue row is still "queued"
+         * - lead has not yet been handed to a salesperson
+         */
+        $query
+            ->whereNull(
+                'leads.representative_user_id'
+            )
+            ->whereExists(
+                function ($subQuery) {
+
+                    $subQuery
+                        ->select(DB::raw(1))
+                        ->from(
+                            'lead_allocation_queue as laq'
+                        )
+                        ->whereColumn(
+                            'laq.lead_id',
+                            'leads.id'
+                        )
+                        ->where(
+                            'laq.status',
+                            'queued'
+                        );
+                }
+            );
+
+    } elseif (
+        $allocationStatus === 'not_queued'
+    ) {
+
+        /*
+         * Any lead which is NOT currently waiting
+         * in the active allocation queue.
+         */
+        $query->whereNotExists(
+            function ($subQuery) {
+
+                $subQuery
+                    ->select(DB::raw(1))
+                    ->from(
+                        'lead_allocation_queue as laq'
+                    )
+                    ->whereColumn(
+                        'laq.lead_id',
+                        'leads.id'
+                    )
+                    ->where(
+                        'laq.status',
+                        'queued'
+                    );
+            }
+        );
+    }
+}
 
         // Service filtering - move to DB where possible
         if ($request->filled('service_ids')) {
@@ -336,7 +483,38 @@ class ClientController extends Controller
             ->unique('lead_id')
             ->keyBy('lead_id');
 
-        return view('admin.pages.leads.index-lead', compact(
+            /*
+|--------------------------------------------------------------------------
+| Current Waiting Queue Count - Super Admin Only
+|--------------------------------------------------------------------------
+|
+| Count only genuinely waiting leads:
+| - active queue status = queued
+| - no representative assigned yet
+|
+*/
+$queuedLeadCount = 0;
+
+if ($isSuperAdmin) {
+
+    $queuedLeadCount =
+        LeadAllocationQueue::query()
+            ->where('status', 'queued')
+            ->whereHas(
+                'lead',
+                function ($leadQuery) {
+
+                    $leadQuery->whereNull(
+                        'representative_user_id'
+                    );
+                }
+            )
+            ->count();
+}
+
+       return view(
+        'admin.pages.leads.index-lead',
+        compact(
             'leads',
             'services',
             'products',
@@ -344,8 +522,11 @@ class ClientController extends Controller
             'staff',
             'canFilterUnassignedLeads',
             'leadsWithApprovedPayments',
-            'latestFollowups'
-        ));
+            'latestFollowups',
+            'isSuperAdmin',
+            'queuedLeadCount'
+        )
+    );
     }
 
     public function create()
