@@ -44,6 +44,8 @@ class WhatsAppInboxSendTest extends TestCase
 
     public function test_inbox_user_can_send_message_for_selected_conversation(): void
     {
+        $this->withoutMiddleware(\App\Http\Middleware\VerifyCsrfToken::class);
+
         $agent = $this->createUser(
             UserType::SUPER_ADMIN,
             'Super Admin Sender'

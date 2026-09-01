@@ -9,9 +9,23 @@ use Illuminate\Support\Str;
 
 class IvrFollowupService
 {
-    public function createIfNeeded(Lead $lead, IvrCallLog $callLog, bool $repeat = false): void
+    public function createIfNeeded(
+        Lead $lead,
+        IvrCallLog $callLog,
+        bool $repeat = false,
+        bool $allowUnassigned = false
+    ): void
     {
-        if (empty($lead->representative_user_id) || !empty($callLog->initial_followup_created_at)) {
+        if (!empty($callLog->initial_followup_created_at)) {
+            $this->attachRepresentativeToOpenFollowup($lead);
+
+            return;
+        }
+
+        if (
+            empty($lead->representative_user_id)
+            && !$allowUnassigned
+        ) {
             return;
         }
 
@@ -22,12 +36,36 @@ class IvrFollowupService
             'lead_id' => $lead->id,
             'next_followup_date' => $nextFollowup,
             'followup_note' => $this->buildNote($callLog, $repeat),
-            'followed_by' => $lead->representative_user_id,
+            'followed_by' => $lead->representative_user_id ?: null,
             'status' => 1,
         ]);
 
         $callLog->initial_followup_created_at = now();
         $callLog->save();
+    }
+
+    private function attachRepresentativeToOpenFollowup(
+        Lead $lead
+    ): void {
+        if (empty($lead->representative_user_id)) {
+            return;
+        }
+
+        $followup = $lead
+            ->leadFollowups()
+            ->whereNull('followed_by')
+            ->whereNotNull('next_followup_date')
+            ->whereNotIn('status', [2, 5])
+            ->orderByDesc('created_at')
+            ->first();
+
+        if (!$followup) {
+            return;
+        }
+
+        $followup->followed_by =
+            $lead->representative_user_id;
+        $followup->save();
     }
 
 public function isSuccessfulStatus(

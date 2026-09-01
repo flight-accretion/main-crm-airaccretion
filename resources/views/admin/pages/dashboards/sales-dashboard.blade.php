@@ -94,7 +94,7 @@
 </script>
 @endif
 
-@if(Auth::user()->userType && in_array(Auth::user()->userType->user_type, [\App\Models\UserType::SALES_MANAGER, \App\Models\UserType::SENIOR_SALES_MANAGER]))
+<!-- @if(Auth::user()->userType && in_array(Auth::user()->userType->user_type, [\App\Models\UserType::SALES_MANAGER, \App\Models\UserType::SENIOR_SALES_MANAGER]))
 <div class="mb-6 rounded-lg border border-defaultborder bg-white p-4 shadow-sm">
     <div class="mb-3 flex items-center justify-between">
         <div>
@@ -121,7 +121,7 @@
         </div>
     @endif
 </div>
-@endif
+@endif -->
 
 @include('admin.pages.dashboards.partials.sales-presence', [
     'salesPresenceRows' => $salesPresenceRows ?? collect(),

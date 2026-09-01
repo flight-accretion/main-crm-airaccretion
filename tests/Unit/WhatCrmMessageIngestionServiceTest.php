@@ -211,6 +211,14 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
     public function test_incoming_message_without_active_lead_creates_one_assigned_lead_and_initial_followup(): void
     {
         $salesperson = $this->createSalesUser('Available Salesperson');
+        $product = $this->createProduct('Yacht in Goa');
+
+        EmailLeadProductUserAssignment::create([
+            'user_id' => $salesperson->id,
+            'product_id' => $product->id,
+            'is_active' => true,
+        ]);
+
         $this->makeAvailable($salesperson);
 
         $result = app(WhatCrmMessageIngestionService::class)

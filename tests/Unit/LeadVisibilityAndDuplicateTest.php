@@ -219,6 +219,8 @@ class LeadVisibilityAndDuplicateTest extends TestCase
 
     public function test_manual_assignment_creates_today_followup_when_lead_has_no_followup(): void
     {
+        $this->withoutMiddleware(\App\Http\Middleware\VerifyCsrfToken::class);
+
         Carbon::setTestNow(Carbon::create(2026, 8, 31, 12, 0, 0));
 
         $superAdmin = $this->createUser(UserType::SUPER_ADMIN, 'Super Admin');

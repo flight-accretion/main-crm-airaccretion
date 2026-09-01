@@ -11,27 +11,26 @@ class EmailLeadFollowupService
 {
     public function createIfNeeded(
         Lead $lead,
-        EmailLeadLog $emailLog
+        EmailLeadLog $emailLog,
+        bool $allowUnassigned = false
     ): void {
         if (
             !empty(
                 $emailLog->followup_created_at
             )
         ) {
+            $this->attachRepresentativeToOpenFollowup(
+                $lead
+            );
+
             return;
         }
 
-        /*
-         * Followed_by needs an actual
-         * CRM representative.
-         *
-         * If lead is not assigned yet,
-         * scheduler will create it after allocation.
-         */
         if (
             empty(
                 $lead->representative_user_id
             )
+            && !$allowUnassigned
         ) {
             return;
         }
@@ -55,7 +54,7 @@ class EmailLeadFollowupService
                 ),
 
             'followed_by' =>
-                $lead->representative_user_id,
+                $lead->representative_user_id ?: null,
 
             /*
              * Active
@@ -67,6 +66,30 @@ class EmailLeadFollowupService
             now();
 
         $emailLog->save();
+    }
+
+    private function attachRepresentativeToOpenFollowup(
+        Lead $lead
+    ): void {
+        if (empty($lead->representative_user_id)) {
+            return;
+        }
+
+        $followup = $lead
+            ->leadFollowups()
+            ->whereNull('followed_by')
+            ->whereNotNull('next_followup_date')
+            ->whereNotIn('status', [2, 5])
+            ->orderByDesc('created_at')
+            ->first();
+
+        if (!$followup) {
+            return;
+        }
+
+        $followup->followed_by =
+            $lead->representative_user_id;
+        $followup->save();
     }
 
     private function buildNote(

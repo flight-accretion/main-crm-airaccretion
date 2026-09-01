@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use App\Models\Client;
 use App\Models\EmailLeadLog;
 use App\Models\EmailLeadProductUserAssignment;
+use App\Models\IvrCallLog;
 use App\Models\Lead;
 use App\Models\LeadAllocationSetting;
 use App\Models\Product;
@@ -13,6 +14,7 @@ use App\Models\User;
 use App\Models\UserType;
 use App\Services\EmailLeadAllocationService;
 use App\Services\EmailLeadService;
+use App\Services\IvrLeadService;
 use App\Services\LeadAllocationService;
 use App\Services\WhatCrmMessageIngestionService;
 use Carbon\Carbon;
@@ -85,7 +87,8 @@ class PhaseOneLeadSourceFlowTest extends TestCase
         );
 
         $this->makeAvailable($salesperson);
-        $this->createProduct('Yacht in Goa');
+        $product = $this->createProduct('Yacht in Goa');
+        $this->assignProductToUser($product, $salesperson);
 
         $result = app(EmailLeadService::class)->process([
             'message_id' => 'email-phase-one-1',
@@ -149,6 +152,8 @@ class PhaseOneLeadSourceFlowTest extends TestCase
 
         $this->makeAvailable($salesperson);
         $this->createProduct('Yacht in Goa');
+        $emptyProduct = $this->createProduct('Empty');
+        $this->assignProductToUser($emptyProduct, $salesperson);
 
         $result = app(EmailLeadService::class)->process([
             'message_id' => 'email-phase-one-queue',
@@ -170,6 +175,14 @@ class PhaseOneLeadSourceFlowTest extends TestCase
 
         $this->assertSame('created_queued', $result['status']);
         $this->assertNull($lead->representative_user_id);
+        $this->assertDatabaseHas(
+            'lead_followups',
+            [
+                'lead_id' => $lead->id,
+                'followed_by' => null,
+                'status' => 1,
+            ]
+        );
         $this->assertDatabaseHas(
             'lead_allocation_queue',
             [
@@ -210,7 +223,8 @@ class PhaseOneLeadSourceFlowTest extends TestCase
         );
 
         $this->makeAvailable($salesperson);
-        $this->createProduct('Yacht in Goa');
+        $product = $this->createProduct('Yacht in Goa');
+        $this->assignProductToUser($product, $salesperson);
 
         $result = app(WhatCrmMessageIngestionService::class)
             ->process([
@@ -235,6 +249,91 @@ class PhaseOneLeadSourceFlowTest extends TestCase
         $this->assertSame('Goa', $ride->from_place);
         $this->assertSame(
             '2026-09-20 00:00:00',
+            Carbon::parse($ride->from_date)->format('Y-m-d H:i:s')
+        );
+    }
+
+    public function test_whatcrm_message_without_identified_product_keeps_crm_fields_empty_and_defaults_ride_data(): void
+    {
+        $emptyProductUser = $this->createSalesUser(
+            'Empty Product User'
+        );
+
+        $emptyProduct = $this->createProduct('Empty');
+        $mappedRetailProduct = $this->createProduct('Yacht in Goa');
+
+        $this->assignProductToUser($emptyProduct, $emptyProductUser);
+        $this->assignProductToUser($mappedRetailProduct, $emptyProductUser);
+        $this->makeAvailable($emptyProductUser);
+
+        $result = app(WhatCrmMessageIngestionService::class)
+            ->process([
+                'message_id' => 'wamid.PHASE1-UNKNOWN',
+                'chat_id' => 'phase1-chat-unknown',
+                'number' => '919876543213',
+                'name' => 'Unknown WhatsApp Customer',
+                'message' => 'Hi',
+                'direction' => 'incoming',
+                'message_at' => now()->toIso8601String(),
+            ]);
+
+        $lead = Lead::findOrFail($result['lead_id']);
+        $ride = DB::table('lead_rides')
+            ->where('lead_id', $lead->id)
+            ->first();
+
+        $this->assertSame([], $lead->product_ids_array);
+        $this->assertSame([], $lead->service_ids_array);
+        $this->assertSame($emptyProductUser->id, $lead->representative_user_id);
+        $this->assertNotNull($ride);
+        $this->assertSame('NA', $ride->from_place);
+        $this->assertSame('NA', $ride->to_place);
+        $this->assertSame(
+            '2026-08-24 11:00:00',
+            Carbon::parse($ride->from_date)->format('Y-m-d H:i:s')
+        );
+    }
+
+    public function test_ivr_source_lead_after_hours_defaults_active_status_and_ride_data(): void
+    {
+        Carbon::setTestNow(
+            Carbon::create(2026, 8, 24, 19, 21, 0)
+        );
+
+        $callLog = IvrCallLog::create([
+            'id' => (string) Str::uuid(),
+            'provider_call_id' => 'ivr-phase-one-queued',
+            'cli' => '9876543214',
+            'normalized_phone' => '9876543214',
+            'raw_dtmf' => '3',
+            'dial_status' => 'timeout',
+            'call_start_at' => now(),
+            'processing_status' => 'received',
+        ]);
+
+        $result = app(IvrLeadService::class)
+            ->processCallLog($callLog);
+
+        $lead = Lead::findOrFail($result['lead_id']);
+        $ride = DB::table('lead_rides')
+            ->where('lead_id', $lead->id)
+            ->first();
+
+        $this->assertSame('created_queued', $result['status']);
+        $this->assertNull($lead->representative_user_id);
+        $this->assertDatabaseHas(
+            'lead_followups',
+            [
+                'lead_id' => $lead->id,
+                'followed_by' => null,
+                'status' => 1,
+            ]
+        );
+        $this->assertNotNull($ride);
+        $this->assertSame('NA', $ride->from_place);
+        $this->assertSame('NA', $ride->to_place);
+        $this->assertSame(
+            '2026-08-24 19:21:00',
             Carbon::parse($ride->from_date)->format('Y-m-d H:i:s')
         );
     }
@@ -341,6 +440,17 @@ class PhaseOneLeadSourceFlowTest extends TestCase
             'id' => (string) Str::uuid(),
             'product' => $name,
             'status' => 1,
+        ]);
+    }
+
+    private function assignProductToUser(
+        Product $product,
+        User $user
+    ): void {
+        EmailLeadProductUserAssignment::create([
+            'user_id' => $user->id,
+            'product_id' => $product->id,
+            'is_active' => true,
         ]);
     }
 
@@ -557,10 +667,26 @@ class PhaseOneLeadSourceFlowTest extends TestCase
 
         Schema::create('ivr_call_logs', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->uuid('lead_id')->nullable();
+            $table->string('provider_call_id')->nullable();
+            $table->uuid('ivr_call_type_id')->nullable();
+            $table->string('call_type_code')->nullable();
+            $table->string('dni')->nullable();
+            $table->string('cli')->nullable();
+            $table->string('normalized_phone')->nullable();
+            $table->string('raw_dtmf')->nullable();
+            $table->string('agent_name')->nullable();
+            $table->string('agent_number')->nullable();
+            $table->string('dial_status')->nullable();
             $table->timestamp('call_start_at')->nullable();
+            $table->timestamp('call_end_at')->nullable();
+            $table->integer('duration_sec')->nullable();
+            $table->integer('og_duration_sec')->nullable();
+            $table->text('voice_url')->nullable();
+            $table->uuid('lead_id')->nullable();
             $table->timestamp('initial_followup_created_at')->nullable();
             $table->string('processing_status')->nullable();
+            $table->text('processing_message')->nullable();
+            $table->json('raw_payload')->nullable();
             $table->timestamps();
         });
 

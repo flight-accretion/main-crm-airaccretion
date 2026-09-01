@@ -52,7 +52,7 @@ class EmailLeadAllocationServiceTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_email_retail_product_assigns_to_empty_product_salesperson(): void
+    public function test_email_retail_product_without_empty_mapping_stays_queued(): void
     {
         $mappedUser =
             $this->createSalesUser(
@@ -99,11 +99,7 @@ class EmailLeadAllocationServiceTest extends TestCase
                     LeadAllocationSetting::getActiveSettings()
                 );
 
-        $this->assertNotNull($salesperson);
-        $this->assertSame(
-            $emptyProductUser->id,
-            $salesperson->id
-        );
+        $this->assertNull($salesperson);
     }
 
     public function test_email_retail_product_assigns_to_user_mapped_to_empty_product(): void
@@ -229,7 +225,7 @@ class EmailLeadAllocationServiceTest extends TestCase
         );
     }
 
-    public function test_email_charter_keyword_without_mapping_falls_back_to_empty_product_salesperson(): void
+    public function test_email_charter_keyword_without_mapping_stays_queued_for_charter_team(): void
     {
         $emptyProductUser =
             $this->createSalesUser(
@@ -255,11 +251,7 @@ class EmailLeadAllocationServiceTest extends TestCase
                     LeadAllocationSetting::getActiveSettings()
                 );
 
-        $this->assertNotNull($salesperson);
-        $this->assertSame(
-            $emptyProductUser->id,
-            $salesperson->id
-        );
+        $this->assertNull($salesperson);
     }
 
     private function createSalesUser(

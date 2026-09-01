@@ -8,7 +8,6 @@ use App\Models\LeadAllocationSetting;
 use App\Models\Product;
 use App\Models\SalespersonAvailability;
 use App\Models\User;
-use App\Models\UserType;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -134,9 +133,6 @@ class WhatsAppProductAllocationService
 
         if (
             $isCharter
-            && $this->hasConfiguredCharterMapping(
-                $product ? $product->id : null
-            )
         ) {
             return 'charter';
         }
@@ -278,73 +274,10 @@ class WhatsAppProductAllocationService
         }
 
         Log::info(
-            'WhatsApp retail lead has no Empty/No Requirement/Incoming Lead fallback product mapping configured. Using legacy unmapped-salesperson fallback.'
+            'WhatsApp retail lead has no Empty/No Requirement/Incoming Lead fallback product mapping configured. Keeping lead queued.'
         );
 
-        return $this->findLegacyRetailUser();
-    }
-
-    private function findLegacyRetailUser(): ?User
-    {
-        $mappedUserIds =
-            EmailLeadProductUserAssignment::query()
-                ->where('is_active', true)
-                ->pluck('user_id')
-                ->filter()
-                ->unique()
-                ->values();
-
-        $users = User::query()
-            ->where('status', 1)
-            ->whereHas('userType', function ($query) {
-                $query->whereIn(
-                    'user_type',
-                    UserType::SALES_ROLES
-                );
-            })
-            ->when(
-                $mappedUserIds->isNotEmpty(),
-                function ($query) use ($mappedUserIds) {
-                    $query->whereNotIn(
-                        'id',
-                        $mappedUserIds
-                    );
-                }
-            )
-            ->get();
-
-        $availableUserIds =
-            SalespersonAvailability::query()
-                ->whereIn(
-                    'user_id',
-                    $users->pluck('id')
-                )
-                ->where('is_available', true)
-                ->where('is_opted_in', true)
-                ->whereDate(
-                    'last_response_at',
-                    Carbon::today()
-                )
-                ->pluck('user_id');
-
-        $users =
-            $users
-                ->whereIn(
-                    'id',
-                    $availableUserIds
-                )
-                ->values();
-
-        if ($users->isEmpty()) {
-
-            Log::info(
-                'WhatsApp retail lead has no eligible empty-product salesperson today.'
-            );
-
-            return null;
-        }
-
-        return $this->balancedUser($users);
+        return null;
     }
 
     private function retailFallbackProductIds(): Collection

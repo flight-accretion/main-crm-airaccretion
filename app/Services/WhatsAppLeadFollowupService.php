@@ -15,8 +15,7 @@ class WhatsAppLeadFollowupService
         array $data
     ): ?LeadFollowup {
         if (
-            empty($lead->representative_user_id)
-            || !empty($message->lead_followup_id)
+            !empty($message->lead_followup_id)
         ) {
             return null;
         }
@@ -26,7 +25,7 @@ class WhatsAppLeadFollowupService
             'lead_id' => $lead->id,
             'next_followup_date' => now(),
             'followup_note' => $this->note($data),
-            'followed_by' => $lead->representative_user_id,
+            'followed_by' => $lead->representative_user_id ?: null,
             'status' => 1,
         ]);
 

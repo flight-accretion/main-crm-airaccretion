@@ -29,25 +29,57 @@ class LeadSourceDataHydrationService
             return;
         }
 
-        if ($lead->rideSegments()->exists()) {
-            return;
-        }
-
-        $serviceDate = $this->parseServiceDate($data);
-
-        if (!$serviceDate) {
-            return;
-        }
-
+        $parsedServiceDate = $this->parseServiceDate($data);
         $places = $this->places($data);
+
+        $existingRide =
+            $lead
+                ->rideSegments()
+                ->orderBy('created_at')
+                ->first();
+
+        if ($existingRide) {
+            if (
+                !$parsedServiceDate
+                && !$places['from']
+                && !$places['to']
+            ) {
+                return;
+            }
+
+            if ($parsedServiceDate) {
+                $existingRide->from_date =
+                    $parsedServiceDate;
+                $existingRide->to_date =
+                    $parsedServiceDate->copy();
+            }
+
+            if ($places['from']) {
+                $existingRide->from_place =
+                    $places['from'];
+            }
+
+            if ($places['to']) {
+                $existingRide->to_place =
+                    $places['to'];
+            }
+
+            $existingRide->save();
+
+            return;
+        }
+
+        $serviceDate =
+            $parsedServiceDate
+            ?: Carbon::now('Asia/Kolkata');
 
         LeadRide::create([
             'id' => (string) Str::uuid(),
             'lead_id' => $lead->id,
             'from_date' => $serviceDate,
             'to_date' => $serviceDate->copy(),
-            'from_place' => $places['from'],
-            'to_place' => $places['to'],
+            'from_place' => $places['from'] ?: 'NA',
+            'to_place' => $places['to'] ?: 'NA',
             'service_address_id' => null,
             'is_tba' => false,
             'total_time' => null,

@@ -18,7 +18,8 @@ class IvrLeadService
         private DtmfAllocationService $allocationService,
         private LeadAllocationService $leadAllocationService,
         private IvrFollowupService $followupService,
-        private ActiveLeadService $activeLeadService
+        private ActiveLeadService $activeLeadService,
+        private LeadSourceDataHydrationService $sourceDataHydrator
     ) {
     }
 
@@ -108,6 +109,11 @@ class IvrLeadService
                 'occasion' => null,
             ]);
 
+            $this->sourceDataHydrator->hydrate(
+                $lead,
+                []
+            );
+
             $callLog->lead_id = $lead->id;
             $callLog->processing_status = $representative ? 'lead_created_assigned' : 'lead_created_queued';
             $callLog->processing_message = $representative
@@ -126,6 +132,13 @@ class IvrLeadService
                 $this->followupService->createIfNeeded($lead, $callLog, false);
             } else {
                 $this->leadAllocationService->queueLead($lead, 'ivr_new_lead');
+
+                $this->followupService->createIfNeeded(
+                    $lead,
+                    $callLog,
+                    false,
+                    true
+                );
             }
 
             return ['status' => $representative ? 'created_assigned' : 'created_queued', 'lead_id' => $lead->id];

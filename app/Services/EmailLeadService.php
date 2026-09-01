@@ -171,6 +171,13 @@ class EmailLeadService
                                 $existingLead,
                                 'email_repeat_lead'
                             );
+
+                        $this->followupService
+                            ->createIfNeeded(
+                                $existingLead,
+                                $emailLog,
+                                true
+                            );
                     }
 
                     return [
@@ -444,6 +451,13 @@ class EmailLeadService
                         $isCharterProduct
                             ? 'email_charter_lead'
                             : 'email_new_lead'
+                    );
+
+                $this->followupService
+                    ->createIfNeeded(
+                        $lead,
+                        $emailLog,
+                        true
                     );
 
                 return [

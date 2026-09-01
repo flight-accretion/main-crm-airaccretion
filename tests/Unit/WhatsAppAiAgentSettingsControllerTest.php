@@ -35,6 +35,8 @@ class WhatsAppAiAgentSettingsControllerTest extends TestCase
 
     public function test_super_admin_can_update_ai_agent_prompt_and_api_key(): void
     {
+        $this->withoutMiddleware(\App\Http\Middleware\VerifyCsrfToken::class);
+
         $admin = $this->createUser(
             UserType::SUPER_ADMIN,
             'AI Admin'

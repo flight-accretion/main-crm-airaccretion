@@ -56,7 +56,7 @@ class WhatsAppLeadServiceTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_unmapped_whatcrm_product_assigns_to_empty_product_salesperson(): void
+    public function test_unmapped_whatcrm_product_without_empty_mapping_stays_queued(): void
     {
         $mappedUser =
             $this->createSalesUser(
@@ -109,32 +109,32 @@ class WhatsAppLeadServiceTest extends TestCase
                 ->firstOrFail();
 
         $this->assertSame(
-            'assigned',
+            'queued',
             $response['status']
         );
-        $this->assertSame(
-            $emptyProductUser->id,
+        $this->assertNull(
             $response['agent_user_id']
         );
-        $this->assertSame(
-            $emptyProductUser->id,
+        $this->assertNull(
             $lead->representative_user_id
         );
         $this->assertSame(
             [$retailProduct->id],
             $lead->product_ids_array
         );
-        $this->assertDatabaseMissing(
+        $this->assertDatabaseHas(
             'lead_allocation_queue',
             [
                 'lead_id' => $lead->id,
+                'status' => 'queued',
+                'reason' => 'whatsapp_retail_waiting',
             ]
         );
         $this->assertDatabaseHas(
             'lead_followups',
             [
                 'lead_id' => $lead->id,
-                'followed_by' => $emptyProductUser->id,
+                'followed_by' => null,
                 'status' => 1,
             ]
         );
@@ -152,11 +152,25 @@ class WhatsAppLeadServiceTest extends TestCase
                 'Empty'
             );
 
+        $mappedRetailProduct =
+            $this->createProduct(
+                'Yacht in Goa'
+            );
+
         EmailLeadProductUserAssignment::create([
             'user_id' =>
                 $emptyProductUser->id,
             'product_id' =>
                 $emptyProduct->id,
+            'is_active' =>
+                true,
+        ]);
+
+        EmailLeadProductUserAssignment::create([
+            'user_id' =>
+                $emptyProductUser->id,
+            'product_id' =>
+                $mappedRetailProduct->id,
             'is_active' =>
                 true,
         ]);
@@ -193,10 +207,26 @@ class WhatsAppLeadServiceTest extends TestCase
             $emptyProductUser->id,
             $lead->representative_user_id
         );
+        $this->assertSame(
+            [],
+            $lead->product_ids_array
+        );
+        $this->assertSame(
+            [],
+            $lead->service_ids_array
+        );
         $this->assertDatabaseMissing(
             'lead_allocation_queue',
             [
                 'lead_id' => $lead->id,
+            ]
+        );
+        $this->assertDatabaseHas(
+            'lead_rides',
+            [
+                'lead_id' => $lead->id,
+                'from_place' => 'NA',
+                'to_place' => 'NA',
             ]
         );
     }
@@ -210,6 +240,20 @@ class WhatsAppLeadServiceTest extends TestCase
             );
 
         $this->makeAvailable($salesperson);
+
+        $retailProduct =
+            $this->createProduct(
+                'Retail Tour'
+            );
+
+        EmailLeadProductUserAssignment::create([
+            'user_id' =>
+                $salesperson->id,
+            'product_id' =>
+                $retailProduct->id,
+            'is_active' =>
+                true,
+        ]);
 
         config()->set(
             'whatcrm.send_message_url',
@@ -364,7 +408,7 @@ class WhatsAppLeadServiceTest extends TestCase
         );
     }
 
-    public function test_unmapped_whatcrm_charter_keyword_falls_back_to_empty_product_salesperson(): void
+    public function test_unmapped_whatcrm_charter_keyword_stays_queued_for_charter_team(): void
     {
         $emptyProductUser =
             $this->createSalesUser(
@@ -397,20 +441,26 @@ class WhatsAppLeadServiceTest extends TestCase
                 ->firstOrFail();
 
         $this->assertSame(
-            'assigned',
+            'queued',
             $response['status']
         );
         $this->assertSame(
             $charterProduct->id,
             $response['product_id']
         );
-        $this->assertSame(
-            $emptyProductUser->id,
+        $this->assertNull(
             $response['agent_user_id']
         );
-        $this->assertSame(
-            $emptyProductUser->id,
+        $this->assertNull(
             $lead->representative_user_id
+        );
+        $this->assertDatabaseHas(
+            'lead_allocation_queue',
+            [
+                'lead_id' => $lead->id,
+                'status' => 'queued',
+                'reason' => 'whatsapp_charter_waiting',
+            ]
         );
     }
 
@@ -577,9 +627,23 @@ class WhatsAppLeadServiceTest extends TestCase
                 '9988776655'
             );
 
+        $emptyProduct =
+            $this->createProduct(
+                'Empty'
+            );
+
         $this->createProduct(
             'Retail Tour'
         );
+
+        EmailLeadProductUserAssignment::create([
+            'user_id' =>
+                $emptyProductUser->id,
+            'product_id' =>
+                $emptyProduct->id,
+            'is_active' =>
+                true,
+        ]);
 
         $response =
             app(WhatsAppLeadService::class)
@@ -669,9 +733,23 @@ class WhatsAppLeadServiceTest extends TestCase
                 'Later Empty Product User'
             );
 
+        $emptyProduct =
+            $this->createProduct(
+                'Empty'
+            );
+
         $this->createProduct(
             'Retail Tour'
         );
+
+        EmailLeadProductUserAssignment::create([
+            'user_id' =>
+                $emptyProductUser->id,
+            'product_id' =>
+                $emptyProduct->id,
+            'is_active' =>
+                true,
+        ]);
 
         $response =
             app(WhatsAppLeadService::class)
@@ -687,9 +765,13 @@ class WhatsAppLeadServiceTest extends TestCase
             'queued',
             $response['status']
         );
-        $this->assertDatabaseCount(
+        $this->assertDatabaseHas(
             'lead_followups',
-            0
+            [
+                'lead_id' => $response['lead_id'],
+                'followed_by' => null,
+                'status' => 1,
+            ]
         );
 
         $queue =
@@ -970,6 +1052,19 @@ class WhatsAppLeadServiceTest extends TestCase
             $table->text('followup_note')->nullable();
             $table->integer('status')->default(0);
             $table->uuid('followed_by')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('lead_rides', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('lead_id');
+            $table->timestamp('from_date')->nullable();
+            $table->timestamp('to_date')->nullable();
+            $table->string('from_place')->nullable();
+            $table->string('to_place')->nullable();
+            $table->uuid('service_address_id')->nullable();
+            $table->boolean('is_tba')->default(false);
+            $table->string('total_time')->nullable();
             $table->timestamps();
         });
 

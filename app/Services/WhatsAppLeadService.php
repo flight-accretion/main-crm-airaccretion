@@ -425,6 +425,22 @@ class WhatsAppLeadService
                         )
                     );
 
+                $this->sourceFollowups
+                    ->createIfMissing(
+                        $lead,
+                        'WhatsApp / WhatCRM',
+                        trim(
+                            (string) ($data['message'] ?? '')
+                        ) ?: 'Lead queued automatically from WhatsApp / WhatCRM.',
+                        array_filter([
+                            'phone' => $phone,
+                            'service' => $serviceText,
+                            'reference' =>
+                                $data['external_id'] ?? null,
+                        ]),
+                        true
+                    );
+
 
                 $integration->update([
                         'status' =>

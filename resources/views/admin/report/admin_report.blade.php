@@ -28,6 +28,7 @@
     </li>
   </ol>
     @if($canRequestLeads)
+    <div>
     <button
         type="submit"
         form="bulk-lead-request-form"
@@ -35,9 +36,11 @@
         onclick="return confirm(
             'Request all selected leads?'
         );"
+        style="width:100%;"
     >
         Request Selected Leads
     </button>
+    </div>
 @endif
 </div>
 <!-- Page Header Close -->

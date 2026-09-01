@@ -11,7 +11,7 @@
             <div class="box-header flex items-center justify-between">
                 <div>
                     <h6 class="text-[1rem] font-semibold text-gray-800">
-                        {{ $canViewAllSalesPresence ? "Today's Sales Presence" : 'Your Availability Today' }}
+                        {{ $canViewAllSalesPresence ? "Today's present Executive" : 'Your Availability Today' }}
                     </h6>
                     <p class="mb-0 text-sm text-gray-500">
                         {{ $canViewAllSalesPresence ? 'Live lead assignment uses only people who clicked Yes today.' : 'Your lead assignment status for today.' }}

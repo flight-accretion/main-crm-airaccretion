@@ -121,9 +121,12 @@ class LeadTransferService
         LeadTransfer $transfer,
         User $user
     ): void {
+        $staleOwnershipMessage = null;
+
         DB::transaction(function () use (
             $transfer,
-            $user
+            $user,
+            &$staleOwnershipMessage
         ) {
             $transfer = LeadTransfer::where(
                 'id',
@@ -183,10 +186,10 @@ class LeadTransferService
                         'Transfer automatically cancelled because lead ownership changed before approval.',
                 ]);
 
-                throw ValidationException::withMessages([
-                    'transfer' =>
-                        'Lead ownership has already changed. This request is no longer valid.',
-                ]);
+                $staleOwnershipMessage =
+                    'Lead ownership has already changed. This request is no longer valid.';
+
+                return;
             }
 
             $oldRepresentative =
@@ -234,6 +237,13 @@ class LeadTransferService
                     now(),
             ]);
         });
+
+        if ($staleOwnershipMessage) {
+            throw ValidationException::withMessages([
+                'transfer' =>
+                    $staleOwnershipMessage,
+            ]);
+        }
     }
 
     /**
@@ -244,10 +254,13 @@ class LeadTransferService
         User $user,
         ?string $note = null
     ): void {
+        $staleOwnershipMessage = null;
+
         DB::transaction(function () use (
             $transfer,
             $user,
-            $note
+            $note,
+            &$staleOwnershipMessage
         ) {
             $transfer = LeadTransfer::where(
                 'id',
@@ -307,10 +320,10 @@ class LeadTransferService
                         'Transfer automatically cancelled because lead ownership changed before rejection.',
                 ]);
 
-                throw ValidationException::withMessages([
-                    'transfer' =>
-                        'Lead ownership has already changed. This request is no longer valid.',
-                ]);
+                $staleOwnershipMessage =
+                    'Lead ownership has already changed. This request is no longer valid.';
+
+                return;
             }
 
             $transfer->update([
@@ -327,6 +340,13 @@ class LeadTransferService
                     $note,
             ]);
         });
+
+        if ($staleOwnershipMessage) {
+            throw ValidationException::withMessages([
+                'transfer' =>
+                    $staleOwnershipMessage,
+            ]);
+        }
     }
 
     private function isSalesUser(User $user): bool

@@ -30,7 +30,7 @@ class SalesDashboardPresenceViewTest extends TestCase
         ])->render();
 
         $this->assertStringContainsString('Today', $html);
-        $this->assertStringContainsString('Sales Presence', $html);
+        $this->assertStringContainsString('Present Today', $html);
         $this->assertStringContainsString('Akshita Borkar', $html);
         $this->assertStringContainsString('Pallavi Singh', $html);
         $this->assertStringContainsString('Yes', $html);

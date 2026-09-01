@@ -12,17 +12,19 @@ class LeadSourceFollowupService
         Lead $lead,
         string $source,
         string $message,
-        array $context = []
+        array $context = [],
+        bool $allowUnassigned = false
     ): ?LeadFollowup {
         if (
             empty(
                 $lead->representative_user_id
             )
+            && !$allowUnassigned
         ) {
             return null;
         }
 
-        $hasOpenFollowup =
+        $openFollowup =
             $lead
                 ->leadFollowups()
                 ->whereNotNull(
@@ -32,9 +34,19 @@ class LeadSourceFollowupService
                     'status',
                     [2, 5]
                 )
-                ->exists();
+                ->orderByDesc('created_at')
+                ->first();
 
-        if ($hasOpenFollowup) {
+        if ($openFollowup) {
+            if (
+                empty($openFollowup->followed_by)
+                && !empty($lead->representative_user_id)
+            ) {
+                $openFollowup->followed_by =
+                    $lead->representative_user_id;
+                $openFollowup->save();
+            }
+
             return null;
         }
 
@@ -42,7 +54,8 @@ class LeadSourceFollowupService
             $lead,
             $source,
             $message,
-            $context
+            $context,
+            $allowUnassigned
         );
     }
 
@@ -50,8 +63,18 @@ class LeadSourceFollowupService
         Lead $lead,
         string $source,
         string $message,
-        array $context = []
+        array $context = [],
+        bool $allowUnassigned = false
     ): LeadFollowup {
+        if (
+            empty($lead->representative_user_id)
+            && !$allowUnassigned
+        ) {
+            throw new \InvalidArgumentException(
+                'Cannot create assigned source follow-up without a representative.'
+            );
+        }
+
         $source = strtoupper(trim($source));
 
         $note = $this->buildNote(
@@ -69,7 +92,7 @@ class LeadSourceFollowupService
              * Existing executive remains owner.
              */
             'followed_by' =>
-                $lead->representative_user_id,
+                $lead->representative_user_id ?: null,
 
             /*
              * Source lead requires prompt action.

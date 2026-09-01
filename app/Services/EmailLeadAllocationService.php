@@ -99,11 +99,7 @@ class EmailLeadAllocationService
                     ]
                 );
 
-                if ($this->hasConfiguredCharterMapping()) {
-                    return $this->pickCharterSalesperson();
-                }
-
-                return $this->pickRetailSalesperson();
+                return $this->pickCharterSalesperson();
             }
 
             Log::info(
@@ -155,7 +151,7 @@ class EmailLeadAllocationService
                 }
 
                 Log::info(
-                    'Email charter product has no configured salesperson. Using retail fallback allocation.',
+                    'Email charter product has no configured salesperson today. Keeping lead queued.',
                     [
                         'lead_id' => $lead->id,
                         'product_id' => $product->id,
@@ -163,7 +159,7 @@ class EmailLeadAllocationService
                     ]
                 );
 
-                return $this->pickRetailSalesperson();
+                return null;
             }
 
             Log::info(
@@ -520,79 +516,10 @@ class EmailLeadAllocationService
         }
 
         Log::info(
-            'Retail email lead has no Empty/No Requirement/Incoming Lead fallback product mapping configured. Using legacy unmapped-salesperson fallback.'
+            'Retail email lead has no Empty/No Requirement/Incoming Lead fallback product mapping configured. Keeping lead queued.'
         );
 
-        return $this->pickLegacyRetailSalesperson();
-    }
-
-    private function pickLegacyRetailSalesperson(): ?User
-    {
-        $mappedUserIds =
-            EmailLeadProductUserAssignment::query()
-                ->where(
-                    'is_active',
-                    true
-                )
-                ->pluck('user_id')
-                ->filter()
-                ->unique()
-                ->values();
-
-        $users = User::query()
-
-            ->with('userType')
-
-            ->where('status', 1)
-
-            ->whereHas(
-                'userType',
-                function ($query) {
-
-                    $query->whereIn(
-                        'user_type',
-                        UserType::SALES_ROLES
-                    );
-
-                }
-            )
-
-            ->when(
-                $mappedUserIds->isNotEmpty(),
-                function ($query) use ($mappedUserIds) {
-                    $query->whereNotIn(
-                        'id',
-                        $mappedUserIds
-                    );
-                }
-            )
-
-            ->get()
-
-            ->filter(function ($user) {
-
-                return $this->isEligibleToday(
-                    $user
-                );
-
-            })
-
-            ->values();
-
-
-        if ($users->isEmpty()) {
-
-            Log::info(
-                'Retail email lead has no eligible salesperson today.'
-            );
-
-            return null;
-        }
-
-
-        return $this->pickBalanced(
-            $users
-        );
+        return null;
     }
 
     private function retailFallbackProductIds(): Collection
