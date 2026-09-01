@@ -18,6 +18,7 @@ use App\Models\SalesDailyUpdate;
 use Illuminate\Http\Request;
 use App\Services\SalespersonPresenceService;
 use function App\Helpers\getRepresentativeIds;
+use App\Services\TargetResolverService;
 
 class DashboardController extends Controller
 {
@@ -220,90 +221,349 @@ class DashboardController extends Controller
         });
     }
 
-    private function calculateTargetProgressForRepIds(array $repIds, int $year, int $month, bool $todayClosed = false): array
-    {
-        $repIds = array_values(array_filter(array_unique($repIds)));
-        $targetAmount = empty($repIds) ? 0.0 : (float) Target::whereIn('sales_executive_id', $repIds)
-            ->where('year', $year)
-            ->where('month', $month)
-            ->where('status', 'active')
-            ->sum('target_amount');
+  private function calculateTargetProgressForRepIds(
+    array $repIds,
+    int $year,
+    int $month,
+    bool $todayClosed = false
+): array {
 
-        $salesDoneTillNow = $this->calculateAchievedAmountForRepIds($repIds, $year, $month);
-        $isCurrentMonth = (int) Carbon::now()->year === $year && (int) Carbon::now()->month === $month;
-        $todaySalesAmount = $isCurrentMonth
-            ? $this->calculateAchievedAmountForRepIds($repIds, $year, $month, Carbon::today())
-            : 0.0;
+    $repIds = array_values(
+        array_filter(
+            array_unique($repIds)
+        )
+    );
 
-        $workingStats = $this->calculateWorkingDayStats($year, $month, $todayClosed);
-        $remainingTarget = $targetAmount - $salesDoneTillNow;
+    /*
+     * Resolve configured target.
+     *
+     * Exact month target takes priority.
+     * If no target exists for this month,
+     * TargetResolverService carries forward
+     * the latest previous active target.
+     */
+    $targetResolver = app(
+        TargetResolverService::class
+    );
 
-        if ($remainingTarget <= 0) {
-            $requiredDailyTarget = 0.0;
-            $status = 'Target achieved';
-        } elseif ($workingStats['remaining_days'] <= 0) {
-            $requiredDailyTarget = $remainingTarget;
-            $status = 'Period over / target missed';
-        } else {
-            $requiredDailyTarget = $remainingTarget / $workingStats['remaining_days'];
-            $status = 'Active';
-        }
+    $targetAmount = empty($repIds)
+        ? 0.0
+        : $targetResolver->amountForUsers(
+            $repIds,
+            $year,
+            $month
+        );
 
-        $attainmentPercent = $targetAmount > 0 ? round(($salesDoneTillNow / $targetAmount) * 100, 2) : 0.0;
-        $currentRunRate = $workingStats['working_days_completed'] > 0
-            ? $salesDoneTillNow / $workingStats['working_days_completed']
-            : 0.0;
-        $projectedMonthEndSales = $currentRunRate * $workingStats['working_days_total'];
-        $dailyProgressPercent = $requiredDailyTarget > 0
-            ? round(($todaySalesAmount / $requiredDailyTarget) * 100, 2)
-            : ($todaySalesAmount > 0 ? 100.0 : 0.0);
+    /*
+     * SALES ARE ALWAYS FOR THE REQUESTED MONTH.
+     *
+     * Only target configuration is carried forward.
+     * Sales are never carried from the previous month.
+     */
+    $salesDoneTillNow =
+        $this->calculateAchievedAmountForRepIds(
+            $repIds,
+            $year,
+            $month
+        );
 
-        $monthlyProgress = [
-            'achievement_percentage' => $attainmentPercent,
-            'remaining_amount' => max(0, $remainingTarget),
-            'target_amount' => $targetAmount,
-            'achieved_amount' => max(0, $salesDoneTillNow),
-            'sales_amount' => max(0, $salesDoneTillNow),
-        ];
+    $isCurrentMonth =
+        (int) Carbon::now()->year === $year
+        &&
+        (int) Carbon::now()->month === $month;
 
-        $dailyProgress = [
-            'achievement_percentage' => $dailyProgressPercent,
-            'remaining_amount' => max(0, $requiredDailyTarget - $todaySalesAmount),
-            'target_amount' => max(0, $requiredDailyTarget),
-            'achieved_amount' => max(0, $todaySalesAmount),
-            'sales_amount' => max(0, $todaySalesAmount),
-        ];
+    $todaySalesAmount = $isCurrentMonth
+        ? $this->calculateAchievedAmountForRepIds(
+            $repIds,
+            $year,
+            $month,
+            Carbon::today()
+        )
+        : 0.0;
 
-        return array_merge($monthlyProgress, $workingStats, [
-            'month_name' => Carbon::create($year, $month, 1)->format('F'),
-            'year' => $year,
-            'required_daily_target' => max(0, $requiredDailyTarget),
-            'target_status' => $status,
-            'status' => $status,
-            'attainment_percent' => $attainmentPercent,
-            'current_run_rate' => max(0, $currentRunRate),
-            'projected_month_end_sales' => max(0, $projectedMonthEndSales),
-            'gap_vs_target' => $targetAmount - $salesDoneTillNow,
-            'today_sales_amount' => max(0, $todaySalesAmount),
-            'monthly_progress' => $monthlyProgress,
-            'daily_progress' => $dailyProgress,
-            'target_calculation' => [
-                'monthly_target' => $targetAmount,
-                'sales_done_till_now' => max(0, $salesDoneTillNow),
-                'working_days_total' => $workingStats['working_days_total'],
-                'working_days_completed' => $workingStats['working_days_completed'],
-                'today_closed' => $workingStats['today_closed'],
-                'remaining_days' => $workingStats['remaining_days'],
-                'remaining_target' => $remainingTarget,
-                'required_daily_target' => max(0, $requiredDailyTarget),
-                'status' => $status,
-                'attainment_percent' => $attainmentPercent,
-                'current_run_rate' => max(0, $currentRunRate),
-                'projected_month_end_sales' => max(0, $projectedMonthEndSales),
-                'gap_vs_target' => $targetAmount - $salesDoneTillNow,
-            ],
-        ]);
+    $workingStats =
+        $this->calculateWorkingDayStats(
+            $year,
+            $month,
+            $todayClosed
+        );
+
+    /*
+     * Important:
+     *
+     * target = 0 does NOT mean target achieved.
+     */
+    $hasTarget = $targetAmount > 0;
+
+    $remainingTarget = $hasTarget
+        ? max(
+            0,
+            $targetAmount - $salesDoneTillNow
+        )
+        : 0.0;
+
+    /*
+     * Required Daily Target
+     */
+    if (!$hasTarget) {
+
+        $requiredDailyTarget = 0.0;
+        $status = 'No target assigned';
+
+    } elseif ($salesDoneTillNow >= $targetAmount) {
+
+        $requiredDailyTarget = 0.0;
+        $status = 'Target achieved';
+
+    } elseif ($workingStats['remaining_days'] <= 0) {
+
+        $requiredDailyTarget = $remainingTarget;
+        $status = 'Period over / target missed';
+
+    } else {
+
+        $requiredDailyTarget =
+            $remainingTarget /
+            $workingStats['remaining_days'];
+
+        $status = 'Active';
     }
+
+    /*
+     * Monthly progress
+     */
+    $attainmentPercent = $hasTarget
+        ? round(
+            ($salesDoneTillNow / $targetAmount) * 100,
+            2
+        )
+        : 0.0;
+
+    /*
+     * Run rate
+     */
+    $currentRunRate =
+        $workingStats['working_days_completed'] > 0
+            ? $salesDoneTillNow /
+                $workingStats['working_days_completed']
+            : 0.0;
+
+    $projectedMonthEndSales =
+        $currentRunRate *
+        $workingStats['working_days_total'];
+
+    /*
+     * Daily progress
+     *
+     * No configured/effective target = 0%.
+     */
+    if (!$hasTarget) {
+
+        $dailyProgressPercent = 0.0;
+
+    } elseif ($requiredDailyTarget > 0) {
+
+        $dailyProgressPercent = round(
+            (
+                $todaySalesAmount /
+                $requiredDailyTarget
+            ) * 100,
+            2
+        );
+
+    } else {
+
+        /*
+         * Target is legitimately already achieved.
+         */
+        $dailyProgressPercent =
+            $salesDoneTillNow >= $targetAmount
+                ? 100.0
+                : 0.0;
+    }
+
+    /*
+     * Keep progress bars capped at 100.
+     * Raw attainment remains available separately.
+     */
+    $monthlyDisplayPercent = min(
+        100,
+        max(0, $attainmentPercent)
+    );
+
+    $dailyDisplayPercent = min(
+        100,
+        max(0, $dailyProgressPercent)
+    );
+
+    $monthlyProgress = [
+        'achievement_percentage' =>
+            $monthlyDisplayPercent,
+
+        'remaining_amount' =>
+            $remainingTarget,
+
+        'target_amount' =>
+            $targetAmount,
+
+        'achieved_amount' =>
+            max(0, $salesDoneTillNow),
+
+        'sales_amount' =>
+            max(0, $salesDoneTillNow),
+    ];
+
+    $dailyProgress = [
+        'achievement_percentage' =>
+            $dailyDisplayPercent,
+
+        'remaining_amount' =>
+            max(
+                0,
+                $requiredDailyTarget -
+                $todaySalesAmount
+            ),
+
+        'target_amount' =>
+            max(0, $requiredDailyTarget),
+
+        'achieved_amount' =>
+            max(0, $todaySalesAmount),
+
+        'sales_amount' =>
+            max(0, $todaySalesAmount),
+    ];
+
+    return array_merge(
+        $monthlyProgress,
+        $workingStats,
+        [
+            'has_target' =>
+                $hasTarget,
+
+            'month_name' =>
+                Carbon::create(
+                    $year,
+                    $month,
+                    1
+                )->format('F'),
+
+            'year' =>
+                $year,
+
+            'required_daily_target' =>
+                max(0, $requiredDailyTarget),
+
+            'target_status' =>
+                $status,
+
+            'status' =>
+                $status,
+
+            /*
+             * Raw actual attainment.
+             * Can exceed 100.
+             */
+            'attainment_percent' =>
+                $attainmentPercent,
+
+            'current_run_rate' =>
+                max(0, $currentRunRate),
+
+            'projected_month_end_sales' =>
+                max(
+                    0,
+                    $projectedMonthEndSales
+                ),
+
+            'gap_vs_target' =>
+                $hasTarget
+                    ? max(
+                        0,
+                        $targetAmount -
+                        $salesDoneTillNow
+                    )
+                    : 0.0,
+
+            'today_sales_amount' =>
+                max(0, $todaySalesAmount),
+
+            'monthly_progress' =>
+                $monthlyProgress,
+
+            'daily_progress' =>
+                $dailyProgress,
+
+            'target_calculation' => [
+
+                'has_target' =>
+                    $hasTarget,
+
+                'monthly_target' =>
+                    $targetAmount,
+
+                'sales_done_till_now' =>
+                    max(0, $salesDoneTillNow),
+
+                'working_days_total' =>
+                    $workingStats[
+                        'working_days_total'
+                    ],
+
+                'working_days_completed' =>
+                    $workingStats[
+                        'working_days_completed'
+                    ],
+
+                'today_closed' =>
+                    $workingStats[
+                        'today_closed'
+                    ],
+
+                'remaining_days' =>
+                    $workingStats[
+                        'remaining_days'
+                    ],
+
+                'remaining_target' =>
+                    $remainingTarget,
+
+                'required_daily_target' =>
+                    max(
+                        0,
+                        $requiredDailyTarget
+                    ),
+
+                'status' =>
+                    $status,
+
+                'attainment_percent' =>
+                    $attainmentPercent,
+
+                'current_run_rate' =>
+                    max(
+                        0,
+                        $currentRunRate
+                    ),
+
+                'projected_month_end_sales' =>
+                    max(
+                        0,
+                        $projectedMonthEndSales
+                    ),
+
+                'gap_vs_target' =>
+                    $hasTarget
+                        ? max(
+                            0,
+                            $targetAmount -
+                            $salesDoneTillNow
+                        )
+                        : 0.0,
+            ],
+        ]
+    );
+}
 
     public function moreLeads()
 {
@@ -373,19 +633,24 @@ class DashboardController extends Controller
         $currentMonthTarget = null;
         $targetProgress = null;
         if ($userType === UserType::SALES_EXECUTIVE) {
-            $currentMonthTarget = Target::where('sales_executive_id', $currentUser->id)
-                ->where('year', $currentYear)
-                ->where('month', $currentMonthNumber)
-                ->where('status', 'active')
-                ->first();
+           $currentMonthTarget = app(
+                TargetResolverService::class
+            )->targetForUser(
+                $currentUser->id,
+                $currentYear,
+                $currentMonthNumber
+            );
 
-            if ($currentMonthTarget) {
-                $targetProgressData = $this->calculateTargetProgressForUser($currentUser, $currentYear, $currentMonthNumber, $todayClosed);
-                $targetProgress = $targetProgressData;
+          if ($currentMonthTarget) {
 
-                $currentMonthTarget->update(['achieved_amount' => $targetProgressData['achieved_amount']]);
-                $currentMonthTarget = $currentMonthTarget->fresh();
-            }
+    $targetProgress =
+        $this->calculateTargetProgressForUser(
+            $currentUser,
+            $currentYear,
+            $currentMonthNumber,
+            $todayClosed
+        );
+}
         }
 
         // If current user is a Sales Manager (or Senior), prepare assigned executives and team progress
