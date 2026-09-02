@@ -106,6 +106,8 @@ class WhatCrmMessageNormalizer
                 ?? $payload['crm_user_id']
                 ?? null,
 
+            'lead_id' => $payload['lead_id'] ?? null,
+
             'agent_name' =>
                 $payload['agent_name']
                 ?? $payload['sender_name']

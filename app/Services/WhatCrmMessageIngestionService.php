@@ -140,6 +140,13 @@ class WhatCrmMessageIngestionService
 
             if (
                 $data['direction'] === 'outgoing'
+                && !empty($data['lead_id'])
+            ) {
+                $conversation->lead_id = $data['lead_id'];
+            }
+
+            if (
+                $data['direction'] === 'outgoing'
                 && $agent
             ) {
                 $conversation->assigned_user_id = $agent->id;

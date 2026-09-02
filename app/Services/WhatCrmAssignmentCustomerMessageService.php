@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\User;
+use App\Models\Lead;
 use App\Models\WhatsAppLeadIntegration;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -22,63 +22,158 @@ class WhatCrmAssignmentCustomerMessageService
             'lead.representative',
         ]);
 
-        $lead = $integration->lead;
-        $representative = optional($lead)->representative;
+        return $this->sendForLead(
+            $integration->lead,
+            $integration
+        );
+    }
 
+    public function sendForLeadId(string $leadId): bool
+    {
+        $lead = Lead::query()
+            ->with([
+                'client',
+                'representative',
+            ])
+            ->find($leadId);
+
+        if (!$lead) {
+            return false;
+        }
+
+        return $this->sendForLead(
+            $lead,
+            $this->integrationForLead($lead)
+        );
+    }
+
+    private function sendForLead(
+        ?Lead $lead,
+        ?WhatsAppLeadIntegration $integration = null
+    ): bool {
         if (
-            !$lead
-            || !$representative
-            || trim((string) $integration->phone) === ''
+            !config(
+                'whatcrm.assignment_customer_message_enabled',
+                true
+            )
         ) {
             return false;
         }
 
+        if (!$lead) {
+            return false;
+        }
+
+        $lead->loadMissing([
+            'client',
+            'representative',
+        ]);
+
+        $representative = $lead->representative;
+
+        if (!$representative) {
+            return false;
+        }
+
         if (
-            $this->hasTrackingColumn('assignment_message_sent_at')
-            && $integration->assignment_message_sent_at
+            $integration
+            && $this->assignmentAlreadySent($integration)
         ) {
             return true;
         }
 
+        $customerNumber = $this->customerNumber(
+            $lead,
+            $integration
+        );
+        $agentName = trim((string) $representative->name);
+        $agentNumber = trim(
+            (string) $representative->contact_number
+        );
+
+        if (
+            $customerNumber === ''
+            || $agentName === ''
+            || $agentNumber === ''
+        ) {
+            if ($integration) {
+                $this->storeError(
+                    $integration,
+                    'Lead assignment message requires customer number, agent name, and agent phone.'
+                );
+            }
+
+            return false;
+        }
+
+        $templateName = trim(
+            (string) config(
+                'whatcrm.assignment_customer_template',
+                'lead_qualified'
+            )
+        );
+
         try {
-            $result = $this->outbound->sendText([
-                'number' => $integration->phone,
+            $result = $this->outbound->sendTemplate([
+                'number' => $customerNumber,
                 'name' => optional($lead->client)->name,
-                'message' =>
-                    $this->messageForRepresentative($representative),
-                'chat_id' =>
-                    data_get($integration->payload, 'chat_id')
-                    ?: data_get(
-                        $integration->payload,
-                        'whatcrm_chat_id'
+                'template_name' => $templateName,
+                'body_values' => [
+                    $agentName,
+                    $agentNumber,
+                ],
+                'rendered_body' =>
+                    $this->templateBody(
+                        $agentName,
+                        $agentNumber
                     ),
+                'chat_id' =>
+                    $integration
+                        ? (
+                            data_get(
+                                $integration->payload,
+                                'chat_id'
+                            )
+                            ?: data_get(
+                                $integration->payload,
+                                'whatcrm_chat_id'
+                            )
+                        )
+                        : null,
                 'agent_user_id' => $representative->id,
                 'assigned_agent_user_id' => $representative->id,
                 'assigned_agent' => $representative->name,
+                'lead_id' => $lead->id,
             ]);
 
             if (!($result['success'] ?? false)) {
-                $this->storeError(
-                    $integration,
-                    'WhatCRM did not accept the assignment message.'
-                );
+                if ($integration) {
+                    $this->storeError(
+                        $integration,
+                        'WhatCRM did not accept the assignment template message.'
+                    );
+                }
 
                 return false;
             }
 
-            $this->storeSuccess($integration);
+            if ($integration) {
+                $this->storeSuccess($integration);
+            }
 
             return true;
         } catch (\Throwable $exception) {
-            $this->storeError(
-                $integration,
-                $exception->getMessage()
-            );
+            if ($integration) {
+                $this->storeError(
+                    $integration,
+                    $exception->getMessage()
+                );
+            }
 
             Log::warning(
-                'WhatCRM assignment customer message failed',
+                'WhatCRM assignment customer template failed',
                 [
-                    'integration_id' => $integration->id,
+                    'integration_id' => optional($integration)->id,
                     'lead_id' => $lead->id,
                     'error' => $exception->getMessage(),
                 ]
@@ -88,22 +183,73 @@ class WhatCrmAssignmentCustomerMessageService
         }
     }
 
-    private function messageForRepresentative(User $representative): string
-    {
-        $name = trim((string) $representative->name);
-        $number = trim((string) $representative->contact_number);
-
-        if ($number === '') {
-            return sprintf(
-                'Our representative %s will call you shortly.',
-                $name
-            );
+    private function integrationForLead(
+        Lead $lead
+    ): ?WhatsAppLeadIntegration {
+        if (!Schema::hasTable('whatsapp_lead_integrations')) {
+            return null;
         }
 
+        return WhatsAppLeadIntegration::query()
+            ->where('lead_id', $lead->id)
+            ->orderByDesc('created_at')
+            ->first();
+    }
+
+    private function assignmentAlreadySent(
+        WhatsAppLeadIntegration $integration
+    ): bool {
+        if (!$this->hasTrackingColumn('assignment_message_sent_at')) {
+            return false;
+        }
+
+        $fresh = WhatsAppLeadIntegration::query()
+            ->whereKey($integration->id)
+            ->first();
+
+        return (bool) optional($fresh)
+            ->assignment_message_sent_at;
+    }
+
+    private function customerNumber(
+        Lead $lead,
+        ?WhatsAppLeadIntegration $integration
+    ): string {
+        $integrationPhone = trim(
+            (string) optional($integration)->phone
+        );
+
+        if ($integrationPhone !== '') {
+            return $integrationPhone;
+        }
+
+        foreach (
+            [
+                'alternate_number',
+                'contact_number',
+            ]
+            as $field
+        ) {
+            $value = trim(
+                (string) optional($lead->client)->{$field}
+            );
+
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return '';
+    }
+
+    private function templateBody(
+        string $agentName,
+        string $agentNumber
+    ): string {
         return sprintf(
-            'Our representative %s (%s) will call you shortly.',
-            $name,
-            $number
+            'Thank you for your enquiry with Accretion Aviation India\'s leading Private Plane Helicopter and Yacht rental company. Your enquiry is being handled by %s and their direct number is %s Accretion Aviation',
+            $agentName,
+            $agentNumber
         );
     }
 

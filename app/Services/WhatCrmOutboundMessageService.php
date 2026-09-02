@@ -24,6 +24,155 @@ class WhatCrmOutboundMessageService
         );
     }
 
+    public function sendTemplate(array $data): array
+    {
+        $templateName = trim(
+            (string) (
+                $data['template_name']
+                ?? $data['templetName']
+                ?? ''
+            )
+        );
+
+        if ($templateName === '') {
+            throw new InvalidArgumentException(
+                'WhatCRM template name is required.'
+            );
+        }
+
+        $rawNumber = trim(
+            (string) (
+                $data['number']
+                ?? $data['to']
+                ?? $data['sendTo']
+                ?? ''
+            )
+        );
+
+        if ($rawNumber === '') {
+            throw new InvalidArgumentException(
+                'Customer WhatsApp number is required.'
+            );
+        }
+
+        $apiUrl = $this->templateMessageUrl();
+        $apiToken = $this->templateMessageToken();
+
+        if ($apiUrl === '') {
+            throw new InvalidArgumentException(
+                'WhatCRM template API URL is not configured.'
+            );
+        }
+
+        if ($apiToken === '') {
+            throw new InvalidArgumentException(
+                'WhatCRM template API token is not configured.'
+            );
+        }
+
+        $toNumber = $this->formatOutboundPhone($rawNumber);
+        $bodyValues = $this->templateBodyValues($data);
+        $mediaUri = trim(
+            (string) (
+                $data['media_uri']
+                ?? $data['mediaUri']
+                ?? ''
+            )
+        );
+
+        $payload = [
+            'sendTo' => '+' . $toNumber,
+            'templetName' => $templateName,
+            'exampleArr' => $bodyValues,
+            'token' => $apiToken,
+            'mediaUri' => $mediaUri,
+        ];
+
+        $response = Http::timeout(
+            (int) config('whatcrm.timeout', 10)
+        )
+            ->acceptJson()
+            ->asJson()
+            ->withToken($apiToken)
+            ->post($apiUrl, $payload);
+
+        $result = $response->json();
+
+        if (!is_array($result)) {
+            $result = [
+                'raw_response' => $response->body(),
+            ];
+        }
+
+        $accepted =
+            $response->successful()
+            && ($result['success'] ?? true) !== false;
+
+        $providerMessageId = $this->providerMessageId($result);
+        $crmResult = null;
+
+        if ($accepted) {
+            $crmResult = $this->ingestionService->process([
+                'message_id' => $providerMessageId,
+                'chat_id' => $data['chat_id'] ?? null,
+                'number' => $toNumber,
+                'customer_name' =>
+                    $data['name']
+                    ?? $data['customer_name']
+                    ?? null,
+                'message' =>
+                    trim(
+                        (string) (
+                            $data['rendered_body']
+                            ?? $data['message']
+                            ?? $data['body']
+                            ?? ''
+                        )
+                    ),
+                'message_type' => 'template',
+                'direction' => 'outgoing',
+                'message_at' => now()->toIso8601String(),
+                'status' =>
+                    data_get(
+                        $result,
+                        'metaResponse.messages.0.message_status'
+                    )
+                    ?? data_get($result, 'status')
+                    ?? 'sent',
+                'agent_user_id' =>
+                    $data['agent_user_id']
+                    ?? $data['crm_user_id']
+                    ?? null,
+                'lead_id' => $data['lead_id'] ?? null,
+                'raw_payload' => [
+                    'crm_outbound_template' => true,
+                    'whatcrm_request' => $payload,
+                    'whatcrm_response' => $result,
+                    'template_name' => $templateName,
+                    'template_body_values' => $bodyValues,
+                ],
+            ]);
+        }
+
+        return [
+            'success' => $accepted,
+            'http_status' => $response->status(),
+            'provider_message_id' => $providerMessageId,
+            'conversation_id' => data_get(
+                $crmResult,
+                'conversation_id'
+            ),
+            'contact_id' => data_get($crmResult, 'contact_id'),
+            'crm_message_id' => data_get($crmResult, 'message_id'),
+            'duplicate' => (bool) data_get(
+                $crmResult,
+                'duplicate',
+                false
+            ),
+            'whatcrm_response' => $result,
+        ];
+    }
+
     public function sendMessage(array $data): array
     {
         $body = trim(
@@ -141,6 +290,7 @@ class WhatCrmOutboundMessageService
                     $data['agent_user_id']
                     ?? $data['crm_user_id']
                     ?? null,
+                'lead_id' => $data['lead_id'] ?? null,
                 'raw_payload' => [
                     'crm_outbound' => true,
                     'whatcrm_request' => $payload,
@@ -366,6 +516,52 @@ class WhatCrmOutboundMessageService
         return $messageType === 'contacts'
             ? 'contacts'
             : $messageType;
+    }
+
+    private function templateBodyValues(array $data): array
+    {
+        $bodyValues =
+            $data['body_values']
+            ?? $data['exampleArr']
+            ?? [];
+
+        if (is_string($bodyValues)) {
+            $decoded = json_decode($bodyValues, true);
+            $bodyValues = is_array($decoded) ? $decoded : [];
+        }
+
+        if (!is_array($bodyValues)) {
+            throw new InvalidArgumentException(
+                'WhatCRM template body values must be an array.'
+            );
+        }
+
+        return array_map(
+            fn ($value) => trim((string) $value),
+            array_values($bodyValues)
+        );
+    }
+
+    private function templateMessageUrl(): string
+    {
+        return trim(
+            (string) (
+                config('whatcrm.template_message_url')
+                ?: config('services.whatscrm.api_url')
+                ?: ''
+            )
+        );
+    }
+
+    private function templateMessageToken(): string
+    {
+        return trim(
+            (string) (
+                config('whatcrm.template_message_token')
+                ?: config('services.whatscrm.api_token')
+                ?: ''
+            )
+        );
     }
 
     private function normalizeMessageType($messageType): string

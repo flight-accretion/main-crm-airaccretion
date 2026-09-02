@@ -257,13 +257,21 @@ class WhatsAppLeadServiceTest extends TestCase
         ]);
 
         config()->set(
-            'whatcrm.send_message_url',
-            'https://web.airaccretion.com/api/v1/send-message'
+            'whatcrm.assignment_customer_message_enabled',
+            true
         );
-        config()->set('whatcrm.send_message_token', 'test-token');
+        config()->set(
+            'whatcrm.assignment_customer_template',
+            'lead_qualified'
+        );
+        config()->set(
+            'whatcrm.template_message_url',
+            'https://web.airaccretion.com/api/v1/send_templet'
+        );
+        config()->set('whatcrm.template_message_token', 'test-token');
 
         Http::fake([
-            'https://web.airaccretion.com/api/v1/send-message*' =>
+            'https://web.airaccretion.com/api/v1/send_templet' =>
                 Http::response(
                     [
                         'success' => true,
@@ -278,6 +286,7 @@ class WhatsAppLeadServiceTest extends TestCase
                     ],
                     200
                 ),
+            '*' => Http::response(['success' => false], 500),
         ]);
 
         $response =
@@ -294,26 +303,26 @@ class WhatsAppLeadServiceTest extends TestCase
 
         Http::assertSent(function ($request) {
             if (
-                !str_contains(
-                    $request->url(),
-                    'https://web.airaccretion.com/api/v1/send-message?token=test-token'
-                )
+                $request->url()
+                !==
+                'https://web.airaccretion.com/api/v1/send_templet'
             ) {
                 return false;
             }
 
             return $request->data() === [
-                'messageObject' => [
-                    'messaging_product' => 'whatsapp',
-                    'to' => '919876543210',
-                    'type' => 'text',
-                    'text' => [
-                        'body' =>
-                            'Our representative Samarpit Sharma (9109152175) will call you shortly.',
-                    ],
+                'sendTo' => '+919876543210',
+                'templetName' => 'lead_qualified',
+                'exampleArr' => [
+                    'Samarpit Sharma',
+                    '9109152175',
                 ],
+                'token' => 'test-token',
+                'mediaUri' => '',
             ];
         });
+
+        Http::assertSentCount(1);
 
         $integration = DB::table('whatsapp_lead_integrations')
             ->where('external_id', 'WA-HANDOFF-1')
@@ -334,10 +343,276 @@ class WhatsAppLeadServiceTest extends TestCase
                 'direction' => 'outgoing',
                 'sender_type' => 'agent',
                 'sender_user_id' => $salesperson->id,
+                'message_type' => 'template',
                 'body' =>
-                    'Our representative Samarpit Sharma (9109152175) will call you shortly.',
+                    'Thank you for your enquiry with Accretion Aviation India\'s leading Private Plane Helicopter and Yacht rental company. Your enquiry is being handled by Samarpit Sharma and their direct number is 9109152175 Accretion Aviation',
             ]
         );
+    }
+
+    public function test_new_assigned_crm_lead_sends_lead_qualified_template_to_customer(): void
+    {
+        config()->set(
+            'whatcrm.assignment_customer_message_enabled',
+            true
+        );
+        config()->set(
+            'whatcrm.assignment_customer_template',
+            'lead_qualified'
+        );
+        config()->set(
+            'whatcrm.template_message_url',
+            'https://web.airaccretion.com/api/v1/send_templet'
+        );
+        config()->set('whatcrm.template_message_token', 'test-token');
+
+        $salesperson =
+            $this->createSalesUser(
+                'Manual Agent',
+                '9000011111'
+            );
+
+        $client =
+            Client::create([
+                'id' => (string) Str::uuid(),
+                'name' => 'Manual Customer',
+                'contact_number' => '+91-9876543213',
+                'alternate_number' => '+91-9123456780',
+                'status' => 1,
+            ]);
+
+        Http::fake([
+            'https://web.airaccretion.com/api/v1/send_templet' =>
+                Http::response(
+                    [
+                        'success' => true,
+                        'metaResponse' => [
+                            'messages' => [
+                                [
+                                    'id' => 'wamid.MANUAL-ASSIGNMENT-1',
+                                    'message_status' => 'accepted',
+                                ],
+                            ],
+                        ],
+                    ],
+                    200
+                ),
+            '*' => Http::response(['success' => false], 500),
+        ]);
+
+        $lead =
+            Lead::create([
+                'id' => (string) Str::uuid(),
+                'client_id' => $client->id,
+                'representative_user_id' => $salesperson->id,
+                'service_ids' => null,
+                'product_ids' => null,
+                'number_of_passengers' => 1,
+                'description' => 'Manual lead',
+                'occasion' => null,
+            ]);
+
+        Http::assertSent(function ($request) {
+            return $request->url()
+                === 'https://web.airaccretion.com/api/v1/send_templet'
+                && $request->data() === [
+                    'sendTo' => '+919123456780',
+                    'templetName' => 'lead_qualified',
+                    'exampleArr' => [
+                        'Manual Agent',
+                        '9000011111',
+                    ],
+                    'token' => 'test-token',
+                    'mediaUri' => '',
+                ];
+        });
+
+        Http::assertSentCount(1);
+
+        $this->assertDatabaseHas(
+            'whatsapp_conversations',
+            [
+                'lead_id' => $lead->id,
+                'assigned_user_id' => $salesperson->id,
+            ]
+        );
+
+        $this->assertDatabaseHas(
+            'whatsapp_messages',
+            [
+                'provider_message_id' => 'wamid.MANUAL-ASSIGNMENT-1',
+                'direction' => 'outgoing',
+                'sender_type' => 'agent',
+                'sender_user_id' => $salesperson->id,
+                'message_type' => 'template',
+                'body' =>
+                    'Thank you for your enquiry with Accretion Aviation India\'s leading Private Plane Helicopter and Yacht rental company. Your enquiry is being handled by Manual Agent and their direct number is 9000011111 Accretion Aviation',
+            ]
+        );
+    }
+
+    public function test_existing_crm_lead_sends_lead_qualified_template_when_representative_is_assigned(): void
+    {
+        config()->set(
+            'whatcrm.assignment_customer_message_enabled',
+            true
+        );
+        config()->set(
+            'whatcrm.assignment_customer_template',
+            'lead_qualified'
+        );
+        config()->set(
+            'whatcrm.template_message_url',
+            'https://web.airaccretion.com/api/v1/send_templet'
+        );
+        config()->set('whatcrm.template_message_token', 'test-token');
+
+        $salesperson =
+            $this->createSalesUser(
+                'Updated Lead Agent',
+                '9000012222'
+            );
+
+        $client =
+            Client::create([
+                'id' => (string) Str::uuid(),
+                'name' => 'Update Customer',
+                'contact_number' => '+91-9876543214',
+                'alternate_number' => null,
+                'status' => 1,
+            ]);
+
+        $lead =
+            Lead::create([
+                'id' => (string) Str::uuid(),
+                'client_id' => $client->id,
+                'representative_user_id' => null,
+                'service_ids' => null,
+                'product_ids' => null,
+                'number_of_passengers' => 1,
+                'description' => 'Unassigned manual lead',
+                'occasion' => null,
+            ]);
+
+        Http::fake([
+            'https://web.airaccretion.com/api/v1/send_templet' =>
+                Http::response(
+                    [
+                        'success' => true,
+                        'metaResponse' => [
+                            'messages' => [
+                                [
+                                    'id' => 'wamid.UPDATED-ASSIGNMENT-1',
+                                    'message_status' => 'accepted',
+                                ],
+                            ],
+                        ],
+                    ],
+                    200
+                ),
+            '*' => Http::response(['success' => false], 500),
+        ]);
+
+        $lead->representative_user_id = $salesperson->id;
+        $lead->save();
+
+        Http::assertSent(function ($request) {
+            return $request->url()
+                === 'https://web.airaccretion.com/api/v1/send_templet'
+                && $request->data() === [
+                    'sendTo' => '+919876543214',
+                    'templetName' => 'lead_qualified',
+                    'exampleArr' => [
+                        'Updated Lead Agent',
+                        '9000012222',
+                    ],
+                    'token' => 'test-token',
+                    'mediaUri' => '',
+                ];
+        });
+
+        Http::assertSentCount(1);
+
+        $this->assertDatabaseHas(
+            'whatsapp_conversations',
+            [
+                'lead_id' => $lead->id,
+                'assigned_user_id' => $salesperson->id,
+            ]
+        );
+
+        $this->assertDatabaseHas(
+            'whatsapp_messages',
+            [
+                'provider_message_id' => 'wamid.UPDATED-ASSIGNMENT-1',
+                'direction' => 'outgoing',
+                'sender_type' => 'agent',
+                'sender_user_id' => $salesperson->id,
+                'message_type' => 'template',
+                'body' =>
+                    'Thank you for your enquiry with Accretion Aviation India\'s leading Private Plane Helicopter and Yacht rental company. Your enquiry is being handled by Updated Lead Agent and their direct number is 9000012222 Accretion Aviation',
+            ]
+        );
+    }
+
+    public function test_assignment_customer_template_does_not_change_existing_text_message_payloads(): void
+    {
+        config()->set(
+            'whatcrm.send_message_url',
+            'https://web.airaccretion.com/api/v1/send-message'
+        );
+        config()->set('whatcrm.send_message_token', 'text-token');
+
+        $agent =
+            $this->createSalesUser(
+                'Text Agent',
+                '9000011130'
+            );
+
+        Http::fake([
+            'https://web.airaccretion.com/api/v1/send-message*' =>
+                Http::response(
+                    [
+                        'success' => true,
+                        'metaResponse' => [
+                            'messages' => [
+                                [
+                                    'id' => 'wamid.TEXT-UNCHANGED-1',
+                                    'message_status' => 'accepted',
+                                ],
+                            ],
+                        ],
+                    ],
+                    200
+                ),
+            '*' => Http::response(['success' => false], 500),
+        ]);
+
+        app(\App\Services\WhatCrmOutboundMessageService::class)
+            ->sendText([
+                'number' => '9876543267',
+                'name' => 'Text Customer',
+                'message' => 'Plain text still works.',
+                'agent_user_id' => $agent->id,
+            ]);
+
+        Http::assertSent(function ($request) {
+            return str_contains(
+                    $request->url(),
+                    'https://web.airaccretion.com/api/v1/send-message?token=text-token'
+                )
+                && $request->data() === [
+                'messageObject' => [
+                    'messaging_product' => 'whatsapp',
+                    'to' => '919876543267',
+                    'type' => 'text',
+                    'text' => [
+                        'body' =>
+                            'Plain text still works.',
+                    ],
+                ],
+            ];
+        });
     }
 
     public function test_whatcrm_charter_keyword_maps_to_related_crm_product_and_charter_team(): void
@@ -662,13 +937,21 @@ class WhatsAppLeadServiceTest extends TestCase
         );
 
         config()->set(
-            'whatcrm.send_message_url',
-            'https://web.airaccretion.com/api/v1/send-message'
+            'whatcrm.assignment_customer_message_enabled',
+            true
         );
-        config()->set('whatcrm.send_message_token', 'test-token');
+        config()->set(
+            'whatcrm.assignment_customer_template',
+            'lead_qualified'
+        );
+        config()->set(
+            'whatcrm.template_message_url',
+            'https://web.airaccretion.com/api/v1/send_templet'
+        );
+        config()->set('whatcrm.template_message_token', 'test-token');
 
         Http::fake([
-            'https://web.airaccretion.com/api/v1/send-message*' =>
+            'https://web.airaccretion.com/api/v1/send_templet' =>
                 Http::response(
                     [
                         'success' => true,
@@ -683,6 +966,7 @@ class WhatsAppLeadServiceTest extends TestCase
                     ],
                     200
                 ),
+            '*' => Http::response(['success' => false], 500),
         ]);
 
         $this->makeAvailable($emptyProductUser);
@@ -697,22 +981,21 @@ class WhatsAppLeadServiceTest extends TestCase
         );
 
         Http::assertSent(function ($request) {
-            return str_contains(
-                    $request->url(),
-                    'https://web.airaccretion.com/api/v1/send-message?token=test-token'
-                )
+            return $request->url()
+                === 'https://web.airaccretion.com/api/v1/send_templet'
                 && $request->data() === [
-                    'messageObject' => [
-                        'messaging_product' => 'whatsapp',
-                        'to' => '919876543212',
-                        'type' => 'text',
-                        'text' => [
-                            'body' =>
-                                'Our representative Later Empty Product User (9988776655) will call you shortly.',
-                        ],
+                    'sendTo' => '+919876543212',
+                    'templetName' => 'lead_qualified',
+                    'exampleArr' => [
+                        'Later Empty Product User',
+                        '9988776655',
                     ],
+                    'token' => 'test-token',
+                    'mediaUri' => '',
                 ];
         });
+
+        Http::assertSentCount(1);
 
         $integration = DB::table('whatsapp_lead_integrations')
             ->where('external_id', 'WA-HANDOFF-QUEUED-1')

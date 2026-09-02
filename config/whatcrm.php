@@ -15,6 +15,28 @@ return [
     'send_message_token' =>
         env('WHATCRM_SEND_MESSAGE_TOKEN'),
 
+    'template_message_url' => env(
+        'WHATCRM_TEMPLATE_MESSAGE_URL',
+        env('WHATSCRM_API_URL')
+    ),
+
+    'template_message_token' => env(
+        'WHATCRM_TEMPLATE_MESSAGE_TOKEN',
+        env('WHATSCRM_API_TOKEN')
+    ),
+
+    'assignment_customer_message_enabled' =>
+        env(
+            'WHATCRM_ASSIGNMENT_CUSTOMER_MESSAGE_ENABLED',
+            env('APP_ENV') !== 'testing'
+        ),
+
+    'assignment_customer_template' =>
+        env(
+            'WHATCRM_ASSIGNMENT_CUSTOMER_TEMPLATE',
+            'lead_qualified'
+        ),
+
     'default_country_code' =>
         env('WHATCRM_DEFAULT_COUNTRY_CODE', '91'),
 

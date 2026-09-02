@@ -93,7 +93,7 @@
                             </div>
                             <div class="btn-list text-center">
                                 <button aria-label="button" type="button" class="ti-btn ti-btn-primary me-[0.365rem] !py-1 !px-2 !text-[0.75rem]">
-                                   <a href="https://flights.airaccretion.com/" target="_blank"> Flying Calculation </a>
+                                   <a href="https://flying.airaccretion.com/" target="_blank"> Flying Calculation </a>
                                 </button>
                                 <button aria-label="button" type="button" class="ti-btn ti-btn-primary me-[0.365rem] !py-1 !px-2 !text-[0.75rem]">
                                     <a href="http://airpoints.airaccretion.com/" target="_blank"> Airpoints </a>
