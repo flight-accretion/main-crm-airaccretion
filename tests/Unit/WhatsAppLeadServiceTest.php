@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Tests\TestCase;
+use App\Models\Service;
 
 class WhatsAppLeadServiceTest extends TestCase
 {
@@ -909,6 +910,64 @@ class WhatsAppLeadServiceTest extends TestCase
         );
     }
 
+    public function test_identified_whatcrm_product_populates_related_services_on_lead(): void
+{
+    $product =
+        $this->createProduct(
+            'Private Plane Charters'
+        );
+
+    $service =
+        $this->createService(
+            'Private Plane Charter Service',
+            [
+                $product->id,
+            ]
+        );
+
+    $response =
+        app(
+            WhatsAppLeadService::class
+        )->process([
+            'name' =>
+                'Charter Customer',
+
+            'number' =>
+                '9876543299',
+
+            'service' =>
+                'Private Plane Charters',
+
+            'guest' =>
+                2,
+
+            'external_id' =>
+                'WA-PRODUCT-SERVICE-1',
+        ]);
+
+    $lead =
+        Lead::query()
+            ->where(
+                'id',
+                $response['lead_id']
+            )
+            ->firstOrFail();
+
+    $this->assertSame(
+        [
+            $product->id,
+        ],
+        $lead->product_ids_array
+    );
+
+    $this->assertSame(
+        [
+            $service->id,
+        ],
+        $lead->service_ids_array
+    );
+}
+
     private function createSalesUser(
         string $name,
         ?string $contactNumber = null
@@ -982,6 +1041,26 @@ class WhatsAppLeadServiceTest extends TestCase
         ]);
     }
 
+    private function createService(
+    string $name,
+    array $productIds
+): Service {
+
+    return Service::create([
+        'id' =>
+            (string) Str::uuid(),
+
+        'service' =>
+            $name,
+
+        'product_ids' =>
+            $productIds,
+
+        'status' =>
+            1,
+    ]);
+}
+
     private function makeAvailable(
         User $user
     ): void {
@@ -1032,6 +1111,53 @@ class WhatsAppLeadServiceTest extends TestCase
             $table->json('user_ids')->nullable();
             $table->timestamps();
         });
+
+        Schema::create(
+    'services',
+    function (Blueprint $table) {
+
+        $table
+            ->uuid('id')
+            ->primary();
+
+        $table
+            ->string('service');
+
+        $table
+            ->text('description')
+            ->nullable();
+
+        $table
+            ->decimal(
+                'service_amount',
+                12,
+                2
+            )
+            ->nullable();
+
+        $table
+            ->decimal(
+                'fees_percent',
+                8,
+                2
+            )
+            ->nullable();
+
+        $table
+            ->text('terms_and_conditions')
+            ->nullable();
+
+        $table
+            ->json('product_ids')
+            ->nullable();
+
+        $table
+            ->integer('status')
+            ->default(1);
+
+        $table->timestamps();
+    }
+);
 
         Schema::create('leads', function (Blueprint $table) {
             $table->uuid('id')->primary();

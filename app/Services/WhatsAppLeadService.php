@@ -8,6 +8,7 @@ use App\Models\LeadAllocationLog;
 use App\Models\WhatsAppLeadIntegration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use App\Models\Service;
 
 class WhatsAppLeadService
 {
@@ -221,6 +222,22 @@ class WhatsAppLeadService
                             $serviceText
                         );
 
+                        /*
+                * --------------------------------------------------
+                * RESOLVE SERVICES FROM IDENTIFIED PRODUCT
+                * --------------------------------------------------
+                *
+                * Service master stores related product UUIDs
+                * inside services.product_ids.
+                *
+                * If a product is identified, attach all ACTIVE
+                * services configured for that product.
+                */
+                    $serviceIds =
+                    $this->resolveServiceIdsForProduct(
+                        $product
+                    );
+
 
                 /*
                  * --------------------------------------------------
@@ -250,7 +267,9 @@ class WhatsAppLeadService
                         null,
 
                     'service_ids' =>
-                        null,
+                        !empty($serviceIds)
+                            ? $serviceIds
+                            : null,
 
                     'product_ids' =>
                         $product
@@ -507,6 +526,101 @@ class WhatsAppLeadService
 
         return $result['response'];
     }
+
+    private function resolveServiceIdsForProduct(
+    ?\App\Models\Product $product
+): array {
+
+    if (!$product) {
+        return [];
+    }
+
+    /*
+     * Do not use whereJsonContains here.
+     *
+     * PostgreSQL supports it, but the SQLite
+     * in-memory test database used by this project
+     * does not.
+     *
+     * Service model casts product_ids to array,
+     * so filter the small active service master
+     * safely in PHP.
+     */
+    return Service::query()
+        ->where(
+            'status',
+            1
+        )
+        ->get([
+            'id',
+            'product_ids',
+        ])
+        ->filter(
+            function (Service $service) use (
+                $product
+            ) {
+
+                $productIds =
+                    $service->product_ids;
+
+                /*
+                 * Normally Eloquent cast already
+                 * gives us an array.
+                 *
+                 * Keep this defensive handling for
+                 * legacy/double encoded values.
+                 */
+                if (is_string($productIds)) {
+
+                    $decoded =
+                        json_decode(
+                            $productIds,
+                            true
+                        );
+
+                    if (is_array($decoded)) {
+
+                        $productIds =
+                            $decoded;
+
+                    } elseif (
+                        is_string($decoded)
+                    ) {
+
+                        $decodedAgain =
+                            json_decode(
+                                $decoded,
+                                true
+                            );
+
+                        $productIds =
+                            is_array(
+                                $decodedAgain
+                            )
+                                ? $decodedAgain
+                                : [];
+                    }
+                }
+
+                if (!is_array($productIds)) {
+                    return false;
+                }
+
+                return in_array(
+                    (string) $product->id,
+                    array_map(
+                        'strval',
+                        $productIds
+                    ),
+                    true
+                );
+            }
+        )
+        ->pluck('id')
+        ->filter()
+        ->values()
+        ->all();
+}
 
     private function assignmentDetails(
         string $assignmentRoute
