@@ -8,6 +8,8 @@ use App\Models\UserType;
 use App\Services\LeadTransferService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use App\Models\User;
+use App\Services\LeadAllocationService;
 
 class LeadTransferController extends Controller
 {
@@ -332,4 +334,232 @@ class LeadTransferController extends Controller
             );
         }
     }
+
+    /**
+ * Super Admin direct assignment/reassignment.
+ *
+ * Supports one or multiple leads.
+ */
+public function directAssign(
+    Request $request,
+    LeadTransferService $transferService,
+    LeadAllocationService $allocationService
+) {
+
+    $actor = auth()->user();
+
+    /*
+     * Backend authorization.
+     *
+     * Do not rely only on hiding the Blade button.
+     */
+    abort_unless(
+        $actor &&
+        $actor->isSuperAdmin(),
+        403
+    );
+
+    $validated = $request->validate([
+        'lead_ids' =>
+            'required|array|min:1|max:100',
+
+        'lead_ids.*' =>
+            'required|uuid|exists:leads,id',
+
+        'representative_user_id' =>
+            'required|uuid|exists:users,id',
+    ]);
+
+    /*
+     * Destination representative:
+     * active Sales role only.
+     */
+    $representative =
+        User::query()
+            ->with('userType')
+            ->where(
+                'id',
+                $validated[
+                    'representative_user_id'
+                ]
+            )
+            ->first();
+
+    if (
+        !$representative
+        ||
+        (int) $representative->status !== 1
+        ||
+        !in_array(
+            optional(
+                $representative->userType
+            )->user_type,
+            UserType::SALES_ROLES,
+            true
+        )
+    ) {
+
+        return back()->with(
+            'error',
+            'Please select an active Sales Manager or Sales Executive.'
+        );
+    }
+
+    $leadIds =
+        array_values(
+            array_unique(
+                $validated['lead_ids']
+            )
+        );
+
+    $transferred = 0;
+    $skipped = 0;
+    $handoffWarnings = 0;
+    $lastSkipReason = null;
+
+    foreach ($leadIds as $leadId) {
+
+        try {
+
+            $lead =
+                Lead::findOrFail(
+                    $leadId
+                );
+
+            $result =
+                $transferService->directAssign(
+                    $lead,
+                    $representative,
+                    $actor
+                );
+
+            if (
+                !($result['changed'] ?? false)
+            ) {
+
+                $skipped++;
+
+                $lastSkipReason =
+                    'One or more selected leads were already assigned to the selected representative.';
+
+                continue;
+            }
+
+            $transferred++;
+
+            /*
+             * A queued lead needs the same source
+             * handoff which normal allocation performs.
+             */
+            if (
+                $result['was_queued']
+                ?? false
+            ) {
+
+                try {
+
+                    $allocationService
+                        ->finalizeManualQueuedAssignment(
+                            $lead->fresh(),
+                            $representative,
+                            $result[
+                                'queue_reason'
+                            ] ?? null
+                        );
+
+                } catch (\Throwable $e) {
+
+                    $handoffWarnings++;
+
+                    \Log::error(
+                        'Queued lead manual assignment handoff failed',
+                        [
+                            'lead_id' =>
+                                $leadId,
+
+                            'representative_user_id' =>
+                                $representative->id,
+
+                            'super_admin_id' =>
+                                $actor->id,
+
+                            'error' =>
+                                $e->getMessage(),
+                        ]
+                    );
+                }
+            }
+
+        } catch (
+            ValidationException $e
+        ) {
+
+            $skipped++;
+
+            $lastSkipReason =
+                collect(
+                    $e->errors()
+                )
+                ->flatten()
+                ->first();
+
+        } catch (\Throwable $e) {
+
+            $skipped++;
+
+            \Log::error(
+                'Super Admin direct lead transfer failed',
+                [
+                    'lead_id' =>
+                        $leadId,
+
+                    'representative_user_id' =>
+                        $representative->id,
+
+                    'super_admin_id' =>
+                        $actor->id,
+
+                    'error' =>
+                        $e->getMessage(),
+                ]
+            );
+        }
+    }
+
+    if ($transferred === 0) {
+
+        return back()->with(
+            'error',
+            $lastSkipReason
+            ?: 'No selected leads were transferred.'
+        );
+    }
+
+    $message =
+        $transferred .
+        ' lead(s) transferred successfully to ' .
+        $representative->name .
+        '.';
+
+    if ($skipped > 0) {
+
+        $message .=
+            ' ' .
+            $skipped .
+            ' lead(s) were skipped.';
+    }
+
+    if ($handoffWarnings > 0) {
+
+        $message .=
+            ' ' .
+            $handoffWarnings .
+            ' queued lead handoff notification(s) need review.';
+    }
+
+    return back()->with(
+        'success',
+        $message
+    );
+}
 }

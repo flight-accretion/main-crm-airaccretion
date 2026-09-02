@@ -15,6 +15,9 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
+use App\Models\LeadAllocationQueue;
+use App\Models\LeadAuditTrail;
+use App\Models\LeadAllocationLog;
 
 class LeadTransferServiceTest extends TestCase
 {
@@ -141,7 +144,7 @@ class LeadTransferServiceTest extends TestCase
         ]);
     }
 
-    private function createLead(User $owner): Lead
+    private function createLead(?User $owner = null): Lead
     {
         $client = Client::create([
             'id' => (string) Str::uuid(),
@@ -153,7 +156,8 @@ class LeadTransferServiceTest extends TestCase
         return Lead::create([
             'id' => (string) Str::uuid(),
             'client_id' => $client->id,
-            'representative_user_id' => $owner->id,
+            'representative_user_id' =>
+             $owner ? $owner->id : null,
             'description' => 'Transfer test lead',
         ]);
     }
@@ -211,5 +215,321 @@ class LeadTransferServiceTest extends TestCase
             $table->uuid('responded_by')->nullable();
             $table->timestamps();
         });
+
+        Schema::create(
+    'lead_audit_trail',
+    function (Blueprint $table) {
+
+        $table->uuid('id')->primary();
+        $table->uuid('lead_id');
+        $table->string('field_name');
+        $table->text('old_value')->nullable();
+        $table->text('new_value')->nullable();
+        $table->uuid('changed_by')->nullable();
+        $table->timestamp('created_at')->nullable();
     }
+);
+
+Schema::create(
+    'lead_allocation_queue',
+    function (Blueprint $table) {
+
+        $table->uuid('id')->primary();
+        $table->uuid('lead_id');
+
+        $table
+            ->uuid('assigned_to')
+            ->nullable();
+
+        $table
+            ->string('status')
+            ->default('queued');
+
+        $table
+            ->text('reason')
+            ->nullable();
+
+        $table
+            ->integer('attempt_count')
+            ->default(0);
+
+        $table
+            ->timestamp('queued_at')
+            ->nullable();
+
+        $table
+            ->timestamp('processed_at')
+            ->nullable();
+
+        $table->timestamps();
+    }
+);
+
+Schema::create(
+    'lead_allocation_logs',
+    function (Blueprint $table) {
+
+        $table->uuid('id')->primary();
+
+        $table
+            ->uuid('lead_id')
+            ->nullable();
+
+        $table
+            ->uuid('salesperson_id')
+            ->nullable();
+
+        $table
+            ->string('action');
+
+        $table
+            ->string('result');
+
+        $table
+            ->text('details')
+            ->nullable();
+
+        $table->timestamps();
+    }
+);
+    }
+
+
+    public function test_super_admin_can_directly_reassign_a_lead(): void
+{
+    $oldOwner = $this->createUser(
+        'Sourav Namdeo',
+        UserType::SALES_EXECUTIVE
+    );
+
+    $newOwner = $this->createUser(
+        'Samarpit Sharma',
+        UserType::SALES_EXECUTIVE
+    );
+
+    $requester = $this->createUser(
+        'Pallavi Singh',
+        UserType::SALES_MANAGER
+    );
+
+    $superAdmin = $this->createUser(
+        'Super Admin User',
+        UserType::SUPER_ADMIN
+    );
+
+    $lead = $this->createLead($oldOwner);
+
+    $pendingTransfer = LeadTransfer::create([
+        'lead_id' => $lead->id,
+        'from_user_id' => $oldOwner->id,
+        'to_user_id' => $requester->id,
+        'requested_by' => $requester->id,
+        'status' => 'pending',
+        'reason' => 'Lead access requested.',
+    ]);
+
+    $result = app(
+        LeadTransferService::class
+    )->directAssign(
+        $lead,
+        $newOwner,
+        $superAdmin
+    );
+
+    $this->assertTrue($result['changed']);
+    $this->assertFalse($result['was_queued']);
+
+    $this->assertSame(
+        $newOwner->id,
+        $lead->fresh()->representative_user_id
+    );
+
+    $pendingTransfer->refresh();
+
+    $this->assertSame(
+        'cancelled',
+        $pendingTransfer->status
+    );
+
+    $this->assertSame(
+        $superAdmin->id,
+        $pendingTransfer->responded_by
+    );
+
+    $audit = LeadAuditTrail::where(
+        'lead_id',
+        $lead->id
+    )->first();
+
+    $this->assertNotNull($audit);
+
+    $this->assertSame(
+        $oldOwner->id,
+        $audit->old_value
+    );
+
+    $this->assertSame(
+        $newOwner->id,
+        $audit->new_value
+    );
+
+    $this->assertSame(
+        $superAdmin->id,
+        $audit->changed_by
+    );
+}
+
+public function test_super_admin_direct_assignment_closes_active_queue(): void
+{
+    $newOwner = $this->createUser(
+        'Sourav Namdeo',
+        UserType::SALES_EXECUTIVE
+    );
+
+    $superAdmin = $this->createUser(
+        'Super Admin User',
+        UserType::SUPER_ADMIN
+    );
+
+    $lead = $this->createLead(null);
+
+    $queue = LeadAllocationQueue::create([
+        'lead_id' => $lead->id,
+        'status' => 'queued',
+        'reason' => 'whatsapp_new_lead',
+        'attempt_count' => 3,
+        'queued_at' => now(),
+    ]);
+
+    $result = app(
+        LeadTransferService::class
+    )->directAssign(
+        $lead,
+        $newOwner,
+        $superAdmin
+    );
+
+    $this->assertTrue($result['changed']);
+    $this->assertTrue($result['was_queued']);
+
+    $this->assertSame(
+        'whatsapp_new_lead',
+        $result['queue_reason']
+    );
+
+    $queue->refresh();
+
+    $this->assertSame(
+        'assigned',
+        $queue->status
+    );
+
+    $this->assertSame(
+        $newOwner->id,
+        $queue->assigned_to
+    );
+
+    $this->assertNotNull(
+        $queue->processed_at
+    );
+
+    $this->assertSame(
+        $newOwner->id,
+        $lead->fresh()->representative_user_id
+    );
+
+    $allocationLog =
+    LeadAllocationLog::where(
+        'lead_id',
+        $lead->id
+    )
+    ->where(
+        'salesperson_id',
+        $newOwner->id
+    )
+    ->first();
+
+$this->assertNotNull(
+    $allocationLog
+);
+
+$this->assertSame(
+    'assigned',
+    $allocationLog->action
+);
+
+$this->assertSame(
+    'success',
+    $allocationLog->result
+);
+
+$this->assertSame(
+    'Assigned manually by Super Admin from lead queue',
+    $allocationLog->details
+);
+}
+
+public function test_non_super_admin_cannot_directly_assign_leads(): void
+{
+    $oldOwner = $this->createUser(
+        'Sourav Namdeo',
+        UserType::SALES_EXECUTIVE
+    );
+
+    $newOwner = $this->createUser(
+        'Samarpit Sharma',
+        UserType::SALES_EXECUTIVE
+    );
+
+    $salesManager = $this->createUser(
+        'Sales Manager',
+        UserType::SALES_MANAGER
+    );
+
+    $lead = $this->createLead($oldOwner);
+
+    $this->expectException(
+        ValidationException::class
+    );
+
+    app(
+        LeadTransferService::class
+    )->directAssign(
+        $lead,
+        $newOwner,
+        $salesManager
+    );
+}
+
+public function test_direct_assignment_rejects_non_sales_destination(): void
+{
+    $oldOwner = $this->createUser(
+        'Sourav Namdeo',
+        UserType::SALES_EXECUTIVE
+    );
+
+    $adminDestination = $this->createUser(
+        'Admin User',
+        UserType::ADMIN
+    );
+
+    $superAdmin = $this->createUser(
+        'Super Admin User',
+        UserType::SUPER_ADMIN
+    );
+
+    $lead = $this->createLead($oldOwner);
+
+    $this->expectException(
+        ValidationException::class
+    );
+
+    app(
+        LeadTransferService::class
+    )->directAssign(
+        $lead,
+        $adminDestination,
+        $superAdmin
+    );
+}
 }

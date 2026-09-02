@@ -464,6 +464,46 @@ if (
 
         $staff = $this->getUsersInHierarchy() ?: auth()->user();
 
+        /*
+|--------------------------------------------------------------------------
+| Direct Transfer Representatives - Super Admin Only
+|--------------------------------------------------------------------------
+|
+| Only active Sales users can own leads through this
+| Super Admin direct-transfer control.
+|
+*/
+$transferRepresentatives =
+    collect();
+
+if ($isSuperAdmin) {
+
+    $transferRepresentatives =
+        User::query()
+            ->where(
+                'status',
+                1
+            )
+            ->whereHas(
+                'userType',
+                function ($query) {
+
+                    $query->whereIn(
+                        'user_type',
+                        UserType::SALES_ROLES
+                    );
+                }
+            )
+            ->orderBy(
+                'name'
+            )
+            ->get([
+                'id',
+                'name',
+                'user_type_id',
+            ]);
+}
+
         // Optimize approved payments query - use select and distinct
         $leadsWithApprovedPayments = \App\Models\PaymentAuditTrail::where('payment_status', 1)
             ->where('paid_amount', '>', 0)
@@ -524,7 +564,8 @@ if ($isSuperAdmin) {
             'leadsWithApprovedPayments',
             'latestFollowups',
             'isSuperAdmin',
-            'queuedLeadCount'
+            'queuedLeadCount',
+            'transferRepresentatives'
         )
     );
     }

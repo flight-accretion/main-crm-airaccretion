@@ -201,7 +201,16 @@ Route::middleware('auth')->group(function () {
     | Lead Transfer Routes
     |--------------------------------------------------------------------------
     */
-
+Route::post(
+    '/transfers/direct-assign',
+    [
+        LeadTransferController::class,
+        'directAssign'
+    ]
+)
+    ->name(
+        'admin.leads.transfer.direct-assign'
+    );
     // Transfer request inbox
     Route::get(
         '/transfers',

@@ -9,6 +9,8 @@ use App\Models\User;
 use App\Models\UserType;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use App\Models\LeadAllocationQueue;
+use App\Models\LeadAllocationLog;
 
 class LeadTransferService
 {
@@ -348,6 +350,234 @@ class LeadTransferService
             ]);
         }
     }
+
+    /**
+ * Directly assign/reassign a lead by Super Admin.
+ *
+ * This is different from the normal request/approval
+ * transfer workflow.
+ *
+ * Returns information needed by the caller to complete
+ * queued lead source handoff.
+ */
+public function directAssign(
+    Lead $lead,
+    User $toUser,
+    User $actor
+): array {
+
+    /*
+     * Direct reassignment is Super Admin only.
+     */
+    if (!$this->isSuperAdmin($actor)) {
+
+        throw ValidationException::withMessages([
+            'transfer' =>
+                'Only Super Admin can directly assign or transfer leads.',
+        ]);
+    }
+
+    /*
+     * Destination must be an active Sales user.
+     */
+    if (
+        !$this->isSalesUser($toUser)
+        ||
+        (int) $toUser->status !== 1
+    ) {
+
+        throw ValidationException::withMessages([
+            'transfer' =>
+                'The selected representative must be an active Sales Manager or Sales Executive.',
+        ]);
+    }
+
+    return DB::transaction(
+        function () use (
+            $lead,
+            $toUser,
+            $actor
+        ) {
+
+            /*
+             * Lock ownership while changing it.
+             */
+            $lockedLead = Lead::where(
+                    'id',
+                    $lead->id
+                )
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            /*
+             * Nothing to change.
+             */
+            if (
+                (string)
+                    $lockedLead->representative_user_id
+                ===
+                (string) $toUser->id
+            ) {
+
+                return [
+                    'changed' => false,
+                    'was_queued' => false,
+                    'queue_reason' => null,
+                ];
+            }
+
+            $oldRepresentative =
+                $lockedLead->representative_user_id;
+
+            /*
+             * Capture queue source before closing the queue.
+             *
+             * We preserve the original reason because it tells
+             * us whether this came from WhatsApp, Email, IVR, etc.
+             */
+            $queuedItem =
+                LeadAllocationQueue::query()
+                    ->where(
+                        'lead_id',
+                        $lockedLead->id
+                    )
+                    ->where(
+                        'status',
+                        'queued'
+                    )
+                    ->orderByDesc(
+                        'queued_at'
+                    )
+                    ->lockForUpdate()
+                    ->first();
+
+            $queueReason =
+                $queuedItem
+                    ? $queuedItem->reason
+                    : null;
+
+            /*
+             * Any old pending transfer request becomes invalid
+             * because Super Admin is changing ownership now.
+             */
+            LeadTransfer::query()
+                ->where(
+                    'lead_id',
+                    $lockedLead->id
+                )
+                ->where(
+                    'status',
+                    'pending'
+                )
+                ->update([
+                    'status' =>
+                        'cancelled',
+
+                    'responded_at' =>
+                        now(),
+
+                    'responded_by' =>
+                        $actor->id,
+
+                    'response_note' =>
+                        'Cancelled because Super Admin directly reassigned the lead.',
+                ]);
+
+            /*
+             * Change ownership.
+             */
+            $lockedLead->representative_user_id =
+                $toUser->id;
+
+            $lockedLead->save();
+
+            /*
+             * If this was waiting in auto allocation,
+             * remove it from the live queue immediately.
+             *
+             * Preserve queue reason/source.
+             */
+            $queuedCount =
+                LeadAllocationQueue::query()
+                    ->where(
+                        'lead_id',
+                        $lockedLead->id
+                    )
+                    ->where(
+                        'status',
+                        'queued'
+                    )
+                    ->update([
+                        'assigned_to' =>
+                            $toUser->id,
+
+                        'status' =>
+                            'assigned',
+
+                        'processed_at' =>
+                            now(),
+                    ]);
+
+                    if ($queuedCount > 0) {
+
+                    LeadAllocationLog::create([
+                        'lead_id' =>
+                            $lockedLead->id,
+
+                        'salesperson_id' =>
+                            $toUser->id,
+
+                        'action' =>
+                            'assigned',
+
+                        'result' =>
+                            'success',
+
+                        'details' =>
+                            'Assigned manually by Super Admin from lead queue',
+                    ]);
+                }
+
+            /*
+             * Keep ownership history.
+             */
+            LeadAuditTrail::create([
+                'id' =>
+                    (string)
+                    \Illuminate\Support\Str::uuid(),
+
+                'lead_id' =>
+                    $lockedLead->id,
+
+                'field_name' =>
+                    'representative_user_id',
+
+                'old_value' =>
+                    $oldRepresentative,
+
+                'new_value' =>
+                    $toUser->id,
+
+                'changed_by' =>
+                    $actor->id,
+
+                'created_at' =>
+                    now(),
+            ]);
+
+            return [
+                'changed' =>
+                    true,
+
+                'was_queued' =>
+                    $queuedCount > 0,
+
+                'queue_reason' =>
+                    $queueReason,
+            ];
+        }
+    );
+}
 
     private function isSalesUser(User $user): bool
     {

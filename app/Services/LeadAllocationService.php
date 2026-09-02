@@ -356,6 +356,118 @@ if ($emailLeadLog) {
         ]);
     }
 
+    /**
+ * Complete source-specific actions after Super Admin
+ * manually assigns a lead which was waiting in queue.
+ *
+ * Ownership and queue status have already been updated
+ * by LeadTransferService.
+ */
+public function finalizeManualQueuedAssignment(
+    Lead $lead,
+    User $salesperson,
+    ?string $queueReason = null
+): void {
+
+    /*
+     * WhatsApp / WhatCRM
+     */
+    $whatsAppIntegration =
+        \App\Models\WhatsAppLeadIntegration::query()
+            ->where(
+                'lead_id',
+                $lead->id
+            )
+            ->first();
+
+    if (
+        str_starts_with(
+            (string) $queueReason,
+            'whatsapp_'
+        )
+    ) {
+
+        $this->createWhatsAppAssignmentFollowup(
+            $lead,
+            $whatsAppIntegration
+        );
+    }
+
+    if ($whatsAppIntegration) {
+
+        $whatsAppIntegration->update([
+            'status' =>
+                'assigned',
+
+            'assigned_user_id' =>
+                $salesperson->id,
+
+            'assigned_at' =>
+                now(),
+        ]);
+
+        app(
+            \App\Services\WhatCrmAssignmentWebhookService::class
+        )->send(
+            $whatsAppIntegration
+        );
+
+        app(
+            \App\Services\WhatCrmAssignmentCustomerMessageService::class
+        )->send(
+            $whatsAppIntegration
+        );
+    }
+
+    /*
+     * IVR
+     */
+    $ivrCallLog =
+        $lead->ivrCallLogs()
+            ->whereNull(
+                'initial_followup_created_at'
+            )
+            ->orderByDesc(
+                'call_start_at'
+            )
+            ->first();
+
+    if ($ivrCallLog) {
+
+        app(
+            IvrFollowupService::class
+        )->createIfNeeded(
+            $lead,
+            $ivrCallLog,
+            $ivrCallLog->processing_status
+                === 'repeat_lead'
+        );
+    }
+
+    /*
+     * Email
+     */
+    $emailLeadLog =
+        $lead->emailLeadLogs()
+            ->whereNull(
+                'followup_created_at'
+            )
+            ->orderByDesc(
+                'received_at'
+            )
+            ->first();
+
+    if ($emailLeadLog) {
+
+        app(
+            EmailLeadFollowupService::class
+        )->createIfNeeded(
+            $lead,
+            $emailLeadLog
+        );
+    }
+}
+
     private function whatsAppSourceServiceText(
         ?array $payload
     ): ?string {

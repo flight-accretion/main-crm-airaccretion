@@ -434,6 +434,31 @@
                     </a>
 
                     @endif -->
+                    @if ($isSuperAdmin ?? false)
+
+<div
+    id="bulk-lead-transfer-controls"
+    class="hidden flex items-center gap-2"
+>
+    <span
+        id="selected-transfer-count"
+        class="text-sm font-semibold whitespace-nowrap"
+    >
+        0 selected
+    </span>
+
+    <button
+        type="button"
+        id="transfer-selected-leads"
+        class="ti-btn ti-btn-primary ti-btn-sm whitespace-nowrap"
+    >
+        <i class="ri-arrow-left-right-line"></i>
+
+        Transfer Selected
+    </button>
+</div>
+
+@endif
                     <!-- Show Entries Dropdown -->
                     <div class="flex items-center gap-2">
                         <label for="per-page-select" class="text-sm whitespace-nowrap">Show</label>
@@ -474,7 +499,20 @@
                         data-empty-msg="No vendor payments found" data-start="{{ $leads->firstItem() ?? 0 }}">
                         <thead class="bg-primary text-white">
                             <tr class="border-b border-defaultborder">
-                                <th></th>
+                               <th class="text-center">
+
+                                @if ($isSuperAdmin ?? false)
+
+                                    <input
+                                        type="checkbox"
+                                        id="select-all-transfer-leads"
+                                        class="form-check-input"
+                                        title="Select all leads on this page"
+                                    >
+
+                                @endif
+
+                            </th>
                                 <th data-priority="1">S.No</th>
                                 <th data-priority="2">Client Name</th>
                                 <!-- <th data-priority="4">Company Name</th>
@@ -496,7 +534,29 @@
                             @foreach ($leads as $key => $enquiry)
                             <!-- <tr class="border-b border-defaultborder"> -->
                                 <tr class="border-b border-defaultborder lead-followup-hover-row">
-                                <td></td>
+                                <td class="text-center">
+
+                                    @if ($isSuperAdmin ?? false)
+
+                                        <input
+                                            type="checkbox"
+                                            class="form-check-input lead-transfer-checkbox"
+                                            value="{{ $enquiry->id }}"
+                                            data-client-name="{{
+                                                optional(
+                                                    $enquiry->client
+                                                )->name ?? 'N/A'
+                                            }}"
+                                            data-current-representative="{{
+                                                optional(
+                                                    $enquiry->representative
+                                                )->name ?? 'N/A'
+                                            }}"
+                                        >
+
+                                    @endif
+
+                                </td>
                                 <td class="text-center">
                                     {{ $leads->firstItem() ? $leads->firstItem() + $key : $key + 1 }}</td>
                                 <td>{{ optional($enquiry->client)->name ?? 'N/A' }}</td>
@@ -766,6 +826,35 @@
                                         <a aria-label="anchor" href="{{ route('admin.leads.edit', $enquiry->id) }}"
                                             class="ti-btn ti-btn-icon ti-btn-sm ti-btn-info-full" title="Edit Lead"><i
                                                 class="ri-edit-line"></i></a>
+                                                @if ($isSuperAdmin ?? false)
+
+<a
+    aria-label="Transfer Lead"
+    href="javascript:void(0);"
+    class="
+        ti-btn
+        ti-btn-icon
+        ti-btn-sm
+        ti-btn-warning-full
+        lead-direct-transfer-btn
+    "
+    data-lead-id="{{ $enquiry->id }}"
+    data-client-name="{{
+        optional(
+            $enquiry->client
+        )->name ?? 'N/A'
+    }}"
+    data-current-representative="{{
+        optional(
+            $enquiry->representative
+        )->name ?? 'N/A'
+    }}"
+    title="Transfer Lead"
+>
+    <i class="ri-arrow-left-right-line"></i>
+</a>
+
+@endif
                                             {{-- @endif --}}
                                         <!-- <a aria-label="anchor" href="javascript:void(0);" class="ti-btn ti-btn-icon ti-btn-sm ti-btn-success-full toggle-client-status" data-id="{{ $enquiry->client->id }}" data-status="{{ $enquiry->client->status }}" data-name="{{ $enquiry->client->name }}" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ $enquiry->client->status ? 'Deactivate' : 'Activate' }}"><i class="{{ $enquiry->client->status ? 'ri-lock-line' : 'ri-check-line' }}"></i></a> -->
                                         <!-- <a aria-label="Confirm Lead" href="javascript:void(0);"
@@ -929,8 +1018,456 @@
         </div>
     </div>
 </div>
+@if ($isSuperAdmin ?? false)
+
+<div
+    id="lead-direct-transfer-modal"
+    class="
+        hidden
+        fixed
+        inset-0
+        z-50
+        flex
+        items-center
+        justify-center
+        bg-black
+        bg-opacity-50
+    "
+>
+    <div
+        class="
+            bg-white
+            dark:!bg-bodybg
+            p-6
+            rounded-lg
+            shadow-lg
+            w-[90%]
+            max-w-lg
+        "
+    >
+
+        <div
+            class="flex justify-between items-center mb-4"
+        >
+            <h5
+                class="text-xl font-semibold"
+            >
+                Transfer Lead
+            </h5>
+
+            <button
+                type="button"
+                id="close-lead-direct-transfer-modal"
+                class="text-gray-500 hover:text-black"
+            >
+                <i class="bi bi-x"></i>
+            </button>
+        </div>
+
+        <form
+            method="POST"
+            action="{{
+                route(
+                    'admin.leads.transfer.direct-assign'
+                )
+            }}"
+            id="lead-direct-transfer-form"
+        >
+
+            @csrf
+
+            <div
+                id="direct-transfer-lead-inputs"
+            ></div>
+
+            <div
+                class="
+                    mb-4
+                    p-3
+                    bg-gray-50
+                    dark:bg-black/20
+                    rounded
+                "
+            >
+                <div
+                    id="direct-transfer-summary"
+                    class="text-sm"
+                ></div>
+            </div>
+
+            <div class="mb-4">
+
+                <label
+                    for="direct-transfer-representative"
+                    class="ti-form-label"
+                >
+                    Assign To Representative
+                </label>
+
+                <select
+                    name="representative_user_id"
+                    id="direct-transfer-representative"
+                    class="ti-form-select w-full"
+                    required
+                >
+
+                    <option value="">
+                        Select Representative
+                    </option>
+
+                    @foreach (
+                        $transferRepresentatives
+                        ?? collect()
+                        as $representative
+                    )
+
+                        <option
+                            value="{{
+                                $representative->id
+                            }}"
+                        >
+                            {{
+                                $representative->name
+                            }}
+                        </option>
+
+                    @endforeach
+
+                </select>
+
+            </div>
+
+            <div
+                class="
+                    flex
+                    justify-end
+                    gap-3
+                "
+            >
+
+                <button
+                    type="button"
+                    id="cancel-lead-direct-transfer"
+                    class="
+                        ti-btn
+                        ti-btn-outline-secondary
+                    "
+                >
+                    Cancel
+                </button>
+
+                <button
+                    type="submit"
+                    id="confirm-lead-direct-transfer"
+                    class="
+                        ti-btn
+                        bg-primary
+                        text-white
+                    "
+                >
+                    Transfer Lead
+                </button>
+
+            </div>
+
+        </form>
+
+    </div>
+</div>
+
+@endif
 @endsection
 @push('scripts')
+@if ($isSuperAdmin ?? false)
+
+<script>
+$(document).ready(function () {
+
+    const modal =
+        $('#lead-direct-transfer-modal');
+
+    const inputsContainer =
+        $('#direct-transfer-lead-inputs');
+
+    const summary =
+        $('#direct-transfer-summary');
+
+    const transferButton =
+        $('#confirm-lead-direct-transfer');
+
+    function selectedCheckboxes() {
+
+        return $(
+            '.lead-transfer-checkbox:checked'
+        );
+    }
+
+    function updateBulkTransferControls() {
+
+        const count =
+            selectedCheckboxes().length;
+
+        $('#selected-transfer-count')
+            .text(
+                count +
+                ' selected'
+            );
+
+        if (count > 0) {
+
+            $('#bulk-lead-transfer-controls')
+                .removeClass('hidden');
+
+        } else {
+
+            $('#bulk-lead-transfer-controls')
+                .addClass('hidden');
+        }
+
+        const total =
+            $('.lead-transfer-checkbox')
+                .length;
+
+        $('#select-all-transfer-leads')
+            .prop(
+                'checked',
+                total > 0 &&
+                count === total
+            );
+    }
+
+    function openTransferModal(
+        leads
+    ) {
+
+        if (!leads.length) {
+            return;
+        }
+
+        inputsContainer.empty();
+
+        const ownerCounts = {};
+
+        leads.forEach(
+            function (lead) {
+
+                $('<input>', {
+                    type: 'hidden',
+                    name: 'lead_ids[]',
+                    value: lead.id
+                }).appendTo(
+                    inputsContainer
+                );
+
+                const owner =
+                    lead.currentRepresentative
+                    || 'N/A';
+
+                ownerCounts[owner] =
+                    (ownerCounts[owner] || 0)
+                    + 1;
+            }
+        );
+
+        const owners =
+            Object.entries(
+                ownerCounts
+            )
+            .map(
+                function (entry) {
+
+                    return (
+                        entry[0] +
+                        ' (' +
+                        entry[1] +
+                        ')'
+                    );
+                }
+            )
+            .join(', ');
+
+        if (leads.length === 1) {
+
+            summary.text(
+                'Client: ' +
+                leads[0].clientName +
+                ' | Current Representative: ' +
+                leads[0].currentRepresentative
+            );
+
+            transferButton.text(
+                'Transfer Lead'
+            );
+
+        } else {
+
+            summary.text(
+                leads.length +
+                ' leads selected. Current Representatives: ' +
+                owners
+            );
+
+            transferButton.text(
+                'Transfer ' +
+                leads.length +
+                ' Leads'
+            );
+        }
+
+        $('#direct-transfer-representative')
+            .val('');
+
+        modal.removeClass(
+            'hidden'
+        );
+    }
+
+    /*
+     * Select all leads displayed on THIS PAGE only.
+     */
+    $('#select-all-transfer-leads')
+        .on(
+            'change',
+            function () {
+
+                $('.lead-transfer-checkbox')
+                    .prop(
+                        'checked',
+                        this.checked
+                    );
+
+                updateBulkTransferControls();
+            }
+        );
+
+    $(document)
+        .on(
+            'change',
+            '.lead-transfer-checkbox',
+            function () {
+
+                updateBulkTransferControls();
+            }
+        );
+
+    /*
+     * Single lead action button.
+     */
+    $(document)
+        .on(
+            'click',
+            '.lead-direct-transfer-btn',
+            function () {
+
+                openTransferModal([
+                    {
+                        id:
+                            $(this)
+                                .data(
+                                    'lead-id'
+                                ),
+
+                        clientName:
+                            $(this)
+                                .data(
+                                    'client-name'
+                                ),
+
+                        currentRepresentative:
+                            $(this)
+                                .data(
+                                    'current-representative'
+                                )
+                    }
+                ]);
+            }
+        );
+
+    /*
+     * Bulk transfer button.
+     */
+    $('#transfer-selected-leads')
+        .on(
+            'click',
+            function () {
+
+                const leads = [];
+
+                selectedCheckboxes()
+                    .each(
+                        function () {
+
+                            leads.push({
+                                id:
+                                    $(this)
+                                        .val(),
+
+                                clientName:
+                                    $(this)
+                                        .data(
+                                            'client-name'
+                                        ),
+
+                                currentRepresentative:
+                                    $(this)
+                                        .data(
+                                            'current-representative'
+                                        )
+                            });
+                        }
+                    );
+
+                openTransferModal(
+                    leads
+                );
+            }
+        );
+
+    function closeTransferModal() {
+
+        modal.addClass(
+            'hidden'
+        );
+
+        inputsContainer.empty();
+    }
+
+    $('#close-lead-direct-transfer-modal')
+        .on(
+            'click',
+            closeTransferModal
+        );
+
+    $('#cancel-lead-direct-transfer')
+        .on(
+            'click',
+            closeTransferModal
+        );
+
+    /*
+     * Protect against double submit.
+     */
+    $('#lead-direct-transfer-form')
+        .on(
+            'submit',
+            function () {
+
+                transferButton
+                    .prop(
+                        'disabled',
+                        true
+                    )
+                    .text(
+                        'Transferring...'
+                    );
+            }
+        );
+
+    updateBulkTransferControls();
+});
+</script>
+
+@endif
 <script>
     $(document).ready(function() {
             let currentLeadId = null;
@@ -1361,10 +1898,15 @@
                 autoWidth: true,
 
                 columnDefs: [{
-                        visible: false,
-                        searchable: false,
-                        orderable: false,
-                        targets: 0 // Old Responsive control column is no longer required.
+                        visible:
+                        @json(
+                            (bool)
+                            ($isSuperAdmin ?? false)
+                        ),
+
+                    searchable: false,
+                    orderable: false,
+                    targets: 0 
                     },
                     {
                         orderable: false,
