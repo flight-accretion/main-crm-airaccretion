@@ -81,6 +81,18 @@ class Kernel extends ConsoleKernel
 
         $schedule
         ->command(
+            'call-summary:replay-rejected --days=7 --limit=25'
+        )
+        ->everyFiveMinutes()
+        ->withoutOverlapping()
+        ->appendOutputTo(
+            storage_path(
+                'logs/call-summary-replay.log'
+            )
+        );
+
+        $schedule
+        ->command(
             'whatsapp:process-ai-replies'
             . ' --limit=' . max(
                 1,
