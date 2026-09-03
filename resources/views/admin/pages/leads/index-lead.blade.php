@@ -451,6 +451,7 @@
         type="button"
         id="transfer-selected-leads"
         class="ti-btn ti-btn-primary ti-btn-sm whitespace-nowrap"
+        style="width: fit-content;"
     >
         <i class="ri-arrow-left-right-line"></i>
 

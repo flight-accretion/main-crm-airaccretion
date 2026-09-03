@@ -43,6 +43,8 @@ class WhatsAppLeadServiceTest extends TestCase
             ]
         );
         config()->set('whatcrm.assignment_webhook', null);
+        config()->set('services.whatscrm_vouchers.api_url', null);
+        config()->set('services.whatscrm_vouchers.api_token', null);
 
         DB::purge('sqlite');
         DB::reconnect('sqlite');
@@ -447,6 +449,121 @@ class WhatsAppLeadServiceTest extends TestCase
                 'message_type' => 'template',
                 'body' =>
                     'Thank you for your enquiry with Accretion Aviation India\'s leading Private Plane Helicopter and Yacht rental company. Your enquiry is being handled by Manual Agent and their direct number is 9000011111 Accretion Aviation',
+            ]
+        );
+    }
+
+    public function test_assignment_customer_template_uses_voucher_whatscrm_credentials_when_available(): void
+    {
+        config()->set(
+            'whatcrm.assignment_customer_message_enabled',
+            true
+        );
+        config()->set(
+            'whatcrm.assignment_customer_template',
+            'lead_qualified'
+        );
+        config()->set(
+            'whatcrm.template_message_url',
+            'https://main.example.test/api/v1/send_templet'
+        );
+        config()->set('whatcrm.template_message_token', 'main-token');
+        config()->set(
+            'services.whatscrm_vouchers.api_url',
+            'https://voucher.example.test/api/v1/send_templet'
+        );
+        config()->set(
+            'services.whatscrm_vouchers.api_token',
+            'voucher-token'
+        );
+
+        $salesperson =
+            $this->createSalesUser(
+                'Voucher Agent',
+                '9819515554'
+            );
+
+        $client =
+            Client::create([
+                'id' => (string) Str::uuid(),
+                'name' => 'Voucher Customer',
+                'contact_number' => '7879645048',
+                'alternate_number' => null,
+                'status' => 1,
+            ]);
+
+        Http::fake([
+            'https://voucher.example.test/api/v1/send_templet' =>
+                Http::response(
+                    [
+                        'success' => true,
+                        'metaResponse' => [
+                            'messages' => [
+                                [
+                                    'id' => 'wamid.VOUCHER-ASSIGNMENT-1',
+                                    'message_status' => 'accepted',
+                                ],
+                            ],
+                        ],
+                    ],
+                    200
+                ),
+            'https://main.example.test/api/v1/send_templet' =>
+                Http::response(
+                    [
+                        'success' => false,
+                        'message' => 'Invalid API keys found',
+                    ],
+                    200
+                ),
+            '*' => Http::response(['success' => false], 500),
+        ]);
+
+        $lead =
+            Lead::create([
+                'id' => (string) Str::uuid(),
+                'client_id' => $client->id,
+                'representative_user_id' => $salesperson->id,
+                'service_ids' => null,
+                'product_ids' => null,
+                'number_of_passengers' => 1,
+                'description' => 'Voucher account lead',
+                'occasion' => null,
+            ]);
+
+        Http::assertSent(function ($request) {
+            return $request->url()
+                === 'https://voucher.example.test/api/v1/send_templet'
+                && $request->data() === [
+                    'sendTo' => '+917879645048',
+                    'templetName' => 'lead_qualified',
+                    'exampleArr' => [
+                        'Voucher Agent',
+                        '9819515554',
+                    ],
+                    'token' => 'voucher-token',
+                    'mediaUri' => '',
+                ];
+        });
+
+        Http::assertSentCount(1);
+
+        $this->assertDatabaseHas(
+            'whatsapp_conversations',
+            [
+                'lead_id' => $lead->id,
+                'assigned_user_id' => $salesperson->id,
+            ]
+        );
+
+        $this->assertDatabaseHas(
+            'whatsapp_messages',
+            [
+                'provider_message_id' => 'wamid.VOUCHER-ASSIGNMENT-1',
+                'direction' => 'outgoing',
+                'sender_type' => 'agent',
+                'sender_user_id' => $salesperson->id,
+                'message_type' => 'template',
             ]
         );
     }

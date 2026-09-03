@@ -113,38 +113,51 @@ class WhatCrmAssignmentCustomerMessageService
             )
         );
 
-        try {
-            $result = $this->outbound->sendTemplate([
-                'number' => $customerNumber,
-                'name' => optional($lead->client)->name,
-                'template_name' => $templateName,
-                'body_values' => [
+        $templatePayload = [
+            'number' => $customerNumber,
+            'name' => optional($lead->client)->name,
+            'template_name' => $templateName,
+            'body_values' => [
+                $agentName,
+                $agentNumber,
+            ],
+            'rendered_body' =>
+                $this->templateBody(
                     $agentName,
-                    $agentNumber,
-                ],
-                'rendered_body' =>
-                    $this->templateBody(
-                        $agentName,
-                        $agentNumber
-                    ),
-                'chat_id' =>
-                    $integration
-                        ? (
-                            data_get(
-                                $integration->payload,
-                                'chat_id'
-                            )
-                            ?: data_get(
-                                $integration->payload,
-                                'whatcrm_chat_id'
-                            )
+                    $agentNumber
+                ),
+            'chat_id' =>
+                $integration
+                    ? (
+                        data_get(
+                            $integration->payload,
+                            'chat_id'
                         )
-                        : null,
-                'agent_user_id' => $representative->id,
-                'assigned_agent_user_id' => $representative->id,
-                'assigned_agent' => $representative->name,
-                'lead_id' => $lead->id,
-            ]);
+                        ?: data_get(
+                            $integration->payload,
+                            'whatcrm_chat_id'
+                        )
+                    )
+                    : null,
+            'agent_user_id' => $representative->id,
+            'assigned_agent_user_id' => $representative->id,
+            'assigned_agent' => $representative->name,
+            'lead_id' => $lead->id,
+        ];
+
+        $voucherCredentials = $this->voucherTemplateCredentials();
+
+        if (!empty($voucherCredentials)) {
+            $templatePayload = array_merge(
+                $templatePayload,
+                $voucherCredentials
+            );
+        }
+
+        try {
+            $result = $this->outbound->sendTemplate(
+                $templatePayload
+            );
 
             if (!($result['success'] ?? false)) {
                 if ($integration) {
@@ -240,6 +253,25 @@ class WhatCrmAssignmentCustomerMessageService
         }
 
         return '';
+    }
+
+    private function voucherTemplateCredentials(): array
+    {
+        $apiUrl = trim(
+            (string) config('services.whatscrm_vouchers.api_url')
+        );
+        $apiToken = trim(
+            (string) config('services.whatscrm_vouchers.api_token')
+        );
+
+        if ($apiUrl === '' || $apiToken === '') {
+            return [];
+        }
+
+        return [
+            'api_url' => $apiUrl,
+            'api_token' => $apiToken,
+        ];
     }
 
     private function templateBody(

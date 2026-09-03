@@ -55,8 +55,8 @@ class WhatCrmOutboundMessageService
             );
         }
 
-        $apiUrl = $this->templateMessageUrl();
-        $apiToken = $this->templateMessageToken();
+        $apiUrl = $this->templateMessageUrl($data);
+        $apiToken = $this->templateMessageToken($data);
 
         if ($apiUrl === '') {
             throw new InvalidArgumentException(
@@ -542,26 +542,38 @@ class WhatCrmOutboundMessageService
         );
     }
 
-    private function templateMessageUrl(): string
+    private function templateMessageUrl(array $data = []): string
     {
-        return trim(
-            (string) (
+        $apiUrl =
+            $data['api_url']
+            ?? $data['template_message_url']
+            ?? null;
+
+        if (trim((string) $apiUrl) === '') {
+            $apiUrl =
                 config('whatcrm.template_message_url')
                 ?: config('services.whatscrm.api_url')
-                ?: ''
-            )
-        );
+                ?: '';
+        }
+
+        return trim((string) $apiUrl);
     }
 
-    private function templateMessageToken(): string
+    private function templateMessageToken(array $data = []): string
     {
-        return trim(
-            (string) (
+        $apiToken =
+            $data['api_token']
+            ?? $data['template_message_token']
+            ?? null;
+
+        if (trim((string) $apiToken) === '') {
+            $apiToken =
                 config('whatcrm.template_message_token')
                 ?: config('services.whatscrm.api_token')
-                ?: ''
-            )
-        );
+                ?: '';
+        }
+
+        return trim((string) $apiToken);
     }
 
     private function normalizeMessageType($messageType): string
