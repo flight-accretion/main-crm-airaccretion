@@ -528,7 +528,7 @@
             style="width:100%; border-collapse:collapse; margin-top:30px; font-family:Arial, sans-serif; font-size:14px; text-align:center;">
             <tr>
                 <td style="padding:6px 0; color:#000000;">
-                    This is a system-generated invoice. For any queries, please contact  leads@accretionaviation.com or +91-9575340786.
+                    This is a system-generated invoice. For any queries, please contact  ops@accretionaviation.com or +91-9575340786.
                 </td>
             </tr>
             <!-- <tr>

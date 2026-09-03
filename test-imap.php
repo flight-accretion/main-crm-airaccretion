@@ -1,7 +1,7 @@
 <?php
 
 $host = 'mail.accretionaviation.com';
-$port = 993;
+$port = 587;
 $username = 'leads@accretionaviation.com';
 
 echo 'Email Password: ';
