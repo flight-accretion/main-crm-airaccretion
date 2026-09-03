@@ -52,7 +52,7 @@
         <span style="font-size:10pt; color:blue;">Aviation</span><br />
         <span style="font-size:10pt; color:#767171;">Phone : +91-9575340786</span><br />
         <span style="font-size:10pt; color:#767171;">
-            Email : <a href="mailto:ops@accretionaviation.com">ops@accretionaviation.com</a>
+            Email : <a href="mailto:leads@accretionaviation.com">leads@accretionaviation.com</a>
         </span><br />
         <span style="font-size:10pt; color:#666666;">
             Website: <a href="http://www.accretionaviation.com" target="_blank" style="color:blue;">

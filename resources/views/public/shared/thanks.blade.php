@@ -46,7 +46,7 @@
                         <p>If you have any questions, please don't hesitate to contact us.</p>
                         <p class="mt-2">
                             <i class="ri-phone-line me-1"></i> Phone:  +91-9575340786  | 
-                            <i class="ri-mail-line me-1"></i> Email: ops@accretionaviation.com 
+                            <i class="ri-mail-line me-1"></i> Email: leads@accretionaviation.com 
                         </p>
                     </div>
                 </div>

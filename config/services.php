@@ -119,7 +119,7 @@ return [
 
     'recipient' => env(
         'EMAIL_LEADS_RECIPIENT',
-        'ops@accretionaviation.com'
+        'leads@accretionaviation.com'
     ),
 
 ],
