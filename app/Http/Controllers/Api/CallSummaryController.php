@@ -92,7 +92,7 @@ class CallSummaryController extends Controller
                         [
                             'required',
                             'string',
-                            'in:incoming,outgoing',
+                            'in:incoming,outgoing,unknown',
                         ],
 
                     'sentiment_score' =>
@@ -127,7 +127,7 @@ class CallSummaryController extends Controller
                         'agent_name is required.',
 
                     'direction.in' =>
-                        'direction must be incoming or outgoing.',
+                        'direction must be incoming, outgoing, or unknown.',
 
                     'sentiment_score.min' =>
                         'sentiment_score must be between 0 and 100.',
