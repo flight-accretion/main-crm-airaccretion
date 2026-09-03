@@ -16,7 +16,7 @@ class FetchEmailLeads extends Command
         {--to= : To date DD/MM/YYYY}';
 
     protected $description =
-        'Fetch website lead emails from ops mailbox';
+        'Fetch website lead emails from leads mailbox';
 
     public function handle(
         EmailMailboxService $mailboxService,
