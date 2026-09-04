@@ -280,6 +280,21 @@ class WhatsAppProductAllocationService
         return null;
     }
 
+    public function emptyProduct(): ?Product
+    {
+        return Product::query()
+            ->where('status', 1)
+            ->get([
+                'id',
+                'product',
+            ])
+            ->first(function (Product $product) {
+                return $this->productRouter
+                    ->normalize($product->product)
+                    === 'empty';
+            });
+    }
+
     private function retailFallbackProductIds(): Collection
     {
         return Product::query()

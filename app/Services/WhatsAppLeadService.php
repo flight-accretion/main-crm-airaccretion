@@ -49,6 +49,12 @@ class WhatsAppLeadService
                         $data['number']
                     );
 
+                $serviceText =
+                    $this->sourceServiceText(
+                        $data
+                    )
+                    ?? null;
+
                 /*
                  * --------------------------------------------------
                  * REQUEST IDEMPOTENCY
@@ -115,36 +121,27 @@ class WhatsAppLeadService
                 if ($existingLead) {
 
                     $integration =
-                        WhatsAppLeadIntegration::create([
-                            'lead_id' =>
-                                $existingLead->id,
+                        $this->recordExistingLeadIntegration(
+                            $existingLead,
+                            $phone,
+                            $data
+                        );
 
-                            'product_id' =>
-                                null,
-
-                            'phone' =>
-                                $phone,
-
-                            'external_id' =>
-                                $data['external_id']
-                                    ?? null,
-
-                            'status' =>
-                                'existing_lead',
-
-                            'assigned_user_id' =>
-                                $existingLead
-                                    ->representative_user_id,
-
-                            'payload' =>
-                                $data,
-
-                            'assigned_at' =>
-                                $existingLead
-                                    ->representative_user_id
-                                    ? now()
-                                    : null,
-                        ]);
+                    $this->sourceFollowups
+                        ->create(
+                            $existingLead,
+                            $source['label'],
+                            $this->existingLeadFollowupMessage(
+                                $data
+                            ),
+                            array_filter([
+                                'phone' => $phone,
+                                'service' => $serviceText,
+                                'reference' =>
+                                    $data['external_id'] ?? null,
+                            ]),
+                            true
+                        );
 
                     return [
                         'integration' =>
@@ -224,17 +221,20 @@ class WhatsAppLeadService
                  * --------------------------------------------------
                  */
 
-                $serviceText =
-                    $this->sourceServiceText(
-                        $data
-                    )
-                    ?? null;
-
                 $product =
                     $this->productRouter
                         ->resolveProduct(
                             $serviceText
                         );
+
+                if (
+                    !$product
+                    && $source['empty_product_on_unmapped']
+                ) {
+                    $product =
+                        $this->allocator
+                            ->emptyProduct();
+                }
 
                         /*
                 * --------------------------------------------------
@@ -631,6 +631,11 @@ class WhatsAppLeadService
                     $options['description_intro']
                     ?? 'Lead received automatically from WhatsApp / WhatCRM.'
                 ),
+            'empty_product_on_unmapped' =>
+                (bool) (
+                    $options['empty_product_on_unmapped']
+                    ?? false
+                ),
         ];
     }
 
@@ -649,6 +654,115 @@ class WhatsAppLeadService
             $source['label'];
 
         return $data;
+    }
+
+    private function recordExistingLeadIntegration(
+        Lead $lead,
+        string $phone,
+        array $data
+    ): WhatsAppLeadIntegration {
+        $integration =
+            WhatsAppLeadIntegration::query()
+                ->where('lead_id', $lead->id)
+                ->first();
+
+        $payload = [
+            'phone' => $phone,
+            'status' =>
+                $integration
+                && $integration->status === 'assigned'
+                    ? 'assigned'
+                    : 'existing_lead',
+            'assigned_user_id' =>
+                $lead->representative_user_id,
+            'payload' => $data,
+            'assigned_at' =>
+                $lead->representative_user_id
+                    ? now()
+                    : null,
+        ];
+
+        if (!empty($data['external_id'])) {
+            $payload['external_id'] =
+                $data['external_id'];
+        }
+
+        if ($integration) {
+            if (
+                !empty($integration->external_id)
+                && !empty($payload['external_id'])
+                && $integration->external_id
+                    !== $payload['external_id']
+            ) {
+                unset($payload['external_id']);
+            }
+
+            $integration->update($payload);
+
+            return $integration->fresh()
+                ?: $integration;
+        }
+
+        return WhatsAppLeadIntegration::create(
+            array_merge(
+                [
+                    'lead_id' => $lead->id,
+                    'product_id' => null,
+                ],
+                $payload
+            )
+        );
+    }
+
+    private function existingLeadFollowupMessage(
+        array $data
+    ): string {
+        $values = [
+            'Existing CRM lead matched by phone. Duplicate lead was not created.',
+        ];
+
+        foreach (
+            [
+                'date' => 'Date',
+                'guest' => 'Guests',
+                'type' => 'Type',
+            ]
+            as $key => $label
+        ) {
+            if (
+                isset($data[$key])
+                && trim(
+                    (string) $data[$key]
+                ) !== ''
+            ) {
+                $values[] =
+                    $label
+                    . ': '
+                    . trim(
+                        (string) $data[$key]
+                    );
+            }
+        }
+
+        $occasion =
+            $data['occasion']
+            ?? $data['occassion']
+            ?? $data['ocassion']
+            ?? null;
+
+        if (
+            is_scalar($occasion)
+            && trim((string) $occasion) !== ''
+        ) {
+            $values[] =
+                'Occasion: '
+                . trim((string) $occasion);
+        }
+
+        return implode(
+            PHP_EOL,
+            $values
+        );
     }
 
     private function resolveServiceIdsForProduct(

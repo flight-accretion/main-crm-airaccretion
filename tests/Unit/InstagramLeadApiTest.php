@@ -2,17 +2,21 @@
 
 namespace Tests\Unit;
 
+use App\Models\Client;
 use App\Models\Lead;
 use App\Models\EmailLeadProductUserAssignment;
+use App\Models\LeadFollowup;
 use App\Models\Product;
 use App\Models\SalespersonAvailability;
 use App\Models\User;
 use App\Models\UserType;
+use App\Models\WhatsAppLeadIntegration;
 use App\Services\LeadAllocationService;
 use Carbon\Carbon;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class InstagramLeadApiTest extends TestCase
@@ -177,6 +181,187 @@ class InstagramLeadApiTest extends TestCase
             'status' => 'assigned',
             'assigned_user_id' => $salesperson->id,
         ]);
+    }
+
+    public function test_instagram_lead_api_requires_only_phone_and_routes_unmapped_to_empty_product_handler(): void
+    {
+        $salesperson =
+            $this->createSalesUser(
+                'Empty Product Handler'
+            );
+
+        $emptyProduct =
+            $this->createProduct('Empty');
+
+        $this->assignProductToUser(
+            $emptyProduct,
+            $salesperson
+        );
+        $this->makeAvailable($salesperson);
+
+        $response = $this
+            ->withHeaders(['token' => 'shared-secret'])
+            ->postJson('/api/instagram-leads', [[
+                'number' => '8411026438',
+            ]]);
+
+        $response
+            ->assertOk()
+            ->assertJson([
+                'success' => true,
+                'status' => 'assigned',
+                'existing_lead' => false,
+                'agent_user_id' => $salesperson->id,
+                'product_id' => $emptyProduct->id,
+            ]);
+
+        $lead = Lead::query()
+            ->with('client')
+            ->findOrFail($response->json('lead_id'));
+
+        $this->assertSame(
+            'Instagram Lead 8411026438',
+            $lead->client->name
+        );
+        $this->assertSame(
+            [$emptyProduct->id],
+            $lead->product_ids_array
+        );
+        $this->assertDatabaseMissing('lead_allocation_queue', [
+            'lead_id' => $lead->id,
+        ]);
+        $this->assertDatabaseHas('lead_followups', [
+            'lead_id' => $lead->id,
+            'followed_by' => $salesperson->id,
+            'status' => 1,
+        ]);
+    }
+
+    public function test_existing_instagram_phone_adds_followup_note_without_creating_duplicate_lead(): void
+    {
+        $salesperson =
+            $this->createSalesUser(
+                'Existing Lead Owner'
+            );
+
+        $client = Client::create([
+            'id' => (string) Str::uuid(),
+            'name' => 'Existing Instagram Customer',
+            'contact_number' => '8411026439',
+            'status' => 1,
+        ]);
+
+        $product =
+            $this->createProduct(
+                'Existing Product'
+            );
+
+        $lead = Lead::create([
+            'id' => (string) Str::uuid(),
+            'client_id' => $client->id,
+            'representative_user_id' => $salesperson->id,
+            'product_ids' => [$product->id],
+            'service_ids' => null,
+            'number_of_passengers' => 1,
+            'description' => 'Existing active lead',
+        ]);
+
+        WhatsAppLeadIntegration::create([
+            'lead_id' => $lead->id,
+            'product_id' => $product->id,
+            'phone' => '8411026439',
+            'external_id' => 'IG-EXISTING-MAPPED',
+            'status' => 'assigned',
+            'assigned_user_id' => $salesperson->id,
+            'payload' => [],
+            'assigned_at' => now(),
+        ]);
+
+        LeadFollowup::create([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $lead->id,
+            'next_followup_date' => now()->addDay(),
+            'followup_note' => 'Existing latest status',
+            'followed_by' => $salesperson->id,
+            'status' => 1,
+        ]);
+
+        $payload = [[
+            'number' => '8411026439',
+            'service' => 'Helicopter Ride in Mumbai',
+            'date' => '04-SEP-2026',
+            'occassion' => 'anniversary',
+            'guest' => '5',
+            'type' => 'retail',
+        ]];
+
+        $firstResponse = $this
+            ->withHeaders(['token' => 'shared-secret'])
+            ->postJson('/api/instagram-leads', $payload);
+
+        $secondResponse = $this
+            ->withHeaders(['token' => 'shared-secret'])
+            ->postJson('/api/instagram-leads', $payload);
+
+        $firstResponse
+            ->assertOk()
+            ->assertJson([
+                'success' => true,
+                'status' => 'existing_lead',
+                'existing_lead' => true,
+                'lead_id' => $lead->id,
+            ]);
+        $secondResponse
+            ->assertOk()
+            ->assertJson([
+                'success' => true,
+                'status' => 'existing_lead',
+                'existing_lead' => true,
+                'lead_id' => $lead->id,
+            ]);
+
+        $this->assertSame(1, Lead::query()->count());
+        $this->assertSame(
+            3,
+            LeadFollowup::query()
+                ->where('lead_id', $lead->id)
+                ->count()
+        );
+        $this->assertSame(
+            $product->id,
+            WhatsAppLeadIntegration::query()
+                ->where('lead_id', $lead->id)
+                ->value('product_id')
+        );
+
+        $instagramFollowups = LeadFollowup::query()
+            ->where('lead_id', $lead->id)
+            ->where(
+                'followup_note',
+                'like',
+                '%New customer enquiry received via INSTAGRAM.%'
+            )
+            ->get();
+
+        $this->assertCount(2, $instagramFollowups);
+        $this->assertStringContainsString(
+            'New customer enquiry received via INSTAGRAM.',
+            $instagramFollowups->last()->followup_note
+        );
+        $this->assertStringContainsString(
+            'Service: Helicopter Ride in Mumbai',
+            $instagramFollowups->last()->followup_note
+        );
+        $this->assertStringContainsString(
+            'Guests: 5',
+            $instagramFollowups->last()->followup_note
+        );
+        $this->assertTrue(
+            $instagramFollowups
+                ->every(fn (LeadFollowup $followup) =>
+                    $followup->followed_by === $salesperson->id
+                )
+        );
     }
 
     private function createSchema(): void
@@ -365,7 +550,7 @@ class InstagramLeadApiTest extends TestCase
                     ],
                     [
                         'id' =>
-                            (string) \Illuminate\Support\Str::uuid(),
+                            (string) Str::uuid(),
 
                         'status' =>
                             1,
@@ -374,10 +559,10 @@ class InstagramLeadApiTest extends TestCase
 
         return User::forceCreate([
             'id' =>
-                (string) \Illuminate\Support\Str::uuid(),
+                (string) Str::uuid(),
             'name' => $name,
             'email' =>
-                \Illuminate\Support\Str::uuid()
+                Str::uuid()
                 . '@example.test',
             'password' => 'secret',
             'user_type_id' => $userType->id,
@@ -390,7 +575,7 @@ class InstagramLeadApiTest extends TestCase
     ): Product {
         return Product::create([
             'id' =>
-                (string) \Illuminate\Support\Str::uuid(),
+                (string) Str::uuid(),
             'product' => $name,
             'status' => 1,
         ]);
@@ -402,7 +587,7 @@ class InstagramLeadApiTest extends TestCase
     ): void {
         EmailLeadProductUserAssignment::create([
             'id' =>
-                (string) \Illuminate\Support\Str::uuid(),
+                (string) Str::uuid(),
             'user_id' => $user->id,
             'product_id' => $product->id,
             'is_active' => true,
@@ -414,7 +599,7 @@ class InstagramLeadApiTest extends TestCase
     ): void {
         SalespersonAvailability::create([
             'id' =>
-                (string) \Illuminate\Support\Str::uuid(),
+                (string) Str::uuid(),
             'user_id' => $user->id,
             'state' => 'available',
             'is_available' => true,

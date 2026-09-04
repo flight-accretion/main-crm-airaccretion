@@ -42,10 +42,10 @@ class InstagramLeadController extends Controller
                     'required|string|max:30',
 
                 'IG' =>
-                    'required|string|max:255',
+                    'nullable|string|max:255',
 
                 'service' =>
-                    'required|string|max:255',
+                    'nullable|string|max:255',
 
                 'date' =>
                     'nullable|string|max:100',
@@ -89,11 +89,13 @@ class InstagramLeadController extends Controller
         $leadData =
             $validator->validated();
 
-        $leadData['external_id'] =
-            $leadData['IG'];
+        if (!empty($leadData['IG'])) {
+            $leadData['external_id'] =
+                $leadData['IG'];
 
-        $leadData['instagram_id'] =
-            $leadData['IG'];
+            $leadData['instagram_id'] =
+                $leadData['IG'];
+        }
 
         if (
             !isset($leadData['occasion'])
@@ -128,6 +130,7 @@ class InstagramLeadController extends Controller
                         'assigned_action' => 'instagram_assigned',
                         'queue_prefix' => 'instagram',
                         'routing_label' => 'Instagram',
+                        'empty_product_on_unmapped' => true,
                         'description_intro' =>
                             'Lead received automatically from Instagram.',
                     ]
