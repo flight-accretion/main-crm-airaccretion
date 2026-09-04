@@ -254,9 +254,8 @@ class LeadAllocationService
                 ->first();
 
         if (
-            str_starts_with(
-                (string) $queueItem->reason,
-                'whatsapp_'
+            $this->isSourceIntegrationQueueReason(
+                $queueItem->reason
             )
         ) {
             $this->createWhatsAppAssignmentFollowup(
@@ -381,9 +380,8 @@ public function finalizeManualQueuedAssignment(
             ->first();
 
     if (
-        str_starts_with(
-            (string) $queueReason,
-            'whatsapp_'
+        $this->isSourceIntegrationQueueReason(
+            $queueReason
         )
     ) {
 
@@ -500,8 +498,14 @@ public function finalizeManualQueuedAssignment(
         ?\App\Models\WhatsAppLeadIntegration $integration
     ): void {
         $context = [];
+        $source =
+            $this->integrationSourceLabel(
+                $integration
+            );
         $message =
-            'Lead assigned automatically from WhatsApp / WhatCRM.';
+            'Lead assigned automatically from '
+            . $source
+            . '.';
 
         if ($integration) {
             $context = [
@@ -554,13 +558,46 @@ public function finalizeManualQueuedAssignment(
         app(LeadSourceFollowupService::class)
             ->createIfMissing(
                 $lead,
-                'WhatsApp / WhatCRM',
+                $source,
                 $message,
                 array_filter(
                     $context,
                     fn($value) => filled($value)
                 )
             );
+    }
+
+    private function isSourceIntegrationQueueReason(
+        ?string $reason
+    ): bool {
+        $reason =
+            (string) $reason;
+
+        return str_starts_with(
+            $reason,
+            'whatsapp_'
+        )
+            || str_starts_with(
+                $reason,
+                'instagram_'
+            );
+    }
+
+    private function integrationSourceLabel(
+        ?\App\Models\WhatsAppLeadIntegration $integration
+    ): string {
+        $label =
+            trim(
+                (string) data_get(
+                    optional($integration)->payload,
+                    '_source_label',
+                    ''
+                )
+            );
+
+        return $label !== ''
+            ? $label
+            : 'WhatsApp / WhatCRM';
     }
 
     public function acceptPopup(User $user): void

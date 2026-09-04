@@ -27,10 +27,22 @@ class WhatsAppLeadService
 
 
     public function process(
-        array $data
+        array $data,
+        array $sourceOptions = []
     ): array {
+        $source =
+            $this->sourceOptions(
+                $sourceOptions
+            );
+
+        $data =
+            $this->withSourceMetadata(
+                $data,
+                $source
+            );
+
         $result = DB::transaction(
-            function () use ($data) {
+            function () use ($data, $source) {
 
                 $phone =
                     $this->normalizePhone(
@@ -80,7 +92,9 @@ class WhatsAppLeadService
                                         ->representative_user_id,
 
                                 'message' =>
-                                    'This WhatCRM request was already processed.',
+                                    'This '
+                                    . $source['request_label']
+                                    . ' request was already processed.',
                             ],
                         ];
                     }
@@ -186,7 +200,7 @@ class WhatsAppLeadService
                                 $data['name']
                                     ?? ''
                             )
-                            ?: 'WhatsApp Lead '
+                            ?: $source['lead_name_prefix']
                                 . $phone,
 
                         'email' => null,
@@ -281,7 +295,8 @@ class WhatsAppLeadService
 
                     'description' =>
                         $this->description(
-                            $data
+                            $data,
+                            $source
                         ),
 
                     'occasion' =>
@@ -356,14 +371,15 @@ class WhatsAppLeadService
                             $user->id,
 
                         'action' =>
-                            'whatsapp_assigned',
+                            $source['assigned_action'],
 
                         'result' =>
                             'success',
 
                         'details' =>
                             $this->assignmentDetails(
-                                $assignmentRoute
+                                $assignmentRoute,
+                                $source
                             ),
                     ]);
 
@@ -382,10 +398,12 @@ class WhatsAppLeadService
                     $this->sourceFollowups
                         ->createIfMissing(
                             $lead,
-                            'WhatsApp / WhatCRM',
+                            $source['label'],
                             trim(
                                 (string) ($data['message'] ?? '')
-                            ) ?: 'Lead assigned automatically from WhatsApp / WhatCRM.',
+                            ) ?: 'Lead assigned automatically from '
+                                . $source['label']
+                                . '.',
                             array_filter([
                                 'phone' => $phone,
                                 'service' => $serviceText,
@@ -424,7 +442,8 @@ class WhatsAppLeadService
                                 $user->id,
 
                             'message' =>
-                                'WhatsApp lead created and assigned successfully.',
+                                $source['label']
+                                . ' lead created and assigned successfully.',
                         ],
                     ];
                 }
@@ -440,17 +459,20 @@ class WhatsAppLeadService
                     ->queueLead(
                         $lead,
                         $this->queueReason(
-                            $assignmentRoute
+                            $assignmentRoute,
+                            $source
                         )
                     );
 
                 $this->sourceFollowups
                     ->createIfMissing(
                         $lead,
-                        'WhatsApp / WhatCRM',
+                        $source['label'],
                         trim(
                             (string) ($data['message'] ?? '')
-                        ) ?: 'Lead queued automatically from WhatsApp / WhatCRM.',
+                        ) ?: 'Lead queued automatically from '
+                            . $source['label']
+                            . '.',
                         array_filter([
                             'phone' => $phone,
                             'service' => $serviceText,
@@ -525,6 +547,108 @@ class WhatsAppLeadService
 
 
         return $result['response'];
+    }
+
+    private function sourceOptions(
+        array $options
+    ): array {
+        $key =
+            trim(
+                (string) (
+                    $options['key']
+                    ?? 'whatsapp'
+                )
+            );
+
+        if ($key === '') {
+            $key = 'whatsapp';
+        }
+
+        $queuePrefix =
+            trim(
+                (string) (
+                    $options['queue_prefix']
+                    ?? $key
+                )
+            );
+
+        $queuePrefix =
+            trim(
+                preg_replace(
+                    '/[^a-z0-9]+/',
+                    '_',
+                    Str::lower($queuePrefix)
+                ) ?: '',
+                '_'
+            );
+
+        if ($queuePrefix === '') {
+            $queuePrefix = 'whatsapp';
+        }
+
+        $label =
+            trim(
+                (string) (
+                    $options['label']
+                    ?? 'WhatsApp / WhatCRM'
+                )
+            );
+
+        if ($label === '') {
+            $label = 'WhatsApp / WhatCRM';
+        }
+
+        return [
+            'key' => $key,
+            'label' => $label,
+            'request_label' =>
+                trim(
+                    (string) (
+                        $options['request_label']
+                        ?? 'WhatCRM'
+                    )
+                ) ?: 'WhatCRM',
+            'lead_name_prefix' =>
+                (string) (
+                    $options['lead_name_prefix']
+                    ?? 'WhatsApp Lead '
+                ),
+            'assigned_action' =>
+                (string) (
+                    $options['assigned_action']
+                    ?? 'whatsapp_assigned'
+                ),
+            'queue_prefix' => $queuePrefix,
+            'routing_label' =>
+                trim(
+                    (string) (
+                        $options['routing_label']
+                        ?? 'WhatCRM'
+                    )
+                ) ?: 'WhatCRM',
+            'description_intro' =>
+                (string) (
+                    $options['description_intro']
+                    ?? 'Lead received automatically from WhatsApp / WhatCRM.'
+                ),
+        ];
+    }
+
+    private function withSourceMetadata(
+        array $data,
+        array $source
+    ): array {
+        if ($source['key'] === 'whatsapp') {
+            return $data;
+        }
+
+        $data['_source'] =
+            $source['key'];
+
+        $data['_source_label'] =
+            $source['label'];
+
+        return $data;
     }
 
     private function resolveServiceIdsForProduct(
@@ -623,31 +747,42 @@ class WhatsAppLeadService
 }
 
     private function assignmentDetails(
-        string $assignmentRoute
+        string $assignmentRoute,
+        array $source
     ): string {
         if ($assignmentRoute === 'charter') {
-            return 'Assigned from WhatCRM using charter product routing.';
+            return 'Assigned from '
+                . $source['routing_label']
+                . ' using charter product routing.';
         }
 
         if ($assignmentRoute === 'retail') {
-            return 'Assigned from WhatCRM using retail empty-product routing.';
+            return 'Assigned from '
+                . $source['routing_label']
+                . ' using retail empty-product routing.';
         }
 
-        return 'Assigned from WhatCRM using dynamic product routing.';
+        return 'Assigned from '
+            . $source['routing_label']
+            . ' using dynamic product routing.';
     }
 
     private function queueReason(
-        string $assignmentRoute
+        string $assignmentRoute,
+        array $source
     ): string {
         if ($assignmentRoute === 'charter') {
-            return 'whatsapp_charter_waiting';
+            return $source['queue_prefix']
+                . '_charter_waiting';
         }
 
         if ($assignmentRoute === 'retail') {
-            return 'whatsapp_retail_waiting';
+            return $source['queue_prefix']
+                . '_retail_waiting';
         }
 
-        return 'whatsapp_product_waiting';
+        return $source['queue_prefix']
+            . '_product_waiting';
     }
 
     private function queuedMessage(
@@ -814,10 +949,11 @@ class WhatsAppLeadService
 
 
     private function description(
-        array $data
+        array $data,
+        array $source
     ): string {
         $values = [
-            'Lead received automatically from WhatsApp / WhatCRM.',
+            $source['description_intro'],
         ];
 
         foreach (
@@ -853,6 +989,28 @@ class WhatsAppLeadService
             $values[] =
                 'Occasion: '
                 . $occasion;
+        }
+
+        foreach (
+            [
+                'instagram_id' => 'Instagram ID',
+                'type' => 'Type',
+            ]
+            as $key => $label
+        ) {
+            if (
+                isset($data[$key])
+                && trim(
+                    (string) $data[$key]
+                ) !== ''
+            ) {
+                $values[] =
+                    $label
+                    . ': '
+                    . trim(
+                        (string) $data[$key]
+                    );
+            }
         }
 
         return implode(

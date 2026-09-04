@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\WhatCrmMessageController;
 use App\Http\Controllers\Api\WhatCrmSendMessageController;
 use App\Http\Controllers\Api\WhatsAppLeadController;
+use App\Http\Controllers\Api\InstagramLeadController;
 use App\Http\Controllers\Api\CallSummaryController;
 
 
@@ -40,6 +41,16 @@ Route::post(
 )
 ->middleware('whatcrm.auth')
 ->name('api.whatsapp-leads.store');
+
+Route::post(
+    '/instagram-leads',
+    [
+        InstagramLeadController::class,
+        'store'
+    ]
+)
+->middleware('whatcrm.auth')
+->name('api.instagram-leads.store');
 
 Route::post(
     '/whatcrm/messages',
