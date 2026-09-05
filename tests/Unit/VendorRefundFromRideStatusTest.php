@@ -5,9 +5,12 @@ namespace Tests\Unit;
 use App\Http\Controllers\RideController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\LeadTrackingController;
+use App\Mail\RefundMail;
+use App\Models\Client;
 use App\Models\Lead;
 use App\Models\LeadRide;
 use App\Models\LeadVendorPayment;
+use App\Models\NotificationMaster;
 use App\Models\User;
 use App\Models\UserType;
 use App\Models\Vendor;
@@ -18,6 +21,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -41,6 +45,8 @@ class VendorRefundFromRideStatusTest extends TestCase
         DB::reconnect('sqlite');
 
         Storage::fake('public');
+        config()->set('services.whatscrm.api_url', null);
+        config()->set('services.whatscrm.api_token', null);
 
         $this->createSchema();
         $this->actingAs($this->createAccountsUser());
@@ -85,6 +91,47 @@ class VendorRefundFromRideStatusTest extends TestCase
             'id' => $leadVendorPayment->id,
             'payment_status' => 'paid',
         ]);
+    }
+
+    public function test_vendor_refund_sends_email_to_vendor_and_account_notification_members(): void
+    {
+        Mail::fake();
+
+        [$ride, $leadVendorPayment, $lead, $vendor] = $this->createVendorPaymentScenario([
+            'vendor_amount' => 70000,
+            'paid_amount' => 30000,
+        ]);
+
+        NotificationMaster::create([
+            'mobile_number' => '9893995795',
+            'contact_country_code' => '+91',
+            'email_id' => 'suraj.jaiswal@example.test',
+            'status' => 1,
+        ]);
+
+        $response = $this->saveVendorRefund($ride->id, [
+            'lead_vendor_payment_id' => $leadVendorPayment->id,
+            'cancellation_amount' => '10000.00',
+            'refund_amount' => '20000.00',
+            'refund_type' => 'Bank Transfer',
+            'refund_date' => '2026-08-20',
+            'refund_reason' => 'Vendor returned cancellation overpayment.',
+            'refund_proof' => UploadedFile::fake()->create('vendor-refund.pdf', 100, 'application/pdf'),
+        ]);
+
+        $this->assertTrue($response->getData(true)['success']);
+
+        app()->terminate();
+
+        Mail::assertSent(RefundMail::class, function (RefundMail $mail) use ($vendor) {
+            return $mail->hasTo($vendor->email)
+                && $mail->template === 'emails.refund-vendor';
+        });
+
+        Mail::assertSent(RefundMail::class, function (RefundMail $mail) {
+            return $mail->hasTo('suraj.jaiswal@example.test')
+                && $mail->template === 'emails.refund-vendor';
+        });
     }
 
     public function test_partial_vendor_refund_received_amount_can_be_less_than_refund_due(): void
@@ -389,9 +436,17 @@ class VendorRefundFromRideStatusTest extends TestCase
 
     private function createVendorPaymentScenario(array $overrides): array
     {
+        $client = Client::forceCreate([
+            'id' => (string) Str::uuid(),
+            'name' => 'Test Customer',
+            'email' => 'customer@example.test',
+            'contact_number' => '9123456780',
+            'alternate_number' => null,
+        ]);
+
         $lead = Lead::forceCreate([
             'id' => (string) Str::uuid(),
-            'client_id' => null,
+            'client_id' => $client->id,
             'representative_user_id' => auth()->id(),
             'service_ids' => [],
             'product_ids' => [],
@@ -459,6 +514,15 @@ class VendorRefundFromRideStatusTest extends TestCase
             $table->timestamps();
         });
 
+        Schema::create('clients', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('name')->nullable();
+            $table->string('email')->nullable();
+            $table->string('contact_number')->nullable();
+            $table->string('alternate_number')->nullable();
+            $table->timestamps();
+        });
+
         Schema::create('leads', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('client_id')->nullable();
@@ -486,6 +550,16 @@ class VendorRefundFromRideStatusTest extends TestCase
             $table->uuid('city_id')->nullable();
             $table->text('address')->nullable();
             $table->boolean('status')->default(true);
+            $table->timestamps();
+        });
+
+        Schema::create('notification_masters', function (Blueprint $table) {
+            $table->id();
+            $table->string('mobile_number')->nullable();
+            $table->string('email_id')->nullable();
+            $table->integer('status')->default(1);
+            $table->string('contact_country_code')->nullable();
+            $table->uuid('country_id')->nullable();
             $table->timestamps();
         });
 

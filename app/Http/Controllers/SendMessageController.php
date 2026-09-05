@@ -705,9 +705,133 @@ class SendMessageController extends Controller
     }
 
     // ═════════════════════════════════════════════════════════════════════════
-    // WhatsApp via WhatsCRM (SEPARATE ACCOUNT FOR VOUCHERS)
-    // Dedicated method for voucher sending with separate business credentials
+    // WhatsApp via WhatsCRM for vendor refund receipts.
+    // Template names are configurable via WHATSCRM_VENDOR_REFUND_*.
     // ═════════════════════════════════════════════════════════════════════════
+    public function sendWhatsCrmVendorRefundMessage(
+        string  $toNumber,
+        array   $bodyValues,
+        ?string $fileUrl  = null,
+        ?string $filename = null
+    ) {
+        $apiUrl = config('services.whatscrm.api_url');
+        $apiToken = config('services.whatscrm.api_token');
+
+        if (empty($apiUrl) || empty($apiToken)) {
+            Log::warning('WHATSCRM VENDOR REFUND: skipped because API URL/token is missing', [
+                'to' => $toNumber,
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'WhatsCRM template API is not configured.',
+            ];
+        }
+
+        $toNumber = '+' . preg_replace('/[^0-9]/', '', $toNumber);
+
+        $ext = strtolower(pathinfo($filename ?? '', PATHINFO_EXTENSION));
+        $isImage = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']);
+        $isPdf = ($ext === 'pdf');
+        $template = $isImage
+            ? config('services.whatscrm.vendor_refund_image_template', 'refund_vendor_notify_v2_img')
+            : config('services.whatscrm.vendor_refund_template', 'refund_vendor_notify_v2');
+
+        $payload = [
+            'sendTo' => $toNumber,
+            'templetName' => $template,
+            'exampleArr' => array_map('strval', $bodyValues),
+            'token' => $apiToken,
+            'mediaUri' => $fileUrl ?? '',
+        ];
+
+        if ($isPdf && $fileUrl) {
+            $curlCheck = curl_init();
+            curl_setopt_array($curlCheck, [
+                CURLOPT_URL => $fileUrl,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_CUSTOMREQUEST => 'HEAD',
+                CURLOPT_TIMEOUT => 10,
+                CURLOPT_SSL_VERIFYHOST => 0,
+                CURLOPT_SSL_VERIFYPEER => 0,
+            ]);
+            curl_exec($curlCheck);
+            $httpCodeCheck = curl_getinfo($curlCheck, CURLINFO_HTTP_CODE);
+            curl_close($curlCheck);
+
+            if ($httpCodeCheck !== 200) {
+                Log::warning('WHATSCRM VENDOR REFUND: PDF URL unreachable', [
+                    'to' => $toNumber,
+                    'url' => $fileUrl,
+                    'http_code' => $httpCodeCheck,
+                ]);
+            }
+        }
+
+        Log::info('WHATSCRM VENDOR REFUND: sending', [
+            'template' => $template,
+            'to' => $toNumber,
+            'file' => $fileUrl ?? 'none',
+            'file_type' => $isImage ? 'IMAGE' : ($isPdf ? 'PDF' : 'TEXT'),
+            'vendor' => $bodyValues[0] ?? '',
+            'customer' => $bodyValues[1] ?? '',
+            'service' => $bodyValues[2] ?? '',
+            'amount' => $bodyValues[4] ?? '',
+            'date' => $bodyValues[7] ?? '',
+        ]);
+
+        $curl = curl_init();
+        curl_setopt_array($curl, [
+            CURLOPT_URL => $apiUrl,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_ENCODING => '',
+            CURLOPT_MAXREDIRS => 10,
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+            CURLOPT_CUSTOMREQUEST => 'POST',
+            CURLOPT_POSTFIELDS => json_encode($payload),
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_SSL_VERIFYHOST => 0,
+            CURLOPT_SSL_VERIFYPEER => 0,
+            CURLOPT_HTTPHEADER => [
+                'Content-Type: application/json',
+                "Authorization: Bearer {$apiToken}",
+            ],
+        ]);
+
+        $response = curl_exec($curl);
+        $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        $err = curl_error($curl);
+        curl_close($curl);
+
+        if ($err) {
+            Log::error('WHATSCRM VENDOR REFUND: cURL error', [
+                'to' => $toNumber,
+                'template' => $template,
+                'error' => $err,
+            ]);
+
+            return [
+                'success' => false,
+                'error' => $err,
+            ];
+        }
+
+        $result = json_decode($response, true);
+
+        Log::info('WHATSCRM VENDOR REFUND: result', [
+            'template' => $template,
+            'to' => $toNumber,
+            'http_code' => $httpCode,
+            'success' => $result['success'] ?? null,
+            'message_id' => $result['metaResponse']['messages'][0]['id'] ?? 'N/A',
+        ]);
+
+        return $result;
+    }
+
+    // WhatsApp via WhatsCRM (SEPARATE ACCOUNT FOR VOUCHERS)
+    // Dedicated method for voucher sending with separate business credentials.
     public function sendWhatsCrmVoucherMessage(
         string  $toNumber,
         array   $bodyValues,

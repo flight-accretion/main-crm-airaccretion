@@ -1534,7 +1534,18 @@ $balanceAmount =
                         ]);
                     }
 
-                    $notificationMasters = \App\Models\NotificationMaster::activeInternalRecipients();
+                    $notificationMasters = \App\Models\NotificationMaster::activeInternalRecipients(
+                        [$vendorEmail, $client->email ?? null],
+                        [
+                            $vendorPhone,
+                            $vendor->whatsapp_number ?? null,
+                            $vendor->alternate_number ?? null,
+                            $vendor->contact_number ?? null,
+                            $vendor->phone ?? null,
+                            $client->contact_number ?? null,
+                            $client->alternate_number ?? null,
+                        ]
+                    );
                     Log::info('storePayment: notification masters', ['count' => $notificationMasters->count()]);
 
                     foreach ($notificationMasters as $nm) {

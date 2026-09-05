@@ -53,6 +53,8 @@ return [
         'api_url'                   => env('WHATSCRM_API_URL'),
         'api_token'                 => env('WHATSCRM_API_TOKEN'),
         'booking_whatsapp_template' => env('WHATSCRM_BOOKING_WHATSAPP_TEMPLATE', 'extra_service_template'),
+        'vendor_refund_template'    => env('WHATSCRM_VENDOR_REFUND_TEMPLATE', 'refund_vendor_notify_v2'),
+        'vendor_refund_image_template' => env('WHATSCRM_VENDOR_REFUND_IMAGE_TEMPLATE', 'refund_vendor_notify_v2_img'),
     ],
 
     'skyrack' => [

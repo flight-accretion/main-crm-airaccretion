@@ -3380,7 +3380,14 @@ return [
             ];
 
             // ── 9. Notification masters ──────────────────────────────────────────
-            $notificationMasters = \App\Models\NotificationMaster::activeInternalRecipients();
+            $notificationMasters = \App\Models\NotificationMaster::activeInternalRecipients(
+                [$client->email ?? null],
+                [
+                    $customerWhatsApp ?? null,
+                    $client->contact_number ?? null,
+                    $client->alternate_number ?? null,
+                ]
+            );
             Log::info('sendRefundEmail: notification masters', ['count' => $notificationMasters->count()]);
 
             $smc    = new SendMessageController();
@@ -3790,7 +3797,7 @@ public function saveVendorRefundFromRideStatus(
 
     try {
 
-        return DB::transaction(
+        $response = DB::transaction(
             function () use (
                 $request,
                 $rideId
@@ -4621,6 +4628,22 @@ public function saveVendorRefundFromRideStatus(
             }
         );
 
+        $payload = method_exists($response, 'getData')
+            ? $response->getData(true)
+            : [];
+
+        if (
+            ($payload['success'] ?? false)
+            &&
+            !empty($payload['vendor_refund_id'])
+        ) {
+            $this->queueVendorRefundNotifications(
+                (string) $payload['vendor_refund_id']
+            );
+        }
+
+        return $response;
+
 
     } catch (
         ValidationException $e
@@ -4657,6 +4680,255 @@ public function saveVendorRefundFromRideStatus(
             'message' =>
                 'Unable to save vendor refund.',
         ], 500);
+    }
+}
+
+private function queueVendorRefundNotifications(string $vendorRefundId): void
+{
+    app()->terminating(function () use ($vendorRefundId) {
+        try {
+            set_time_limit(300);
+            $this->sendVendorRefundNotifications($vendorRefundId);
+        } catch (\Throwable $e) {
+            Log::warning('Vendor refund notification failed (refund still saved)', [
+                'vendor_refund_id' => $vendorRefundId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+        }
+    });
+}
+
+private function sendVendorRefundNotifications(string $vendorRefundId): void
+{
+    $vendorRefund = VendorRefund::with([
+        'vendor',
+        'lead.client',
+        'leadVendorPayment.vendor',
+        'leadVendorPayment.lead.client',
+        'leadVendorPayment.vendorPayments',
+        'leadVendorPayment.vendorRefunds',
+        'leadVendorPayment.paymentDetails.service',
+        'leadVendorPayment.paymentDetails.extraService',
+        'ride',
+    ])->find($vendorRefundId);
+
+    if (!$vendorRefund) {
+        Log::warning('Vendor refund notification skipped: refund not found', [
+            'vendor_refund_id' => $vendorRefundId,
+        ]);
+        return;
+    }
+
+    $leadVendorPayment = $vendorRefund->leadVendorPayment;
+    $vendor = $vendorRefund->vendor ?? $leadVendorPayment?->vendor;
+    $lead = $vendorRefund->lead ?? $leadVendorPayment?->lead;
+    $client = $lead?->client;
+    $ride = $vendorRefund->ride
+        ?? (
+            $lead
+                ? LeadRide::where('lead_id', $lead->id)->latest()->first()
+                : null
+        );
+
+    $firstDetail = $leadVendorPayment?->paymentDetails?->first();
+    $serviceObj = $firstDetail ? ($firstDetail->service ?? null) : null;
+    $extraServiceObj = $firstDetail ? ($firstDetail->extraService ?? null) : null;
+    $serviceName = $serviceObj->service
+        ?? $serviceObj->service_name
+        ?? $extraServiceObj->service
+        ?? $extraServiceObj->service_name
+        ?? $extraServiceObj->name
+        ?? 'N/A';
+    $serviceDate = $this->formatNotificationDate($ride?->from_date);
+    $refundDate = $this->formatNotificationDate($vendorRefund->refund_date);
+
+    $refundAmount = round((float) ($vendorRefund->refund_amount ?? 0), 2);
+    $pendingAmount = round((float) ($leadVendorPayment?->vendor_refund_due ?? 0), 2);
+
+    $vendorName = $vendor->name ?? 'Vendor';
+    $clientName = $client->name ?? 'Customer';
+    $vendorEmail = $vendor->email ?? null;
+    $vendorPhone = $vendor->whatsapp_number
+        ?? $vendor->alternate_number
+        ?? $vendor->contact_number
+        ?? $vendor->phone
+        ?? null;
+
+    $proofFilePath = null;
+    $proofFileUrl = null;
+    $proofFilename = null;
+
+    if (!empty($vendorRefund->refund_proof)) {
+        $relative = ltrim($vendorRefund->refund_proof, '/');
+        $fullPath = storage_path('app/public/' . $relative);
+
+        if (file_exists($fullPath)) {
+            $proofFilePath = $fullPath;
+            $proofFileUrl = rtrim(config('app.url'), '/') . '/storage/' . $relative;
+            $proofFilename = basename($relative);
+        } else {
+            Log::warning('Vendor refund notification proof missing on disk', [
+                'vendor_refund_id' => $vendorRefund->id,
+                'path' => $fullPath,
+            ]);
+        }
+    }
+
+    $vendorEmailData = [
+        'vendor_name' => $vendorName,
+        'client_name' => $clientName,
+        'service' => $serviceName,
+        'service_date' => $serviceDate,
+        'paid_amount' => $refundAmount,
+        'pending_amount' => $pendingAmount,
+        'balance_amount' => $pendingAmount,
+        'refund_date' => $refundDate,
+        'refund_type' => $vendorRefund->refund_type ?? 'N/A',
+        'refund_reason' => $vendorRefund->refund_reason ?? '',
+    ];
+
+    if (!empty($vendorEmail) && filter_var($vendorEmail, FILTER_VALIDATE_EMAIL)) {
+        try {
+            Mail::to($vendorEmail)->send(new RefundMail(
+                'emails.refund-vendor',
+                'Vendor Refund Notification - ' . $clientName . ' - ' . $serviceName,
+                $vendorEmailData,
+                $proofFilePath
+            ));
+            Log::info('Vendor refund email sent', [
+                'vendor_refund_id' => $vendorRefund->id,
+                'to' => $vendorEmail,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Vendor refund vendor email failed', [
+                'vendor_refund_id' => $vendorRefund->id,
+                'to' => $vendorEmail,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    } else {
+        Log::warning('Vendor refund vendor email missing/invalid', [
+            'vendor_refund_id' => $vendorRefund->id,
+            'vendor' => $vendorName,
+            'email' => $vendorEmail,
+        ]);
+    }
+
+    $smc = new SendMessageController();
+    $waBodyData = [
+        $vendorName,
+        $clientName,
+        $serviceName,
+        $serviceDate,
+        number_format($refundAmount, 2),
+        number_format($pendingAmount, 2),
+        number_format($pendingAmount, 2),
+        $refundDate,
+        $vendorRefund->refund_type ?? 'N/A',
+    ];
+
+    if (!empty($vendorPhone) && $proofFileUrl) {
+        try {
+            $waResult = $smc->sendWhatsCrmVendorRefundMessage(
+                $vendorPhone,
+                $waBodyData,
+                $proofFileUrl,
+                $proofFilename
+            );
+            Log::info('Vendor refund WhatsApp response', [
+                'vendor_refund_id' => $vendorRefund->id,
+                'to' => $vendorPhone,
+                'success' => $waResult['success'] ?? null,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Vendor refund WhatsApp exception', [
+                'vendor_refund_id' => $vendorRefund->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    $notificationMasters = \App\Models\NotificationMaster::activeInternalRecipients(
+        [$vendorEmail, $client->email ?? null],
+        [
+            $vendorPhone,
+            $vendor->contact_number ?? null,
+            $vendor->alternate_number ?? null,
+            $vendor->whatsapp_number ?? null,
+            $client->contact_number ?? null,
+            $client->alternate_number ?? null,
+        ]
+    );
+
+    Log::info('Vendor refund notification masters', [
+        'vendor_refund_id' => $vendorRefund->id,
+        'count' => $notificationMasters->count(),
+    ]);
+
+    foreach ($notificationMasters as $nm) {
+        $nmEmail = $nm->email_id ?? null;
+
+        if (!empty($nmEmail) && filter_var($nmEmail, FILTER_VALIDATE_EMAIL)) {
+            try {
+                Mail::to($nmEmail)->send(new RefundMail(
+                    'emails.refund-vendor',
+                    'Vendor Refund Notification - ' . $clientName . ' - ' . $serviceName,
+                    $vendorEmailData,
+                    $proofFilePath
+                ));
+                Log::info('Vendor refund NM email sent', [
+                    'vendor_refund_id' => $vendorRefund->id,
+                    'nm_id' => $nm->id,
+                    'to' => $nmEmail,
+                ]);
+            } catch (\Throwable $e) {
+                Log::error('Vendor refund NM email failed', [
+                    'vendor_refund_id' => $vendorRefund->id,
+                    'nm_id' => $nm->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        $nmPhone = !empty($nm->contact_country_code)
+            ? $nm->contact_country_code . $nm->mobile_number
+            : $nm->mobile_number;
+
+        if (!empty($nm->mobile_number) && $proofFileUrl) {
+            try {
+                $nmWaResult = $smc->sendWhatsCrmVendorRefundMessage(
+                    $nmPhone,
+                    $waBodyData,
+                    $proofFileUrl,
+                    $proofFilename
+                );
+                Log::info('Vendor refund NM WhatsApp response', [
+                    'vendor_refund_id' => $vendorRefund->id,
+                    'nm_id' => $nm->id,
+                    'success' => $nmWaResult['success'] ?? null,
+                ]);
+            } catch (\Throwable $e) {
+                Log::error('Vendor refund NM WhatsApp exception', [
+                    'vendor_refund_id' => $vendorRefund->id,
+                    'nm_id' => $nm->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+    }
+}
+
+private function formatNotificationDate($value): string
+{
+    if (empty($value)) {
+        return 'N/A';
+    }
+
+    try {
+        return Carbon::parse($value)->format('jS F, Y');
+    } catch (\Throwable $e) {
+        return 'N/A';
     }
 }
 

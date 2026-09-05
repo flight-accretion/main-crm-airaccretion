@@ -35,24 +35,14 @@ return [
 
     'mailers' => [
 
-        // 'smtp' => [
-        //     'transport' => 'smtp',
-        //     'host' => 'mail.pleximus.net',
-        //     'port' => 465,
-        //     'encryption' =>  'ssl',
-        //     'username' => 'testaviation@pleximus.net',
-        //     'password' => '3cSQ2TC{2B',
-        //     'timeout' => null,
-        //     'local_domain' => env('MAIL_EHLO_DOMAIN'),
-        // ],
         'smtp' => [
             'transport' => 'smtp',
-            'host' => 'mail.accretionaviation.com',
-            'port' => 465,
-            'encryption' =>  'ssl',
-            'username' => 'confirm@accretionaviation.com',
-            'password' => 'Accretion@786',
-            'timeout' => 15,
+            'host' => env('MAIL_HOST', 'mail.accretionaviation.com'),
+            'port' => env('MAIL_PORT', 465),
+            'encryption' => env('MAIL_ENCRYPTION', 'ssl'),
+            'username' => env('MAIL_USERNAME'),
+            'password' => env('MAIL_PASSWORD'),
+            'timeout' => env('MAIL_TIMEOUT', 15),
             'local_domain' => env('MAIL_EHLO_DOMAIN'),
         ],
         'ses' => [
@@ -108,8 +98,8 @@ return [
     */
 
     'from' => [
-        'address' => 'confirm@accretionaviation.com',
-        'name' =>  'Accretion Aviation',
+        'address' => env('MAIL_FROM_ADDRESS', 'confirm@accretionaviation.com'),
+        'name' => env('MAIL_FROM_NAME', 'Accretion Aviation'),
     ],
 
     /*
