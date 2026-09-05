@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Lead;
 use App\Models\LeadAuditTrail;
+use App\Models\LeadFollowup;
 use App\Models\LeadTransfer;
 use App\Models\User;
 use App\Models\UserType;
@@ -423,6 +424,8 @@ public function directAssign(
                     'changed' => false,
                     'was_queued' => false,
                     'queue_reason' => null,
+                    'old_representative_id' =>
+                        $lockedLead->representative_user_id,
                 ];
             }
 
@@ -574,9 +577,74 @@ public function directAssign(
 
                 'queue_reason' =>
                     $queueReason,
+
+                'old_representative_id' =>
+                    $oldRepresentative,
             ];
         }
     );
+}
+
+public function recordDirectAssignmentFollowup(
+    Lead $lead,
+    User $toUser,
+    User $actor,
+    ?string $fromUserId = null
+): LeadFollowup {
+    if (!$this->isSuperAdmin($actor)) {
+        throw ValidationException::withMessages([
+            'transfer' =>
+                'Only Super Admin can record direct lead transfer follow-ups.',
+        ]);
+    }
+
+    if (
+        !$this->isSalesUser($toUser)
+        ||
+        (int) $toUser->status !== 1
+    ) {
+        throw ValidationException::withMessages([
+            'transfer' =>
+                'The selected representative must be an active Sales Manager or Sales Executive.',
+        ]);
+    }
+
+    $fromUser = $fromUserId
+        ? User::query()->find($fromUserId)
+        : null;
+
+    $transferredAt = now();
+
+    return LeadFollowup::create([
+        'id' =>
+            (string) \Illuminate\Support\Str::uuid(),
+
+        'lead_id' =>
+            $lead->id,
+
+        'next_followup_date' =>
+            $transferredAt,
+
+        'followup_note' =>
+            implode(PHP_EOL, [
+                'Lead transferred by Super Admin.',
+                'From: ' . (
+                    optional($fromUser)->name
+                    ?: 'Unassigned'
+                ),
+                'To: ' . $toUser->name,
+                'Transferred at: '
+                    . $transferredAt->format('d-M-Y h:i A')
+                    . ' IST',
+                'Transferred by: ' . $actor->name,
+            ]),
+
+        'followed_by' =>
+            $toUser->id,
+
+        'status' =>
+            1,
+    ]);
 }
 
     private function isSalesUser(User $user): bool

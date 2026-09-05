@@ -114,7 +114,7 @@ return [
 
     'allowed_sender' => env(
         'EMAIL_LEADS_ALLOWED_SENDER',
-        'noreply@accretionaviation.com'
+        ''
     ),
 
     'recipient' => env(

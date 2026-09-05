@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use App\Models\Client;
 use App\Models\Lead;
+use App\Models\LeadFollowup;
 use App\Models\LeadTransfer;
 use App\Models\User;
 use App\Models\UserType;
@@ -216,6 +217,16 @@ class LeadTransferServiceTest extends TestCase
             $table->timestamps();
         });
 
+        Schema::create('lead_followups', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('lead_id');
+            $table->timestamp('next_followup_date')->nullable();
+            $table->text('followup_note')->nullable();
+            $table->integer('status')->default(0);
+            $table->uuid('followed_by')->nullable();
+            $table->timestamps();
+        });
+
         Schema::create(
     'lead_audit_trail',
     function (Blueprint $table) {
@@ -373,9 +384,135 @@ Schema::create(
         $audit->new_value
     );
 
+$this->assertSame(
+    $superAdmin->id,
+    $audit->changed_by
+);
+}
+
+public function test_super_admin_direct_assignment_can_record_current_followup_note(): void
+{
+    $oldOwner = $this->createUser(
+        'Sourav Namdeo',
+        UserType::SALES_EXECUTIVE
+    );
+
+    $newOwner = $this->createUser(
+        'Samarpit Sharma',
+        UserType::SALES_EXECUTIVE
+    );
+
+    $superAdmin = $this->createUser(
+        'Super Admin User',
+        UserType::SUPER_ADMIN
+    );
+
+    $lead = $this->createLead($oldOwner);
+
+    $result = app(
+        LeadTransferService::class
+    )->directAssign(
+        $lead,
+        $newOwner,
+        $superAdmin
+    );
+
+    $this->assertTrue($result['changed']);
+
+    app(
+        LeadTransferService::class
+    )->recordDirectAssignmentFollowup(
+        $lead->fresh(),
+        $newOwner,
+        $superAdmin,
+        $oldOwner->id
+    );
+
+    $followup = LeadFollowup::query()
+        ->where('lead_id', $lead->id)
+        ->latest('created_at')
+        ->first();
+
+    $this->assertNotNull($followup);
     $this->assertSame(
-        $superAdmin->id,
-        $audit->changed_by
+        $newOwner->id,
+        $followup->followed_by
+    );
+    $this->assertSame(1, (int) $followup->status);
+    $this->assertSame(
+        now()->format('Y-m-d H:i:s'),
+        $followup->next_followup_date->format('Y-m-d H:i:s')
+    );
+    $this->assertStringContainsString(
+        'Lead transferred by Super Admin.',
+        $followup->followup_note
+    );
+    $this->assertStringContainsString(
+        'From: Sourav Namdeo',
+        $followup->followup_note
+    );
+    $this->assertStringContainsString(
+        'To: Samarpit Sharma',
+        $followup->followup_note
+    );
+    $this->assertStringContainsString(
+        'Transferred at: 31-Aug-2026 01:30 PM IST',
+        $followup->followup_note
+    );
+}
+
+public function test_super_admin_direct_assignment_route_records_transfer_followup(): void
+{
+    $this->withoutMiddleware(
+        \App\Http\Middleware\VerifyCsrfToken::class
+    );
+
+    $oldOwner = $this->createUser(
+        'Sourav Namdeo',
+        UserType::SALES_EXECUTIVE
+    );
+
+    $newOwner = $this->createUser(
+        'Samarpit Sharma',
+        UserType::SALES_EXECUTIVE
+    );
+
+    $superAdmin = $this->createUser(
+        'Super Admin User',
+        UserType::SUPER_ADMIN
+    );
+
+    $lead = $this->createLead($oldOwner);
+
+    $this
+        ->actingAs($superAdmin)
+        ->post(
+            route('admin.leads.transfer.direct-assign'),
+            [
+                'lead_ids' => [$lead->id],
+                'representative_user_id' => $newOwner->id,
+            ]
+        )
+        ->assertRedirect();
+
+    $this->assertSame(
+        $newOwner->id,
+        $lead->fresh()->representative_user_id
+    );
+
+    $followup = LeadFollowup::query()
+        ->where('lead_id', $lead->id)
+        ->latest('created_at')
+        ->first();
+
+    $this->assertNotNull($followup);
+    $this->assertSame(
+        $newOwner->id,
+        $followup->followed_by
+    );
+    $this->assertStringContainsString(
+        'Lead transferred by Super Admin.',
+        $followup->followup_note
     );
 }
 

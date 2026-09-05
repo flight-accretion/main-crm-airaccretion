@@ -91,11 +91,28 @@
             background: #ecfdf5;
         }
 
+        .wa-contact-row:focus-visible {
+            outline: 2px solid #2563eb;
+            outline-offset: -2px;
+        }
+
         .wa-contact-top {
             display: grid;
             grid-template-columns: minmax(0, 1fr) auto;
             gap: 8px;
             align-items: center;
+        }
+
+        .wa-contact-name-line,
+        .wa-contact-bottom {
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .wa-contact-bottom {
+            justify-content: space-between;
         }
 
         .wa-contact-name,
@@ -133,6 +150,29 @@
             background: #16a34a;
             font-size: 12px;
             font-weight: 700;
+        }
+
+        .wa-followup-pill {
+            min-width: 22px;
+            height: 22px;
+            border-radius: 999px;
+            padding: 0 7px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #1d4ed8;
+            background: #dbeafe;
+            font-size: 11px;
+            font-weight: 700;
+            flex: 0 0 auto;
+        }
+
+        .wa-view-lead {
+            flex: 0 0 auto;
+            padding: 4px 8px;
+            font-size: 11px;
+            line-height: 1.2;
+            white-space: nowrap;
         }
 
         .wa-chat-header {
@@ -600,23 +640,37 @@
                 const rows = state.conversations.map((conversation) => {
                     const activeClass = conversation.id === state.selectedId ? ' is-active' : '';
                     const unread = Number(conversation.unread_count || 0);
+                    const followups = Number(conversation.followups_count || 0);
                     const unreadBadge = unread > 0
                         ? `<span class="wa-unread-pill">${unread}</span>`
                         : '';
+                    const followupBadge = followups > 0
+                        ? `<span class="wa-followup-pill" title="Follow-ups">${followups}</span>`
+                        : '';
+                    const viewLeadButton = conversation.lead_followup_url
+                        ? `<a class="ti-btn ti-btn-sm ti-btn-light wa-view-lead" href="${escapeHtml(conversation.lead_followup_url)}">View Lead</a>`
+                        : '';
 
                     return `
-                        <button
-                            type="button"
+                        <div
                             class="wa-contact-row${activeClass}"
                             data-id="${escapeHtml(conversation.id)}"
+                            role="button"
+                            tabindex="0"
                         >
                             <span class="wa-contact-top">
-                                <span class="wa-contact-name">${escapeHtml(conversationLabel(conversation))}</span>
+                                <span class="wa-contact-name-line">
+                                    <span class="wa-contact-name">${escapeHtml(conversationLabel(conversation))}</span>
+                                    ${followupBadge}
+                                </span>
                                 ${unreadBadge}
                             </span>
                             <span class="wa-contact-number">${escapeHtml(conversation.number || conversation.raw_phone || '-')}</span>
-                            <span class="wa-contact-message">${escapeHtml(conversation.last_message || '-')}</span>
-                        </button>
+                            <span class="wa-contact-bottom">
+                                <span class="wa-contact-message">${escapeHtml(conversation.last_message || '-')}</span>
+                                ${viewLeadButton}
+                            </span>
+                        </div>
                     `;
                 }).join('');
 
@@ -998,6 +1052,10 @@
             };
 
             conversationsEl.addEventListener('click', (event) => {
+                if (event.target.closest('.wa-view-lead')) {
+                    return;
+                }
+
                 const showMoreButton = event.target.closest('#wa-show-more');
 
                 if (showMoreButton) {
@@ -1011,6 +1069,24 @@
                     return;
                 }
 
+                selectConversation(row.dataset.id);
+            });
+
+            conversationsEl.addEventListener('keydown', (event) => {
+                if (
+                    event.target.closest('.wa-view-lead')
+                    || !['Enter', ' '].includes(event.key)
+                ) {
+                    return;
+                }
+
+                const row = event.target.closest('.wa-contact-row');
+
+                if (!row) {
+                    return;
+                }
+
+                event.preventDefault();
                 selectConversation(row.dataset.id);
             });
 

@@ -490,6 +490,16 @@ public function directAssign(
                 }
             }
 
+            $transferService
+                ->recordDirectAssignmentFollowup(
+                    $lead->fresh(),
+                    $representative,
+                    $actor,
+                    $result[
+                        'old_representative_id'
+                    ] ?? null
+                );
+
         } catch (
             ValidationException $e
         ) {

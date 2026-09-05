@@ -184,7 +184,8 @@ class WhatCrmMessageIngestionService
                         ->createForIncomingMessage(
                             $lead,
                             $message,
-                            $data
+                            $data,
+                            $conversation
                         );
                 }
 

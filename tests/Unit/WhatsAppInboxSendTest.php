@@ -197,6 +197,66 @@ class WhatsAppInboxSendTest extends TestCase
             ->assertJsonPath('meta.total', 3);
     }
 
+    public function test_conversations_endpoint_returns_followup_count_and_lead_followup_url(): void
+    {
+        $agent = $this->createUser(
+            UserType::SUPER_ADMIN,
+            'Super Admin Viewer'
+        );
+        $leadId = $this->createLead(
+            $agent,
+            '9876543219'
+        );
+        $conversationId = $this->createConversation(
+            $agent,
+            '9876543219',
+            'Followup Customer',
+            Carbon::parse('2026-08-25 12:30:00'),
+            'Need a quote',
+            $leadId
+        );
+
+        DB::table('lead_followups')->insert([
+            [
+                'id' => (string) Str::uuid(),
+                'lead_id' => $leadId,
+                'next_followup_date' => now(),
+                'followup_note' => 'First follow-up',
+                'followed_by' => $agent->id,
+                'status' => 1,
+                'created_at' => now()->subMinute(),
+                'updated_at' => now()->subMinute(),
+            ],
+            [
+                'id' => (string) Str::uuid(),
+                'lead_id' => $leadId,
+                'next_followup_date' => now(),
+                'followup_note' => 'Second follow-up',
+                'followed_by' => $agent->id,
+                'status' => 1,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
+        $this->actingAs($agent);
+
+        $this->getJson(
+            route('admin.whatsapp.conversations')
+        )
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $conversationId)
+            ->assertJsonPath('data.0.lead_id', $leadId)
+            ->assertJsonPath('data.0.followups_count', 2)
+            ->assertJsonPath(
+                'data.0.lead_followup_url',
+                route(
+                    'admin.leads.follow-up.create',
+                    $leadId
+                )
+            );
+    }
+
     private function createUser(
         string $role,
         string $name
@@ -227,7 +287,8 @@ class WhatsAppInboxSendTest extends TestCase
         string $phone,
         string $name,
         ?Carbon $lastMessageAt = null,
-        ?string $lastMessage = null
+        ?string $lastMessage = null,
+        ?string $leadId = null
     ): string {
         $contactId = (string) Str::uuid();
         $conversationId = (string) Str::uuid();
@@ -245,6 +306,7 @@ class WhatsAppInboxSendTest extends TestCase
         DB::table('whatsapp_conversations')->insert([
             'id' => $conversationId,
             'contact_id' => $contactId,
+            'lead_id' => $leadId,
             'assigned_user_id' => $assignedUser->id,
             'status' => 'open',
             'last_message' => $lastMessage,
@@ -255,6 +317,33 @@ class WhatsAppInboxSendTest extends TestCase
         ]);
 
         return $conversationId;
+    }
+
+    private function createLead(
+        User $assignedUser,
+        string $phone
+    ): string {
+        $clientId = (string) Str::uuid();
+        $leadId = (string) Str::uuid();
+
+        DB::table('clients')->insert([
+            'id' => $clientId,
+            'name' => 'Followup Customer',
+            'contact_number' => $phone,
+            'status' => 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DB::table('leads')->insert([
+            'id' => $leadId,
+            'client_id' => $clientId,
+            'representative_user_id' => $assignedUser->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return $leadId;
     }
 
     private function createSchema(): void
@@ -273,6 +362,31 @@ class WhatsAppInboxSendTest extends TestCase
             $table->string('password')->nullable();
             $table->uuid('user_type_id')->nullable();
             $table->integer('status')->default(1);
+            $table->timestamps();
+        });
+
+        Schema::create('clients', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('name')->nullable();
+            $table->string('contact_number')->nullable();
+            $table->integer('status')->default(1);
+            $table->timestamps();
+        });
+
+        Schema::create('leads', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('client_id');
+            $table->uuid('representative_user_id')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('lead_followups', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('lead_id');
+            $table->timestamp('next_followup_date')->nullable();
+            $table->text('followup_note')->nullable();
+            $table->uuid('followed_by')->nullable();
+            $table->integer('status')->default(0);
             $table->timestamps();
         });
 

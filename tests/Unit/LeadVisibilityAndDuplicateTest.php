@@ -411,6 +411,23 @@ class LeadVisibilityAndDuplicateTest extends TestCase
             $table->timestamps();
         });
 
+        Schema::create('lead_allocation_queue', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('lead_id');
+            $table->uuid('assigned_to')->nullable();
+            $table->string('status')->default('queued');
+            $table->string('reason')->nullable();
+            $table->integer('attempt_count')->default(0);
+            $table->timestamp('queued_at')->nullable();
+            $table->timestamp('processed_at')->nullable();
+            $table->timestamps();
+
+            $table->unique('lead_id');
+            $table->index('status');
+            $table->index('assigned_to');
+            $table->index('queued_at');
+        });
+
         Schema::create('services', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->string('service');

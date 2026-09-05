@@ -16,8 +16,11 @@ class EmailMailboxService
         $this->connect();
 
         try {
-            $sender = config(
-                'services.email_leads.allowed_sender'
+            $sender = trim(
+                (string) config(
+                    'services.email_leads.allowed_sender',
+                    ''
+                )
             );
 
             /*
@@ -26,9 +29,15 @@ class EmailMailboxService
              * We fetch from yesterday/start date,
              * then strictly filter received_at below.
              */
-            $criteria =
-                'FROM "' . $sender . '" '
-                . 'SINCE "'
+            $criteria = '';
+
+            if ($sender !== '') {
+                $criteria .=
+                    'FROM "' . $sender . '" ';
+            }
+
+            $criteria .=
+                'SINCE "'
                 . $from->format('d-M-Y')
                 . '"';
 
@@ -67,14 +76,10 @@ class EmailMailboxService
                     continue;
                 }
 
-                /*
-                 * Security/business check:
-                 * actual From address must match.
-                 */
                 if (
-                    strtolower($record['sender_email'])
-                    !==
-                    strtolower($sender)
+                    $sender !== ''
+                    && strtolower($record['sender_email'])
+                        !== strtolower($sender)
                 ) {
                     continue;
                 }

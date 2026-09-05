@@ -38,6 +38,19 @@
         font-weight: 600;
     }
 
+    .lead-service-column {
+        max-width: 320px;
+    }
+
+    .lead-service-preview {
+        display: block;
+        width: 320px;
+        max-width: 100%;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+
     /*
      * Highlight only when Follow-up History column is hovered.
      */
@@ -157,6 +170,14 @@
         .followup-history-preview {
             width: 230px;
             max-width: 230px;
+        }
+
+        .lead-service-column {
+            max-width: 220px;
+        }
+
+        .lead-service-preview {
+            width: 220px;
         }
 
         .followup-history-popup {
@@ -524,7 +545,7 @@
                                 <th data-priority="7">Created Date</th>
                                 <th data-priority="8">Assigned:</th>
                                 <th data-priority="9">Service Date:</th>
-                                <th data-priority="10">Service:</th>
+                                <th data-priority="10" class="lead-service-column">Service:</th>
                                 <th data-priority="11">Last Update:</th>
                                 <th data-priority="12">Follow-up History:</th>
                                 <th data-priority="1">Status</th>
@@ -594,15 +615,14 @@
                                     @endif
                                 </td>
 
-                                <td>
-                                    @php
-                                    $serviceNames = $enquiry->service_names ?? [];
-                                    @endphp
-                                    @if (!empty($serviceNames) && is_array($serviceNames))
-                                    {{ implode(', ', $serviceNames) }}
-                                    @else
-                                    N/A
-                                    @endif
+                                <td class="lead-service-column">
+                                    @include(
+                                        'admin.pages.leads.partials.service-preview',
+                                        [
+                                            'serviceNames' =>
+                                                $enquiry->service_names ?? [],
+                                        ]
+                                    )
                                 </td>
                                 <td>{{ optional($enquiry->updated_at)->format('d-m-Y H:i:s') ?? 'N/A' }}</td>
                                 <td>

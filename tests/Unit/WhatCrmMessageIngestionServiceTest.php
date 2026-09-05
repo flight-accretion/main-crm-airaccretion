@@ -166,6 +166,72 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
         );
     }
 
+    public function test_incoming_followup_note_summarizes_recent_conversation_context(): void
+    {
+        $salesperson = $this->createSalesUser('Summary Owner');
+        $lead = $this->createActiveLead(
+            'Summary Customer',
+            '9876543220',
+            $salesperson
+        );
+
+        app(WhatCrmMessageIngestionService::class)
+            ->process([
+                'message_id' => 'wamid.SUMMARY-OUT-1',
+                'chat_id' => 'chat-summary',
+                'number' => '+91 98765 43220',
+                'customer_name' => 'Summary Customer',
+                'message' => 'Helicopter ride package starts at Rs 35,000.',
+                'message_type' => 'text',
+                'direction' => 'outgoing',
+                'message_at' => '2026-08-22T17:31:00+05:30',
+                'status' => 'sent',
+                'agent_user_id' => $salesperson->id,
+                'lead_id' => $lead->id,
+            ]);
+
+        app(WhatCrmMessageIngestionService::class)
+            ->process([
+                'message_id' => 'wamid.SUMMARY-IN-1',
+                'chat_id' => 'chat-summary',
+                'number' => '+91 98765 43220',
+                'customer_name' => 'Summary Customer',
+                'message' => 'Can we book for five guests tomorrow?',
+                'message_type' => 'text',
+                'direction' => 'incoming',
+                'message_at' => '2026-08-22T17:32:00+05:30',
+                'status' => 'delivered',
+            ]);
+
+        $followupId = DB::table('whatsapp_messages')
+            ->where('provider_message_id', 'wamid.SUMMARY-IN-1')
+            ->value('lead_followup_id');
+
+        $followup = LeadFollowup::find($followupId);
+
+        $this->assertNotNull($followup);
+        $this->assertStringContainsString(
+            'WhatsApp conversation summary.',
+            $followup->followup_note
+        );
+        $this->assertStringContainsString(
+            'Customer need: Can we book for five guests tomorrow?',
+            $followup->followup_note
+        );
+        $this->assertStringContainsString(
+            'Agent: Helicopter ride package starts at Rs 35,000.',
+            $followup->followup_note
+        );
+        $this->assertStringContainsString(
+            'Customer: Can we book for five guests tomorrow?',
+            $followup->followup_note
+        );
+        $this->assertLessThanOrEqual(
+            1000,
+            mb_strlen($followup->followup_note)
+        );
+    }
+
     public function test_outgoing_message_is_stored_without_creating_lead_or_followup(): void
     {
         $agent = $this->createSalesUser('Agent Sender');

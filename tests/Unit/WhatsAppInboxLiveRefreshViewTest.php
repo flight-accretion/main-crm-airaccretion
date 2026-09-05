@@ -53,4 +53,30 @@ class WhatsAppInboxLiveRefreshViewTest extends TestCase
             $source
         );
     }
+
+    public function test_inbox_view_shows_followup_badge_and_view_lead_action(): void
+    {
+        $source = file_get_contents(
+            resource_path(
+                'views/admin/pages/whatsapp/inbox.blade.php'
+            )
+        );
+
+        $this->assertStringContainsString(
+            'followups_count',
+            $source
+        );
+        $this->assertStringContainsString(
+            'wa-followup-pill',
+            $source
+        );
+        $this->assertStringContainsString(
+            'lead_followup_url',
+            $source
+        );
+        $this->assertStringContainsString(
+            'wa-view-lead',
+            $source
+        );
+    }
 }

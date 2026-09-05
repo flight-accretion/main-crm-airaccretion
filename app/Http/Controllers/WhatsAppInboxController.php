@@ -110,6 +110,9 @@ class WhatsAppInboxController extends Controller
             ->with([
                 'contact',
                 'assignedUser',
+                'lead' => function ($leadQuery) {
+                    $leadQuery->withCount('leadFollowups');
+                },
             ])
             ->orderByDesc('last_message_at')
             ->orderByDesc('updated_at')
@@ -157,6 +160,9 @@ class WhatsAppInboxController extends Controller
             ->with([
                 'contact',
                 'assignedUser',
+                'lead' => function ($leadQuery) {
+                    $leadQuery->withCount('leadFollowups');
+                },
                 'messages' => function ($query) {
                     $query
                         ->with('sender')
@@ -375,10 +381,33 @@ class WhatsAppInboxController extends Controller
     private function conversationPayload(
         WhatsAppConversation $conversation
     ): array {
+        $lead = null;
+
+        if ($conversation->lead_id) {
+            $lead = $conversation->relationLoaded('lead')
+                ? $conversation->lead
+                : $conversation
+                    ->lead()
+                    ->withCount('leadFollowups')
+                    ->first();
+        }
+
+        $followupsCount = $lead
+            ? (int) ($lead->lead_followups_count ?? 0)
+            : 0;
+
         return [
             'id' => $conversation->id,
             'contact_id' => $conversation->contact_id,
             'lead_id' => $conversation->lead_id,
+            'lead_followup_url' =>
+                $lead
+                    ? route(
+                        'admin.leads.follow-up.create',
+                        $lead->id
+                    )
+                    : null,
+            'followups_count' => $followupsCount,
             'contact_name' =>
                 optional($conversation->contact)->name
                 ?: 'Unknown',

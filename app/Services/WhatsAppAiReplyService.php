@@ -320,7 +320,8 @@ class WhatsAppAiReplyService
                         $this->followupData(
                             $conversation,
                             $message
-                        )
+                        ),
+                        $conversation
                     );
             }
         } elseif ($user) {
