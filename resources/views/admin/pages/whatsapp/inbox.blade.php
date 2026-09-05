@@ -60,7 +60,8 @@
 
         .wa-conversation-list {
             flex: 1 1 auto;
-            overflow: auto;
+            overflow-y: auto;
+            overflow-x: hidden;
             min-height: 0;
         }
 
@@ -103,8 +104,7 @@
             align-items: center;
         }
 
-        .wa-contact-name-line,
-        .wa-contact-bottom {
+        .wa-contact-name-line {
             min-width: 0;
             display: flex;
             align-items: center;
@@ -112,7 +112,11 @@
         }
 
         .wa-contact-bottom {
-            justify-content: space-between;
+            min-width: 0;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 8px;
         }
 
         .wa-contact-name,
@@ -136,6 +140,8 @@
         .wa-contact-message {
             color: #475569;
             font-size: 13px;
+            min-width: 0;
+            flex: 1 1 auto;
         }
 
         .wa-unread-pill {

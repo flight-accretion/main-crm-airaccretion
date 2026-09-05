@@ -79,4 +79,26 @@ class WhatsAppInboxLiveRefreshViewTest extends TestCase
             $source
         );
     }
+
+    public function test_conversation_row_layout_keeps_view_lead_button_visible(): void
+    {
+        $source = file_get_contents(
+            resource_path(
+                'views/admin/pages/whatsapp/inbox.blade.php'
+            )
+        );
+
+        $this->assertStringContainsString(
+            'overflow-x: hidden;',
+            $source
+        );
+        $this->assertMatchesRegularExpression(
+            '/\\.wa-contact-message\\s*\\{[^}]*min-width:\\s*0;[^}]*flex:\\s*1\\s+1\\s+auto;/s',
+            $source
+        );
+        $this->assertMatchesRegularExpression(
+            '/\\.wa-contact-bottom\\s*\\{[^}]*grid-template-columns:\\s*minmax\\(0,\\s*1fr\\)\\s+auto;/s',
+            $source
+        );
+    }
 }

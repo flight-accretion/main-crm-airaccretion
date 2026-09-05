@@ -4675,32 +4675,43 @@ public function saveVendorRefundFromRideStatus(
      */
     private function calculatePendingAmount($lead)
     {
-        // Match PaymentReviewController behavior exactly:
-        // - total amount is taken from the latest followup for the lead
+        // Keep pending amount aligned with reviewed customer payments:
+        // - total amount is taken from the latest billable followup for the lead
         // - received amount is sum of approved payments (payment_status = 1) from PaymentAuditTrail
 
+        if (!$lead) {
+            return 0;
+        }
+
         // Get all followup ids for this lead
-        $followupIds = $lead->leadFollowups->pluck('id')->toArray();
+        $followups = $lead->relationLoaded('leadFollowups')
+            ? $lead->leadFollowups
+            : $lead->leadFollowups()->get();
+
+        $followupIds = $followups
+            ->pluck('id')
+            ->filter()
+            ->toArray();
 
         if (empty($followupIds)) {
             return 0;
         }
 
-        // Latest followup (to get total_amount)
-        $latestFollowup = $lead->leadFollowups()->orderBy('created_at', 'desc')->first();
-        if (!$latestFollowup) {
-            return 0;
-        }
+        $latestBillableFollowup = $followups
+            ->filter(function ($followup) {
+                return (float) ($followup->total_amount ?? 0) > 0;
+            })
+            ->sortByDesc('created_at')
+            ->first();
 
-        $totalAmount = (float) ($latestFollowup->total_amount ?? 0);
+        $totalAmount = (float) optional($latestBillableFollowup)
+            ->total_amount;
 
         // Calculate received amount only from approved payments (audit trail status = 1)
-        $approvedPayments = PaymentAuditTrail::whereIn('lead_followup_id', $followupIds)
+        $totalReceived = PaymentAuditTrail::whereIn('lead_followup_id', $followupIds)
             ->where('payment_status', 1) // Only approved payments
-            ->get();
+            ->sum('paid_amount');
 
-        $totalReceived = $approvedPayments->sum('paid_amount');
-
-        return $totalAmount - $totalReceived;
+        return max(0, $totalAmount - (float) $totalReceived);
     }
 }
