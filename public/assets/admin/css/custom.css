@@ -324,3 +324,13 @@ table.dataTable thead>tr>th.sorting{
     padding-bottom: 0.35rem;
   }
 }
+
+#lead-ai-score-button {
+    width: auto !important;
+    min-width: auto !important;
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+    display: inline-flex !important;
+    align-items: center;
+    white-space: nowrap;
+}

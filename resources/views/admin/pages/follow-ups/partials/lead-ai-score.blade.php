@@ -134,7 +134,7 @@
 >
 
     <div
-        class="bg-white dark:bg-bodybg rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+        class="bg-white dark:bg-bodybg rounded-lg shadow-xl  max-h-[90vh] overflow-y-auto"
     >
 
         {{-- HEADER --}}
@@ -705,6 +705,12 @@
 
         button.innerHTML =
             '<i class="ri-sparkling-line me-1"></i> Analyse Lead';
+
+        button.style.setProperty(
+        'width',
+        'auto',
+        'important'
+    );
 
     }
 
