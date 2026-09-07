@@ -38,6 +38,7 @@ use App\Services\SalesAmountCalculator;
 use function App\Helpers\getRepresentativeIds;
 use App\Services\ActiveLeadService;
 use App\Models\LeadAllocationQueue;
+use App\Models\LeadAiScore;
 
 class ClientController extends Controller
 {
@@ -3198,11 +3199,27 @@ try {
                 : [];
         }
 
+        $latestAiScore =
+    LeadAiScore::query()
+        ->with(
+            'previousScore'
+        )
+        ->where(
+            'lead_id',
+            $lead->id
+        )
+        ->orderByDesc(
+            'created_at'
+        )
+        ->first();
+
         return view('admin.pages.follow-ups.add-follow-up', [
             'clientInfo' => $clientInfo,
             'followups' => $followups,
             'client' => $lead->client,
             'lead' => $lead,
+            'latestAiScore' =>
+             $latestAiScore,
             'services' => $services,
             'allExtraServices' => $allExtraServices,
             'selectedServices' => $selectedServices,

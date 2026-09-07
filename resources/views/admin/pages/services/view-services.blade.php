@@ -53,6 +53,10 @@
                             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Description</label>
                             <p class="text-gray-800 dark:text-white">{{ $service->description ?? 'N/A' }}</p>
                         </div>
+                        <div class="xl:col-span-12 col-span-12">
+                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Registration Email Note</label>
+                            <p class="text-gray-800 dark:text-white whitespace-pre-line">{{ $service->booking_email_note ?: 'N/A' }}</p>
+                        </div>
                         <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
                             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Created At</label>
                             <p class="text-gray-800 dark:text-white">{{ $service->created_at->format('d-m-Y H:i') }}</p>

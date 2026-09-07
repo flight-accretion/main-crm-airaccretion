@@ -93,6 +93,13 @@
                                             <span class="text-red-500 text-xs error-message"
                                                 id="add-airambulance-error"></span>
                                         </div>
+                                        <div class="xl:col-span-12 col-span-12">
+                                            <label class="ti-form-label mb-0">Registration Email Note</label>
+                                            <textarea name="booking_email_note"
+                                                class="ti-form-input rounded-sm form-control-sm" rows="3"></textarea>
+                                            <span class="text-red-500 text-xs error-message"
+                                                id="add-booking-email-note-error"></span>
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="box-footer">
@@ -382,6 +389,13 @@
                                         <span class="text-red-500 text-xs error-message"
                                             id="edit-airambulance-error"></span>
                                     </div>
+                                    <div class="xl:col-span-12 col-span-12">
+                                        <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Registration Email Note</label>
+                                        <textarea name="booking_email_note" id="edit-booking-email-note"
+                                            class="ti-form-input rounded-sm form-control-sm" rows="3"></textarea>
+                                        <span class="text-red-500 text-xs error-message"
+                                            id="edit-booking-email-note-error"></span>
+                                    </div>
                                 </div>
                                 <div class="mt-5">
                                     <button type="submit"
@@ -519,6 +533,9 @@
                         console.log('View response:', response);
                         if (response.success) {
                             const product = response.product;
+                            const bookingEmailNote = product.booking_email_note
+                                ? escapeHtml(product.booking_email_note)
+                                : 'N/A';
                             const content = `
                                 <div class="grid grid-cols-12 sm:gap-6">
                                     <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
@@ -540,7 +557,11 @@
                                     <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
                                         <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Created Date</label>
                                         <p class="text-gray-800 dark:text-white">${new Date(product.created_at).toLocaleDateString()}</p>
-                                    </div>                                  
+                                    </div>
+                                    <div class="xl:col-span-12 col-span-12">
+                                        <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Registration Email Note</label>
+                                        <p class="text-gray-800 dark:text-white whitespace-pre-line">${bookingEmailNote}</p>
+                                    </div>
                                 </div>
                             `;
                             $('#view-product-content').html(content);
@@ -580,6 +601,7 @@
                             const product = response.product;
                             $('#edit-product-id').val(product.id);
                             $('#edit-product-name').val(product.product);
+                            $('#edit-booking-email-note').val(product.booking_email_note || '');
                             $('#edit-is_private').prop('checked', product.is_private == 1);
                             $('#edit-is_airambulance').prop('checked', product
                                 .is_airambulance == 1);
@@ -769,7 +791,7 @@
 
             function displayValidationErrors(errors, prefix) {
                 $.each(errors, function(field, messages) {
-                    $(`#${prefix}-${field.replace('_', '-')}-error`).text(messages[0]);
+                    $(`#${prefix}-${field.replace(/_/g, '-')}-error`).text(messages[0]);
                 });
             }
 
@@ -781,6 +803,15 @@
                 toast.textContent = message;
                 document.body.appendChild(toast);
                 setTimeout(() => toast.remove(), 3000);
+            }
+
+            function escapeHtml(value) {
+                return String(value)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
             }
         });
 

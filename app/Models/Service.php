@@ -17,6 +17,7 @@ class Service extends Model
         'service_amount',
         'fees_percent',
         'terms_and_conditions',
+        'booking_email_note',
         'product_ids',
         'status'
     ];

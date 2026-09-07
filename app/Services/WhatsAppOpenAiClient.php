@@ -5,87 +5,66 @@ namespace App\Services;
 use App\Models\WhatsAppAiAgentSetting;
 use App\Models\WhatsAppConversation;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Http;
+// use Illuminate\Support\Facades\Http;
+use App\Services\Ai\AiProviderManager;
 use RuntimeException;
 
 class WhatsAppOpenAiClient
 {
-    public function __construct(
-        private WhatsAppAiRuntimeDataService $runtimeData
-    ) {
-    }
+ public function __construct(
+    private WhatsAppAiRuntimeDataService $runtimeData,
+    private AiProviderManager $providers
+) {
+}
 
-    public function generateReply(
-        WhatsAppAiAgentSetting $setting,
-        WhatsAppConversation $conversation,
-        Collection $messages,
-        Collection $products,
-        ?Collection $contextMessages = null
-    ): array {
-        $apiKey = $setting->apiKey();
+public function generateReply(
+    WhatsAppAiAgentSetting $setting,
+    WhatsAppConversation $conversation,
+    Collection $messages,
+    Collection $products,
+    ?Collection $contextMessages = null
+): array {
+    $profile =
+        $setting
+            ->aiModelProfile()
+            ->first();
 
-        if (!$apiKey) {
-            throw new RuntimeException(
-                'OpenAI API key is not configured.'
-            );
-        }
-
-        $model = trim((string) $setting->model)
-            ?: WhatsAppAiAgentSetting::defaultModel();
-
-        $response = Http::timeout(
-            (int) config('whatcrm.timeout', 10)
-        )
-            ->acceptJson()
-            ->asJson()
-            ->withToken($apiKey)
-            ->post(
-                (string) config('whatcrm.openai_responses_url'),
-                [
-                    'model' => $model,
-                    'instructions' => $this->instructions(
-                        $setting,
-                        $conversation,
-                        $messages,
-                        $products,
-                        $contextMessages
-                    ),
-                    'input' => [
-                        [
-                            'role' => 'user',
-                            'content' => [
-                                [
-                                    'type' => 'input_text',
-                                    'text' => $this->prompt(
-                                        $conversation,
-                                        $messages,
-                                        $products,
-                                        $contextMessages
-                                    ),
-                                ],
-                            ],
-                        ],
-                    ],
-                ]
-            );
-
-        if (!$response->successful()) {
-            $message = data_get(
-                $response->json(),
-                'error.message'
-            );
-
-            throw new RuntimeException(
-                'OpenAI request failed with HTTP '
-                . $response->status()
-                . ($message ? ': ' . $message : '')
-            );
-        }
-
-        return $this->parseResponse(
-            $this->responseText($response->json() ?: [])
+    if (!$profile) {
+        throw new RuntimeException(
+            'WhatsApp AI Model Profile is not configured.'
         );
     }
+
+    if (!$profile->isReady()) {
+        throw new RuntimeException(
+            'WhatsApp AI Model Profile is unavailable.'
+        );
+    }
+
+    $text =
+        $this->providers->generate(
+            $profile,
+
+            $this->instructions(
+                $setting,
+                $conversation,
+                $messages,
+                $products,
+                $contextMessages
+            ),
+
+            $this->prompt(
+                $conversation,
+                $messages,
+                $products,
+                $contextMessages
+            )
+        );
+
+    return $this->parseResponse(
+        $text
+    );
+}
 
     private function prompt(
         WhatsAppConversation $conversation,

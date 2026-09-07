@@ -703,7 +703,16 @@
                             <li class="slide {{ Route::is('admin.whatsapp.ai-agent.*') ? 'active' : '' }}">
                                 <a href="{{ route('admin.whatsapp.ai-agent.edit') }}" class="side-menu__item">
                                     <i class="bx bx-bot side-menu__icon"></i>
-                                    <span class="side-menu__label">WhatsApp AI Agent</span>
+                                    <span class="side-menu__label">AI Agent</span>
+                                </a>
+                            </li>
+                        @endif
+
+                        @if ($userType === UserType::SUPER_ADMIN)
+                            <li class="slide {{ Route::is('admin.booking-email-template.*') ? 'active' : '' }}">
+                                <a href="{{ route('admin.booking-email-template.edit') }}" class="side-menu__item">
+                                    <i class="bx bx-envelope side-menu__icon"></i>
+                                    <span class="side-menu__label">Booking Email</span>
                                 </a>
                             </li>
                         @endif

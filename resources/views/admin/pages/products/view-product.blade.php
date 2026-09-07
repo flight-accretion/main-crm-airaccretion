@@ -64,9 +64,13 @@
                             <div class="form-check">
                                 <input class="form-check-input" type="checkbox" disabled {{ $product->is_airambulance ? 'checked' : '' }}>
                             </div>
+                        </div>
+                        <div class="xl:col-span-12 col-span-12">
+                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Registration Email Note</label>
+                            <p class="text-gray-800 dark:text-white whitespace-pre-line">{{ $product->booking_email_note ?: 'N/A' }}</p>
+                        </div>
                     </div>
                 </div>
-            </div>
         </div>
     </div>
 

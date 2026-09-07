@@ -41,6 +41,10 @@ use App\Http\Controllers\WhatsAppAiAgentSettingController;
 use App\Http\Controllers\LeadTransferController;
 use App\Http\Controllers\LeadAllocationSettingController;
 use App\Http\Controllers\VendorExtraServiceController;
+use App\Http\Controllers\LeadAiScoreController;
+use App\Http\Controllers\AiModelProfileController;
+use App\Http\Controllers\BookingEmailTemplateController;
+use App\Http\Controllers\LeadBookingConfirmationEmailController;
 
 /*
 |--------------------------------------------------------------------------
@@ -114,6 +118,56 @@ Route::middleware('auth')->group(function () {
                 ->name('ai-agent.edit');
             Route::put('/ai-agent', [WhatsAppAiAgentSettingController::class, 'update'])
                 ->name('ai-agent.update');
+                Route::post(
+                '/ai-agent/test-connection',
+                [
+                    WhatsAppAiAgentSettingController::class,
+                    'testConnection'
+                ]
+            )->name(
+                'ai-agent.test-connection'
+            );
+
+            Route::post(
+    '/ai-models',
+    [
+        AiModelProfileController::class,
+        'store'
+            ]
+        )->name(
+            'ai-models.store'
+        );
+
+        Route::put(
+            '/ai-models/{aiModelProfile}',
+            [
+                AiModelProfileController::class,
+                'update'
+            ]
+        )->name(
+            'ai-models.update'
+        );
+
+        Route::delete(
+            '/ai-models/{aiModelProfile}',
+            [
+                AiModelProfileController::class,
+                'destroy'
+            ]
+        )->name(
+            'ai-models.destroy'
+        );
+
+        Route::post(
+            '/ai-models/test-connection',
+            [
+                AiModelProfileController::class,
+                'testConnection'
+            ]
+        )->name(
+            'ai-models.test-connection'
+        );
+
             Route::get('/conversations', [WhatsAppInboxController::class, 'conversations'])
                 ->name('conversations');
             Route::get('/conversations/{conversation}/messages', [WhatsAppInboxController::class, 'messages'])
@@ -163,6 +217,18 @@ Route::middleware('auth')->group(function () {
         ->name(
             'admin.lead-allocation.settings.update'
         );
+
+    Route::get(
+        '/admin/booking-email-template',
+        [BookingEmailTemplateController::class, 'edit']
+    )
+        ->name('admin.booking-email-template.edit');
+
+    Route::put(
+        '/admin/booking-email-template',
+        [BookingEmailTemplateController::class, 'update']
+    )
+        ->name('admin.booking-email-template.update');
 
 
     Route::prefix('admin/lead')->group(function () {
@@ -290,6 +356,13 @@ Route::post(
         Route::get('/import/sample', [ClientController::class, 'downloadSampleExcel'])->name('admin.leads.import.sample');
         Route::get('/export', [ClientController::class, 'exportLeads'])->name('admin.leads.export');
 
+        Route::post(
+            '/{lead}/send-booking-confirmation-email',
+            [LeadBookingConfirmationEmailController::class, 'send']
+        )
+            ->whereUuid('lead')
+            ->name('admin.leads.booking-confirmation-email.send');
+
         // Dynamic routes that expect a UUID lead identifier
         Route::get('/{lead}', [ClientController::class, 'viewLead'])
             ->whereUuid('lead')
@@ -306,6 +379,42 @@ Route::post(
         Route::delete('/{lead}', [ClientController::class, 'destroyLead'])
             ->whereUuid('lead')
             ->name('admin.leads.destroy');
+
+            Route::get(
+    '/{lead}/ai-score',
+    [
+        LeadAiScoreController::class,
+        'show'
+    ]
+)
+    ->whereUuid('lead')
+    ->name(
+        'admin.leads.ai-score.show'
+    );
+
+Route::post(
+    '/{lead}/ai-score/analyse',
+    [
+        LeadAiScoreController::class,
+        'analyse'
+    ]
+)
+    ->whereUuid('lead')
+    ->name(
+        'admin.leads.ai-score.analyse'
+    );
+
+Route::post(
+    '/{lead}/ai-score/retry',
+    [
+        LeadAiScoreController::class,
+        'retry'
+    ]
+)
+    ->whereUuid('lead')
+    ->name(
+        'admin.leads.ai-score.retry'
+    );
 
         Route::get('/{lead}/follow-up/create', [ClientController::class, 'createLeadFollowUp'])
             ->whereUuid('lead')

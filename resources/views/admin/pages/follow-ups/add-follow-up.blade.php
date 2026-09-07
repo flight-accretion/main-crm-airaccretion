@@ -2,11 +2,19 @@
 @section('content')
     <!-- Page Header -->
     <div class="block justify-between page-header md:flex">
-        <div>
-            <h3
-                class="!text-defaulttextcolor dark:!text-defaulttextcolor/70 dark:text-white dark:hover:text-white text-[1.125rem] font-semibold">
-                Add Follow Up</h3>
-        </div>
+        <div class="flex items-center gap-3 flex-wrap">
+
+    <h3
+        class="!text-defaulttextcolor dark:!text-defaulttextcolor/70 dark:text-white dark:hover:text-white text-[1.125rem] font-semibold"
+    >
+        Add Follow Up
+    </h3>
+
+    @include(
+        'admin.pages.follow-ups.partials.lead-ai-score'
+    )
+
+</div>
         <ol class="flex items-center whitespace-nowrap min-w-0">
             <li class="text-[0.813rem] ps-[0.5rem]">
                 <a class="flex items-center text-primary hover:text-primary dark:text-primary truncate"
@@ -56,6 +64,10 @@
                                 <button type="button" id="generate-registration-link-btn"
                                     class="ti-btn ti-btn-secondary ti-btn" data-client-id="{{ $client->id }}">
                                     Generate Registration Link
+                                </button>
+                                <button type="button" id="send-booking-confirmation-email-btn"
+                                    class="ti-btn ti-btn-primary ti-btn" data-lead-id="{{ $lead->id }}">
+                                    Send Booking Email
                                 </button>
                                 <button type="button" id="copy-registration-link-btn" class="ti-btn ti-btn-info ti-btn"
                                     style="display: none;">
@@ -2262,6 +2274,60 @@
                     btn.textContent = 'Generate Registration Link';
                     console.error('Error:', error);
                     alert('Error generating registration link');
+                });
+        });
+
+        document.getElementById('send-booking-confirmation-email-btn').addEventListener('click', function() {
+            const leadId = this.getAttribute('data-lead-id');
+            const btn = this;
+            const originalText = btn.textContent;
+
+            btn.disabled = true;
+            btn.textContent = 'Sending...';
+
+            fetch(`{{ route('admin.leads.booking-confirmation-email.send', ['lead' => ':lead']) }}`
+                    .replace(':lead', leadId), {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        }
+                    })
+                .then(response => response.json().then(data => ({
+                    ok: response.ok,
+                    data
+                })))
+                .then(({ ok, data }) => {
+                    if (!ok || !data.success) {
+                        alert('Error: ' + (data.message || 'Failed to send booking email'));
+                        return;
+                    }
+
+                    const displayLink = data.short_link || data.registration_link || '';
+                    const registrationInput = document.getElementById('registration-link-input');
+                    const generateBtn = document.getElementById('generate-registration-link-btn');
+
+                    if (displayLink && registrationInput) {
+                        registrationInput.value = displayLink;
+                        document.getElementById('registration-link-container').style.display = 'block';
+                        document.getElementById('copy-registration-link-btn').style.display = 'inline-block';
+                    }
+
+                    if (generateBtn) {
+                        generateBtn.disabled = true;
+                        generateBtn.textContent = 'Link Generated';
+                        generateBtn.setAttribute('aria-disabled', 'true');
+                    }
+
+                    showSuccessMessage(data.message || 'Booking confirmation email sent successfully!');
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error sending booking email');
+                })
+                .finally(() => {
+                    btn.disabled = false;
+                    btn.textContent = originalText;
                 });
         });
 

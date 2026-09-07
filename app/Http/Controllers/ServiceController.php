@@ -80,6 +80,7 @@ public function index(Request $request)
             'service_amount' => 'required|integer|min:0|max:9999999',
             'fees_percent' => 'nullable|numeric|min:0|max:100',
             'terms_and_conditions' => 'nullable',
+            'booking_email_note' => 'nullable|string|max:5000',
             // Accept single selected product from form but store as product_ids array
             'product_id' => 'required|exists:products,id',
             'extra_service_ids' => 'nullable|array',
@@ -156,6 +157,7 @@ public function index(Request $request)
                 'service_amount' => $request->service_amount,
                 'fees_percent' => $request->input('fees_percent', 0) ?: 0,
                 'terms_and_conditions' => $request->terms_and_conditions,
+                'booking_email_note' => $request->booking_email_note,
                 // Store selected product as single-element array in product_ids
                 'product_ids' => [$request->product_id],
                 'status' => 1
@@ -232,6 +234,7 @@ public function index(Request $request)
             'service_amount' => 'required|integer|min:0|max:9999999',
             'fees_percent' => 'nullable|numeric|min:0|max:100',
             'terms_and_conditions' => 'nullable',
+            'booking_email_note' => 'nullable|string|max:5000',
             'product_id' => 'required|exists:products,id',
             'extra_service_ids' => 'nullable|array',
            'extra_service_ids.*' => [
@@ -309,6 +312,7 @@ public function index(Request $request)
                 'service_amount' => $request->service_amount,
                 'fees_percent' => $request->input('fees_percent', 0) ?: 0,
                 'terms_and_conditions' => $request->terms_and_conditions,
+                'booking_email_note' => $request->booking_email_note,
                 'product_ids' => [$request->product_id], // Store as array with single product
             ]);
 

@@ -85,6 +85,13 @@
                                                 <span class="text-red-500 text-xs">{{ $message }}</span>
                                             @enderror
                                         </div>
+                                        <div class="xl:col-span-12 col-span-12">
+                                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Registration Email Note</label>
+                                            <textarea class="form-control form-control-sm" name="booking_email_note" rows="3">{{ old('booking_email_note', $service->booking_email_note) }}</textarea>
+                                            @error('booking_email_note')
+                                                <span class="text-red-500 text-xs">{{ $message }}</span>
+                                            @enderror
+                                        </div>
                                         
                                     </div>
                                     <div class="my-5">

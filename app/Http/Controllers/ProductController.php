@@ -50,6 +50,7 @@ public function index(Request $request)
                 'product' => 'required|string|max:255|unique:products',
                 'is_private' => 'nullable|boolean',
                 'is_airambulance' => 'nullable|boolean',
+                'booking_email_note' => 'nullable|string|max:5000',
             ], [
                 'product.required' => 'The product name field is required.',
                 'product.unique' => 'This product name already exists.',
@@ -106,6 +107,7 @@ public function index(Request $request)
                     'product' => $request->product,
                     'is_private' => $request->has('is_private') ? true : false,
                     'is_airambulance' => $request->has('is_airambulance') ? 1 : 0,
+                    'booking_email_note' => $request->booking_email_note,
                     'status' => 1,
                 ]);
                 DB::commit();
@@ -173,6 +175,7 @@ public function index(Request $request)
             'product' => 'required|string|max:255|unique:products,product,'.$id,
             'is_private' => 'nullable|boolean',
             'is_airambulance' => 'nullable|boolean',
+            'booking_email_note' => 'nullable|string|max:5000',
         ], [
             'product.required' => 'The product name field is required.',
             'product.unique' => 'This product name already exists.',
@@ -212,6 +215,7 @@ public function index(Request $request)
                 'product' => $request->product,
                 'is_private' => $request->has('is_private') ? true : false,
                 'is_airambulance' => $request->has('is_airambulance') ? 1 : 0,
+                'booking_email_note' => $request->booking_email_note,
                 'updated_at' => now(),
                 ]);
 

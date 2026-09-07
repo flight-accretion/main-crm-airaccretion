@@ -1,0 +1,95 @@
+<?php
+
+namespace App\Services\Ai;
+
+use App\Models\AiModelProfile;
+use RuntimeException;
+
+class AiProviderManager
+{
+    public function generate(
+        AiModelProfile $profile,
+        string $instructions,
+        string $input
+    ): string {
+        if (!$profile->enabled) {
+            throw new RuntimeException(
+                'Selected AI Model Profile is inactive.'
+            );
+        }
+
+        $apiKey =
+            $profile->apiKey();
+
+        if (!$apiKey) {
+            throw new RuntimeException(
+                'Selected AI Model Profile has no API key.'
+            );
+        }
+
+        return $this
+            ->client(
+                $profile->provider
+            )
+            ->generate(
+                $profile->model,
+                $apiKey,
+                $instructions,
+                $input
+            );
+    }
+
+    public function test(
+        string $provider,
+        string $model,
+        string $apiKey
+    ): void {
+        if (
+            trim($apiKey) === ''
+        ) {
+            throw new RuntimeException(
+                'API key is required.'
+            );
+        }
+
+        if (
+            trim($model) === ''
+        ) {
+            throw new RuntimeException(
+                'Model is required.'
+            );
+        }
+
+        $this
+            ->client($provider)
+            ->testConnection(
+                $model,
+                $apiKey
+            );
+    }
+
+    public function client(
+        string $provider
+    ): AiProviderClientInterface {
+        switch (
+            strtolower(
+                trim($provider)
+            )
+        ) {
+            case 'openai':
+                return app(
+                    OpenAiProviderClient::class
+                );
+
+            case 'gemini':
+                return app(
+                    GeminiProviderClient::class
+                );
+
+            default:
+                throw new RuntimeException(
+                    'Unsupported AI provider.'
+                );
+        }
+    }
+}

@@ -19,7 +19,8 @@ class Product extends Model
         'is_private',
         'is_airambulance',
         'status',
-        'user_ids'
+        'user_ids',
+        'booking_email_note',
     ];
 
     protected $casts = [

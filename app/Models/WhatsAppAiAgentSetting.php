@@ -25,6 +25,7 @@ class WhatsAppAiAgentSetting extends Model
         'api_key_encrypted',
         'buffer_seconds',
         'context_message_limit',
+        'ai_model_profile_id',
     ];
 
     protected $hidden = [
@@ -76,13 +77,6 @@ class WhatsAppAiAgentSetting extends Model
             [],
             $defaults
         );
-
-        if ($setting->provider !== 'openai') {
-            $setting->forceFill([
-                'provider' => 'openai',
-                'model' => self::defaultModel(),
-            ])->save();
-        }
 
         return $setting;
     }
@@ -155,15 +149,33 @@ class WhatsAppAiAgentSetting extends Model
     }
 
     public function isReady(): bool
-    {
-        return (bool) $this->enabled
-            && (bool) $this->auto_reply_enabled
-            && $this->provider === 'openai'
-            && !empty($this->apiKey());
+{
+    if (
+        !$this->enabled
+        ||
+        !$this->auto_reply_enabled
+    ) {
+        return false;
     }
+
+    $profile =
+        $this->aiModelProfile;
+
+    return $profile
+        &&
+        $profile->isReady();
+}
 
     public function getApiKeyStatusAttribute(): string
     {
         return $this->apiKey() ? 'configured' : 'missing';
     }
+
+    public function aiModelProfile()
+{
+    return $this->belongsTo(
+        AiModelProfile::class,
+        'ai_model_profile_id'
+    );
+}
 }

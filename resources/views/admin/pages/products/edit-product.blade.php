@@ -48,6 +48,13 @@
                                     <span class="text-danger">{{ $message }}</span>
                                 @enderror
                             </div>
+                            <div class="xl:col-span-12 col-span-12 mt-4">
+                                <label for="booking_email_note" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Registration Email Note</label>
+                                <textarea name="booking_email_note" id="booking_email_note" class="ti-form-input rounded-sm form-control-sm" rows="3">{{ old('booking_email_note', $product->booking_email_note) }}</textarea>
+                                @error('booking_email_note')
+                                    <span class="text-danger">{{ $message }}</span>
+                                @enderror
+                            </div>
                         </div>
                     </div>
                     <div class="box-footer">
