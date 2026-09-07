@@ -118,10 +118,48 @@ class WhatCrmMessageNormalizer
                 ?? $payload['agent_id']
                 ?? null,
 
-            'service' => $payload['service'] ?? null,
-            'city' => $payload['city'] ?? null,
-            'date' => $payload['date'] ?? null,
-            'guest' => $payload['guest'] ?? null,
+            'product' => $payload['product'] ?? null,
+            'service' =>
+                $payload['service']
+                ?? $payload['service_name']
+                ?? null,
+            'city' =>
+                $payload['city']
+                ?? $payload['service_city']
+                ?? $payload['location']
+                ?? null,
+            'date' =>
+                $payload['date']
+                ?? $payload['service_date']
+                ?? $payload['travel_date']
+                ?? $payload['ride_date']
+                ?? null,
+            'service_date' =>
+                $payload['service_date']
+                ?? $payload['date']
+                ?? null,
+            'guest' =>
+                $payload['guest']
+                ?? $payload['guests']
+                ?? $payload['passengers']
+                ?? null,
+            'route' =>
+                $payload['route']
+                ?? $payload['travel_route']
+                ?? $payload['city_route']
+                ?? null,
+            'origin' =>
+                $payload['origin']
+                ?? $payload['from_place']
+                ?? $payload['departure_city']
+                ?? $payload['pickup_city']
+                ?? null,
+            'destination' =>
+                $payload['destination']
+                ?? $payload['to_place']
+                ?? $payload['arrival_city']
+                ?? $payload['drop_city']
+                ?? null,
             'occasion' =>
                 $payload['occasion']
                 ?? $payload['ocassion']

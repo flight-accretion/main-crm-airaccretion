@@ -667,9 +667,9 @@
                             <span class="wa-contact-top">
                                 <span class="wa-contact-name-line">
                                     <span class="wa-contact-name">${escapeHtml(conversationLabel(conversation))}</span>
-                                    ${followupBadge}
+                                    ${followupBadge} ${viewLeadButton}
                                 </span>
-                                ${viewLeadButton}
+                                
                                 ${unreadBadge}
                             </span>
                             <span class="wa-contact-number">${escapeHtml(conversation.number || conversation.raw_phone || '-')}</span>

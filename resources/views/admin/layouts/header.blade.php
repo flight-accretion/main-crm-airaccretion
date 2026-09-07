@@ -792,7 +792,7 @@
                                         <a href="{{ route('admin.leads.dnp') }}" class="side-menu__item">View DNP
                                             Leads</a>
                                     </li>
-                                    @if(
+                                    <!-- @if(
                                         $userType === \App\Models\UserType::SUPER_ADMIN
                                         ||
                                         in_array(
@@ -843,10 +843,52 @@
 
                                         </li>
 
-                                    @endif
+                                    @endif -->
                                 </ul>
                             </li>
                         @endif
+
+                        @if(
+                        $userType === \App\Models\UserType::SUPER_ADMIN
+                        ||
+                        in_array(
+                            $userType,
+                            \App\Models\UserType::SALES_ROLES,
+                            true
+                        )
+                    )
+                        @php
+                            $leadTransferPendingCount = 0;
+
+                            try {
+                                $leadTransferPendingCount = app(
+                                    \App\Services\LeadTransferService::class
+                                )->pendingActionCountFor(auth()->user());
+                            } catch (\Throwable $e) {
+                                $leadTransferPendingCount = 0;
+                            }
+                        @endphp
+
+                        <li class="slide {{ Route::is('admin.leads.transfers.*') ? 'active' : '' }}">
+                            <a
+                                href="{{ route('admin.leads.transfers.index') }}"
+                                class="side-menu__item {{ Route::is('admin.leads.transfers.*') ? 'active' : '' }}"
+                            >
+                                <i class="bx bx-transfer side-menu__icon"></i>
+
+                                <span class="side-menu__label">Requested Leads</span>
+
+                                <span
+                                    id="lead-transfer-pending-count"
+                                    class="badge bg-danger/10 text-danger ms-auto"
+                                    data-current-count="{{ $leadTransferPendingCount }}"
+                                    style="{{ $leadTransferPendingCount > 0 ? '' : 'display:none;' }}"
+                                >
+                                    {{ $leadTransferPendingCount }}
+                                </span>
+                            </a>
+                        </li>
+                    @endif
                       @if(
                         $userType
                         &&

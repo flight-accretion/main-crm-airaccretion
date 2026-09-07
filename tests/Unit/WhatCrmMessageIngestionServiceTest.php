@@ -123,17 +123,17 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
         $this->assertNotNull($followup);
 
         $this->assertStringContainsString(
-            'WhatsApp message received.',
+            'WhatsApp customer message received.',
             $followup->followup_note
         );
         $this->assertStringContainsString(
-            'Please call me',
+            'Latest Customer Message: Please call me',
             $followup->followup_note
         );
         $this->assertSame($salesperson->id, $followup->followed_by);
     }
 
-    public function test_same_text_with_different_provider_ids_stores_both_messages_and_followups(): void
+    public function test_repeated_customer_message_does_not_create_duplicate_followup_but_new_message_does(): void
     {
         $salesperson = $this->createSalesUser('Repeat Owner');
         $lead = $this->createActiveLead('Repeat Customer', '9876543211', $salesperson);
@@ -153,20 +153,46 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
             ->process($base + ['message_id' => 'wamid.REPEAT-1']);
         app(WhatCrmMessageIngestionService::class)
             ->process($base + ['message_id' => 'wamid.REPEAT-2']);
+        app(WhatCrmMessageIngestionService::class)
+            ->process(array_merge($base, [
+                'message_id' => 'wamid.REPEAT-3',
+                'message' => 'Can you call me now?',
+            ]));
 
-        $this->assertDatabaseCount('whatsapp_messages', 2);
+        $this->assertDatabaseCount('whatsapp_messages', 3);
         $this->assertDatabaseCount('lead_followups', 3);
         $this->assertDatabaseHas(
             'whatsapp_conversations',
             [
                 'lead_id' => $lead->id,
-                'unread_count' => 2,
-                'last_message' => 'Hello',
+                'unread_count' => 3,
+                'last_message' => 'Can you call me now?',
             ]
+        );
+
+        $messageFollowups = DB::table('whatsapp_messages')
+            ->whereIn(
+                'provider_message_id',
+                [
+                    'wamid.REPEAT-1',
+                    'wamid.REPEAT-2',
+                    'wamid.REPEAT-3',
+                ]
+            )
+            ->pluck('lead_followup_id', 'provider_message_id');
+
+        $this->assertNotNull($messageFollowups['wamid.REPEAT-1']);
+        $this->assertSame(
+            $messageFollowups['wamid.REPEAT-1'],
+            $messageFollowups['wamid.REPEAT-2']
+        );
+        $this->assertNotSame(
+            $messageFollowups['wamid.REPEAT-1'],
+            $messageFollowups['wamid.REPEAT-3']
         );
     }
 
-    public function test_incoming_followup_note_summarizes_recent_conversation_context(): void
+    public function test_incoming_followup_note_records_customer_details_without_chat_transcript(): void
     {
         $salesperson = $this->createSalesUser('Summary Owner');
         $lead = $this->createActiveLead(
@@ -196,11 +222,16 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
                 'chat_id' => 'chat-summary',
                 'number' => '+91 98765 43220',
                 'customer_name' => 'Summary Customer',
-                'message' => 'Can we book for five guests tomorrow?',
+                'message' => 'Yes, please share final pricing.',
                 'message_type' => 'text',
                 'direction' => 'incoming',
                 'message_at' => '2026-08-22T17:32:00+05:30',
                 'status' => 'delivered',
+                'service' => 'Helicopter Charter Mumbai to Goa',
+                'date' => '26-09-2026',
+                'guest' => 2,
+                'route' => 'Mumbai to Goa',
+                'occasion' => 'Birthday',
             ]);
 
         $followupId = DB::table('whatsapp_messages')
@@ -211,19 +242,47 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
 
         $this->assertNotNull($followup);
         $this->assertStringContainsString(
-            'WhatsApp conversation summary.',
+            'WhatsApp customer message received.',
             $followup->followup_note
         );
         $this->assertStringContainsString(
-            'Customer need: Can we book for five guests tomorrow?',
+            'Customer: Summary Customer',
             $followup->followup_note
         );
         $this->assertStringContainsString(
+            'Phone: 9876543220',
+            $followup->followup_note
+        );
+        $this->assertStringContainsString(
+            'Service: Helicopter Charter Mumbai to Goa',
+            $followup->followup_note
+        );
+        $this->assertStringContainsString(
+            'Service Date: 26-09-2026',
+            $followup->followup_note
+        );
+        $this->assertStringContainsString(
+            'Guests: 2',
+            $followup->followup_note
+        );
+        $this->assertStringContainsString(
+            'Route: Mumbai to Goa',
+            $followup->followup_note
+        );
+        $this->assertStringContainsString(
+            'Occasion: Birthday',
+            $followup->followup_note
+        );
+        $this->assertStringContainsString(
+            'Latest Customer Message: Yes, please share final pricing.',
+            $followup->followup_note
+        );
+        $this->assertStringNotContainsString(
+            'Recent conversation:',
+            $followup->followup_note
+        );
+        $this->assertStringNotContainsString(
             'Agent: Helicopter ride package starts at Rs 35,000.',
-            $followup->followup_note
-        );
-        $this->assertStringContainsString(
-            'Customer: Can we book for five guests tomorrow?',
             $followup->followup_note
         );
         $this->assertLessThanOrEqual(
