@@ -118,7 +118,144 @@ class LeadTransferService
     }
 
     /**
-     * Current owner or Super Admin can approve.
+     * Current owner offers one of their own leads to another sales user.
+     *
+     * from_user_id = current lead owner
+     * to_user_id = requested recipient
+     * requested_by = current lead owner
+     */
+    public function requestFromOwner(
+        Lead $lead,
+        User $toUser,
+        User $requester,
+        ?string $reason = null
+    ): LeadTransfer {
+        return DB::transaction(function () use (
+            $lead,
+            $toUser,
+            $requester,
+            $reason
+        ) {
+            $lead = Lead::where('id', $lead->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (empty($lead->representative_user_id)) {
+                throw ValidationException::withMessages([
+                    'transfer' =>
+                        'This lead is currently unassigned and cannot be transferred through lead transfer.',
+                ]);
+            }
+
+            if (
+                (string) $lead->representative_user_id
+                !==
+                (string) $requester->id
+            ) {
+                throw ValidationException::withMessages([
+                    'transfer' =>
+                        'Only the current lead owner can transfer this lead.',
+                ]);
+            }
+
+            if (
+                !$this->isSalesUser($requester)
+                ||
+                (int) $requester->status !== 1
+            ) {
+                throw ValidationException::withMessages([
+                    'transfer' =>
+                        'Only active Sales Executives or Sales Managers can transfer their leads.',
+                ]);
+            }
+
+            if (
+                !$this->isSalesUser($toUser)
+                ||
+                (int) $toUser->status !== 1
+            ) {
+                throw ValidationException::withMessages([
+                    'transfer' =>
+                        'The selected recipient must be an active Sales Manager or Sales Executive.',
+                ]);
+            }
+
+            if ((string) $toUser->id === (string) $requester->id) {
+                throw ValidationException::withMessages([
+                    'transfer' =>
+                        'Please select another sales user for this transfer.',
+                ]);
+            }
+
+            $pendingExists = LeadTransfer::where(
+                'lead_id',
+                $lead->id
+            )
+                ->where('status', 'pending')
+                ->exists();
+
+            if ($pendingExists) {
+                throw ValidationException::withMessages([
+                    'transfer' =>
+                        'A transfer request is already pending for this lead.',
+                ]);
+            }
+
+            return LeadTransfer::create([
+                'lead_id' =>
+                    $lead->id,
+
+                'from_user_id' =>
+                    $lead->representative_user_id,
+
+                'to_user_id' =>
+                    $toUser->id,
+
+                'requested_by' =>
+                    $requester->id,
+
+                'status' =>
+                    'pending',
+
+                'reason' =>
+                    $reason,
+            ]);
+        });
+    }
+
+    public function pendingActionCountFor(User $user): int
+    {
+        if ($this->isSuperAdmin($user)) {
+            return LeadTransfer::query()
+                ->where('status', 'pending')
+                ->count();
+        }
+
+        if (!$this->isSalesUser($user)) {
+            return 0;
+        }
+
+        return LeadTransfer::query()
+            ->where('status', 'pending')
+            ->where(function ($query) use ($user) {
+                $query
+                    ->where(function ($pullRequest) use ($user) {
+                        $pullRequest
+                            ->whereColumn('requested_by', 'to_user_id')
+                            ->where('from_user_id', $user->id);
+                    })
+                    ->orWhere(function ($ownerOffer) use ($user) {
+                        $ownerOffer
+                            ->whereColumn('requested_by', 'from_user_id')
+                            ->where('to_user_id', $user->id);
+                    });
+            })
+            ->count();
+    }
+
+    /**
+     * Current owner, requested recipient, or Super Admin can approve,
+     * depending on which side created the request.
      */
     public function accept(
         LeadTransfer $transfer,
@@ -145,18 +282,10 @@ class LeadTransferService
                 ]);
             }
 
-            $isCurrentOwner =
-                (string) $transfer->from_user_id
-                ===
-                (string) $user->id;
-
-            $isSuperAdmin =
-                $this->isSuperAdmin($user);
-
-            if (!$isCurrentOwner && !$isSuperAdmin) {
+            if (!$this->canRespondToTransfer($transfer, $user)) {
                 throw ValidationException::withMessages([
                     'transfer' =>
-                        'Only the current lead owner or Super Admin can approve this transfer.',
+                        $this->approvalDeniedMessage($transfer),
                 ]);
             }
 
@@ -199,7 +328,7 @@ class LeadTransferService
                 $lead->representative_user_id;
 
             /*
-             * Assign to the person who REQUESTED the lead.
+             * Assign to the requested recipient.
              */
             $lead->representative_user_id =
                 $transfer->to_user_id;
@@ -239,6 +368,12 @@ class LeadTransferService
                 'created_at' =>
                     now(),
             ]);
+
+            $this->recordAcceptedTransferFollowup(
+                $lead,
+                $transfer,
+                $user
+            );
         });
 
         if ($staleOwnershipMessage) {
@@ -250,7 +385,8 @@ class LeadTransferService
     }
 
     /**
-     * Current owner or Super Admin can reject.
+     * Current owner, requested recipient, or Super Admin can reject,
+     * depending on which side created the request.
      */
     public function reject(
         LeadTransfer $transfer,
@@ -279,18 +415,10 @@ class LeadTransferService
                 ]);
             }
 
-            $isCurrentOwner =
-                (string) $transfer->from_user_id
-                ===
-                (string) $user->id;
-
-            $isSuperAdmin =
-                $this->isSuperAdmin($user);
-
-            if (!$isCurrentOwner && !$isSuperAdmin) {
+            if (!$this->canRespondToTransfer($transfer, $user)) {
                 throw ValidationException::withMessages([
                     'transfer' =>
-                        'Only the current lead owner or Super Admin can reject this transfer.',
+                        $this->rejectionDeniedMessage($transfer),
                 ]);
             }
 
@@ -646,6 +774,102 @@ public function recordDirectAssignmentFollowup(
             1,
     ]);
 }
+
+    private function recordAcceptedTransferFollowup(
+        Lead $lead,
+        LeadTransfer $transfer,
+        User $actor
+    ): LeadFollowup {
+        $fromUser = User::query()
+            ->find($transfer->from_user_id);
+
+        $toUser = User::query()
+            ->find($transfer->to_user_id);
+
+        $acceptedAt = now();
+
+        $noteLines = [
+            'Lead transfer accepted.',
+            'From: ' . (optional($fromUser)->name ?: 'Unassigned'),
+            'To: ' . (optional($toUser)->name ?: 'N/A'),
+            'Accepted at: '
+                . $acceptedAt->format('d-M-Y h:i A')
+                . ' IST',
+            'Accepted by: ' . $actor->name,
+        ];
+
+        if (!empty($transfer->reason)) {
+            $noteLines[] =
+                'Reason: ' . $transfer->reason;
+        }
+
+        return LeadFollowup::create([
+            'id' =>
+                (string) \Illuminate\Support\Str::uuid(),
+
+            'lead_id' =>
+                $lead->id,
+
+            'next_followup_date' =>
+                $acceptedAt,
+
+            'followup_note' =>
+                implode(PHP_EOL, $noteLines),
+
+            'followed_by' =>
+                $transfer->to_user_id,
+
+            'status' =>
+                1,
+        ]);
+    }
+
+    private function canRespondToTransfer(
+        LeadTransfer $transfer,
+        User $user
+    ): bool {
+        if ($this->isSuperAdmin($user)) {
+            return true;
+        }
+
+        if ($this->requiresRecipientApproval($transfer)) {
+            return (string) $transfer->to_user_id
+                ===
+                (string) $user->id;
+        }
+
+        return (string) $transfer->from_user_id
+            ===
+            (string) $user->id;
+    }
+
+    private function requiresRecipientApproval(
+        LeadTransfer $transfer
+    ): bool {
+        return (string) $transfer->requested_by
+            ===
+            (string) $transfer->from_user_id;
+    }
+
+    private function approvalDeniedMessage(
+        LeadTransfer $transfer
+    ): string {
+        if ($this->requiresRecipientApproval($transfer)) {
+            return 'Only the requested recipient or Super Admin can approve this transfer.';
+        }
+
+        return 'Only the current lead owner or Super Admin can approve this transfer.';
+    }
+
+    private function rejectionDeniedMessage(
+        LeadTransfer $transfer
+    ): string {
+        if ($this->requiresRecipientApproval($transfer)) {
+            return 'Only the requested recipient or Super Admin can reject this transfer.';
+        }
+
+        return 'Only the current lead owner or Super Admin can reject this transfer.';
+    }
 
     private function isSalesUser(User $user): bool
     {

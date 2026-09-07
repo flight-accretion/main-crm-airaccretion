@@ -539,23 +539,12 @@ class RefundController extends Controller
                 $messages['refund_amount.lte'] = 'Refund amount cannot be greater than the original amount.';
             }
 
-            // Accounts (or admin) are responsible for refund type, date and proof
+            // Accounts (or admin) are responsible for refund type and date.
+            // Customer refund proof is optional, but must be a valid file when uploaded.
             if ($isAccounts || $isAdmin) {
                 $rules['refund_type'] = 'required|string';
                 $rules['refund_date'] = 'required|date';
-                // proof is required from accounts when they submit; allow file optional on operations submissions
-                //$rules['refund_proof'] = 'required|file|mimes:pdf,jpg,jpeg,png|max:2048';
-                // Check if proof already exists on this refund
-$existingRefundForProofCheck = LeadRefund::where('lead_followup_id', $request->followup_id)->first();
-$alreadyHasProof = $existingRefundForProofCheck && !empty($existingRefundForProofCheck->refund_proof);
-
-if ($alreadyHasProof) {
-    // Proof already saved — optional on re-save, existing proof is kept
-    $rules['refund_proof'] = 'sometimes|file|mimes:pdf,jpg,jpeg,png|max:2048';
-} else {
-    // No proof yet — require upload
-    $rules['refund_proof'] = 'required|file|mimes:pdf,jpg,jpeg,png|max:2048';
-}
+                $rules['refund_proof'] = 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048';
 
                 $messages['refund_type.required'] = 'Please select a refund method (Refund Type).';
                 $messages['refund_date.required'] = 'Please provide the refund date.';
@@ -563,7 +552,6 @@ if ($alreadyHasProof) {
                 $messages['refund_proof.file'] = 'Refund proof must be a file (PDF or image).';
                 $messages['refund_proof.mimes'] = 'Refund proof must be a PDF or image (JPG, JPEG, PNG).';
                 $messages['refund_proof.max'] = 'Refund proof must be smaller than 2 MB.';
-                $messages['refund_proof.required'] = 'Please upload a refund proof document (PDF or image).';
             }
 
             $validator = Validator::make($request->all(), $rules, $messages);

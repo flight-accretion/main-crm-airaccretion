@@ -13,6 +13,9 @@
 
     $pendingTransfersByLead =
         $pendingTransfersByLead ?? collect();
+
+    $salesTransferUsers =
+        $salesTransferUsers ?? collect();
 @endphp
 <!-- Page Header -->
 <div class="block justify-between page-header md:flex">
@@ -28,18 +31,23 @@
     </li>
   </ol>
     @if($canRequestLeads)
-    <div>
-    <button
-        type="submit"
-        form="bulk-lead-request-form"
-        class="ti-btn ti-btn-primary ti-btn-sm"
-        onclick="return confirm(
-            'Request all selected leads?'
-        );"
-        style="width:100%;"
-    >
-        Request Selected Leads
-    </button>
+    <div class="flex flex-wrap gap-2">
+        <button
+            type="submit"
+            form="bulk-lead-request-form"
+            class="ti-btn ti-btn-primary ti-btn-sm"
+            onclick="return prepareBulkLeadRequestSubmit();"
+        >
+            Request Selected Leads
+        </button>
+
+        <button
+            type="button"
+            class="ti-btn ti-btn-info-full ti-btn-sm"
+            id="open-lead-transfer-offer-modal"
+        >
+            Transfer Selected Leads
+        </button>
     </div>
 @endif
 </div>
@@ -244,6 +252,29 @@
                   !$isUnassigned
                   &&
                   !$pendingTransfer;
+
+              $canOfferThisLead =
+                  $canRequestLeads
+                  &&
+                  $isOwnLead
+                  &&
+                  !$isUnassigned
+                  &&
+                  !$pendingTransfer;
+
+              $canSelectThisLead =
+                  $canRequestThisLead
+                  ||
+                  $canOfferThisLead;
+
+              $leadSelectionMode =
+                  $canOfferThisLead
+                      ? 'offer'
+                      : (
+                          $canRequestThisLead
+                              ? 'request'
+                              : ''
+                      );
               @endphp
               <tr class="border-b border-defaultborder">
                  @if($canRequestLeads)
@@ -253,7 +284,8 @@
                         name="lead_ids[]"
                         value="{{ $payment->lead_id }}"
                         class="form-check-input lead-request-checkbox"
-                        {{ $canRequestThisLead ? '' : 'disabled' }}
+                        data-transfer-mode="{{ $leadSelectionMode }}"
+                        {{ $canSelectThisLead ? '' : 'disabled' }}
                     >
                 </td>
             @endif
@@ -345,9 +377,24 @@
 
                 @elseif($isOwnLead)
 
-                    <span class="badge bg-success/10 text-success">
-                        Your Lead
-                    </span>
+                    <div class="inline-flex items-center justify-center gap-2">
+
+                        <span class="badge bg-success/10 text-success">
+                            Your Lead
+                        </span>
+
+                        @if(!$pendingTransfer)
+                            <button
+                                type="button"
+                                class="ti-btn ti-btn-sm ti-btn-info-full inline-flex items-center justify-center gap-1 whitespace-nowrap !px-3 !py-1.5 !text-white open-lead-transfer-offer-btn"
+                                data-lead-id="{{ $payment->lead_id }}"
+                            >
+                                <i class="ri-share-forward-line"></i>
+                                Transfer
+                            </button>
+                        @endif
+
+                    </div>
 
                 @elseif($isUnassigned)
 
@@ -414,8 +461,231 @@
   </div>
 </div>
 
+@if($canRequestLeads)
+<div
+  id="lead-transfer-offer-modal"
+  class="hs-overlay hidden ti-modal"
+  tabindex="-1"
+>
+  <div class="hs-overlay-open:mt-7 ti-modal-box mt-0 ease-out">
+    <div class="ti-modal-content">
+      <div class="ti-modal-header">
+        <h6 class="modal-title">
+          Transfer Leads
+        </h6>
+        <button
+          type="button"
+          class="hs-dropdown-toggle !text-[1rem] !font-semibold !text-defaulttextcolor"
+          data-hs-overlay="#lead-transfer-offer-modal"
+        >
+          <span class="sr-only">Close</span>
+          <i class="ri-close-line"></i>
+        </button>
+      </div>
+
+      <form
+        method="POST"
+        action="{{ route('admin.leads.transfer.offer-bulk') }}"
+        id="lead-transfer-offer-form"
+      >
+        @csrf
+
+        <div class="ti-modal-body">
+          <div class="mb-4">
+            <label for="lead-transfer-to-user" class="ti-form-label">
+              Transfer To
+            </label>
+            <select
+              name="representative_user_id"
+              id="lead-transfer-to-user"
+              class="form-control"
+              required
+            >
+              <option value="">Select Sales User</option>
+              @foreach($salesTransferUsers as $salesTransferUser)
+                <option value="{{ $salesTransferUser->id }}">
+                  {{ $salesTransferUser->name }}
+                  @if($salesTransferUser->userType)
+                    ({{ $salesTransferUser->userType->user_type }})
+                  @endif
+                </option>
+              @endforeach
+            </select>
+          </div>
+
+          <div class="mb-4">
+            <label for="lead-transfer-reason" class="ti-form-label">
+              Remark / Reason
+            </label>
+            <textarea
+              name="reason"
+              id="lead-transfer-reason"
+              class="form-control"
+              rows="4"
+              maxlength="1000"
+              placeholder="Enter transfer reason"
+            ></textarea>
+          </div>
+
+          <div
+            id="lead-transfer-offer-selected-count"
+            class="text-sm text-defaulttextcolor dark:text-white/70"
+          >
+            0 lead(s) selected.
+          </div>
+
+          <div id="lead-transfer-offer-inputs"></div>
+        </div>
+
+        <div class="ti-modal-footer">
+          <button
+            type="button"
+            class="ti-btn ti-btn-light"
+            data-hs-overlay="#lead-transfer-offer-modal"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="submit"
+            class="ti-btn ti-btn-primary"
+          >
+            <i class="ri-share-forward-line me-1"></i>
+            Send Transfer Request
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+@endif
+
 @endsection
 @push('scripts')
+<script>
+  (function() {
+    function getCheckedLeadBoxes(mode) {
+      return Array.from(document.querySelectorAll('.lead-request-checkbox:checked'))
+        .filter(function(checkbox) {
+          return !checkbox.disabled && checkbox.dataset.transferMode === mode;
+        });
+    }
+
+    function setLeadTransferOfferInputs(leadIds) {
+      const holder = document.getElementById('lead-transfer-offer-inputs');
+      const countLabel = document.getElementById('lead-transfer-offer-selected-count');
+
+      if (!holder) {
+        return;
+      }
+
+      holder.innerHTML = '';
+
+      leadIds.forEach(function(leadId) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'lead_ids[]';
+        input.value = leadId;
+        holder.appendChild(input);
+      });
+
+      if (countLabel) {
+        countLabel.textContent = leadIds.length + ' lead(s) selected.';
+      }
+    }
+
+    function openLeadTransferOfferModal(leadIds) {
+      if (!leadIds.length) {
+        alert('Please select your own leads for transfer.');
+        return;
+      }
+
+      setLeadTransferOfferInputs(leadIds);
+
+      const modal = document.querySelector('#lead-transfer-offer-modal');
+
+      if (
+        window.HSOverlay
+        &&
+        typeof HSOverlay.open === 'function'
+      ) {
+        HSOverlay.open(modal);
+      } else if (modal) {
+        modal.classList.remove('hidden');
+      }
+    }
+
+    window.prepareBulkLeadRequestSubmit = function() {
+      const allChecked = Array.from(
+        document.querySelectorAll('.lead-request-checkbox:checked')
+      );
+      const requestBoxes = getCheckedLeadBoxes('request');
+      const offerBoxes = allChecked.filter(function(checkbox) {
+        return checkbox.dataset.transferMode !== 'request';
+      });
+
+      if (!requestBoxes.length) {
+        alert('Please select leads assigned to another sales user.');
+        return false;
+      }
+
+      offerBoxes.forEach(function(checkbox) {
+        checkbox.disabled = true;
+      });
+
+      const confirmed = confirm('Request all selected leads?');
+
+      if (!confirmed) {
+        offerBoxes.forEach(function(checkbox) {
+          checkbox.disabled = false;
+        });
+      }
+
+      return confirmed;
+    };
+
+    document.addEventListener('DOMContentLoaded', function() {
+      const bulkTransferButton =
+        document.getElementById('open-lead-transfer-offer-modal');
+
+      if (bulkTransferButton) {
+        bulkTransferButton.addEventListener('click', function() {
+          const leadIds = getCheckedLeadBoxes('offer')
+            .map(function(checkbox) {
+              return checkbox.value;
+            });
+
+          openLeadTransferOfferModal(leadIds);
+        });
+      }
+
+      document.querySelectorAll('.open-lead-transfer-offer-btn')
+        .forEach(function(button) {
+          button.addEventListener('click', function() {
+            openLeadTransferOfferModal([
+              button.dataset.leadId
+            ]);
+          });
+        });
+
+      const offerForm =
+        document.getElementById('lead-transfer-offer-form');
+
+      if (offerForm) {
+        offerForm.addEventListener('submit', function(event) {
+          const leadInputs = offerForm.querySelectorAll(
+            'input[name="lead_ids[]"]'
+          );
+
+          if (!leadInputs.length) {
+            event.preventDefault();
+            alert('Please select your own leads for transfer.');
+          }
+        });
+      }
+    });
+  })();
+</script>
 <script>
   $(document).ready(function() {
             let currentLeadId = null;

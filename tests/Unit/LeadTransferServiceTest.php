@@ -127,6 +127,227 @@ class LeadTransferServiceTest extends TestCase
         $this->assertSame($currentOwner->id, $lead->fresh()->representative_user_id);
     }
 
+    public function test_pull_request_still_requires_owner_approval_and_records_followup(): void
+    {
+        $owner = $this->createUser('Pallavi Singh', UserType::SALES_MANAGER);
+        $requester = $this->createUser('Samarpit Sharma', UserType::SALES_EXECUTIVE);
+        $lead = $this->createLead($owner);
+
+        $service = app(LeadTransferService::class);
+
+        $transfer = $service->requestForSelf(
+            $lead,
+            $requester,
+            'Need this lead for customer follow-up.'
+        );
+
+        try {
+            $service->accept($transfer, $requester);
+            $this->fail('Expected requester to be blocked from approving their own pull request.');
+        } catch (ValidationException $exception) {
+            $this->assertStringContainsString(
+                'Only the current lead owner or Super Admin can approve this transfer.',
+                $exception->errors()['transfer'][0]
+            );
+        }
+
+        $service->accept($transfer, $owner);
+
+        $this->assertSame(
+            $requester->id,
+            $lead->fresh()->representative_user_id
+        );
+
+        $followup = LeadFollowup::query()
+            ->where('lead_id', $lead->id)
+            ->latest('created_at')
+            ->first();
+
+        $this->assertNotNull($followup);
+        $this->assertSame($requester->id, $followup->followed_by);
+        $this->assertSame(1, (int) $followup->status);
+        $this->assertSame(
+            now()->format('Y-m-d H:i:s'),
+            $followup->next_followup_date->format('Y-m-d H:i:s')
+        );
+        $this->assertStringContainsString(
+            'Lead transfer accepted.',
+            $followup->followup_note
+        );
+        $this->assertStringContainsString(
+            'Reason: Need this lead for customer follow-up.',
+            $followup->followup_note
+        );
+        $this->assertStringContainsString(
+            'Accepted at: 31-Aug-2026 01:30 PM IST',
+            $followup->followup_note
+        );
+    }
+
+    public function test_owner_can_offer_own_lead_to_another_sales_user_for_recipient_approval(): void
+    {
+        $owner = $this->createUser('Pallavi Singh', UserType::SALES_MANAGER);
+        $recipient = $this->createUser('Samarpit Sharma', UserType::SALES_EXECUTIVE);
+        $lead = $this->createLead($owner);
+
+        $service = app(LeadTransferService::class);
+
+        $transfer = $service->requestFromOwner(
+            $lead,
+            $recipient,
+            $owner,
+            'Please handle this lead from today.'
+        );
+
+        $this->assertSame('pending', $transfer->status);
+        $this->assertSame($owner->id, $transfer->from_user_id);
+        $this->assertSame($recipient->id, $transfer->to_user_id);
+        $this->assertSame($owner->id, $transfer->requested_by);
+        $this->assertSame('Please handle this lead from today.', $transfer->reason);
+
+        try {
+            $service->accept($transfer, $owner);
+            $this->fail('Expected owner to be blocked from approving their own offered transfer.');
+        } catch (ValidationException $exception) {
+            $this->assertStringContainsString(
+                'Only the requested recipient or Super Admin can approve this transfer.',
+                $exception->errors()['transfer'][0]
+            );
+        }
+
+        $service->accept($transfer, $recipient);
+
+        $this->assertSame(
+            $recipient->id,
+            $lead->fresh()->representative_user_id
+        );
+
+        $followup = LeadFollowup::query()
+            ->where('lead_id', $lead->id)
+            ->latest('created_at')
+            ->first();
+
+        $this->assertNotNull($followup);
+        $this->assertSame($recipient->id, $followup->followed_by);
+        $this->assertStringContainsString(
+            'Lead transfer accepted.',
+            $followup->followup_note
+        );
+        $this->assertStringContainsString(
+            'From: Pallavi Singh',
+            $followup->followup_note
+        );
+        $this->assertStringContainsString(
+            'To: Samarpit Sharma',
+            $followup->followup_note
+        );
+        $this->assertStringContainsString(
+            'Reason: Please handle this lead from today.',
+            $followup->followup_note
+        );
+    }
+
+    public function test_pending_action_count_only_counts_requests_waiting_on_that_user(): void
+    {
+        $owner = $this->createUser('Pallavi Singh', UserType::SALES_MANAGER);
+        $pullRequester = $this->createUser('Samarpit Sharma', UserType::SALES_EXECUTIVE);
+        $offerRecipient = $this->createUser('Sourav Namdeo', UserType::SALES_EXECUTIVE);
+        $superAdmin = $this->createUser('Super Admin User', UserType::SUPER_ADMIN);
+
+        $pullLead = $this->createLead($owner);
+        $offerLead = $this->createLead($owner);
+
+        LeadTransfer::create([
+            'lead_id' => $pullLead->id,
+            'from_user_id' => $owner->id,
+            'to_user_id' => $pullRequester->id,
+            'requested_by' => $pullRequester->id,
+            'status' => 'pending',
+            'reason' => 'Please assign this lead to me.',
+        ]);
+
+        LeadTransfer::create([
+            'lead_id' => $offerLead->id,
+            'from_user_id' => $owner->id,
+            'to_user_id' => $offerRecipient->id,
+            'requested_by' => $owner->id,
+            'status' => 'pending',
+            'reason' => 'Please take this lead.',
+        ]);
+
+        LeadTransfer::create([
+            'lead_id' => $this->createLead($owner)->id,
+            'from_user_id' => $owner->id,
+            'to_user_id' => $offerRecipient->id,
+            'requested_by' => $owner->id,
+            'status' => 'accepted',
+            'reason' => 'Already handled.',
+        ]);
+
+        $service = app(LeadTransferService::class);
+
+        $this->assertSame(1, $service->pendingActionCountFor($owner));
+        $this->assertSame(0, $service->pendingActionCountFor($pullRequester));
+        $this->assertSame(1, $service->pendingActionCountFor($offerRecipient));
+        $this->assertSame(2, $service->pendingActionCountFor($superAdmin));
+    }
+
+    public function test_bulk_owner_offer_route_creates_pending_transfer_request(): void
+    {
+        $this->withoutMiddleware(
+            \App\Http\Middleware\VerifyCsrfToken::class
+        );
+
+        $owner = $this->createUser('Pallavi Singh', UserType::SALES_MANAGER);
+        $recipient = $this->createUser('Samarpit Sharma', UserType::SALES_EXECUTIVE);
+        $lead = $this->createLead($owner);
+
+        $this
+            ->actingAs($owner)
+            ->post(
+                route('admin.leads.transfer.offer-bulk'),
+                [
+                    'lead_ids' => [$lead->id],
+                    'representative_user_id' => $recipient->id,
+                    'reason' => 'Moving this lead for faster callback.',
+                ]
+            )
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('lead_transfers', [
+            'lead_id' => $lead->id,
+            'from_user_id' => $owner->id,
+            'to_user_id' => $recipient->id,
+            'requested_by' => $owner->id,
+            'status' => 'pending',
+            'reason' => 'Moving this lead for faster callback.',
+        ]);
+    }
+
+    public function test_pending_count_route_returns_actionable_transfer_count(): void
+    {
+        $owner = $this->createUser('Pallavi Singh', UserType::SALES_MANAGER);
+        $requester = $this->createUser('Samarpit Sharma', UserType::SALES_EXECUTIVE);
+        $lead = $this->createLead($owner);
+
+        LeadTransfer::create([
+            'lead_id' => $lead->id,
+            'from_user_id' => $owner->id,
+            'to_user_id' => $requester->id,
+            'requested_by' => $requester->id,
+            'status' => 'pending',
+            'reason' => 'Please assign this lead to me.',
+        ]);
+
+        $this
+            ->actingAs($owner)
+            ->getJson(route('admin.leads.transfers.pending-count'))
+            ->assertOk()
+            ->assertJson([
+                'count' => 1,
+            ]);
+    }
+
     private function createUser(string $name, string $role): User
     {
         $userType = UserType::create([

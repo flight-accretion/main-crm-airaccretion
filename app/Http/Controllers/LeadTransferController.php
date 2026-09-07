@@ -58,6 +58,7 @@ class LeadTransferController extends Controller
              *
              * 1. Requests for leads they currently own.
              * 2. Requests they personally created.
+             * 3. Leads offered to them for approval.
              */
             $query->where(function ($q) use ($user) {
                 $q->where(
@@ -66,6 +67,10 @@ class LeadTransferController extends Controller
                 )
                 ->orWhere(
                     'requested_by',
+                    $user->id
+                )
+                ->orWhere(
+                    'to_user_id',
                     $user->id
                 );
             });
@@ -80,6 +85,38 @@ class LeadTransferController extends Controller
                 'isSuperAdmin'
             )
         );
+    }
+
+    public function pendingCount(
+        LeadTransferService $service
+    ) {
+        $user = auth()->user();
+
+        if (!$user) {
+            abort(403);
+        }
+
+        $userType =
+            optional($user->userType)->user_type;
+
+        $isSuperAdmin =
+            $userType === UserType::SUPER_ADMIN;
+
+        $isSalesUser =
+            in_array(
+                $userType,
+                UserType::SALES_ROLES,
+                true
+            );
+
+        if (!$isSuperAdmin && !$isSalesUser) {
+            abort(403);
+        }
+
+        return response()->json([
+            'count' =>
+                $service->pendingActionCountFor($user),
+        ]);
     }
 
     /**
@@ -223,6 +260,120 @@ class LeadTransferController extends Controller
         $message =
             $created .
             ' lead transfer request(s) created successfully.';
+
+        if ($skipped > 0) {
+            $message .=
+                ' ' .
+                $skipped .
+                ' lead(s) were skipped.';
+        }
+
+        return back()->with(
+            'success',
+            $message
+        );
+    }
+
+    public function bulkOffer(
+        Request $request,
+        LeadTransferService $service
+    ) {
+        $validated = $request->validate([
+            'lead_ids' =>
+                'required|array|min:1|max:100',
+
+            'lead_ids.*' =>
+                'required|uuid|exists:leads,id',
+
+            'representative_user_id' =>
+                'required|uuid|exists:users,id',
+
+            'reason' =>
+                'nullable|string|max:1000',
+        ]);
+
+        $recipient = User::query()
+            ->with('userType')
+            ->findOrFail(
+                $validated['representative_user_id']
+            );
+
+        $leadIds =
+            array_values(
+                array_unique(
+                    $validated['lead_ids']
+                )
+            );
+
+        $created = 0;
+        $skipped = 0;
+        $lastSkipReason = null;
+
+        foreach ($leadIds as $leadId) {
+
+            try {
+
+                $lead = Lead::findOrFail(
+                    $leadId
+                );
+
+                $service->requestFromOwner(
+                    $lead,
+                    $recipient,
+                    auth()->user(),
+                    $validated['reason']
+                        ?? 'Lead transfer requested from report.'
+                );
+
+                $created++;
+
+            } catch (ValidationException $e) {
+
+                $skipped++;
+
+                $lastSkipReason =
+                    collect(
+                        $e->errors()
+                    )
+                    ->flatten()
+                    ->first();
+
+            } catch (\Throwable $e) {
+
+                \Log::error(
+                    'Bulk owner lead transfer request failed',
+                    [
+                        'lead_id' =>
+                            $leadId,
+
+                        'recipient_user_id' =>
+                            $recipient->id,
+
+                        'user_id' =>
+                            auth()->id(),
+
+                        'error' =>
+                            $e->getMessage(),
+                    ]
+                );
+
+                $skipped++;
+            }
+        }
+
+        if ($created === 0) {
+            return back()->with(
+                'error',
+                $lastSkipReason
+                ?: 'No lead transfer requests were created. Please select your own leads without pending transfer requests.'
+            );
+        }
+
+        $message =
+            $created .
+            ' lead transfer request(s) sent to ' .
+            $recipient->name .
+            '.';
 
         if ($skipped > 0) {
             $message .=

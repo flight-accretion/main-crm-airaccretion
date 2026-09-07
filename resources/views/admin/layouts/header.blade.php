@@ -799,8 +799,20 @@
                                             $userType,
                                             \App\Models\UserType::SALES_ROLES,
                                             true
-                                        )
                                     )
+                                )
+
+                                        @php
+                                            $leadTransferPendingCount = 0;
+
+                                            try {
+                                                $leadTransferPendingCount = app(
+                                                    \App\Services\LeadTransferService::class
+                                                )->pendingActionCountFor(auth()->user());
+                                            } catch (\Throwable $e) {
+                                                $leadTransferPendingCount = 0;
+                                            }
+                                        @endphp
 
                                         <li class="slide">
 
@@ -813,6 +825,20 @@
                                                 }}"
                                             >
                                                 Transfer Leads
+                                                <span
+                                                    id="lead-transfer-pending-count"
+                                                    class="badge bg-danger/10 text-danger ms-auto"
+                                                    data-current-count="{{
+                                                        $leadTransferPendingCount
+                                                    }}"
+                                                    style="{{
+                                                        $leadTransferPendingCount > 0
+                                                            ? ''
+                                                            : 'display:none;'
+                                                    }}"
+                                                >
+                                                    {{ $leadTransferPendingCount }}
+                                                </span>
                                             </a>
 
                                         </li>
@@ -1489,6 +1515,159 @@
 
 
     @stack('scripts')
+
+    @if(
+        auth()->check()
+        &&
+        (
+            $userType === \App\Models\UserType::SUPER_ADMIN
+            ||
+            in_array(
+                $userType,
+                \App\Models\UserType::SALES_ROLES,
+                true
+            )
+        )
+    )
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                const badge =
+                    document.getElementById(
+                        'lead-transfer-pending-count'
+                    );
+
+                if (!badge) {
+                    return;
+                }
+
+                const endpoint =
+                    @json(route('admin.leads.transfers.pending-count'));
+
+                let lastCount =
+                    Number(
+                        badge.dataset.currentCount
+                        ||
+                        badge.textContent
+                        ||
+                        0
+                    );
+
+                let soundReady = false;
+
+                document.addEventListener(
+                    'click',
+                    function () {
+                        soundReady = true;
+                    },
+                    { once: true }
+                );
+
+                function updateLeadTransferBadge(count) {
+                    badge.dataset.currentCount = String(count);
+                    badge.textContent = count;
+                    badge.style.display = count > 0 ? '' : 'none';
+                }
+
+                function playLeadTransferNotificationSound() {
+                    if (!soundReady) {
+                        return;
+                    }
+
+                    try {
+                        const AudioContext =
+                            window.AudioContext
+                            ||
+                            window.webkitAudioContext;
+
+                        if (!AudioContext) {
+                            return;
+                        }
+
+                        const context =
+                            new AudioContext();
+
+                        const oscillator =
+                            context.createOscillator();
+
+                        const gain =
+                            context.createGain();
+
+                        oscillator.type = 'sine';
+                        oscillator.frequency.setValueAtTime(
+                            880,
+                            context.currentTime
+                        );
+                        gain.gain.setValueAtTime(
+                            0.001,
+                            context.currentTime
+                        );
+                        gain.gain.exponentialRampToValueAtTime(
+                            0.15,
+                            context.currentTime + 0.02
+                        );
+                        gain.gain.exponentialRampToValueAtTime(
+                            0.001,
+                            context.currentTime + 0.35
+                        );
+
+                        oscillator.connect(gain);
+                        gain.connect(context.destination);
+                        oscillator.start();
+                        oscillator.stop(context.currentTime + 0.36);
+                    } catch (error) {
+                        return;
+                    }
+                }
+
+                function refreshLeadTransferPendingCount() {
+                    fetch(
+                        endpoint,
+                        {
+                            headers: {
+                                'Accept': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest'
+                            },
+                            credentials: 'same-origin'
+                        }
+                    )
+                        .then(function (response) {
+                            if (!response.ok) {
+                                return null;
+                            }
+
+                            return response.json();
+                        })
+                        .then(function (payload) {
+                            if (!payload) {
+                                return;
+                            }
+
+                            const count =
+                                Number(payload.count || 0);
+
+                            if (count > lastCount) {
+                                playLeadTransferNotificationSound();
+                            }
+
+                            lastCount = count;
+                            updateLeadTransferBadge(count);
+                        })
+                        .catch(function () {
+                            return;
+                        });
+                }
+
+                window.refreshLeadTransferPendingCount =
+                    refreshLeadTransferPendingCount;
+
+                refreshLeadTransferPendingCount();
+                window.setInterval(
+                    refreshLeadTransferPendingCount,
+                    10000
+                );
+            });
+        </script>
+    @endif
 
 {{-- ========================================================== --}}
 {{-- SHARED LEAD AVAILABILITY MODAL --}}

@@ -3630,15 +3630,15 @@ return [
                 'refund_amount.lte' => 'Refund amount cannot be greater than the original amount.'
             ];
 
-            // Accounts must provide refund method, date and proof
+            // Accounts must provide refund method and date.
+            // Customer refund proof is optional, but must be a valid file when uploaded.
             if ($isAccounts) {
                 $rules['refund_type'] = 'required|string';
                 $rules['refund_date'] = 'required|date';
-                $rules['refund_proof'] = 'required|file|mimes:pdf,jpg,jpeg,png|max:2048';
+                $rules['refund_proof'] = 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048';
 
                 $messages['refund_type.required'] = 'Please select a refund method.';
                 $messages['refund_date.required'] = 'Please provide the refund date.';
-                $messages['refund_proof.required'] = 'Please upload a refund proof document.';
                 $messages['refund_proof.mimes'] = 'Refund proof must be a PDF or image (JPG, JPEG, PNG).';
                 $messages['refund_proof.max'] = 'Refund proof must be smaller than 2 MB.';
             } else {

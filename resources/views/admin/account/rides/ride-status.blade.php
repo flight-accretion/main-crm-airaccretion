@@ -438,7 +438,7 @@
                                 </div>
                                 <div class="xl:col-span-12 lg:col-span-12 md:col-span-12 sm:col-span-12 col-span-12">
                                     <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Upload Refund
-                                        Proof<span class="text-danger">*</span></label>
+                                        Proof</label>
                                     <div class="flex items-center gap-3">
                                         <input type="file" class="form-control" id="ride-refund-proof"
                                             name="refund_proof" accept=".pdf,.jpg,.jpeg,.png" {{ ($isAccounts ||
@@ -448,7 +448,7 @@
                                             Preview
                                         </button>
                                     </div>
-                                    <small class="text-muted">Upload PDF or image (JPG, JPEG, PNG). Max 2MB.</small>
+                                    <small class="text-muted">Optional. Upload PDF or image (JPG, JPEG, PNG). Max 2MB.</small>
                                     <div class="text-sm text-gray-500 mt-1 flex items-center gap-3">
                                         <div id="ride-proof-filename">No file selected</div>
                                         <small id="ride-proof-hint" class="text-muted"></small>
@@ -4027,11 +4027,6 @@ $(document).on(
                 const refundAmt   = parseFloat($('#ride-refund-amount').val())   || 0;
                 const refundType  = $('#ride-refund-type').val();
                 const refundDate  = $('#ride-refund-date').val();
-                const newFileSelected  = $('#ride-refund-proof')[0].files && $('#ride-refund-proof')[0].files[0];
-                const existingProofShown = $('#ride-proof-filename').text().trim() !== ''
-                                            && $('#ride-proof-filename').text().trim() !== 'No file selected';
-                const hasProof = !!(newFileSelected || existingProofShown);
-
                 // 1. Refund amount check — for everyone
                 const refundAmtRaw = $('#ride-refund-amount').val();
                 if (refundAmtRaw === '' || refundAmtRaw === null || isNaN(refundAmt) || refundAmt < 0) {
@@ -4044,14 +4039,12 @@ $(document).on(
                     return;
                 }
 
-                // 2. Refund Type, Date, Proof — required for Admin + Accounts
+                // 2. Refund Type and Date are required for Admin + Accounts
                 //    (Operations can save without these — no email/WA sent for them anyway)
                 if (isAdmin || isAccounts) {
                     const missing = [];
                     if (!refundType)  missing.push('Refund Type');
                     if (!refundDate)  missing.push('Refund Date');
-                    if (!hasProof)    missing.push('Refund Proof');
-
                     if (missing.length > 0) {
                         showError('Please fill in all required fields: ' + missing.join(', ') + '.');
                         return;

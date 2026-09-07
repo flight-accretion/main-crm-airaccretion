@@ -310,7 +310,21 @@ class ReportController extends Controller
                 $staff = null;
             }
         }
-        return view('admin.report.admin_report', compact('payments', 'services', 'products', 'serviceDate', 'serviceName', 'status', 'fromDate', 'toDate', 'representatives', 'staff', 'statusArray', 'hidePaymentColumns', 'pendingTransfersByLead'));
+
+        $salesTransferUsers = User::query()
+            ->with('userType')
+            ->where('status', 1)
+            ->where('id', '!=', $currentUser->id)
+            ->whereHas('userType', function ($query) {
+                $query->whereIn(
+                    'user_type',
+                    UserType::SALES_ROLES
+                );
+            })
+            ->orderBy('name')
+            ->get();
+
+        return view('admin.report.admin_report', compact('payments', 'services', 'products', 'serviceDate', 'serviceName', 'status', 'fromDate', 'toDate', 'representatives', 'staff', 'statusArray', 'hidePaymentColumns', 'pendingTransfersByLead', 'salesTransferUsers'));
     }
 
     /**

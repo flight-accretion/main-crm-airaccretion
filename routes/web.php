@@ -211,6 +211,13 @@ Route::post(
     ->name(
         'admin.leads.transfer.direct-assign'
     );
+
+    Route::get(
+        '/transfers/pending-count',
+        [LeadTransferController::class, 'pendingCount']
+    )
+        ->name('admin.leads.transfers.pending-count');
+
     // Transfer request inbox
     Route::get(
         '/transfers',
@@ -224,6 +231,13 @@ Route::post(
         [LeadTransferController::class, 'bulkStore']
     )
         ->name('admin.leads.transfer.bulk');
+
+    // Bulk own-lead transfer offer from Report
+    Route::post(
+        '/transfers/bulk-offer',
+        [LeadTransferController::class, 'bulkOffer']
+    )
+        ->name('admin.leads.transfer.offer-bulk');
 
     // Request one lead for logged-in user
     Route::post(

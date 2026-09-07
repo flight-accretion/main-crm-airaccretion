@@ -195,10 +195,17 @@
                                         |     Can approve/reject any pending request.
                                         |
                                         | Normal Sales User:
-                                        |     Can approve/reject only when the lead
+                                        |     Can approve/reject pull requests when the lead
                                         |     currently belongs to them.
+                                        |     Can approve/reject owner-offered transfers
+                                        |     when the transfer is offered to them.
                                         |
                                         */
+
+                                        $isOwnerOfferedTransfer =
+                                            (string) $transfer->requested_by
+                                            ===
+                                            (string) $transfer->from_user_id;
 
                                         $canApprove =
                                             $transfer->status === 'pending'
@@ -206,9 +213,21 @@
                                             (
                                                 $isSuperAdmin
                                                 ||
-                                                (string) $transfer->from_user_id
+                                                (
+                                                    $isOwnerOfferedTransfer
+                                                    &&
+                                                    (string) $transfer->to_user_id
                                                     ===
                                                     (string) auth()->id()
+                                                )
+                                                ||
+                                                (
+                                                    !$isOwnerOfferedTransfer
+                                                    &&
+                                                    (string) $transfer->from_user_id
+                                                    ===
+                                                    (string) auth()->id()
+                                                )
                                             );
 
                                         $isRequester =

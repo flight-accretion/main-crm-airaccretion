@@ -376,8 +376,7 @@
                                 @endif
                             </div>
                             <div class="xl:col-span-12 lg:col-span-12 md:col-span-12 sm:col-span-12 col-span-12">
-                                <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Upload refund proof<span
-                                        class="text-danger">*</span></label>
+                                <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Upload refund proof</label>
                                 <div class="flex items-center gap-3">
                                     <input type="file" class="form-control" id="refund-proof" name="refund_proof"
                                         accept=".pdf,.jpg,.jpeg,.png" {{ ($isAccounts || $isAdmin) ? '' : 'disabled' }}>
@@ -400,7 +399,7 @@
                                     <div id="proof-filename">Refund_receipt_001.pdf</div>
                                     <small id="proof-hint" class="text-muted"></small>
                                 </div>
-                                <div class="text-sm text-gray-400 mt-1">Max file size: 2 MB. Allowed types: .pdf, .jpg,
+                                <div class="text-sm text-gray-400 mt-1">Optional. Max file size: 2 MB. Allowed types: .pdf, .jpg,
                                     .jpeg, .png</div>
                                 @if(!$isAccounts && !$isAdmin)
                                 <small class="text-muted">Only Accounts can upload refund proof.</small>
