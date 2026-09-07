@@ -78,9 +78,17 @@ class WhatsAppInboxLiveRefreshViewTest extends TestCase
             'wa-view-lead',
             $source
         );
+        $this->assertStringContainsString(
+            'target="_blank"',
+            $source
+        );
+        $this->assertStringContainsString(
+            'rel="noopener noreferrer"',
+            $source
+        );
     }
 
-    public function test_conversation_row_layout_keeps_view_lead_button_visible(): void
+    public function test_conversation_row_layout_places_view_lead_button_between_followup_and_unread_counts(): void
     {
         $source = file_get_contents(
             resource_path(
@@ -97,7 +105,11 @@ class WhatsAppInboxLiveRefreshViewTest extends TestCase
             $source
         );
         $this->assertMatchesRegularExpression(
-            '/\\.wa-contact-bottom\\s*\\{[^}]*grid-template-columns:\\s*minmax\\(0,\\s*1fr\\)\\s+auto;/s',
+            '/\\.wa-contact-top\\s*\\{[^}]*grid-template-columns:\\s*minmax\\(0,\\s*1fr\\)\\s+auto\\s+auto;/s',
+            $source
+        );
+        $this->assertMatchesRegularExpression(
+            '/<span class="wa-contact-name-line">\\s*<span class="wa-contact-name">[^`]+\\$\\{followupBadge\\}\\s*<\\/span>\\s*\\$\\{viewLeadButton\\}\\s*\\$\\{unreadBadge\\}/s',
             $source
         );
     }

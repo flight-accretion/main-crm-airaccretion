@@ -99,7 +99,7 @@
 
         .wa-contact-top {
             display: grid;
-            grid-template-columns: minmax(0, 1fr) auto;
+            grid-template-columns: minmax(0, 1fr) auto auto;
             gap: 8px;
             align-items: center;
         }
@@ -654,7 +654,7 @@
                         ? `<span class="wa-followup-pill" title="Follow-ups">${followups}</span>`
                         : '';
                     const viewLeadButton = conversation.lead_followup_url
-                        ? `<a class="ti-btn ti-btn-sm ti-btn-light wa-view-lead" href="${escapeHtml(conversation.lead_followup_url)}">View Lead</a>`
+                        ? `<a class="ti-btn ti-btn-sm ti-btn-light wa-view-lead" href="${escapeHtml(conversation.lead_followup_url)}" target="_blank" rel="noopener noreferrer">View Lead</a>`
                         : '';
 
                     return `
@@ -669,12 +669,12 @@
                                     <span class="wa-contact-name">${escapeHtml(conversationLabel(conversation))}</span>
                                     ${followupBadge}
                                 </span>
+                                ${viewLeadButton}
                                 ${unreadBadge}
                             </span>
                             <span class="wa-contact-number">${escapeHtml(conversation.number || conversation.raw_phone || '-')}</span>
                             <span class="wa-contact-bottom">
                                 <span class="wa-contact-message">${escapeHtml(conversation.last_message || '-')}</span>
-                                ${viewLeadButton}
                             </span>
                         </div>
                     `;
