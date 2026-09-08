@@ -1595,19 +1595,27 @@
     id="ai-model-modal"
     class="hidden fixed inset-0 z-[9999]
            bg-black/50
-           flex items-center justify-center
-           p-4"
+           overflow-y-auto"
 >
-
+ <div
+        class="min-h-full
+               flex
+               items-center
+               justify-center
+               px-4
+               py-8"
+    >
     <div
         class="bg-white
                dark:bg-bodybg
                rounded-lg
                shadow-xl
-               w-full
-               max-w-xl
                max-h-[90vh]
                overflow-y-auto"
+               style="border: 1px solid #dcdbdbe8;
+                margin-top: 20px;
+                margin-bottom: 20px;   
+                width: 40vw;"
     >
 
         <form
@@ -1878,7 +1886,7 @@
         </form>
 
     </div>
-
+ </div>
 </div>
 
 
@@ -1887,20 +1895,29 @@
      ========================================================== --}}
 <div
     id="ai-agent-modal"
-    class="hidden fixed inset-0 z-[9999]
-           bg-black/50
-           flex items-center justify-center
-           p-4"
+    class="hidden fixed inset-0 z-[9999] bg-black/50 overflow-y-auto"
 >
+
+    <div
+        class="min-h-full
+               flex
+               items-center
+               justify-center
+               px-4
+               py-8"
+    >
 
     <div
         class="bg-white
                dark:bg-bodybg
                rounded-lg
                shadow-xl
-              
                max-h-[90vh]
                overflow-y-auto"
+               style="border: 1px solid #dcdbdbe8;
+                margin-top: 20px;
+                margin-bottom: 20px;   
+                width: 40vw;"
     >
 
         <form
@@ -2171,7 +2188,7 @@
         </form>
 
     </div>
-
+</div>
 </div>
 
 @endsection
