@@ -410,6 +410,7 @@
                                             data-provider="{{ $profile->provider }}"
                                             data-model="{{ $profile->model }}"
                                             data-enabled="{{ $profile->enabled ? '1' : '0' }}"
+                                            style="width: auto;"
                                         >
                                             <i class="ri-edit-line"></i>
                                             Edit
@@ -426,6 +427,7 @@
                                             data-provider="{{ $profile->provider }}"
                                             data-model="{{ $profile->model }}"
                                             data-result-id="model-test-result-{{ $profile->id }}"
+                                             style="width: auto;"
                                         >
                                             <i class="ri-plug-line"></i>
                                             Test
@@ -458,6 +460,7 @@
                                                             'Delete this AI Model Profile?'
                                                         );
                                                     "
+                                                     style="width: auto;"
                                                 >
                                                     <i class="ri-delete-bin-line"></i>
                                                     Delete
@@ -768,6 +771,7 @@
                                             data-profile="{{ $agent->ai_model_profile_id }}"
                                             data-enabled="{{ $agent->enabled ? '1' : '0' }}"
                                             data-prompt="{{ $agentPromptBase64 }}"
+                                             style="width: auto;"
                                         >
                                             <i class="ri-edit-line"></i>
                                             Edit
@@ -800,6 +804,7 @@
                                                             'Delete this AI Agent?'
                                                         );
                                                     "
+                                                     style="width: auto;"
                                                 >
                                                     <i class="ri-delete-bin-line"></i>
                                                     Delete
@@ -1893,8 +1898,7 @@
                dark:bg-bodybg
                rounded-lg
                shadow-xl
-               w-full
-               max-w-3xl
+              
                max-h-[90vh]
                overflow-y-auto"
     >
