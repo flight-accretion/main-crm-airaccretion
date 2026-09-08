@@ -22,6 +22,7 @@ class LeadAiScoringSetting extends Model
         'created_by',
         'updated_by',
         'ai_model_profile_id',
+        'ai_agent_id',
     ];
 
     protected $casts = [
@@ -124,11 +125,21 @@ public function isReady(): bool
         return false;
     }
 
-    $profile =
-        $this->aiModelProfile;
+    $agent =
+        $this->aiAgent;
 
-    return $profile
+    return
+        $agent
         &&
-        $profile->isReady();
+        $agent->isReady();
 }
+
+public function aiAgent()
+{
+    return $this->belongsTo(
+        AiAgent::class,
+        'ai_agent_id'
+    );
+}
+
 }

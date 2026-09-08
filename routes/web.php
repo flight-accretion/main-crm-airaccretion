@@ -45,6 +45,7 @@ use App\Http\Controllers\LeadAiScoreController;
 use App\Http\Controllers\AiModelProfileController;
 use App\Http\Controllers\BookingEmailTemplateController;
 use App\Http\Controllers\LeadBookingConfirmationEmailController;
+use App\Http\Controllers\AiAgentController;
 
 /*
 |--------------------------------------------------------------------------
@@ -112,6 +113,39 @@ Route::middleware('auth')->group(function () {
     Route::prefix('admin/whatsapp')
         ->name('admin.whatsapp.')
         ->group(function () {
+
+        Route::post(
+    '/ai-agents',
+    [
+        AiAgentController::class,
+        'store'
+            ]
+        )->name(
+            'ai-agents.store'
+        );
+
+
+        Route::put(
+            '/ai-agents/{aiAgent}',
+            [
+                AiAgentController::class,
+                'update'
+            ]
+        )->name(
+            'ai-agents.update'
+        );
+
+
+        Route::delete(
+            '/ai-agents/{aiAgent}',
+            [
+                AiAgentController::class,
+                'destroy'
+            ]
+        )->name(
+            'ai-agents.destroy'
+        );
+
             Route::get('/', [WhatsAppInboxController::class, 'index'])
                 ->name('index');
             Route::get('/ai-agent', [WhatsAppAiAgentSettingController::class, 'edit'])

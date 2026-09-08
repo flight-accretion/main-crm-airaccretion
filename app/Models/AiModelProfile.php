@@ -142,15 +142,18 @@ class AiModelProfile extends Model
         );
     }
 
-    public function isInUse(): bool
-    {
-        return
-            $this
-                ->whatsappAgents()
-                ->exists()
-            ||
-            $this
-                ->leadScoringAgents()
-                ->exists();
-    }
+public function isInUse(): bool
+{
+    return $this
+        ->agents()
+        ->exists();
+}
+
+    public function agents()
+{
+    return $this->hasMany(
+        AiAgent::class,
+        'ai_model_profile_id'
+    );
+}
 }

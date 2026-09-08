@@ -24,29 +24,39 @@ public function generateReply(
     Collection $products,
     ?Collection $contextMessages = null
 ): array {
-    $profile =
+    $agent =
         $setting
-            ->aiModelProfile()
+            ->aiAgent()
+            ->with(
+                'modelProfile'
+            )
             ->first();
 
-    if (!$profile) {
+
+    if (!$agent) {
         throw new RuntimeException(
-            'WhatsApp AI Model Profile is not configured.'
+            'WhatsApp AI Agent is not configured.'
         );
     }
 
-    if (!$profile->isReady()) {
+
+    if (!$agent->isReady()) {
         throw new RuntimeException(
-            'WhatsApp AI Model Profile is unavailable.'
+            'WhatsApp AI Agent is unavailable.'
         );
     }
+
+
+    $profile =
+        $agent->modelProfile;
+
 
     $text =
         $this->providers->generate(
             $profile,
 
             $this->instructions(
-                $setting,
+                (string) $agent->prompt,
                 $conversation,
                 $messages,
                 $products,
@@ -60,6 +70,7 @@ public function generateReply(
                 $contextMessages
             )
         );
+
 
     return $this->parseResponse(
         $text
@@ -129,18 +140,21 @@ public function generateReply(
     }
 
     private function instructions(
-        WhatsAppAiAgentSetting $setting,
-        WhatsAppConversation $conversation,
+        string $agentPrompt,
+    WhatsAppConversation $conversation,
         Collection $messages,
         Collection $products,
         ?Collection $contextMessages = null
     ): string {
-        $instructions = trim(
-            (string) (
-                $setting->prompt
-                ?: WhatsAppAiAgentSetting::defaultPrompt()
-            )
-        );
+     $instructions =
+    trim(
+        $agentPrompt
+    );
+
+        if ($instructions === '') {
+            $instructions =
+                WhatsAppAiAgentSetting::defaultPrompt();
+        }
 
         $runtimeData = $this->runtimeData->build(
             $conversation,
@@ -278,7 +292,7 @@ public function generateReply(
 
         if ($reply === '') {
             throw new RuntimeException(
-                'OpenAI response did not include a reply.'
+                'AI response did not include a reply.'
             );
         }
 

@@ -26,6 +26,7 @@ class WhatsAppAiAgentSetting extends Model
         'buffer_seconds',
         'context_message_limit',
         'ai_model_profile_id',
+        'ai_agent_id',
     ];
 
     protected $hidden = [
@@ -148,7 +149,7 @@ class WhatsAppAiAgentSetting extends Model
         }
     }
 
-    public function isReady(): bool
+public function isReady(): bool
 {
     if (
         !$this->enabled
@@ -158,12 +159,13 @@ class WhatsAppAiAgentSetting extends Model
         return false;
     }
 
-    $profile =
-        $this->aiModelProfile;
+    $agent =
+        $this->aiAgent;
 
-    return $profile
+    return
+        $agent
         &&
-        $profile->isReady();
+        $agent->isReady();
 }
 
     public function getApiKeyStatusAttribute(): string
@@ -178,4 +180,12 @@ class WhatsAppAiAgentSetting extends Model
         'ai_model_profile_id'
     );
 }
+public function aiAgent()
+{
+    return $this->belongsTo(
+        AiAgent::class,
+        'ai_agent_id'
+    );
+}
+
 }

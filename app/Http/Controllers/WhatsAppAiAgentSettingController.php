@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AiAgent;
 use App\Models\AiModelProfile;
 use App\Models\LeadAiScoringSetting;
 use App\Models\UserType;
@@ -10,12 +11,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class WhatsAppAiAgentSettingController extends Controller
 {
-    /**
-     * Show AI Agent settings page.
-     */
     public function edit()
     {
         $this->ensureSuperAdmin();
@@ -29,158 +28,170 @@ class WhatsAppAiAgentSettingController extends Controller
                 'leadScoringSetting' =>
                     LeadAiScoringSetting::active(),
 
-                /*
-                 * All profiles are passed because
-                 * AI Models tab also needs to display
-                 * inactive profiles.
-                 */
                 'aiModelProfiles' =>
                     AiModelProfile::query()
-                        ->orderByDesc('enabled')
+                        ->with('agents')
+                        ->orderByDesc(
+                            'enabled'
+                        )
+                        ->orderBy('name')
+                        ->get(),
+
+                'aiAgents' =>
+                    AiAgent::query()
+                        ->with(
+                            'modelProfile'
+                        )
+                        ->orderByDesc(
+                            'enabled'
+                        )
                         ->orderBy('name')
                         ->get(),
             ]
         );
     }
 
-    /**
-     * Update WhatsApp AI and Lead Scoring AI settings.
-     *
-     * Provider, model and API key are NOT handled here.
-     * They belong to AiModelProfile.
-     */
-    public function update(Request $request)
-    {
+
+    public function update(
+        Request $request
+    ) {
         $this->ensureSuperAdmin();
 
-        $validated = $request->validate([
-            /*
-             * =================================================
-             * WHATSAPP AI
-             * =================================================
-             */
 
-            'enabled' => [
-                'nullable',
-                'boolean',
+        $validated =
+            $request->validate([
+                /*
+                 * =============================================
+                 * WHATSAPP
+                 * =============================================
+                 */
+                'enabled' => [
+                    'nullable',
+                    'boolean',
+                ],
+
+                'auto_reply_enabled' => [
+                    'nullable',
+                    'boolean',
+                ],
+
+                'whatsapp_ai_agent_id' => [
+                    Rule::requiredIf(
+                        fn () =>
+                            $request
+                                ->boolean(
+                                    'enabled'
+                                )
+                    ),
+
+                    'nullable',
+                    'uuid',
+                    'exists:ai_agents,id',
+                ],
+
+                'buffer_seconds' => [
+                    'required',
+                    'integer',
+                    'min:1',
+                    'max:300',
+                ],
+
+                'context_message_limit' => [
+                    'required',
+                    'integer',
+                    'min:1',
+                    'max:100000',
+                ],
+
+
+                /*
+                 * =============================================
+                 * LEAD SCORING
+                 * =============================================
+                 */
+                'lead_scoring_enabled' => [
+                    'nullable',
+                    'boolean',
+                ],
+
+                'lead_scoring_auto_analyse' => [
+                    'nullable',
+                    'boolean',
+                ],
+
+                'lead_scoring_ai_agent_id' => [
+                    Rule::requiredIf(
+                        fn () =>
+                            $request
+                                ->boolean(
+                                    'lead_scoring_enabled'
+                                )
+                    ),
+
+                    'nullable',
+                    'uuid',
+                    'exists:ai_agents,id',
+                ],
+
+                'cold_max' => [
+                    'required',
+                    'integer',
+                    'min:0',
+                    'max:98',
+                ],
+
+                'neutral_max' => [
+                    'required',
+                    'integer',
+                    'min:1',
+                    'max:99',
+                    'gt:cold_max',
+                ],
+            ]);
+
+
+        /*
+         * Make sure feature cannot select
+         * wrong agent type.
+         */
+        $this->validateAgent(
+            $validated[
+                'whatsapp_ai_agent_id'
+            ] ?? null,
+
+            [
+                'whatsapp',
+                'generic',
             ],
 
-            'auto_reply_enabled' => [
-                'nullable',
-                'boolean',
+            'whatsapp_ai_agent_id'
+        );
+
+
+        $this->validateAgent(
+            $validated[
+                'lead_scoring_ai_agent_id'
+            ] ?? null,
+
+            [
+                'lead_scoring',
+                'generic',
             ],
 
-            'whatsapp_ai_model_profile_id' => [
-                Rule::requiredIf(
-                    fn () =>
-                        $request->boolean('enabled')
-                ),
+            'lead_scoring_ai_agent_id'
+        );
 
-                'nullable',
-                'uuid',
-
-                Rule::exists(
-                    'ai_model_profiles',
-                    'id'
-                )->where(
-                    fn ($query) =>
-                        $query->where(
-                            'enabled',
-                            true
-                        )
-                ),
-            ],
-
-            'prompt' => [
-                'required',
-                'string',
-                'max:12000',
-            ],
-
-            'buffer_seconds' => [
-                'required',
-                'integer',
-                'min:1',
-                'max:300',
-            ],
-
-            'context_message_limit' => [
-                'required',
-                'integer',
-                'min:1',
-                'max:100000',
-            ],
-
-            /*
-             * =================================================
-             * LEAD SCORING AI
-             * =================================================
-             */
-
-            'lead_scoring_enabled' => [
-                'nullable',
-                'boolean',
-            ],
-
-            'lead_scoring_auto_analyse' => [
-                'nullable',
-                'boolean',
-            ],
-
-            'lead_scoring_ai_model_profile_id' => [
-                Rule::requiredIf(
-                    fn () =>
-                        $request->boolean(
-                            'lead_scoring_enabled'
-                        )
-                ),
-
-                'nullable',
-                'uuid',
-
-                Rule::exists(
-                    'ai_model_profiles',
-                    'id'
-                )->where(
-                    fn ($query) =>
-                        $query->where(
-                            'enabled',
-                            true
-                        )
-                ),
-            ],
-
-            'lead_scoring_prompt' => [
-                'required',
-                'string',
-                'max:12000',
-            ],
-
-            'cold_max' => [
-                'required',
-                'integer',
-                'min:0',
-                'max:98',
-            ],
-
-            'neutral_max' => [
-                'required',
-                'integer',
-                'min:1',
-                'max:99',
-                'gt:cold_max',
-            ],
-        ]);
 
         DB::transaction(
             function () use (
                 $request,
                 $validated
             ) {
+
                 /*
-                 * =============================================
-                 * WHATSAPP AI SETTINGS
-                 * =============================================
+                 * ============================================
+                 * WHATSAPP SETTINGS
+                 * ============================================
                  */
                 $setting =
                     WhatsAppAiAgentSetting::active();
@@ -196,18 +207,10 @@ class WhatsAppAiAgentSettingController extends Controller
                             'auto_reply_enabled'
                         ),
 
-                    /*
-                     * NEW:
-                     * Provider/model/API key now come
-                     * through this reusable profile.
-                     */
-                    'ai_model_profile_id' =>
+                    'ai_agent_id' =>
                         $validated[
-                            'whatsapp_ai_model_profile_id'
+                            'whatsapp_ai_agent_id'
                         ] ?? null,
-
-                    'prompt' =>
-                        $validated['prompt'],
 
                     'buffer_seconds' =>
                         (int) $validated[
@@ -224,9 +227,9 @@ class WhatsAppAiAgentSettingController extends Controller
 
 
                 /*
-                 * =============================================
-                 * LEAD SCORING AI SETTINGS
-                 * =============================================
+                 * ============================================
+                 * LEAD SCORING SETTINGS
+                 * ============================================
                  */
                 $leadSetting =
                     LeadAiScoringSetting::active();
@@ -242,20 +245,10 @@ class WhatsAppAiAgentSettingController extends Controller
                             'lead_scoring_auto_analyse'
                         ),
 
-                    /*
-                     * NEW:
-                     * Lead Scoring may use Gemini,
-                     * OpenAI or another supported profile.
-                     */
-                    'ai_model_profile_id' =>
+                    'ai_agent_id' =>
                         $validated[
-                            'lead_scoring_ai_model_profile_id'
+                            'lead_scoring_ai_agent_id'
                         ] ?? null,
-
-                    'prompt' =>
-                        $validated[
-                            'lead_scoring_prompt'
-                        ],
 
                     'cold_max' =>
                         (int) $validated[
@@ -271,15 +264,15 @@ class WhatsAppAiAgentSettingController extends Controller
                         Auth::id(),
                 ]);
 
-                /*
-                 * Preserve original creator.
-                 */
+
                 if (
                     empty(
-                        $leadSetting->created_by
+                        $leadSetting
+                            ->created_by
                     )
                 ) {
-                    $leadSetting->created_by =
+                    $leadSetting
+                        ->created_by =
                         Auth::id();
                 }
 
@@ -287,19 +280,82 @@ class WhatsAppAiAgentSettingController extends Controller
             }
         );
 
+
         return redirect()
             ->route(
                 'admin.whatsapp.ai-agent.edit'
             )
             ->with(
                 'success',
-                'AI Agent settings updated successfully.'
+                'AI Agent assignments updated successfully.'
             );
     }
 
-    /**
-     * Only Super Admin can manage AI Agent configuration.
-     */
+
+    private function validateAgent(
+        ?string $id,
+        array $allowedTypes,
+        string $field
+    ): void {
+        if (!$id) {
+            return;
+        }
+
+        $agent =
+            AiAgent::query()
+                ->with(
+                    'modelProfile'
+                )
+                ->find($id);
+
+
+        if (!$agent) {
+            throw ValidationException::withMessages([
+                $field =>
+                    'Selected AI Agent does not exist.',
+            ]);
+        }
+
+
+        if (!$agent->enabled) {
+            throw ValidationException::withMessages([
+                $field =>
+                    'Selected AI Agent is inactive.',
+            ]);
+        }
+
+
+        if (
+            !in_array(
+                $agent->agent_type,
+                $allowedTypes,
+                true
+            )
+        ) {
+            throw ValidationException::withMessages([
+                $field =>
+                    'Selected AI Agent is not compatible with this feature.',
+            ]);
+        }
+
+
+        if (!$agent->modelProfile) {
+            throw ValidationException::withMessages([
+                $field =>
+                    'Selected AI Agent has no AI Model Profile.',
+            ]);
+        }
+
+
+        if (!$agent->modelProfile->enabled) {
+            throw ValidationException::withMessages([
+                $field =>
+                    'The AI Model Profile assigned to this agent is inactive.',
+            ]);
+        }
+    }
+
+
     private function ensureSuperAdmin(): void
     {
         $role =

@@ -654,7 +654,7 @@
                         ? `<span class="wa-followup-pill" title="Follow-ups">${followups}</span>`
                         : '';
                     const viewLeadButton = conversation.lead_followup_url
-                        ? `<a class="ti-btn ti-btn-sm ti-btn-light wa-view-lead" href="${escapeHtml(conversation.lead_followup_url)}" target="_blank" rel="noopener noreferrer">View Lead</a>`
+                        ? `<a class="ti-btn ti-btn-sm ti-btn-light wa-view-lead" href="${escapeHtml(conversation.lead_followup_url)}" target="_blank" rel="noopener noreferrer" style="width:auto;">View Lead</a>`
                         : '';
 
                     return `
