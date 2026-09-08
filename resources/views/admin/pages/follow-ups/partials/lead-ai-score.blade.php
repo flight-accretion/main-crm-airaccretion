@@ -57,6 +57,7 @@
             @else
                 ti-btn-primary-full
             @endif"
+            style="width: auto;"
     >
 
         @if(!$aiScore)

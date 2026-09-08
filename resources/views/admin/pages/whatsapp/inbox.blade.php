@@ -171,6 +171,7 @@
             font-size: 11px;
             font-weight: 700;
             flex: 0 0 auto;
+            margin-right: 5px;
         }
 
         .wa-view-lead {
@@ -179,6 +180,7 @@
             font-size: 11px;
             line-height: 1.2;
             white-space: nowrap;
+            width: auto !important;
         }
 
         .wa-chat-header {
@@ -654,7 +656,7 @@
                         ? `<span class="wa-followup-pill" title="Follow-ups">${followups}</span>`
                         : '';
                     const viewLeadButton = conversation.lead_followup_url
-                        ? `<a class="ti-btn ti-btn-sm ti-btn-light wa-view-lead" href="${escapeHtml(conversation.lead_followup_url)}" target="_blank" rel="noopener noreferrer" style="width:auto;">View Lead</a>`
+                        ? `<a class="ti-btn ti-btn-sm ti-btn-light wa-view-lead" href="${escapeHtml(conversation.lead_followup_url)}" target="_blank" rel="noopener noreferrer">View Lead</a>`
                         : '';
 
                     return `
