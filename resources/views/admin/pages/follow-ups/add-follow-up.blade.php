@@ -259,6 +259,24 @@
                                 <p class="text-danger mt-1">{{ $message }}</p>
                             @enderror
                         </div>
+                        <div class="xl:col-span-12 col-span-12">
+                            <label class="inline-flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    name="customer_not_picked_up"
+                                    id="customer_not_picked_up"
+                                    value="1"
+                                    class="ti-form-checkbox"
+                                    {{ old('customer_not_picked_up') ? 'checked' : '' }}
+                                >
+                                <span class="font-medium">Customer did not pick up / respond</span>
+                            </label>
+
+                            <p class="text-xs text-gray-500 mt-1">
+                                Use this only when this follow-up attempt received no customer response.
+                                The CRM will track consecutive no-response attempts for AI ghosting analysis.
+                            </p>
+                        </div>
                         <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
                             <label for="status" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Status<span
                                     class="text-danger">*</span></label>
@@ -1863,6 +1881,29 @@
                     }
                 });
             });
+
+            const noAnswerCheckbox = document.getElementById('customer_not_picked_up');
+            const notesInput = document.getElementById('notes');
+
+            function syncNoAnswerUi() {
+                if (!noAnswerCheckbox || !notesInput) return;
+
+                if (noAnswerCheckbox.checked) {
+                    notesInput.required = false;
+
+                    if (!notesInput.value.trim()) {
+                        notesInput.placeholder =
+                            'Optional note, e.g. called customer; no answer.';
+                    }
+                } else {
+                    notesInput.required = true;
+                    notesInput.placeholder = '';
+                }
+            }
+
+            noAnswerCheckbox?.addEventListener('change', syncNoAnswerUi);
+            syncNoAnswerUi();
+
             document.querySelectorAll('.update-image-form').forEach(form => {
                 form.addEventListener('submit', function(e) {
                     e.preventDefault();

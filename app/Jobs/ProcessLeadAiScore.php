@@ -17,7 +17,7 @@ class ProcessLeadAiScore implements ShouldQueue
     use Queueable;
     use SerializesModels;
 
-    public $tries = 20;
+    public $tries = 3;
 
     public $timeout = 45;
 
@@ -92,10 +92,9 @@ class ProcessLeadAiScore implements ShouldQueue
     public function backoff(): array
     {
         return [
-            10,
-            30,
+            15,
             60,
-            120,
+            180,
         ];
     }
 }

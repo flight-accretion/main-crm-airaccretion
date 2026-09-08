@@ -13,6 +13,8 @@ class LeadFollowup extends Model
 
     public const SALES_AMOUNT_STATUSES = [2, 3, 4, 5, 7, 8];
 
+    public const CONTACT_OUTCOME_NO_ANSWER = 'no_answer';
+
     protected $fillable = [
         'id',
         'parent_followup_id',
@@ -32,6 +34,7 @@ class LeadFollowup extends Model
         'received_amount',
         'payment_method',
         'paid_date',
+        'contact_outcome',
     ];
 
     protected $casts = [
@@ -42,6 +45,11 @@ class LeadFollowup extends Model
         'service_details' => 'array',
         'paid_date' => 'date',
     ];
+
+    public function isCustomerNoAnswer(): bool
+    {
+        return $this->contact_outcome === self::CONTACT_OUTCOME_NO_ANSWER;
+    }
 
 // 0-initiated
 // 1=active

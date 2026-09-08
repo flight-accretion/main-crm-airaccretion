@@ -4,7 +4,11 @@
      *
      * @var \App\Models\LeadAiScore|null $latestAiScore
      * @var \App\Models\LeadAiScore|null $aiScore
+     * @var bool|null $aiBookedClosed
      */
+
+    $aiBookedClosed =
+        (bool) ($aiBookedClosed ?? false);
 
     $aiScore =
         isset($latestAiScore)
@@ -48,7 +52,9 @@
         type="button"
         id="lead-ai-score-button"
         class="ti-btn ti-btn-sm
-            @if($temperature === 'hot')
+            @if($aiBookedClosed)
+                ti-btn-success-full
+            @elseif($temperature === 'hot')
                 ti-btn-danger-full
             @elseif($temperature === 'neutral')
                 ti-btn-warning-full
@@ -58,9 +64,14 @@
                 ti-btn-primary-full
             @endif"
             style="width: auto;"
+        @if($aiBookedClosed) disabled @endif
     >
 
-        @if(!$aiScore)
+        @if($aiBookedClosed)
+
+            BOOKED / CLOSED
+
+        @elseif(!$aiScore)
 
             <i class="ri-sparkling-line me-1"></i>
             Analyse Lead
@@ -173,6 +184,18 @@
 
         {{-- BODY --}}
         <div class="p-5">
+
+            {{-- BOOKED / CLOSED --}}
+            <div
+                id="ai-score-closed"
+                class="hidden alert alert-success"
+            >
+                <p
+                    id="ai-score-closed-message"
+                >
+                    Approved payment received. AI scoring has stopped.
+                </p>
+            </div>
 
             {{-- LOADING --}}
             <div
@@ -311,23 +334,38 @@
                 </div>
 
 
-                {{-- SUGGESTED ACTION --}}
+                {{-- SALES COACHING --}}
                 <div class="mb-6">
 
                     <h5 class="font-semibold mb-2">
-                        Suggested Next Action
+                        Recommended Sales Coaching
                     </h5>
 
                     <div
-                        class="p-3 bg-primary/10 rounded"
-                    >
+                        id="ai-actions-list"
+                        class="space-y-3"
+                    ></div>
 
-                        <p
-                            id="ai-suggested-action"
-                        ></p>
+                </div>
 
-                    </div>
+                <div class="mb-6">
 
+                    <p class="text-xs text-gray-500">
+                        Next objective
+                    </p>
+
+                    <p
+                        id="ai-next-commitment"
+                        class="font-semibold mt-1"
+                    ></p>
+
+                </div>
+
+                <div
+                    id="ai-ghosting-signal"
+                    class="hidden mb-6 p-3 rounded bg-warning/10"
+                >
+                    Customer Ghosting
                 </div>
 
 
@@ -425,6 +463,16 @@
     const loading =
         document.getElementById(
             'ai-score-loading'
+        );
+
+    const closed =
+        document.getElementById(
+            'ai-score-closed'
+        );
+
+    const closedMessage =
+        document.getElementById(
+            'ai-score-closed-message'
         );
 
     const content =
@@ -554,6 +602,12 @@
     function resetDisplay() {
 
         loading
+            ?.classList
+            .add(
+                'hidden'
+            );
+
+        closed
             ?.classList
             .add(
                 'hidden'
@@ -712,6 +766,38 @@
         'auto',
         'important'
     );
+
+    }
+
+    function setButtonBookedClosed() {
+
+        button.disabled =
+            true;
+
+        button.textContent =
+            'BOOKED / CLOSED';
+
+    }
+
+
+    function showBookedClosedState(
+        message
+    ) {
+
+        resetDisplay();
+
+        if (closedMessage) {
+            closedMessage.textContent =
+                message
+                ||
+                'Approved payment received. AI scoring has stopped.';
+        }
+
+        closed
+            ?.classList
+            .remove(
+                'hidden'
+            );
 
     }
 
@@ -957,20 +1043,122 @@
 
 
         /*
-         * Suggested action
+         * Sales coaching actions
          */
-        const suggestedAction =
+        const actionsContainer =
             document.getElementById(
-                'ai-suggested-action'
+                'ai-actions-list'
             );
 
-        if (suggestedAction) {
+        if (actionsContainer) {
 
-            suggestedAction.textContent =
-                data.suggested_action
-                || '-';
+            actionsContainer.innerHTML =
+                '';
+
+            const actions =
+                Array.isArray(
+                    data.actions
+                )
+                    ? data.actions.slice(
+                        0,
+                        3
+                    )
+                    : [];
+
+            actions.forEach(
+                function (
+                    item,
+                    index
+                ) {
+                    const wrapper =
+                        document.createElement(
+                            'div'
+                        );
+
+                    wrapper.className =
+                        'p-3 border rounded dark:border-white/10';
+
+                    const title =
+                        document.createElement(
+                            'div'
+                        );
+
+                    title.className =
+                        'font-semibold';
+
+                    const channel =
+                        String(
+                            item.channel
+                            || ''
+                        )
+                            .toUpperCase();
+
+                    title.textContent =
+                        `${index + 1}. ${channel} - ${String(item.action || '')}`;
+
+                    const script =
+                        document.createElement(
+                            'p'
+                        );
+
+                    script.className =
+                        'mt-2 text-gray-700 dark:text-white/70';
+
+                    script.textContent =
+                        `Say/Send: "${String(item.script || '')}"`;
+
+                    wrapper.appendChild(
+                        title
+                    );
+
+                    wrapper.appendChild(
+                        script
+                    );
+
+                    actionsContainer.appendChild(
+                        wrapper
+                    );
+                }
+            );
+
+            if (actions.length === 0) {
+                const empty =
+                    document.createElement(
+                        'p'
+                    );
+
+                empty.textContent =
+                    'No coaching actions available.';
+
+                actionsContainer.appendChild(
+                    empty
+                );
+            }
 
         }
+
+        const nextCommitment =
+            document.getElementById(
+                'ai-next-commitment'
+            );
+
+        if (nextCommitment) {
+            nextCommitment.textContent =
+                data.next_commitment
+                || '-';
+        }
+
+        const ghostingSignal =
+            document.getElementById(
+                'ai-ghosting-signal'
+            );
+
+        ghostingSignal
+            ?.classList
+            .toggle(
+                'hidden',
+                !data.customer_ghosting
+            );
 
 
         /*
@@ -1065,9 +1253,37 @@
         data
     ) {
 
+        if (!data) {
+            stopPolling();
+
+            showError(
+                'Unable to load AI score.'
+            );
+
+            return;
+        }
+
         if (
-            !data
+            data.status === 'closed'
             ||
+            data.lifecycle === 'booked_closed'
+        ) {
+
+            stopPolling();
+
+            setButtonBookedClosed();
+
+            showBookedClosedState(
+                data.message
+                ||
+                'Approved payment received. AI scoring has stopped.'
+            );
+
+            return;
+
+        }
+
+        if (
             data.has_score === false
         ) {
 
@@ -1712,6 +1928,8 @@
      * this page loaded, continue monitoring it.
      */
     @if(
+        !$aiBookedClosed
+        &&
         $aiScore
         &&
         in_array(

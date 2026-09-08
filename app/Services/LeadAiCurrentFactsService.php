@@ -155,6 +155,14 @@ class LeadAiCurrentFactsService
         ];
     }
 
+    public function isBookedClosed(
+        Lead $lead
+    ): bool {
+        $facts = $this->build($lead);
+
+        return (float) ($facts['approved_received_amount'] ?? 0) > 0;
+    }
+
     private function statusName(
         $status
     ): string {

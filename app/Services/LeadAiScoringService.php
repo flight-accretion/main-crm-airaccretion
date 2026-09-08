@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Jobs\ProcessLeadAiScore;
+use App\Models\Lead;
 use App\Models\LeadAiScore;
 use App\Models\LeadAiScoringSetting;
 use App\Models\LeadFollowup;
@@ -12,9 +13,12 @@ use Illuminate\Support\Str;
 
 class LeadAiScoringService
 {
+    public const PROMPT_VERSION = 'lead-scoring-v2.0';
+
     public function __construct(
         private LeadAiScoringEligibilityService $eligibility,
         private LeadAiCurrentFactsService $facts,
+        private LeadAiContactSignalService $contactSignals,
         private LeadAiOpenAiClient $client
     ) {
     }
@@ -34,6 +38,18 @@ class LeadAiScoringService
             !$manual
             &&
             !$setting->auto_analyse
+        ) {
+            return null;
+        }
+
+        $lead =
+            $followup
+                ->enquiry()
+                ->first();
+
+        if (
+            !$lead
+            || $this->facts->isBookedClosed($lead)
         ) {
             return null;
         }
@@ -72,13 +88,21 @@ class LeadAiScoringService
                     'input_hash' =>
                         hash(
                             'sha256',
-                            $followup->id
+                            self::PROMPT_VERSION
+                            . '|'
+                            . $followup->id
                             . '|'
                             . $followup->lead_id
                             . '|'
                             . (
                                 $followup
                                     ->followup_note
+                                ?? ''
+                            )
+                            . '|'
+                            . (
+                                $followup
+                                    ->contact_outcome
                                 ?? ''
                             )
                         ),
@@ -188,6 +212,18 @@ class LeadAiScoringService
                 $followup->enquiry()
                     ->firstOrFail();
 
+            if ($this->facts->isBookedClosed($lead)) {
+                $score->update([
+                    'status' =>
+                        'failed',
+
+                    'last_error' =>
+                        'Skipped because approved payment has been received.',
+                ]);
+
+                return;
+            }
+
             /*
              * Latest COMPLETED state created before
              * this new AI state.
@@ -220,77 +256,55 @@ class LeadAiScoringService
             $setting =
                 LeadAiScoringSetting::active();
 
+            $crmFacts =
+                $this->facts->build(
+                    $lead
+                );
+
+            $contactSignals =
+                $this->contactSignals->build(
+                    $lead,
+                    $followup
+                );
+
             $payload = [
-                'current_crm_facts' =>
-                    $this->facts->build(
-                        $lead
-                    ),
+                'crm' =>
+                    $crmFacts,
 
-                'previous_ai_state' =>
-                    $previous
-                        ? [
-                            'temperature' =>
-                                $previous
-                                    ->temperature,
-
-                            'score' =>
-                                $previous
-                                    ->score,
-
-                            'confidence' =>
-                                $previous
-                                    ->confidence,
-
-                            'summary' =>
-                                $previous
-                                    ->summary,
-
-                            'suggested_action' =>
-                                $previous
-                                    ->suggested_action,
-
-                            'state' =>
-                                $previous
-                                    ->state_json,
-                        ]
-                        : null,
-
-                /*
-                 * ONLY this newly created
-                 * raw follow-up is sent.
-                 */
-                'new_followup' => [
-                    'note' =>
-                        $this->sanitizeNote(
-                            (string)
-                            $followup
-                                ->followup_note
-                        ),
-
-                    'status' =>
-                        (int)
-                        $followup->status,
-
-                    'created_at' =>
-                        $followup->created_at
-                            ? $followup
-                                ->created_at
-                                ->copy()
-                                ->timezone(
-                                    'Asia/Kolkata'
-                                )
-                                ->format(
-                                    'd-M-Y h:i A'
-                                )
-                                . ' IST'
-                            : null,
-                ],
+                'contact' =>
+                    $contactSignals,
             ];
+
+            if ($previous) {
+                $payload['previous'] = [
+                    'score' =>
+                        (int) $previous->score,
+
+                    'reason' =>
+                        (string) $previous->score_reason,
+
+                    'state' =>
+                        $previous->state_json ?: [],
+                ];
+
+                $payload['interaction'] =
+                    $this->followupPayload(
+                        $followup
+                    );
+            } else {
+                $payload['history'] =
+                    $this->bootstrapHistory(
+                        $lead,
+                        $followup
+                    );
+            }
 
             $inputHash =
                 hash(
                     'sha256',
-                    json_encode(
+                    self::PROMPT_VERSION
+                    . '|'
+                    . json_encode(
                         $payload,
                         JSON_UNESCAPED_UNICODE
                         |
@@ -312,7 +326,9 @@ class LeadAiScoringService
                     'completed',
 
                 'temperature' =>
-                    $result['temperature'],
+                    $setting->temperatureFor(
+                        (int) $result['score']
+                    ),
 
                 'score' =>
                     $result['score'],
@@ -320,18 +336,22 @@ class LeadAiScoringService
                 'confidence' =>
                     $result['confidence'],
 
+                'score_reason' =>
+                    $result['score_reason'],
+
                 'summary' =>
                     $result['summary'],
-
-                'suggested_action' =>
-                    $result[
-                        'suggested_action'
-                    ],
 
                 'score_change_reason' =>
                     $result[
                         'score_change_reason'
                     ],
+
+                'actions_json' =>
+                    $result['actions'],
+
+                'next_commitment' =>
+                    $result['next_commitment'],
 
                 'state_json' =>
                     $result['state'],
@@ -341,6 +361,43 @@ class LeadAiScoringService
 
                 'model' =>
                     $result['model'],
+
+                'provider' =>
+                    $result['provider']
+                    ?? 'gemini',
+
+                'prompt_version' =>
+                    self::PROMPT_VERSION,
+
+                'input_tokens' =>
+                    data_get(
+                        $result,
+                        'usage.input_tokens'
+                    ),
+
+                'cached_input_tokens' =>
+                    data_get(
+                        $result,
+                        'usage.cached_input_tokens'
+                    ),
+
+                'output_tokens' =>
+                    data_get(
+                        $result,
+                        'usage.output_tokens'
+                    ),
+
+                'total_tokens' =>
+                    data_get(
+                        $result,
+                        'usage.total_tokens'
+                    ),
+
+                'processing_ms' =>
+                    data_get(
+                        $result,
+                        'processing_ms'
+                    ),
 
                 'processed_at' =>
                     now(),
@@ -369,6 +426,57 @@ class LeadAiScoringService
              */
             throw $e;
         }
+    }
+
+    private function bootstrapHistory(
+        Lead $lead,
+        LeadFollowup $current
+    ): array {
+        return $lead
+            ->leadFollowups()
+            ->with('followedBy.userType')
+            ->where(
+                'created_at',
+                '<=',
+                $current->created_at
+            )
+            ->orderByDesc('created_at')
+            ->limit(30)
+            ->get()
+            ->filter(
+                fn (LeadFollowup $item) =>
+                    $this->eligibility
+                        ->eligible($item)
+            )
+            ->take(10)
+            ->reverse()
+            ->values()
+            ->map(
+                fn (LeadFollowup $item) =>
+                    $this->followupPayload($item)
+            )
+            ->all();
+    }
+
+    private function followupPayload(
+        LeadFollowup $followup
+    ): array {
+        return [
+            'note' =>
+                $this->sanitizeNote(
+                    (string) $followup->followup_note
+                ),
+
+            'status' =>
+                (int) $followup->status,
+
+            'contact_outcome' =>
+                $followup->contact_outcome,
+
+            'at' =>
+                optional($followup->created_at)
+                    ?->toIso8601String(),
+        ];
     }
 
     private function sanitizeNote(
@@ -420,8 +528,12 @@ class LeadAiScoringService
             (string) $note
         );
 
-        return trim(
-            (string) $note
+        return Str::limit(
+            trim(
+                (string) $note
+            ),
+            600,
+            ''
         );
     }
 }

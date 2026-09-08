@@ -15,7 +15,11 @@ class LeadAiScoringEligibilityService
             (string) $followup->followup_note
         );
 
-        if ($note === '') {
+        if (
+            $note === ''
+            && $followup->contact_outcome
+                !== LeadFollowup::CONTACT_OUTCOME_NO_ANSWER
+        ) {
             return false;
         }
 

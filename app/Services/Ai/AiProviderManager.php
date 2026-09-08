@@ -39,6 +39,53 @@ class AiProviderManager
             );
     }
 
+    public function generateStructured(
+        AiModelProfile $profile,
+        string $instructions,
+        string $input,
+        array $responseSchema
+    ): array {
+        if (!$profile->enabled) {
+            throw new RuntimeException(
+                'Selected AI Model Profile is inactive.'
+            );
+        }
+
+        $apiKey =
+            $profile->apiKey();
+
+        if (!$apiKey) {
+            throw new RuntimeException(
+                'Selected AI Model Profile has no API key.'
+            );
+        }
+
+        $client =
+            $this->client(
+                $profile->provider
+            );
+
+        if (
+            !method_exists(
+                $client,
+                'generateStructured'
+            )
+        ) {
+            throw new RuntimeException(
+                'Selected AI provider does not support structured lead scoring.'
+            );
+        }
+
+        return $client
+            ->generateStructured(
+                $profile->model,
+                $apiKey,
+                $instructions,
+                $input,
+                $responseSchema
+            );
+    }
+
     public function test(
         string $provider,
         string $model,

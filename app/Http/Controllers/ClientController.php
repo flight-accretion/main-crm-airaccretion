@@ -33,6 +33,7 @@ use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use App\Services\AirpointsIntegrationService;
 use App\Services\LeadAllocationService;
+use App\Services\LeadAiCurrentFactsService;
 use App\Services\LeadSourceFollowupService;
 use App\Services\SalesAmountCalculator;
 use function App\Helpers\getRepresentativeIds;
@@ -2524,7 +2525,19 @@ try {
         if ($isAjaxRequest) {
             // Simple validation for AJAX requests
             $validator = Validator::make($request->all(), [
-                'notes' => ['required', 'string', 'max:1000'],
+                'notes' => [
+                    'nullable',
+                    'string',
+                    'max:1000',
+                    function ($attribute, $value, $fail) use ($request) {
+                        if (
+                            !$request->boolean('customer_not_picked_up')
+                            && trim((string) $value) === ''
+                        ) {
+                            $fail('Follow-up notes are required unless Customer did not pick up is selected.');
+                        }
+                    },
+                ],
                 'status' => 'required|in:0,1,2,3,4,5',
                 'next_followup_date' => 'nullable|date_format:Y-m-d H:i',
                 'services' => 'nullable|array',
@@ -2533,6 +2546,7 @@ try {
                 'extra_services.*' => 'exists:extra_services,id',
                 'number_of_passengers' => 'nullable|integer|min:1|max:100',
                 'occasion' => 'nullable|string|max:255',
+                'customer_not_picked_up' => ['nullable', 'boolean'],
             ]);
 
             if ($validator->fails()) {
@@ -2545,7 +2559,19 @@ try {
         } else {
             // Full validation for form submissions
             $validationRules = [
-                'notes' => ['nullable', 'string', 'max:1000'],
+                'notes' => [
+                    'nullable',
+                    'string',
+                    'max:1000',
+                    function ($attribute, $value, $fail) use ($request) {
+                        if (
+                            !$request->boolean('customer_not_picked_up')
+                            && trim((string) $value) === ''
+                        ) {
+                            $fail('Follow-up notes are required unless Customer did not pick up is selected.');
+                        }
+                    },
+                ],
                 'status' => 'required|integer|in:0,1,2,3,4,5,6,7',
                 'next_followup_date' => ['nullable', 'date_format:Y-m-d\TH:i'],
                 'services' => 'required_if:status,3,4|array',
@@ -2575,6 +2601,7 @@ try {
                     'integer',
                     'min:1'
                 ],
+                'customer_not_picked_up' => ['nullable', 'boolean'],
             ];
 
             // Conditionally set image and paid_date validation based on payment method
@@ -2785,11 +2812,20 @@ try {
             // Ensure total is not negative as a final safeguard
             $totalAmount = max(0, $totalAmount);
 
+            $followupNote = trim((string) $request->notes);
+
+            if (
+                $request->boolean('customer_not_picked_up')
+                && $followupNote === ''
+            ) {
+                $followupNote = 'Customer did not pick up / respond.';
+            }
+
             $followup = LeadFollowup::create([
                 'id' => Str::uuid(),
                 'lead_id' => $lead->id,
                 'next_followup_date' => $request->next_followup_date,
-                'followup_note' => $request->notes,
+                'followup_note' => $followupNote,
                 'status' => $request->status,
                 'followed_by' => $followedById,
                 'file' => $imagePath,
@@ -2804,6 +2840,9 @@ try {
                 'paid_date' => $request->paid_date,
                 'created_at' => now(),
                 'updated_at' => now(),
+                'contact_outcome' => $request->boolean('customer_not_picked_up')
+                    ? LeadFollowup::CONTACT_OUTCOME_NO_ANSWER
+                    : null,
             ]);
 
             // Status 3 = Full Payment Received, 4 = Partial Payment Received
@@ -3213,6 +3252,10 @@ try {
         )
         ->first();
 
+        $aiBookedClosed =
+            app(LeadAiCurrentFactsService::class)
+                ->isBookedClosed($lead);
+
         return view('admin.pages.follow-ups.add-follow-up', [
             'clientInfo' => $clientInfo,
             'followups' => $followups,
@@ -3220,6 +3263,7 @@ try {
             'lead' => $lead,
             'latestAiScore' =>
              $latestAiScore,
+            'aiBookedClosed' => $aiBookedClosed,
             'services' => $services,
             'allExtraServices' => $allExtraServices,
             'selectedServices' => $selectedServices,

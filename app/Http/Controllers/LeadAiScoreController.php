@@ -7,6 +7,7 @@ use App\Models\Lead;
 use App\Models\LeadAiScore;
 use App\Models\LeadAiScoringSetting;
 use App\Models\UserType;
+use App\Services\LeadAiCurrentFactsService;
 use App\Services\LeadAiScoringEligibilityService;
 use App\Services\LeadAiScoringService;
 use Illuminate\Http\Request;
@@ -15,11 +16,22 @@ use function App\Helpers\getRepresentativeIds;
 class LeadAiScoreController extends Controller
 {
     public function show(
-        Lead $lead
+        Lead $lead,
+        LeadAiCurrentFactsService $facts
     ) {
         $this->authorizeLead(
             $lead
         );
+
+        if ($facts->isBookedClosed($lead)) {
+            return response()->json([
+                'has_score' => true,
+                'status' => 'closed',
+                'lifecycle' => 'booked_closed',
+                'message' =>
+                    'Approved payment received. AI scoring has stopped.',
+            ]);
+        }
 
         $score =
             LeadAiScore::query()
@@ -60,7 +72,8 @@ class LeadAiScoreController extends Controller
     public function analyse(
         Lead $lead,
         LeadAiScoringEligibilityService $eligibility,
-        LeadAiScoringService $service
+        LeadAiScoringService $service,
+        LeadAiCurrentFactsService $facts
     ) {
         $this->authorizeLead(
             $lead
@@ -75,6 +88,18 @@ class LeadAiScoreController extends Controller
                     'success' => false,
                     'message' =>
                         'AI lead scoring is currently disabled.',
+                ],
+                422
+            );
+        }
+
+        if ($facts->isBookedClosed($lead)) {
+            return response()->json(
+                [
+                    'success' => false,
+                    'status' => 'closed',
+                    'message' =>
+                        'This lead is booked/closed because approved payment has been received.',
                 ],
                 422
             );
@@ -137,9 +162,22 @@ class LeadAiScoreController extends Controller
      * only Super Admin retries failed analysis.
      */
     public function retry(
-        Lead $lead
+        Lead $lead,
+        LeadAiCurrentFactsService $facts
     ) {
         $this->ensureSuperAdmin();
+
+        if ($facts->isBookedClosed($lead)) {
+            return response()->json(
+                [
+                    'success' => false,
+                    'status' => 'closed',
+                    'message' =>
+                        'This lead is booked/closed because approved payment has been received.',
+                ],
+                422
+            );
+        }
 
         $score =
             LeadAiScore::query()
@@ -224,15 +262,28 @@ class LeadAiScoreController extends Controller
             'confidence' =>
                 $score->confidence,
 
+            'score_reason' =>
+                $score->score_reason,
+
             'summary' =>
                 array_slice(
                     $score->summary ?: [],
                     0,
-                    3
+                    2
                 ),
 
-            'suggested_action' =>
-                $score->suggested_action,
+            'actions' =>
+                $score->actions_json ?: [],
+
+            'next_commitment' =>
+                $score->next_commitment,
+
+            'customer_ghosting' =>
+                (bool) data_get(
+                    $score->state_json,
+                    'customer_ghosting',
+                    false
+                ),
 
             'score_change_reason' =>
                 $score->score_change_reason,
