@@ -4,7 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-class ExtendLeadAiScoresForCoaching extends Migration
+class UpgradeLeadAiScoresForCoaching extends Migration
 {
     public function up(): void
     {
@@ -23,6 +23,22 @@ class ExtendLeadAiScoresForCoaching extends Migration
         $this->addUnsignedInteger('thinking_tokens');
         $this->addUnsignedInteger('total_tokens');
         $this->addUnsignedInteger('processing_ms');
+
+        if (Schema::hasColumn('lead_ai_scores', 'next_commitment')) {
+            Schema::table('lead_ai_scores', function (Blueprint $table) {
+                $table->string('next_commitment', 120)
+                    ->nullable()
+                    ->change();
+            });
+        }
+
+        if (Schema::hasColumn('lead_ai_scores', 'prompt_version')) {
+            Schema::table('lead_ai_scores', function (Blueprint $table) {
+                $table->string('prompt_version', 60)
+                    ->nullable()
+                    ->change();
+            });
+        }
     }
 
     public function down(): void

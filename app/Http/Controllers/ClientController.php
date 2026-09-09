@@ -2812,13 +2812,23 @@ try {
             // Ensure total is not negative as a final safeguard
             $totalAmount = max(0, $totalAmount);
 
-            $followupNote = trim((string) $request->notes);
+            $customerNotPickedUp =
+                $request->boolean(
+                    'customer_not_picked_up'
+                );
+
+            $followupNote = trim(
+                (string) $request->input(
+                    'notes',
+                    ''
+                )
+            );
 
             if (
-                $request->boolean('customer_not_picked_up')
+                $customerNotPickedUp
                 && $followupNote === ''
             ) {
-                $followupNote = 'Customer did not pick up / respond.';
+                $followupNote = 'Customer did not pick up.';
             }
 
             $followup = LeadFollowup::create([
@@ -2840,9 +2850,11 @@ try {
                 'paid_date' => $request->paid_date,
                 'created_at' => now(),
                 'updated_at' => now(),
-                'contact_outcome' => $request->boolean('customer_not_picked_up')
+                'contact_outcome' => $customerNotPickedUp
                     ? LeadFollowup::CONTACT_OUTCOME_NO_ANSWER
                     : null,
+                'customer_not_picked_up' =>
+                    $customerNotPickedUp,
             ]);
 
             // Status 3 = Full Payment Received, 4 = Partial Payment Received

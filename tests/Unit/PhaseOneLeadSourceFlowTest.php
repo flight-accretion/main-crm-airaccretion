@@ -19,6 +19,7 @@ use App\Services\LeadAllocationService;
 use App\Services\WhatCrmMessageIngestionService;
 use Carbon\Carbon;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -46,10 +47,12 @@ class PhaseOneLeadSourceFlowTest extends TestCase
         );
         config()->set('whatcrm.ai_auto_dispatch', false);
         config()->set('whatcrm.assignment_webhook', null);
+        config()->set('services.website_lead_webhook.token', 'website-secret');
 
         DB::purge('sqlite');
         DB::reconnect('sqlite');
 
+        Cache::flush();
         $this->createSchema();
     }
 
@@ -213,6 +216,326 @@ class PhaseOneLeadSourceFlowTest extends TestCase
                 'status' => 'assigned',
                 'assigned_to' => $salesperson->id,
             ]
+        );
+    }
+
+    public function test_website_lead_webhook_accepts_service_text_and_reuses_email_flow(): void
+    {
+        $salesperson = $this->createSalesUser(
+            'Website Retail User'
+        );
+
+        $this->makeAvailable($salesperson);
+        $product = $this->createProduct('Yacht in Goa');
+        $this->assignProductToUser($product, $salesperson);
+
+        $response = $this
+            ->withHeaders([
+                'X-Website-Webhook-Token' => 'website-secret',
+            ])
+            ->postJson(
+                '/api/website-leads',
+                [
+                    'service_id' => 10,
+                    'service' => 'Yacht in Goa',
+                    'name' => 'devendra testing',
+                    'mobile' => '7879645048',
+                    'departure_date' => '2026-09-10',
+                    'departure_time' => '16:14',
+                    'guest' => 1,
+                ]
+            );
+
+        $response->assertOk();
+        $response->assertJsonPath('success', true);
+        $response->assertJsonPath('status', 'created_assigned');
+        $response->assertJsonPath('product_id', $product->id);
+        $response->assertJsonPath('agent_user_id', $salesperson->id);
+
+        $leadId = $response->json('lead_id');
+
+        $this->assertDatabaseHas(
+            'email_lead_logs',
+            [
+                'lead_id' => $leadId,
+                'source_type' => 'website_form',
+                'service_name' => 'Yacht in Goa',
+                'passenger_count' => 1,
+            ]
+        );
+
+        $followup = DB::table('lead_followups')
+            ->where('lead_id', $leadId)
+            ->first();
+
+        $this->assertNotNull($followup);
+        $this->assertStringContainsString(
+            'Lead received automatically from Website Form.',
+            $followup->followup_note
+        );
+        $this->assertStringContainsString(
+            'Website Form Data:',
+            $followup->followup_note
+        );
+        $this->assertStringNotContainsString(
+            'Email Message:',
+            $followup->followup_note
+        );
+    }
+
+    public function test_website_lead_webhook_requires_shared_token(): void
+    {
+        $response = $this->postJson(
+            '/api/website-leads',
+            [
+                'service_id' => 10,
+                'service' => 'Yacht in Goa',
+                'name' => 'Unauthorized Customer',
+                'mobile' => '7879645059',
+                'departure_date' => '2026-09-10',
+                'departure_time' => '16:14',
+                'guest' => 1,
+            ]
+        );
+
+        $response->assertStatus(401);
+        $response->assertJson([
+            'success' => false,
+            'message' => 'Unauthorized',
+        ]);
+    }
+
+    public function test_website_lead_webhook_ignores_duplicate_delivery_within_sixty_seconds(): void
+    {
+        $salesperson = $this->createSalesUser(
+            'Duplicate Website User'
+        );
+
+        $this->makeAvailable($salesperson);
+        $product = $this->createProduct('Yacht in Goa');
+        $this->assignProductToUser($product, $salesperson);
+
+        $payload = [
+            'service_id' => 10,
+            'service' => 'Yacht in Goa',
+            'name' => 'Duplicate Customer',
+            'mobile' => '7879645050',
+            'departure_date' => '2026-09-10',
+            'departure_time' => '16:14',
+            'guest' => 1,
+        ];
+
+        $first = $this
+            ->withHeaders([
+                'X-Website-Webhook-Token' => 'website-secret',
+            ])
+            ->postJson('/api/website-leads', $payload);
+
+        $second = $this
+            ->withHeaders([
+                'X-Website-Webhook-Token' => 'website-secret',
+            ])
+            ->postJson('/api/website-leads', $payload);
+
+        $first->assertOk();
+        $second->assertOk();
+        $second->assertJsonPath('status', 'duplicate_submission');
+        $this->assertDatabaseCount('email_lead_logs', 1);
+        $this->assertDatabaseCount('lead_followups', 1);
+        $this->assertDatabaseCount('leads', 1);
+    }
+
+    public function test_queued_website_lead_uses_email_product_assignment_when_office_reopens(): void
+    {
+        Carbon::setTestNow(
+            Carbon::create(2026, 8, 24, 19, 21, 0)
+        );
+
+        $genericUser = $this->createSalesUser(
+            'Generic Queue User'
+        );
+        $productUser = $this->createSalesUser(
+            'Mapped Product Queue User'
+        );
+
+        $this->makeAvailable($genericUser);
+        $this->makeAvailable($productUser);
+
+        $product = $this->createProduct('Yacht in Goa');
+        $this->assignProductToUser($product, $productUser);
+
+        $existingClient = Client::create([
+            'id' => (string) Str::uuid(),
+            'name' => 'Existing Assigned Customer',
+            'contact_number' => '7000000001',
+            'status' => 1,
+        ]);
+
+        Lead::create([
+            'id' => (string) Str::uuid(),
+            'client_id' => $existingClient->id,
+            'representative_user_id' => $productUser->id,
+            'product_ids' => [$product->id],
+        ]);
+
+        $response = $this
+            ->withHeaders([
+                'X-Website-Webhook-Token' => 'website-secret',
+            ])
+            ->postJson(
+                '/api/website-leads',
+                [
+                    'service_id' => 10,
+                    'service' => 'Yacht in Goa',
+                    'name' => 'Queued Website Customer',
+                    'mobile' => '7879645053',
+                    'departure_date' => '2026-09-10',
+                    'departure_time' => '16:14',
+                    'guest' => 1,
+                ]
+            );
+
+        $response->assertOk();
+        $response->assertJsonPath('status', 'created_queued');
+
+        $lead = Lead::findOrFail(
+            $response->json('lead_id')
+        );
+
+        $this->assertNull(
+            $lead->representative_user_id
+        );
+        $this->assertDatabaseHas(
+            'lead_allocation_queue',
+            [
+                'lead_id' => $lead->id,
+                'status' => 'queued',
+                'reason' => 'website_new_lead',
+            ]
+        );
+
+        Carbon::setTestNow(
+            Carbon::create(2026, 8, 25, 10, 30, 0)
+        );
+
+        SalespersonAvailability::query()
+            ->whereIn(
+                'user_id',
+                [
+                    $genericUser->id,
+                    $productUser->id,
+                ]
+            )
+            ->update(['last_response_at' => now()]);
+
+        $processed = app(LeadAllocationService::class)
+            ->processPendingLeads();
+
+        $lead->refresh();
+
+        $this->assertSame(1, $processed['processed']);
+        $this->assertSame(
+            $productUser->id,
+            $lead->representative_user_id
+        );
+        $this->assertDatabaseHas(
+            'lead_allocation_queue',
+            [
+                'lead_id' => $lead->id,
+                'status' => 'assigned',
+                'assigned_to' => $productUser->id,
+            ]
+        );
+    }
+
+    public function test_website_lead_webhook_requires_service_text_without_creating_email_log(): void
+    {
+        $response = $this
+            ->withHeaders([
+                'X-Website-Webhook-Token' => 'website-secret',
+            ])
+            ->postJson(
+                '/api/website-leads',
+                [
+                    'service_id' => 999,
+                    'name' => 'Unmapped Customer',
+                    'mobile' => '7879645051',
+                    'departure_date' => '2026-09-10',
+                    'departure_time' => '16:14',
+                    'guest' => 1,
+                ]
+            );
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['service']);
+        $this->assertDatabaseCount('email_lead_logs', 0);
+        $this->assertDatabaseCount('leads', 0);
+    }
+
+    public function test_website_form_repeat_lead_adds_followup_to_existing_active_lead(): void
+    {
+        $salesperson = $this->createSalesUser(
+            'Existing Lead Owner'
+        );
+
+        $product = $this->createProduct('Yacht in Goa');
+
+        $client = Client::create([
+            'id' => (string) Str::uuid(),
+            'name' => 'Existing Customer',
+            'contact_number' => '7879645052',
+            'status' => 1,
+        ]);
+
+        $lead = Lead::create([
+            'id' => (string) Str::uuid(),
+            'client_id' => $client->id,
+            'representative_user_id' => $salesperson->id,
+            'product_ids' => [$product->id],
+        ]);
+
+        DB::table('lead_followups')->insert([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $lead->id,
+            'followup_note' => 'Existing active journey.',
+            'status' => 1,
+            'followed_by' => $salesperson->id,
+            'created_at' => now()->subMinute(),
+            'updated_at' => now()->subMinute(),
+        ]);
+
+        $response = $this
+            ->withHeaders([
+                'X-Website-Webhook-Token' => 'website-secret',
+            ])
+            ->postJson(
+                '/api/website-leads',
+                [
+                    'service_id' => 10,
+                    'service' => 'Yacht in Goa',
+                    'name' => 'Existing Customer',
+                    'mobile' => '7879645052',
+                    'departure_date' => '2026-09-10',
+                    'departure_time' => '16:14',
+                    'guest' => 2,
+                ]
+            );
+
+        $response->assertOk();
+        $response->assertJsonPath('status', 'repeat_lead');
+        $response->assertJsonPath('lead_id', $lead->id);
+        $response->assertJsonPath('product_id', $product->id);
+        $this->assertDatabaseCount('leads', 1);
+        $this->assertDatabaseCount('lead_followups', 2);
+
+        $newFollowup = DB::table('lead_followups')
+            ->where('lead_id', $lead->id)
+            ->orderByDesc('created_at')
+            ->first();
+
+        $this->assertStringContainsString(
+            'Lead received automatically from Website Form.',
+            $newFollowup->followup_note
         );
     }
 
@@ -644,6 +967,7 @@ class PhaseOneLeadSourceFlowTest extends TestCase
         Schema::create('email_lead_logs', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->string('message_id')->nullable();
+            $table->string('source_type', 50)->default('email');
             $table->string('imap_uid')->nullable();
             $table->string('sender_email')->nullable();
             $table->string('recipient_email')->nullable();

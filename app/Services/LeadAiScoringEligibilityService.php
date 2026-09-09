@@ -15,10 +15,12 @@ class LeadAiScoringEligibilityService
             (string) $followup->followup_note
         );
 
+        $isStructuredNoAnswer =
+            (bool) $followup->customer_not_picked_up;
+
         if (
             $note === ''
-            && $followup->contact_outcome
-                !== LeadFollowup::CONTACT_OUTCOME_NO_ANSWER
+            && !$isStructuredNoAnswer
         ) {
             return false;
         }

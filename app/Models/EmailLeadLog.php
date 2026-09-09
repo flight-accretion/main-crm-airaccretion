@@ -14,6 +14,7 @@ class EmailLeadLog extends Model
     protected $fillable = [
         'id',
         'message_id',
+        'source_type',
         'imap_uid',
         'sender_email',
         'recipient_email',

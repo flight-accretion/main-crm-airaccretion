@@ -7,7 +7,7 @@ use App\Models\Lead;
 use App\Models\LeadAiScore;
 use App\Models\LeadAiScoringSetting;
 use App\Models\UserType;
-use App\Services\LeadAiCurrentFactsService;
+use App\Services\LeadAiLifecycleService;
 use App\Services\LeadAiScoringEligibilityService;
 use App\Services\LeadAiScoringService;
 use Illuminate\Http\Request;
@@ -17,13 +17,13 @@ class LeadAiScoreController extends Controller
 {
     public function show(
         Lead $lead,
-        LeadAiCurrentFactsService $facts
+        LeadAiLifecycleService $lifecycle
     ) {
         $this->authorizeLead(
             $lead
         );
 
-        if ($facts->isBookedClosed($lead)) {
+        if ($lifecycle->isBooked($lead)) {
             return response()->json([
                 'has_score' => true,
                 'status' => 'closed',
@@ -73,7 +73,7 @@ class LeadAiScoreController extends Controller
         Lead $lead,
         LeadAiScoringEligibilityService $eligibility,
         LeadAiScoringService $service,
-        LeadAiCurrentFactsService $facts
+        LeadAiLifecycleService $lifecycle
     ) {
         $this->authorizeLead(
             $lead
@@ -93,13 +93,25 @@ class LeadAiScoreController extends Controller
             );
         }
 
-        if ($facts->isBookedClosed($lead)) {
+        if ($lifecycle->isBooked($lead)) {
             return response()->json(
                 [
                     'success' => false,
                     'status' => 'closed',
                     'message' =>
                         'This lead is booked/closed because approved payment has been received.',
+                ],
+                422
+            );
+        }
+
+        if (!$lifecycle->hasActiveStatus($lead)) {
+            return response()->json(
+                [
+                    'success' => false,
+                    'status' => 'not_active',
+                    'message' =>
+                        'Only Active leads can be analysed by AI lead scoring.',
                 ],
                 422
             );
@@ -163,17 +175,29 @@ class LeadAiScoreController extends Controller
      */
     public function retry(
         Lead $lead,
-        LeadAiCurrentFactsService $facts
+        LeadAiLifecycleService $lifecycle
     ) {
         $this->ensureSuperAdmin();
 
-        if ($facts->isBookedClosed($lead)) {
+        if ($lifecycle->isBooked($lead)) {
             return response()->json(
                 [
                     'success' => false,
                     'status' => 'closed',
                     'message' =>
                         'This lead is booked/closed because approved payment has been received.',
+                ],
+                422
+            );
+        }
+
+        if (!$lifecycle->hasActiveStatus($lead)) {
+            return response()->json(
+                [
+                    'success' => false,
+                    'status' => 'not_active',
+                    'message' =>
+                        'Only Active leads can be analysed by AI lead scoring.',
                 ],
                 422
             );
@@ -215,7 +239,7 @@ class LeadAiScoreController extends Controller
 
         ProcessLeadAiScore::dispatch(
             $score->id
-        );
+        )->afterCommit();
 
         return response()->json([
             'success' => true,

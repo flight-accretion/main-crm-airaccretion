@@ -45,6 +45,23 @@ class AiProviderManager
         string $input,
         array $responseSchema
     ): array {
+        return $this->generateDetailed(
+            $profile,
+            $instructions,
+            $input,
+            [
+                'response_schema' =>
+                    $responseSchema,
+            ]
+        );
+    }
+
+    public function generateDetailed(
+        AiModelProfile $profile,
+        string $instructions,
+        string $input,
+        array $options = []
+    ): array {
         if (!$profile->enabled) {
             throw new RuntimeException(
                 'Selected AI Model Profile is inactive.'
@@ -66,10 +83,8 @@ class AiProviderManager
             );
 
         if (
-            !method_exists(
-                $client,
-                'generateStructured'
-            )
+            !$client instanceof
+                AiProviderDetailedClientInterface
         ) {
             throw new RuntimeException(
                 'Selected AI provider does not support structured lead scoring.'
@@ -77,12 +92,12 @@ class AiProviderManager
         }
 
         return $client
-            ->generateStructured(
+            ->generateDetailed(
                 $profile->model,
                 $apiKey,
                 $instructions,
                 $input,
-                $responseSchema
+                $options
             );
     }
 

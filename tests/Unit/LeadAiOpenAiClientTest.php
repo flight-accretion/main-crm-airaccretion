@@ -113,7 +113,7 @@ class LeadAiOpenAiClientTest extends TestCase
                         'crm' => [
                             'approved_received_amount' => 0,
                         ],
-                        'history' => [],
+                        'bootstrap_history' => [],
                     ]
                 );
 
@@ -142,7 +142,7 @@ class LeadAiOpenAiClientTest extends TestCase
             return data_get(
                 $data,
                 'generationConfig.maxOutputTokens'
-            ) === 700
+            ) === 800
                 && data_get(
                     $data,
                     'generationConfig.responseMimeType'
@@ -163,6 +163,14 @@ class LeadAiOpenAiClientTest extends TestCase
                 && str_contains(
                     $instructions,
                     'do not return a temperature'
+                )
+                && str_contains(
+                    $instructions,
+                    'email-source signal as score 90'
+                )
+                && str_contains(
+                    $input,
+                    'bootstrap_history'
                 );
         });
     }
@@ -219,7 +227,7 @@ class LeadAiOpenAiClientTest extends TestCase
                 $setting,
                 [
                     'crm' => [],
-                    'history' => [],
+                    'bootstrap_history' => [],
                 ]
             );
     }

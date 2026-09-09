@@ -88,6 +88,7 @@ class EmailLeadParserService
         $passenger =
             $fields['passenger']
             ?? $fields['passengers']
+            ?? $fields['guest']
             ?? $fields['pax']
             ?? 1;
 

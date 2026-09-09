@@ -37,6 +37,14 @@ return [
     'lead_api' => [
         'key' => env('LEAD_API_KEY'),
     ],
+
+    'website_lead_webhook' => [
+        'token' =>
+            env(
+                'WEBSITE_LEAD_WEBHOOK_TOKEN'
+            ),
+    ],
+
     'meta_whatsapp' => [
         'token' => env('META_WHATSAPP_TOKEN'),
         'phone_number_id' => env('META_WHATSAPP_PHONE_NUMBER_ID'),

@@ -95,8 +95,15 @@ class EmailLeadFollowupService
     private function buildNote(
         EmailLeadLog $emailLog
     ): string {
+        $sourceLabel =
+            $emailLog->source_type === 'website_form'
+                ? 'Website Form'
+                : 'Email';
+
         $parts = [
-            'Lead received automatically from Email.',
+            'Lead received automatically from '
+            . $sourceLabel
+            . '.',
         ];
 
         if ($emailLog->subject) {
@@ -149,7 +156,10 @@ class EmailLeadFollowupService
          */
         if ($emailLog->email_body) {
             $parts[] = '';
-            $parts[] = 'Email Message:';
+            $parts[] =
+                $emailLog->source_type === 'website_form'
+                    ? 'Website Form Data:'
+                    : 'Email Message:';
             $parts[] =
                 trim(
                     $emailLog->email_body

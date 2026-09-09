@@ -35,6 +35,7 @@ class LeadFollowup extends Model
         'payment_method',
         'paid_date',
         'contact_outcome',
+        'customer_not_picked_up',
     ];
 
     protected $casts = [
@@ -44,11 +45,12 @@ class LeadFollowup extends Model
         'extra_service_ids' => 'array',
         'service_details' => 'array',
         'paid_date' => 'date',
+        'customer_not_picked_up' => 'boolean',
     ];
 
     public function isCustomerNoAnswer(): bool
     {
-        return $this->contact_outcome === self::CONTACT_OUTCOME_NO_ANSWER;
+        return (bool) $this->customer_not_picked_up;
     }
 
 // 0-initiated

@@ -17,7 +17,7 @@ class ProcessLeadAiScore implements ShouldQueue
     use Queueable;
     use SerializesModels;
 
-    public $tries = 3;
+    public $tries = 4;
 
     public $timeout = 45;
 

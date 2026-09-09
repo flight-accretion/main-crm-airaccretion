@@ -8,7 +8,7 @@ use App\Models\LeadFollowup;
 class LeadAiContactSignalService
 {
     public function __construct(
-        private LeadAiScoringEligibilityService $eligibility
+        private LeadAiNoResponseService $noResponse
     ) {
     }
 
@@ -17,52 +17,19 @@ class LeadAiContactSignalService
         ?LeadFollowup $through = null
     ): array
     {
-        $query = $lead->leadFollowups()
-            ->with('followedBy.userType')
-            ->orderByDesc('created_at');
-
-        if (
-            $through
-            && $through->created_at
-        ) {
-            $query->where(
-                'created_at',
-                '<=',
-                $through->created_at
+        $facts =
+            $this->noResponse->facts(
+                $lead,
+                $through
             );
-        }
 
-        $followups =
-            $query
-                ->limit(30)
-                ->get();
-
-        $consecutiveNoResponse = 0;
-        $lastAttemptAt = null;
-        $lastMeaningfulEngagementAt = null;
-
-        foreach ($followups as $followup) {
-            if (!$this->eligibility->eligible($followup)) {
-                continue;
-            }
-
-            if (
-                $followup->contact_outcome
-                === LeadFollowup::CONTACT_OUTCOME_NO_ANSWER
-            ) {
-                if ($lastAttemptAt === null) {
-                    $lastAttemptAt = $followup->created_at;
-                }
-
-                $consecutiveNoResponse++;
-                continue;
-            }
-
-            $lastMeaningfulEngagementAt = $followup->created_at;
-            break;
-        }
+        $consecutiveNoResponse =
+            (int) $facts['consecutive_no_response_attempts'];
 
         return [
+            'customer_not_picked_up' =>
+                (bool) optional($through)->customer_not_picked_up,
+
             'consecutive_no_response_attempts' =>
                 $consecutiveNoResponse,
 
@@ -70,10 +37,10 @@ class LeadAiContactSignalService
                 $consecutiveNoResponse >= 3,
 
             'last_contact_attempt_at' =>
-                optional($lastAttemptAt)?->toIso8601String(),
+                $facts['last_contact_attempt_at'],
 
             'last_meaningful_engagement_at' =>
-                optional($lastMeaningfulEngagementAt)?->toIso8601String(),
+                $facts['last_meaningful_engagement_at'],
         ];
     }
 }

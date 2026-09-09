@@ -2,9 +2,11 @@
 
 namespace Tests\Unit;
 
+use App\Jobs\ProcessLeadAiScore;
 use App\Models\Lead;
 use App\Models\LeadAiScore;
 use App\Models\LeadAiScoringSetting;
+use App\Models\EmailLeadLog;
 use App\Models\LeadFollowup;
 use App\Models\PaymentAuditTrail;
 use App\Models\User;
@@ -14,6 +16,7 @@ use App\Services\LeadAiScoringService;
 use Carbon\Carbon;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -100,7 +103,7 @@ class LeadAiScoringServiceTest extends TestCase
             ->process($score->id);
 
         $this->assertArrayHasKey(
-            'history',
+            'bootstrap_history',
             $capturedPayload
         );
 
@@ -111,17 +114,17 @@ class LeadAiScoringServiceTest extends TestCase
 
         $this->assertCount(
             10,
-            $capturedPayload['history']
+            $capturedPayload['bootstrap_history']
         );
 
         $this->assertSame(
             'Eligible follow-up 3',
-            $capturedPayload['history'][0]['note']
+            $capturedPayload['bootstrap_history'][0]['note']
         );
 
         $this->assertSame(
             'Eligible follow-up 12',
-            $capturedPayload['history'][9]['note']
+            $capturedPayload['bootstrap_history'][9]['note']
         );
 
         $score->refresh();
@@ -134,6 +137,11 @@ class LeadAiScoringServiceTest extends TestCase
         $this->assertSame(
             LeadAiScoringService::PROMPT_VERSION,
             $score->prompt_version
+        );
+
+        $this->assertSame(
+            7,
+            $score->thinking_tokens
         );
     }
 
@@ -179,6 +187,198 @@ class LeadAiScoringServiceTest extends TestCase
 
         $this->assertNull($result);
         $this->assertSame(0, LeadAiScore::query()->count());
+    }
+
+    public function test_queue_dispatches_processing_job_after_database_commit(): void
+    {
+        Queue::fake();
+
+        $user =
+            $this->salesUser();
+
+        $lead =
+            Lead::create([
+                'id' => (string) Str::uuid(),
+                'representative_user_id' => $user->id,
+            ]);
+
+        $followup =
+            $this->followup(
+                $lead,
+                $user,
+                'Customer asked for available charter options.',
+                null,
+                Carbon::create(2026, 9, 8, 9, 0, 0)
+            );
+
+        $score =
+            app(LeadAiScoringService::class)
+                ->queueForFollowup($followup);
+
+        $this->assertNotNull($score);
+
+        Queue::assertPushed(
+            ProcessLeadAiScore::class,
+            function (ProcessLeadAiScore $job) use ($score) {
+                return $job->scoreId === $score->id
+                    && ($job->afterCommit ?? false) === true;
+            }
+        );
+    }
+
+    public function test_process_marks_score_skipped_when_lead_becomes_booked_before_job_runs(): void
+    {
+        $user =
+            $this->salesUser();
+
+        $lead =
+            Lead::create([
+                'id' => (string) Str::uuid(),
+                'representative_user_id' => $user->id,
+            ]);
+
+        $followup =
+            $this->followup(
+                $lead,
+                $user,
+                'Customer asked for payment details.',
+                null,
+                Carbon::create(2026, 9, 8, 9, 0, 0)
+            );
+
+        $score =
+            LeadAiScore::create([
+                'id' => (string) Str::uuid(),
+                'lead_id' => $lead->id,
+                'followup_id' => $followup->id,
+                'status' => 'pending',
+            ]);
+
+        PaymentAuditTrail::create([
+            'id' => (string) Str::uuid(),
+            'lead_followup_id' => $followup->id,
+            'paid_amount' => 1,
+            'payment_status' => 1,
+        ]);
+
+        $this->mock(
+            LeadAiOpenAiClient::class,
+            function ($mock) {
+                $mock
+                    ->shouldReceive('analyse')
+                    ->never();
+            }
+        );
+
+        app(LeadAiScoringService::class)
+            ->process($score->id);
+
+        $score->refresh();
+
+        $this->assertSame('skipped', $score->status);
+        $this->assertSame(1, $score->attempt_count);
+        $this->assertNull($score->last_error);
+        $this->assertNotNull($score->processed_at);
+    }
+
+    public function test_non_active_lead_status_prevents_queueing_new_ai_score(): void
+    {
+        $user =
+            $this->salesUser();
+
+        $lead =
+            Lead::create([
+                'id' => (string) Str::uuid(),
+                'representative_user_id' => $user->id,
+            ]);
+
+        $followup =
+            $this->followup(
+                $lead,
+                $user,
+                'Customer cancelled the enquiry.',
+                null,
+                Carbon::create(2026, 9, 8, 9, 0, 0),
+                2
+            );
+
+        $result =
+            app(LeadAiScoringService::class)
+                ->queueForFollowup($followup);
+
+        $this->assertNull($result);
+        $this->assertSame(0, LeadAiScore::query()->count());
+    }
+
+    public function test_email_source_fact_is_sent_to_ai_payload(): void
+    {
+        $user =
+            $this->salesUser();
+
+        $lead =
+            Lead::create([
+                'id' => (string) Str::uuid(),
+                'representative_user_id' => $user->id,
+            ]);
+
+        EmailLeadLog::create([
+            'id' => (string) Str::uuid(),
+            'message_id' => 'email-source-score-test',
+            'sender_email' => 'customer@example.test',
+            'lead_id' => $lead->id,
+            'processing_status' => 'assigned',
+            'received_at' => Carbon::create(2026, 9, 8, 8, 30, 0),
+        ]);
+
+        $current =
+            $this->followup(
+                $lead,
+                $user,
+                'Lead received automatically from Email.',
+                null,
+                Carbon::create(2026, 9, 8, 9, 0, 0)
+            );
+
+        $score =
+            LeadAiScore::create([
+                'id' => (string) Str::uuid(),
+                'lead_id' => $lead->id,
+                'followup_id' => $current->id,
+                'status' => 'pending',
+            ]);
+
+        $capturedPayload = null;
+
+        $this->mock(
+            LeadAiOpenAiClient::class,
+            function ($mock) use (&$capturedPayload) {
+                $mock
+                    ->shouldReceive('analyse')
+                    ->once()
+                    ->withArgs(
+                        function ($setting, $payload) use (&$capturedPayload) {
+                            $capturedPayload =
+                                $payload;
+
+                            return $setting instanceof LeadAiScoringSetting
+                                && is_array($payload);
+                        }
+                    )
+                    ->andReturn($this->aiResult());
+            }
+        );
+
+        app(LeadAiScoringService::class)
+            ->process($score->id);
+
+        $this->assertSame(
+            'email',
+            $capturedPayload['crm']['lead_source'] ?? null
+        );
+
+        $this->assertTrue(
+            $capturedPayload['crm']['email_source_lead'] ?? false
+        );
     }
 
     private function activeSetting(): void
@@ -229,6 +429,7 @@ class LeadAiScoringServiceTest extends TestCase
                 'input_tokens' => 100,
                 'cached_input_tokens' => 10,
                 'output_tokens' => 50,
+                'thinking_tokens' => 7,
                 'total_tokens' => 150,
             ],
             'processing_ms' => 25,
@@ -258,7 +459,8 @@ class LeadAiScoringServiceTest extends TestCase
         User $user,
         string $note,
         ?string $contactOutcome,
-        Carbon $createdAt
+        Carbon $createdAt,
+        int $status = 1
     ): LeadFollowup {
         return LeadFollowup::withoutEvents(
             function () use (
@@ -266,14 +468,15 @@ class LeadAiScoringServiceTest extends TestCase
                 $user,
                 $note,
                 $contactOutcome,
-                $createdAt
+                $createdAt,
+                $status
             ) {
                 $followup =
                     new LeadFollowup([
                         'id' => (string) Str::uuid(),
                         'lead_id' => $lead->id,
                         'followup_note' => $note,
-                        'status' => 1,
+                        'status' => $status,
                         'followed_by' => $user->id,
                         'contact_outcome' => $contactOutcome,
                     ]);
@@ -322,12 +525,23 @@ class LeadAiScoringServiceTest extends TestCase
             $table->timestamps();
         });
 
+        Schema::create('email_lead_logs', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('message_id');
+            $table->string('sender_email');
+            $table->uuid('lead_id')->nullable();
+            $table->string('processing_status')->nullable();
+            $table->timestamp('received_at')->nullable();
+            $table->timestamps();
+        });
+
         Schema::create('lead_followups', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('lead_id');
             $table->timestamp('next_followup_date')->nullable();
             $table->text('followup_note')->nullable();
             $table->string('contact_outcome', 30)->nullable();
+            $table->boolean('customer_not_picked_up')->default(false);
             $table->integer('status')->nullable();
             $table->uuid('followed_by')->nullable();
             $table->unsignedInteger('followup_recording_id')->nullable();
@@ -358,6 +572,7 @@ class LeadAiScoringServiceTest extends TestCase
             $table->unsignedInteger('input_tokens')->nullable();
             $table->unsignedInteger('cached_input_tokens')->nullable();
             $table->unsignedInteger('output_tokens')->nullable();
+            $table->unsignedInteger('thinking_tokens')->nullable();
             $table->unsignedInteger('total_tokens')->nullable();
             $table->unsignedInteger('processing_ms')->nullable();
             $table->uuid('analysed_by')->nullable();

@@ -67,8 +67,10 @@ class Kernel extends HttpKernel
         'role' => RoleMiddleware::class,
         'verify.lead.key' => \App\Http\Middleware\VerifyLeadApiKey::class,
         'whatcrm.auth' =>
-         \App\Http\Middleware\VerifyWhatCrmWebhook::class,
-         'call.summary.auth' =>
-    \App\Http\Middleware\VerifyCallSummaryWebhook::class,
+            \App\Http\Middleware\VerifyWhatCrmWebhook::class,
+        'call.summary.auth' =>
+            \App\Http\Middleware\VerifyCallSummaryWebhook::class,
+        'website.lead.auth' =>
+            \App\Http\Middleware\VerifyWebsiteLeadWebhook::class,
     ];
 }

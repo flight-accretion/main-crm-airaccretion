@@ -269,12 +269,11 @@
                                     class="ti-form-checkbox"
                                     {{ old('customer_not_picked_up') ? 'checked' : '' }}
                                 >
-                                <span class="font-medium">Customer did not pick up / respond</span>
+                                <span class="font-medium">Customer did not pick up / No answer</span>
                             </label>
 
                             <p class="text-xs text-gray-500 mt-1">
-                                Use this only when this follow-up attempt received no customer response.
-                                The CRM will track consecutive no-response attempts for AI ghosting analysis.
+                                Use this only when you attempted to call the customer and the customer did not answer.
                             </p>
                         </div>
                         <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
@@ -560,6 +559,11 @@
                                             <div class="xl:col-span-12 col-span-12">
                                                 <div class="md:flex block items-start justify-between">
                                                     <p class="mb-0 text-[.875rem]">Note : {{ $followup->followup_note }}
+                                                        @if ($followup->customer_not_picked_up)
+                                                            <span class="badge bg-warning/10 text-warning ms-2">
+                                                                No Answer
+                                                            </span>
+                                                        @endif
                                                     </p>
                                                     <div>
                                                         <span class="text-[#8c9097] dark:text-white/50">
@@ -894,6 +898,376 @@
             </div>
         </div>
     </div>
+
+
+{{-- ==========================================================
+     BOOKING EMAIL PREVIEW MODAL
+     ========================================================== --}}
+<div
+    id="booking-email-preview-modal"
+    class="hidden fixed inset-0 z-[9999] bg-black/50 overflow-y-auto"
+>
+
+    <div
+        class="min-h-full flex items-center justify-center px-4 py-8"
+    >
+
+        <div
+            class="bg-white
+                   dark:bg-bodybg
+                   rounded-lg
+                   shadow-xl
+                   max-h-[90vh]
+               overflow-y-auto"
+               style="border: 1px solid #dcdbdbe8;
+                margin-top: 20px;
+                margin-bottom: 20px;   
+                width: 60vw;"
+        >
+
+            {{-- ==================================================
+                 HEADER
+                 ================================================== --}}
+            <div
+                class="sticky top-0 z-20
+                       bg-white dark:bg-bodybg
+                       p-5
+                       border-b dark:border-white/10
+                       flex justify-between items-center"
+            >
+
+                <div>
+
+                    <h4 class="font-semibold text-lg">
+                        Booking Email Preview
+                    </h4>
+
+                    <p class="text-xs text-gray-500 mt-1">
+                        Review the complete email.
+                        Only the Payment Breakdown can be edited.
+                    </p>
+
+                </div>
+
+
+                <button
+                    type="button"
+                    id="close-booking-email-preview-modal"
+                    class="text-xl"
+                >
+                    <i class="ri-close-line"></i>
+                </button>
+
+            </div>
+
+
+            <div class="p-6">
+
+                {{-- ==================================================
+                     EMAIL META
+                     ================================================== --}}
+                <div
+                    class="grid grid-cols-12 gap-4 mb-5"
+                >
+
+                    <div
+                        class="md:col-span-6 col-span-12"
+                    >
+
+                        <label class="ti-form-label">
+                            To
+                        </label>
+
+                        <input
+                            type="text"
+                            id="booking-email-preview-to"
+                            class="ti-form-input"
+                            readonly
+                        >
+
+                    </div>
+
+
+                    <div
+                        class="md:col-span-6 col-span-12"
+                    >
+
+                        <label class="ti-form-label">
+                            Subject
+                        </label>
+
+                        <input
+                            type="text"
+                            id="booking-email-preview-subject"
+                            class="ti-form-input"
+                            readonly
+                        >
+
+                    </div>
+
+                </div>
+
+
+                {{-- ==================================================
+                     EMAIL BEFORE PAYMENT
+                     ================================================== --}}
+                <div
+                    id="booking-email-before-payment"
+                    class="whitespace-pre-wrap
+                           text-sm
+                           leading-6
+                           p-4
+                           border
+                           rounded
+                           dark:border-white/10
+                           bg-gray-50
+                           dark:bg-black/20"
+                ></div>
+
+
+                {{-- ==================================================
+                     EDITABLE PAYMENT BREAKDOWN
+                     ================================================== --}}
+                <div
+                    class="my-5
+                           p-5
+                           border-2
+                           border-primary/30
+                           rounded-lg
+                           bg-primary/5"
+                >
+
+                    <div class="mb-5">
+
+                        <h5 class="font-semibold">
+                            PAYMENT BREAKDOWN
+                        </h5>
+
+                        <p class="text-xs text-gray-500 mt-1">
+                            These payment values are used only for this
+                            email and are not saved in CRM.
+                        </p>
+
+                    </div>
+
+
+                    {{-- ==============================================
+                         TOTAL SERVICE COST
+                         EDITABLE
+                         ============================================== --}}
+                    <div class="mb-5">
+
+                        <label
+                            for="booking-total-service-cost"
+                            class="ti-form-label"
+                        >
+                            Total Service Cost
+                        </label>
+
+                        <input
+                            type="text"
+                            id="booking-total-service-cost"
+                            class="ti-form-input"
+                            placeholder="Enter total service cost"
+                            autocomplete="off"
+                        >
+
+                        <small class="text-gray-500">
+                            Prefilled from CRM/service price.
+                            You may edit it before sending.
+                        </small>
+
+                    </div>
+
+
+                    {{-- ==============================================
+                         PAYMENT MODE
+                         ============================================== --}}
+                    <div class="mb-5">
+
+                        <label class="ti-form-label">
+                            Payment Option
+                        </label>
+
+
+                        <div class="flex gap-3 flex-wrap">
+
+                            <button
+                                type="button"
+                                id="booking-payment-due-option"
+                                class="ti-btn ti-btn-primary-full"
+                                style="width:auto !important;"
+                            >
+                                Payment Due
+                            </button>
+
+
+                            <button
+                                type="button"
+                                id="booking-installment-option"
+                                class="ti-btn ti-btn-outline-primary"
+                                style="width:auto !important;"
+                            >
+                                Installment
+                            </button>
+
+                        </div>
+
+                    </div>
+
+
+                    {{-- ==============================================
+                         PAYMENT DUE
+                         ============================================== --}}
+                    <div
+                        id="booking-payment-due-fields"
+                    >
+
+                        <label
+                            for="booking-advance-amount"
+                            class="ti-form-label"
+                        >
+                            Advance Payment Due Now
+                        </label>
+
+                        <input
+                            type="text"
+                            id="booking-advance-amount"
+                            class="ti-form-input"
+                            placeholder="Enter payment due amount"
+                            autocomplete="off"
+                        >
+
+                        <small class="text-gray-500">
+                            Prefilled with the full Total Service Cost.
+                            You may edit it before sending.
+                        </small>
+
+                    </div>
+
+
+                    {{-- ==============================================
+                         INSTALLMENTS
+                         ============================================== --}}
+                    <div
+                        id="booking-installment-fields"
+                        class="hidden"
+                    >
+
+                        <div
+                            class="flex
+                                   justify-between
+                                   items-center
+                                   gap-3
+                                   mb-3"
+                        >
+
+                            <div class="font-semibold">
+                                Installment Schedule
+                            </div>
+
+                        </div>
+
+
+                        <div
+                            id="booking-installments-container"
+                            class="space-y-3"
+                        ></div>
+
+
+                        <div
+                            class="mt-4 flex justify-end"
+                        >
+
+                            <button
+                                type="button"
+                                id="add-booking-installment"
+                                class="ti-btn
+                                       ti-btn-sm
+                                       ti-btn-primary-full"
+                                style="width:auto !important;"
+                            >
+                                <i class="ri-add-line me-1"></i>
+                                Add Installment
+                            </button>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                {{-- ==================================================
+                     EMAIL AFTER PAYMENT
+                     ================================================== --}}
+                <div
+                    id="booking-email-after-payment"
+                    class="whitespace-pre-wrap
+                           text-sm
+                           leading-6
+                           p-4
+                           border
+                           rounded
+                           dark:border-white/10
+                           bg-gray-50
+                           dark:bg-black/20"
+                ></div>
+
+
+                {{-- ==================================================
+                     ERROR
+                     ================================================== --}}
+                <div
+                    id="booking-email-modal-error"
+                    class="hidden
+                           mt-4
+                           p-3
+                           rounded
+                           bg-danger/10
+                           text-danger"
+                ></div>
+
+            </div>
+
+
+            {{-- ==================================================
+                 FOOTER
+                 ================================================== --}}
+            <div
+                class="sticky bottom-0 z-20
+                       bg-white dark:bg-bodybg
+                       border-t dark:border-white/10
+                       p-4
+                       flex justify-end gap-3"
+            >
+
+                <button
+                    type="button"
+                    id="cancel-booking-email-preview"
+                    class="ti-btn ti-btn-secondary-full"
+                    style="width:auto !important;"
+                >
+                    Cancel
+                </button>
+
+
+                <button
+                    type="button"
+                    id="confirm-send-booking-email"
+                    class="ti-btn ti-btn-primary-full"
+                    style="width:auto !important;"
+                >
+                    <i class="ri-mail-send-line me-1"></i>
+                    Send Booking Email
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+</div>
 @endsection
 @push('scripts')
     <script>
@@ -2318,59 +2692,1484 @@
                 });
         });
 
-        document.getElementById('send-booking-confirmation-email-btn').addEventListener('click', function() {
-            const leadId = this.getAttribute('data-lead-id');
-            const btn = this;
-            const originalText = btn.textContent;
+   /*
+ * =============================================================
+ * BOOKING EMAIL PREVIEW + TEMPORARY PAYMENT BREAKDOWN
+ * =============================================================
+ */
 
-            btn.disabled = true;
-            btn.textContent = 'Sending...';
+const bookingEmailButton =
+    document.getElementById(
+        'send-booking-confirmation-email-btn'
+    );
 
-            fetch(`{{ route('admin.leads.booking-confirmation-email.send', ['lead' => ':lead']) }}`
-                    .replace(':lead', leadId), {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+const bookingEmailModal =
+    document.getElementById(
+        'booking-email-preview-modal'
+    );
+
+const bookingEmailTo =
+    document.getElementById(
+        'booking-email-preview-to'
+    );
+
+const bookingEmailSubject =
+    document.getElementById(
+        'booking-email-preview-subject'
+    );
+
+const bookingEmailBeforePayment =
+    document.getElementById(
+        'booking-email-before-payment'
+    );
+
+const bookingEmailAfterPayment =
+    document.getElementById(
+        'booking-email-after-payment'
+    );
+
+const totalServiceCostInput =
+    document.getElementById(
+        'booking-total-service-cost'
+    );
+
+const advanceAmountInput =
+    document.getElementById(
+        'booking-advance-amount'
+    );
+
+const paymentDueButton =
+    document.getElementById(
+        'booking-payment-due-option'
+    );
+
+const installmentButton =
+    document.getElementById(
+        'booking-installment-option'
+    );
+
+const paymentDueFields =
+    document.getElementById(
+        'booking-payment-due-fields'
+    );
+
+const installmentFields =
+    document.getElementById(
+        'booking-installment-fields'
+    );
+
+const installmentsContainer =
+    document.getElementById(
+        'booking-installments-container'
+    );
+
+const modalError =
+    document.getElementById(
+        'booking-email-modal-error'
+    );
+
+const confirmSendButton =
+    document.getElementById(
+        'confirm-send-booking-email'
+    );
+
+
+let bookingPaymentMode =
+    'payment_due';
+
+let bookingTotalAmount =
+    0;
+
+let bookingCurrentLeadId =
+    null;
+
+let advanceAmountManuallyEdited =
+    false;
+
+
+const bookingEmailUrlTemplate =
+    @json(
+        route(
+            'admin.leads.booking-confirmation-email.send',
+            [
+                'lead' => ':lead'
+            ]
+        )
+    );
+
+
+/*
+ * =============================================================
+ * URL
+ * =============================================================
+ */
+function bookingEmailUrl(
+    leadId
+) {
+    return bookingEmailUrlTemplate
+        .replace(
+            ':lead',
+            leadId
+        );
+}
+
+
+/*
+ * =============================================================
+ * MODAL
+ * =============================================================
+ */
+function openBookingEmailModal()
+{
+    if (
+        !bookingEmailModal
+    ) {
+        return;
+    }
+
+    bookingEmailModal
+        .classList
+        .remove(
+            'hidden'
+        );
+
+    document.body.style.overflow =
+        'hidden';
+}
+
+
+function closeBookingEmailModal()
+{
+    if (
+        !bookingEmailModal
+    ) {
+        return;
+    }
+
+    bookingEmailModal
+        .classList
+        .add(
+            'hidden'
+        );
+
+    document.body.style.overflow =
+        '';
+}
+
+
+/*
+ * =============================================================
+ * ERROR
+ * =============================================================
+ */
+function showBookingEmailError(
+    message
+) {
+    if (
+        !modalError
+    ) {
+        return;
+    }
+
+    modalError.textContent =
+        message;
+
+    modalError
+        .classList
+        .remove(
+            'hidden'
+        );
+}
+
+
+function clearBookingEmailError()
+{
+    if (
+        !modalError
+    ) {
+        return;
+    }
+
+    modalError.textContent =
+        '';
+
+    modalError
+        .classList
+        .add(
+            'hidden'
+        );
+}
+
+
+/*
+ * =============================================================
+ * AMOUNT HELPERS
+ * =============================================================
+ */
+function parseBookingAmount(
+    value
+) {
+    if (
+        value === null
+        ||
+        value === undefined
+    ) {
+        return 0;
+    }
+
+
+    const cleaned =
+        String(
+            value
+        )
+            .replace(
+                /₹/g,
+                ''
+            )
+            .replace(
+                /,/g,
+                ''
+            )
+            .trim();
+
+
+    const amount =
+        parseFloat(
+            cleaned
+        );
+
+
+    return Number.isNaN(
+        amount
+    )
+        ? 0
+        : amount;
+}
+
+
+function currentBookingTotalAmount()
+{
+    return parseBookingAmount(
+        totalServiceCostInput
+            ?.value
+    );
+}
+
+
+/*
+ * =============================================================
+ * DD/MM/YY DATE VALIDATION
+ * =============================================================
+ */
+function isValidBookingDueDate(
+    value
+) {
+    value =
+        String(
+            value
+            || ''
+        ).trim();
+
+
+    if (
+        !/^\d{2}\/\d{2}\/\d{2}$/
+            .test(
+                value
+            )
+    ) {
+        return false;
+    }
+
+
+    const parts =
+        value.split(
+            '/'
+        );
+
+
+    const day =
+        parseInt(
+            parts[0],
+            10
+        );
+
+
+    const month =
+        parseInt(
+            parts[1],
+            10
+        );
+
+
+    const year =
+        2000
+        +
+        parseInt(
+            parts[2],
+            10
+        );
+
+
+    const date =
+        new Date(
+            year,
+            month - 1,
+            day
+        );
+
+
+    return (
+        date.getFullYear()
+            === year
+
+        &&
+
+        date.getMonth()
+            === month - 1
+
+        &&
+
+        date.getDate()
+            === day
+    );
+}
+
+
+/*
+ * =============================================================
+ * PAYMENT MODE
+ * =============================================================
+ */
+function setBookingPaymentMode(
+    mode
+) {
+    bookingPaymentMode =
+        mode;
+
+
+    if (
+        mode ===
+        'payment_due'
+    ) {
+        paymentDueFields
+            ?.classList
+            .remove(
+                'hidden'
+            );
+
+
+        installmentFields
+            ?.classList
+            .add(
+                'hidden'
+            );
+
+
+        paymentDueButton
+            ?.classList
+            .remove(
+                'ti-btn-outline-primary'
+            );
+
+
+        paymentDueButton
+            ?.classList
+            .add(
+                'ti-btn-primary-full'
+            );
+
+
+        installmentButton
+            ?.classList
+            .remove(
+                'ti-btn-primary-full'
+            );
+
+
+        installmentButton
+            ?.classList
+            .add(
+                'ti-btn-outline-primary'
+            );
+
+
+        /*
+         * If Total Service Cost was changed while
+         * Installment mode was selected, keep the
+         * Payment Due amount in sync unless the
+         * salesperson already edited Advance manually.
+         */
+        if (
+            !advanceAmountManuallyEdited
+            &&
+            advanceAmountInput
+        ) {
+            const currentTotal =
+                currentBookingTotalAmount();
+
+            advanceAmountInput.value =
+                currentTotal > 0
+                    ? currentTotal.toFixed(2)
+                    : '';
+        }
+
+
+        return;
+    }
+
+
+    paymentDueFields
+        ?.classList
+        .add(
+            'hidden'
+        );
+
+
+    installmentFields
+        ?.classList
+        .remove(
+            'hidden'
+        );
+
+
+    installmentButton
+        ?.classList
+        .remove(
+            'ti-btn-outline-primary'
+        );
+
+
+    installmentButton
+        ?.classList
+        .add(
+            'ti-btn-primary-full'
+        );
+
+
+    paymentDueButton
+        ?.classList
+        .remove(
+            'ti-btn-primary-full'
+        );
+
+
+    paymentDueButton
+        ?.classList
+        .add(
+            'ti-btn-outline-primary'
+        );
+
+
+    /*
+     * Automatically add first row.
+     */
+    if (
+        installmentsContainer
+        &&
+        installmentsContainer
+            .children
+            .length === 0
+    ) {
+        addBookingInstallment();
+    }
+}
+
+
+/*
+ * =============================================================
+ * INSTALLMENT ROW
+ * =============================================================
+ */
+function addBookingInstallment(
+    date = '',
+    amount = ''
+) {
+    if (
+        !installmentsContainer
+    ) {
+        return;
+    }
+
+
+    const row =
+        document.createElement(
+            'div'
+        );
+
+
+    row.className =
+        'booking-installment-row '
+        + 'grid grid-cols-12 gap-3 '
+        + 'items-end p-3 '
+        + 'border rounded '
+        + 'dark:border-white/10';
+
+
+    row.innerHTML = `
+        <div class="md:col-span-5 col-span-12">
+
+            <label class="ti-form-label">
+                Due Date
+            </label>
+
+            <input
+                type="text"
+                class="ti-form-input booking-installment-date"
+                value="${date}"
+                placeholder="dd/mm/yy"
+                maxlength="8"
+                autocomplete="off"
+            >
+
+        </div>
+
+
+        <div class="md:col-span-5 col-span-12">
+
+            <label class="ti-form-label">
+                Amount
+            </label>
+
+            <input
+                type="text"
+                class="ti-form-input booking-installment-amount"
+                value="${amount}"
+                placeholder="Enter amount"
+                autocomplete="off"
+            >
+
+        </div>
+
+
+        <div class="md:col-span-2 col-span-12">
+
+            <button
+                type="button"
+                class="
+                    remove-booking-installment
+                    ti-btn
+                    ti-btn-danger-full
+                "
+                style="width:auto !important;"
+            >
+                <i class="ri-delete-bin-line"></i>
+                Remove
+            </button>
+
+        </div>
+    `;
+
+
+    const removeButton =
+        row.querySelector(
+            '.remove-booking-installment'
+        );
+
+
+    removeButton
+        ?.addEventListener(
+            'click',
+            function () {
+
+                row.remove();
+
+
+                /*
+                 * Keep one row while
+                 * Installment mode is selected.
+                 */
+                if (
+                    bookingPaymentMode
+                        === 'installment'
+
+                    &&
+
+                    installmentsContainer
+                        .children
+                        .length === 0
+                ) {
+                    addBookingInstallment();
+                }
+
+            }
+        );
+
+
+    installmentsContainer
+        .appendChild(
+            row
+        );
+}
+
+
+/*
+ * =============================================================
+ * RESET INSTALLMENTS
+ * =============================================================
+ */
+function resetBookingInstallments()
+{
+    if (
+        !installmentsContainer
+    ) {
+        return;
+    }
+
+    installmentsContainer.innerHTML =
+        '';
+}
+
+
+/*
+ * =============================================================
+ * COLLECT INSTALLMENTS
+ * =============================================================
+ */
+function collectBookingInstallments()
+{
+    return Array
+        .from(
+            document
+                .querySelectorAll(
+                    '.booking-installment-row'
+                )
+        )
+        .map(
+            function (
+                row
+            ) {
+                const dateInput =
+                    row.querySelector(
+                        '.booking-installment-date'
+                    );
+
+
+                const amountInput =
+                    row.querySelector(
+                        '.booking-installment-amount'
+                    );
+
+
+                return {
+                    date:
+                        String(
+                            dateInput
+                                ?.value
+                            || ''
+                        ).trim(),
+
+                    amount:
+                        parseBookingAmount(
+                            amountInput
+                                ?.value
+                        ),
+                };
+            }
+        );
+}
+
+
+/*
+ * =============================================================
+ * VALIDATE POPUP
+ * =============================================================
+ */
+function validateBookingPayment()
+{
+    clearBookingEmailError();
+
+
+    const totalAmount =
+        currentBookingTotalAmount();
+
+
+    if (
+        !totalAmount
+        ||
+        totalAmount <= 0
+    ) {
+        showBookingEmailError(
+            'Please enter a valid Total Service Cost.'
+        );
+
+        totalServiceCostInput
+            ?.focus();
+
+        return false;
+    }
+
+
+    /*
+     * =========================================================
+     * PAYMENT DUE
+     * =========================================================
+     */
+    if (
+        bookingPaymentMode
+            === 'payment_due'
+    ) {
+        const advance =
+            parseBookingAmount(
+                advanceAmountInput
+                    ?.value
+            );
+
+
+        if (
+            !advance
+            ||
+            advance <= 0
+        ) {
+            showBookingEmailError(
+                'Please enter a valid Advance Payment Due Now amount.'
+            );
+
+            advanceAmountInput
+                ?.focus();
+
+            return false;
+        }
+
+
+        if (
+            advance
+            > totalAmount
+        ) {
+            showBookingEmailError(
+                'Advance Payment Due Now cannot exceed Total Service Cost.'
+            );
+
+            advanceAmountInput
+                ?.focus();
+
+            return false;
+        }
+
+
+        return true;
+    }
+
+
+    /*
+     * =========================================================
+     * INSTALLMENTS
+     * =========================================================
+     */
+    const installments =
+        collectBookingInstallments();
+
+
+    if (
+        installments.length === 0
+    ) {
+        showBookingEmailError(
+            'Please add at least one installment.'
+        );
+
+        return false;
+    }
+
+
+    let totalInstallments =
+        0;
+
+
+    for (
+        const installment
+        of installments
+    ) {
+        if (
+            !isValidBookingDueDate(
+                installment.date
+            )
+        ) {
+            showBookingEmailError(
+                'Please enter every Due Date in dd/mm/yy format.'
+            );
+
+            return false;
+        }
+
+
+        if (
+            !installment.amount
+            ||
+            installment.amount <= 0
+        ) {
+            showBookingEmailError(
+                'Please enter a valid Amount for every installment.'
+            );
+
+            return false;
+        }
+
+
+        totalInstallments +=
+            installment.amount;
+    }
+
+
+    if (
+        totalInstallments
+        > totalAmount
+    ) {
+        showBookingEmailError(
+            'Total installment amount cannot exceed Total Service Cost.'
+        );
+
+        return false;
+    }
+
+
+    return true;
+}
+
+
+/*
+ * =============================================================
+ * KEEP ADVANCE IN SYNC WITH TOTAL
+ *
+ * Only until salesperson manually changes Advance.
+ * =============================================================
+ */
+advanceAmountInput
+    ?.addEventListener(
+        'input',
+        function () {
+
+            advanceAmountManuallyEdited =
+                true;
+
+        }
+    );
+
+
+totalServiceCostInput
+    ?.addEventListener(
+        'input',
+        function () {
+
+            if (
+                bookingPaymentMode
+                    !== 'payment_due'
+            ) {
+                return;
+            }
+
+
+            if (
+                advanceAmountManuallyEdited
+            ) {
+                return;
+            }
+
+
+            const total =
+                currentBookingTotalAmount();
+
+
+            advanceAmountInput.value =
+                total > 0
+                    ? total.toFixed(
+                        2
+                    )
+                    : '';
+
+        }
+    );
+
+
+/*
+ * =============================================================
+ * OPEN PREVIEW
+ * =============================================================
+ */
+bookingEmailButton
+    ?.addEventListener(
+        'click',
+        async function () {
+
+            const button =
+                this;
+
+
+            const originalText =
+                button.textContent;
+
+
+            bookingCurrentLeadId =
+                button.getAttribute(
+                    'data-lead-id'
+                );
+
+
+            if (
+                !bookingCurrentLeadId
+            ) {
+                alert(
+                    'Lead ID is missing.'
+                );
+
+                return;
+            }
+
+
+            clearBookingEmailError();
+
+
+            button.disabled =
+                true;
+
+
+            button.textContent =
+                'Loading Preview...';
+
+
+            try {
+                const response =
+                    await fetch(
+                        bookingEmailUrl(
+                            bookingCurrentLeadId
+                        ),
+                        {
+                            method:
+                                'POST',
+
+                            headers: {
+                                'Content-Type':
+                                    'application/json',
+
+                                'Accept':
+                                    'application/json',
+
+                                'X-CSRF-TOKEN':
+                                    '{{ csrf_token() }}',
+
+                                'X-Requested-With':
+                                    'XMLHttpRequest'
+                            },
+
+                            credentials:
+                                'same-origin',
+
+                            body:
+                                JSON.stringify({
+                                    preview_only:
+                                        true
+                                })
                         }
-                    })
-                .then(response => response.json().then(data => ({
-                    ok: response.ok,
-                    data
-                })))
-                .then(({ ok, data }) => {
-                    if (!ok || !data.success) {
-                        alert('Error: ' + (data.message || 'Failed to send booking email'));
-                        return;
+                    );
+
+
+                const data =
+                    await response
+                        .json();
+
+
+                if (
+                    !response.ok
+                    ||
+                    !data.success
+                ) {
+                    throw new Error(
+                        data.message
+                        ||
+                        'Unable to prepare email preview.'
+                    );
+                }
+
+
+                bookingTotalAmount =
+                    parseBookingAmount(
+                        data.total_amount
+                    );
+
+
+                bookingEmailTo.value =
+                    data.customer_email
+                    || '';
+
+
+                bookingEmailSubject.value =
+                    data.subject
+                    || '';
+
+
+                bookingEmailBeforePayment
+                    .textContent =
+                    data.body_before_payment
+                    || '';
+
+
+                bookingEmailAfterPayment
+                    .textContent =
+                    data.body_after_payment
+                    || '';
+
+
+                /*
+                 * IMPORTANT:
+                 *
+                 * Text input receives numeric
+                 * editable value, NOT ₹53,000.
+                 */
+                totalServiceCostInput.value =
+                    bookingTotalAmount > 0
+                        ? bookingTotalAmount
+                            .toFixed(
+                                2
+                            )
+                        : '';
+
+
+                /*
+                 * Payment Due defaults to
+                 * full service cost.
+                 */
+                advanceAmountInput.value =
+                    bookingTotalAmount > 0
+                        ? bookingTotalAmount
+                            .toFixed(
+                                2
+                            )
+                        : '';
+
+
+                advanceAmountManuallyEdited =
+                    false;
+
+
+                resetBookingInstallments();
+
+
+                setBookingPaymentMode(
+                    'payment_due'
+                );
+
+
+                openBookingEmailModal();
+
+            } catch (
+                error
+            ) {
+                console.error(
+                    'Booking email preview error:',
+                    error
+                );
+
+
+                alert(
+                    error.message
+                    ||
+                    'Unable to prepare booking email preview.'
+                );
+
+            } finally {
+                button.disabled =
+                    false;
+
+
+                button.textContent =
+                    originalText;
+            }
+
+        }
+    );
+
+
+/*
+ * =============================================================
+ * PAYMENT MODE BUTTONS
+ * =============================================================
+ */
+paymentDueButton
+    ?.addEventListener(
+        'click',
+        function () {
+
+            setBookingPaymentMode(
+                'payment_due'
+            );
+
+        }
+    );
+
+
+installmentButton
+    ?.addEventListener(
+        'click',
+        function () {
+
+            setBookingPaymentMode(
+                'installment'
+            );
+
+        }
+    );
+
+
+document
+    .getElementById(
+        'add-booking-installment'
+    )
+    ?.addEventListener(
+        'click',
+        function () {
+
+            addBookingInstallment();
+
+        }
+    );
+
+
+/*
+ * =============================================================
+ * FINAL SEND
+ * =============================================================
+ */
+confirmSendButton
+    ?.addEventListener(
+        'click',
+        async function () {
+
+            if (
+                !validateBookingPayment()
+            ) {
+                return;
+            }
+
+
+            const button =
+                this;
+
+
+            const originalHtml =
+                button.innerHTML;
+
+
+            /*
+             * IMPORTANT:
+             *
+             * total_amount is now included.
+             *
+             * It is only used to render this email.
+             */
+            const payload = {
+                payment_mode:
+                    bookingPaymentMode,
+
+                total_amount:
+                    currentBookingTotalAmount()
+            };
+
+
+            if (
+                bookingPaymentMode
+                    === 'payment_due'
+            ) {
+                payload.advance_amount =
+                    parseBookingAmount(
+                        advanceAmountInput
+                            ?.value
+                    );
+            } else {
+                payload.installments =
+                    collectBookingInstallments();
+            }
+
+
+            button.disabled =
+                true;
+
+
+            button.innerHTML =
+                '<i class="ri-loader-4-line animate-spin me-1"></i> Sending...';
+
+
+            clearBookingEmailError();
+
+
+            try {
+                const response =
+                    await fetch(
+                        bookingEmailUrl(
+                            bookingCurrentLeadId
+                        ),
+                        {
+                            method:
+                                'POST',
+
+                            headers: {
+                                'Content-Type':
+                                    'application/json',
+
+                                'Accept':
+                                    'application/json',
+
+                                'X-CSRF-TOKEN':
+                                    '{{ csrf_token() }}',
+
+                                'X-Requested-With':
+                                    'XMLHttpRequest'
+                            },
+
+                            credentials:
+                                'same-origin',
+
+                            body:
+                                JSON.stringify(
+                                    payload
+                                )
+                        }
+                    );
+
+
+                const data =
+                    await response
+                        .json();
+
+
+                if (
+                    !response.ok
+                    ||
+                    !data.success
+                ) {
+                    let message =
+                        data.message
+                        ||
+                        'Failed to send booking email.';
+
+
+                    if (
+                        data.errors
+                    ) {
+                        const firstError =
+                            Object
+                                .values(
+                                    data.errors
+                                )
+                                .flat()
+                                [0];
+
+
+                        if (
+                            firstError
+                        ) {
+                            message =
+                                firstError;
+                        }
                     }
 
-                    const displayLink = data.short_link || data.registration_link || '';
-                    const registrationInput = document.getElementById('registration-link-input');
-                    const generateBtn = document.getElementById('generate-registration-link-btn');
 
-                    if (displayLink && registrationInput) {
-                        registrationInput.value = displayLink;
-                        document.getElementById('registration-link-container').style.display = 'block';
-                        document.getElementById('copy-registration-link-btn').style.display = 'inline-block';
+                    throw new Error(
+                        message
+                    );
+                }
+
+
+                /*
+                 * Existing registration-link
+                 * behaviour remains.
+                 */
+                const displayLink =
+                    data.short_link
+                    ||
+                    data.registration_link
+                    ||
+                    '';
+
+
+                const registrationInput =
+                    document
+                        .getElementById(
+                            'registration-link-input'
+                        );
+
+
+                const generateBtn =
+                    document
+                        .getElementById(
+                            'generate-registration-link-btn'
+                        );
+
+
+                const registrationContainer =
+                    document
+                        .getElementById(
+                            'registration-link-container'
+                        );
+
+
+                const copyButton =
+                    document
+                        .getElementById(
+                            'copy-registration-link-btn'
+                        );
+
+
+                if (
+                    displayLink
+                    &&
+                    registrationInput
+                ) {
+                    registrationInput.value =
+                        displayLink;
+
+
+                    if (
+                        registrationContainer
+                    ) {
+                        registrationContainer
+                            .style
+                            .display =
+                            'block';
                     }
 
-                    if (generateBtn) {
-                        generateBtn.disabled = true;
-                        generateBtn.textContent = 'Link Generated';
-                        generateBtn.setAttribute('aria-disabled', 'true');
-                    }
 
-                    showSuccessMessage(data.message || 'Booking confirmation email sent successfully!');
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    alert('Error sending booking email');
-                })
-                .finally(() => {
-                    btn.disabled = false;
-                    btn.textContent = originalText;
-                });
-        });
+                    if (
+                        copyButton
+                    ) {
+                        copyButton
+                            .style
+                            .display =
+                            'inline-block';
+                    }
+                }
+
+
+                if (
+                    generateBtn
+                ) {
+                    generateBtn.disabled =
+                        true;
+
+
+                    generateBtn.textContent =
+                        'Link Generated';
+
+
+                    generateBtn.setAttribute(
+                        'aria-disabled',
+                        'true'
+                    );
+                }
+
+
+                closeBookingEmailModal();
+
+
+                showSuccessMessage(
+                    data.message
+                    ||
+                    'Booking confirmation email sent successfully!'
+                );
+
+            } catch (
+                error
+            ) {
+                console.error(
+                    'Booking email send error:',
+                    error
+                );
+
+
+                showBookingEmailError(
+                    error.message
+                    ||
+                    'Error sending booking email.'
+                );
+
+            } finally {
+                button.disabled =
+                    false;
+
+
+                button.innerHTML =
+                    originalHtml;
+            }
+
+        }
+    );
+
+
+/*
+ * =============================================================
+ * CLOSE BUTTONS
+ * =============================================================
+ */
+document
+    .getElementById(
+        'close-booking-email-preview-modal'
+    )
+    ?.addEventListener(
+        'click',
+        closeBookingEmailModal
+    );
+
+
+document
+    .getElementById(
+        'cancel-booking-email-preview'
+    )
+    ?.addEventListener(
+        'click',
+        closeBookingEmailModal
+    );
+
+
+/*
+ * Close if actual dark backdrop is clicked.
+ */
+bookingEmailModal
+    ?.addEventListener(
+        'click',
+        function (
+            event
+        ) {
+
+            if (
+                event.target
+                    === bookingEmailModal
+            ) {
+                closeBookingEmailModal();
+            }
+
+        }
+    );
+
+
+/*
+ * Escape closes popup.
+ */
+document
+    .addEventListener(
+        'keydown',
+        function (
+            event
+        ) {
+
+            if (
+                event.key
+                    !== 'Escape'
+            ) {
+                return;
+            }
+
+
+            if (
+                bookingEmailModal
+                &&
+                !bookingEmailModal
+                    .classList
+                    .contains(
+                        'hidden'
+                    )
+            ) {
+                closeBookingEmailModal();
+            }
+
+        }
+    );
 
         // Copy registration link functionality
         document.getElementById('copy-registration-link-btn').addEventListener('click', function() {

@@ -7,6 +7,8 @@ use App\Http\Controllers\Api\WhatCrmSendMessageController;
 use App\Http\Controllers\Api\WhatsAppLeadController;
 use App\Http\Controllers\Api\InstagramLeadController;
 use App\Http\Controllers\Api\CallSummaryController;
+use App\Http\Controllers\Api\WebsiteLeadWebhookController;
+use App\Http\Controllers\Api\LeadApiController;
 
 
 /*
@@ -24,13 +26,26 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
 
-use App\Http\Controllers\Api\LeadApiController;
-
 // Secure endpoints for external AI workflows (n8n, etc.)
 Route::middleware(['verify.lead.key', 'throttle:60,1'])->group(function () {
     Route::get('/leads', [LeadApiController::class, 'index']);
     Route::post('/leads', [LeadApiController::class, 'store']);
 });
+
+Route::post(
+    '/website-leads',
+    [
+        WebsiteLeadWebhookController::class,
+        'store',
+    ]
+)
+->middleware([
+    'website.lead.auth',
+    'throttle:60,1',
+])
+->name(
+    'api.website-leads.store'
+);
 
 Route::post(
     '/whatsapp-leads',

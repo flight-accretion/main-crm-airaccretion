@@ -50,6 +50,11 @@ class LeadAllocationService
                     (string) $queueItem->reason,
                     'email_'
                 )
+                ||
+                str_starts_with(
+                    (string) $queueItem->reason,
+                    'website_'
+                )
             ) {
                 $salesperson = app(
                     EmailLeadAllocationService::class

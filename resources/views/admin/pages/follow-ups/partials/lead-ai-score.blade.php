@@ -319,6 +319,21 @@
                 </div>
 
 
+                {{-- SCORE REASON --}}
+                <div class="mb-6">
+
+                    <h5 class="font-semibold mb-2">
+                        Why This Score
+                    </h5>
+
+                    <p
+                        id="ai-score-reason"
+                        class="text-gray-700 dark:text-white/70"
+                    ></p>
+
+                </div>
+
+
                 {{-- SCORE CHANGE REASON --}}
                 <div class="mb-6">
 
@@ -972,7 +987,7 @@
             summary
                 .slice(
                     0,
-                    3
+                    2
                 )
                 .forEach(
                     function (
@@ -1021,6 +1036,23 @@
                     );
 
             }
+
+        }
+
+
+        /*
+         * Score reason
+         */
+        const scoreReason =
+            document.getElementById(
+                'ai-score-reason'
+            );
+
+        if (scoreReason) {
+
+            scoreReason.textContent =
+                data.score_reason
+                || '-';
 
         }
 
@@ -1324,6 +1356,23 @@
             showError(
                 'AI analysis could not be completed. The lead and follow-up remain unchanged.',
                 true
+            );
+
+            return;
+
+        }
+
+        if (
+            data.status === 'skipped'
+        ) {
+
+            stopPolling();
+
+            setButtonFailed();
+
+            showError(
+                'AI analysis was skipped because this lead is no longer eligible for scoring.',
+                false
             );
 
             return;

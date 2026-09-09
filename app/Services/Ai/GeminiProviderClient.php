@@ -2,11 +2,16 @@
 
 namespace App\Services\Ai;
 
+use App\Exceptions\AiProviderException;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use RuntimeException;
 
 class GeminiProviderClient
-    implements AiProviderClientInterface
+    implements AiProviderClientInterface,
+    AiProviderDetailedClientInterface
 {
     public function generate(
         string $model,
@@ -66,6 +71,36 @@ class GeminiProviderClient
         string $input,
         array $responseSchema
     ): array {
+        return $this->generateDetailed(
+            $model,
+            $apiKey,
+            $instructions,
+            $input,
+            [
+                'response_schema' =>
+                    $responseSchema,
+            ]
+        );
+    }
+
+    public function generateDetailed(
+        string $model,
+        string $apiKey,
+        string $instructions,
+        string $input,
+        array $options = []
+    ): array {
+        $responseSchema =
+            $options['response_schema']
+            ?? $options['responseSchema']
+            ?? null;
+
+        if (!is_array($responseSchema)) {
+            throw new RuntimeException(
+                'Structured response schema is required.'
+            );
+        }
+
         $body = [
             'system_instruction' => [
                 'parts' => [
@@ -92,7 +127,7 @@ class GeminiProviderClient
 
             'generationConfig' => [
                 'temperature' => 0.2,
-                'maxOutputTokens' => 700,
+                'maxOutputTokens' => 800,
                 'responseMimeType' => 'application/json',
                 'responseSchema' => $responseSchema,
                 'thinkingConfig' => [
@@ -101,13 +136,22 @@ class GeminiProviderClient
             ],
         ];
 
-        $response =
-            $this->postRequest(
-                $this->url($model),
-                $apiKey,
-                $body,
-                60
+        try {
+            $response =
+                $this->postRequest(
+                    $this->url($model),
+                    $apiKey,
+                    $body,
+                    60
+                );
+        } catch (ConnectionException $e) {
+            throw new AiProviderException(
+                'AI provider request timed out or could not connect.',
+                true,
+                null,
+                $e
             );
+        }
 
         if (
             !$response->successful()
@@ -123,29 +167,50 @@ class GeminiProviderClient
                 ]
             );
 
-            $response =
-                $this->postRequest(
-                    $this->url($model),
-                    $apiKey,
-                    $body,
-                    60
+            try {
+                $response =
+                    $this->postRequest(
+                        $this->url($model),
+                        $apiKey,
+                        $body,
+                        60
+                    );
+            } catch (ConnectionException $e) {
+                throw new AiProviderException(
+                    'AI provider request timed out or could not connect.',
+                    true,
+                    null,
+                    $e
                 );
+            }
         }
 
         if (!$response->successful()) {
-            throw new RuntimeException(
-                'AI provider request failed.'
+            throw $this->providerException(
+                $response
             );
         }
 
         $payload =
             $response->json() ?: [];
 
-        return [
-            'text' =>
+        try {
+            $text =
                 $this->extractText(
                     $payload
-                ),
+                );
+        } catch (RuntimeException $e) {
+            throw new AiProviderException(
+                $e->getMessage(),
+                false,
+                null,
+                $e
+            );
+        }
+
+        return [
+            'text' =>
+                $text,
 
             'usage' => [
                 'input_tokens' =>
@@ -166,6 +231,13 @@ class GeminiProviderClient
                     (int) data_get(
                         $payload,
                         'usageMetadata.candidatesTokenCount',
+                        0
+                    ),
+
+                'thinking_tokens' =>
+                    (int) data_get(
+                        $payload,
+                        'usageMetadata.thoughtsTokenCount',
                         0
                     ),
 
@@ -196,7 +268,7 @@ class GeminiProviderClient
         string $apiKey,
         array $body,
         int $timeout
-    ) {
+    ): Response {
         return Http::timeout(
             $timeout
         )
@@ -210,6 +282,54 @@ class GeminiProviderClient
                 $url,
                 $body
             );
+    }
+
+    private function providerException(
+        Response $response
+    ): AiProviderException {
+        $status =
+            (int) $response->status();
+
+        $payload =
+            $response->json() ?: [];
+
+        $providerMessage =
+            data_get(
+                $payload,
+                'error.message'
+            );
+
+        if (!is_string($providerMessage)) {
+            $providerMessage =
+                $response->body();
+        }
+
+        $providerMessage =
+            trim((string) $providerMessage);
+
+        $retryable =
+            $status === 408
+            || $status === 429
+            || $status >= 500;
+
+        $message =
+            'AI provider request failed'
+            . ($status ? " ({$status})" : '');
+
+        if ($providerMessage !== '') {
+            $message .= ': '
+                . Str::limit(
+                    $providerMessage,
+                    500,
+                    ''
+                );
+        }
+
+        return new AiProviderException(
+            $message,
+            $retryable,
+            $status
+        );
     }
 
     private function url(

@@ -40,6 +40,24 @@ class EmailLeadService
             ];
         }
 
+        $sourceType =
+            ($email['source_type'] ?? 'email') === 'website_form'
+                ? 'website_form'
+                : 'email';
+
+        $isWebsiteLead =
+            $sourceType === 'website_form';
+
+        $sourceLabel =
+            $isWebsiteLead
+                ? 'Website Form'
+                : 'Email';
+
+        $sourceSlug =
+            $isWebsiteLead
+                ? 'website form'
+                : 'email';
+
         $parsed = $this->parser->parse(
             $email['body']
         );
@@ -47,7 +65,11 @@ class EmailLeadService
         return DB::transaction(
             function () use (
                 $email,
-                $parsed
+                $parsed,
+                $sourceType,
+                $isWebsiteLead,
+                $sourceLabel,
+                $sourceSlug
             ) {
                 /*
                  * Create processing/audit log FIRST.
@@ -57,8 +79,11 @@ class EmailLeadService
                         'message_id' =>
                             $email['message_id'],
 
+                        'source_type' =>
+                            $sourceType,
+
                         'imap_uid' =>
-                            $email['uid'],
+                            $email['uid'] ?? null,
 
                         'sender_email' =>
                             $email['sender_email'],
@@ -111,7 +136,9 @@ class EmailLeadService
                         'error';
 
                     $emailLog->processing_message =
-                        'Customer phone number not found in email.';
+                        'Customer phone number not found in '
+                        . $sourceLabel
+                        . ' lead.';
 
                     $emailLog->processed_at = now();
 
@@ -140,7 +167,9 @@ class EmailLeadService
                         'repeat_lead';
 
                     $emailLog->processing_message =
-                        'Existing active lead found. Email follow-up added to existing lead.';
+                        'Existing active lead found. '
+                        . $sourceLabel
+                        . ' follow-up added to existing lead.';
 
                     $emailLog->processed_at =
                         now();
@@ -169,7 +198,9 @@ class EmailLeadService
                         $this->allocationService
                             ->queueLead(
                                 $existingLead,
-                                'email_repeat_lead'
+                                $isWebsiteLead
+                                    ? 'website_repeat_lead'
+                                    : 'email_repeat_lead'
                             );
 
                         $this->followupService
@@ -203,7 +234,11 @@ class EmailLeadService
                         'name' =>
                             $parsed['name']
                             ?: (
-                                'Email Lead '
+                                (
+                                    $isWebsiteLead
+                                        ? 'Website Lead '
+                                        : 'Email Lead '
+                                )
                                 . $parsed['phone']
                             ),
 
@@ -239,6 +274,11 @@ class EmailLeadService
                             (string) $client->name,
                             'Email Lead '
                         )
+                        ||
+                        str_starts_with(
+                            (string) $client->name,
+                            'Website Lead '
+                        )
                     )
                 ) {
                     $client->name =
@@ -268,7 +308,9 @@ class EmailLeadService
                         );
 
                 $descriptionParts = [
-                    'Lead received automatically from Email.',
+                    'Lead received automatically from '
+                    . $sourceLabel
+                    . '.',
                 ];
 
                 if ($parsed['service']) {
@@ -388,11 +430,15 @@ class EmailLeadService
                         'salesperson_id' =>
                             $salesperson->id,
                         'action' =>
-                            'email_assigned',
+                            $isWebsiteLead
+                                ? 'website_assigned'
+                                : 'email_assigned',
                         'result' =>
                             'success',
                         'details' =>
-                            'Assigned from Email using dynamic source lead routing.',
+                            'Assigned from '
+                            . $sourceLabel
+                            . ' using dynamic source lead routing.',
                     ]);
 
                     $emailLog->processing_status =
@@ -400,8 +446,16 @@ class EmailLeadService
 
                     $emailLog->processing_message =
                         $productId
-                        ? 'New email lead created with matched product and assigned immediately.'
-                        : 'New email lead created. Product not matched; assigned to fallback retail allocation.';
+                        ? (
+                            'New '
+                            . $sourceSlug
+                            . ' lead created with matched product and assigned immediately.'
+                        )
+                        : (
+                            'New '
+                            . $sourceSlug
+                            . ' lead created. Product not matched; assigned to fallback retail allocation.'
+                        );
 
                     $emailLog->processed_at =
                         now();
@@ -434,8 +488,16 @@ class EmailLeadService
 
                 $emailLog->processing_message =
                     $productId
-                    ? 'New email lead created with matched product and queued for allocation.'
-                    : 'New email lead created. Product not matched; queued for fallback allocation.';
+                    ? (
+                        'New '
+                        . $sourceSlug
+                        . ' lead created with matched product and queued for allocation.'
+                    )
+                    : (
+                        'New '
+                        . $sourceSlug
+                        . ' lead created. Product not matched; queued for fallback allocation.'
+                    );
 
                 $emailLog->processed_at =
                     now();
@@ -448,9 +510,17 @@ class EmailLeadService
                 $this->allocationService
                     ->queueLead(
                         $lead,
-                        $isCharterProduct
-                            ? 'email_charter_lead'
-                            : 'email_new_lead'
+                        $isWebsiteLead
+                            ? (
+                                $isCharterProduct
+                                    ? 'website_charter_lead'
+                                    : 'website_new_lead'
+                            )
+                            : (
+                                $isCharterProduct
+                                    ? 'email_charter_lead'
+                                    : 'email_new_lead'
+                            )
                     );
 
                 $this->followupService
