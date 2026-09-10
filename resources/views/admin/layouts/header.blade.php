@@ -1227,8 +1227,7 @@
                             </a>
                         </li>
                          
-                        @if(canAccess($userType, $adminRoles) || canAccess($userType, $accountRoles))
-                            <!-- Accounts Reports -->
+                        <!-- @if(canAccess($userType, $adminRoles) || canAccess($userType, $accountRoles) || canAccess($userType, $salesRoles))
                             <li class="slide has-sub {{ Route::is('admin.report.sales') || Route::is('admin.report.vendor') || Route::is('admin.report.profit-loss') ? 'open active' : '' }}">
                                 <a href="javascript:void(0);" class="side-menu__item">
                                     <i class="bx bx-file side-menu__icon"></i>
@@ -1250,7 +1249,61 @@
                                     </li>
                                 </ul>
                             </li>
-                        @endif
+                        @endif -->
+
+                        @php
+                        $canViewSalesReport =
+                            canAccess($userType, $adminRoles) ||
+                            canAccess($userType, $accountRoles) ||
+                            canAccess($userType, $salesRoles);
+
+                        $canViewAccountReports =
+                            canAccess($userType, $adminRoles) ||
+                            canAccess($userType, $accountRoles);
+
+                        $canViewAnyAccountReport =
+                            $canViewSalesReport || $canViewAccountReports;
+
+                        $isAccountReportOpen =
+                            Route::is('admin.report.sales') ||
+                            ($canViewAccountReports && (
+                                Route::is('admin.report.vendor') ||
+                                Route::is('admin.report.profit-loss') ||
+                                Route::is('admin.report.kpi')
+                            ));
+                    @endphp
+
+                    @if($canViewAnyAccountReport)
+                        <li class="slide has-sub {{ $isAccountReportOpen ? 'open active' : '' }}">
+                            <a href="javascript:void(0);" class="side-menu__item">
+                                <i class="bx bx-file side-menu__icon"></i>
+                                <span class="side-menu__label">Accounts Reports</span>
+                                <i class="fe fe-chevron-right side-menu__angle"></i>
+                            </a>
+
+                            <ul class="slide-menu child1">
+                                @if($canViewSalesReport)
+                                    <li class="slide {{ Route::is('admin.report.sales') ? 'active' : '' }}">
+                                        <a href="{{ route('admin.report.sales') }}" class="side-menu__item">Sales Report</a>
+                                    </li>
+                                @endif
+
+                                @if($canViewAccountReports)
+                                    <li class="slide {{ Route::is('admin.report.vendor') ? 'active' : '' }}">
+                                        <a href="{{ route('admin.report.vendor') }}" class="side-menu__item">Vendor Report</a>
+                                    </li>
+
+                                    <li class="slide {{ Route::is('admin.report.profit-loss') ? 'active' : '' }}">
+                                        <a href="{{ route('admin.report.profit-loss') }}" class="side-menu__item">Profit/Loss Report</a>
+                                    </li>
+
+                                    <li class="slide {{ Route::is('admin.report.kpi') ? 'active' : '' }}">
+                                        <a href="{{ route('admin.report.kpi') }}" class="side-menu__item">KPI Report</a>
+                                    </li>
+                                @endif
+                            </ul>
+                        </li>
+                    @endif
                         <!-- Payment Review Direct Link -->
                         @if (canAccess($userType, $adminRoles) || canAccess($userType, $accountRoles) || canAccess($userType, $operationsManagerRoles))
                             <li class="slide {{ Route::is('admin.account.payment-review*') ? 'active' : '' }}">
