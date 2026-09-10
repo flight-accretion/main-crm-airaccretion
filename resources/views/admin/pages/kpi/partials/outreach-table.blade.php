@@ -35,7 +35,7 @@
                                     <span>DNP</span>
                                 </label>
                                 <button class="ti-btn ti-btn-warning mt-1" {{ $locked ? 'disabled' : '' }}>
-                                    DNP
+                                    Save
                                 </button>
                             </form>
                         </td>

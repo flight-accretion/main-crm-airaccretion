@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\KpiOutreachAssignment;
 use App\Services\Kpi\KpiOutreachContextService;
 use App\Services\Kpi\KpiOutreachService;
 use Illuminate\Http\Request;
