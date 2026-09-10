@@ -155,6 +155,11 @@ class Lead extends Model
         return $this->hasOne(LeadFollowup::class, 'lead_id')->latest('created_at');
     }
 
+    public function latestAiScore()
+    {
+        return $this->hasOne(LeadAiScore::class, 'lead_id')->latest('created_at');
+    }
+
     public function getNextFollowupAttribute()
     {
         return $this->leadFollowups()

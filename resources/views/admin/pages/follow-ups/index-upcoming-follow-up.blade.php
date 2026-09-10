@@ -46,11 +46,10 @@
                                 id="from-date" value="{{ $fromDate->format('Y-m-d') ?? request('from_date') }}">
                         </div>
                         <div class="xl:col-span-2 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                            <label for="product_id" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Product
-                                *</label>
+                            <label for="product_id" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Product</label>
                             <select class="js-example-basic-single w-full form-control-sm" name="product_id"
-                                id="product_id" required>
-                                <option value="">Select Product</option>
+                                id="product_id">
+                                <option value="">All Products</option>
                                 @foreach ($products as $product)
                                 <option value="{{ $product->id }}" {{ old('product_id')==$product->id ||
                                     request('product_id') == $product->id ? 'selected' : '' }}>
@@ -61,6 +60,23 @@
                             @error('product_id')
                             <span class="text-red-500 text-xs">{{ $message }}</span>
                             @enderror
+                        </div>
+                        <div class="xl:col-span-2 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
+                            <label for="lead_score_temperature"
+                                class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Lead Score</label>
+                            <select class="js-example-basic-single w-full form-control-sm"
+                                name="lead_score_temperature" id="lead_score_temperature">
+                                <option value="">All Scores</option>
+                                <option value="hot" {{ request('lead_score_temperature') == 'hot' ? 'selected' : '' }}>
+                                    Hot
+                                </option>
+                                <option value="neutral" {{ request('lead_score_temperature') == 'neutral' ? 'selected' : '' }}>
+                                    Neutral
+                                </option>
+                                <option value="cold" {{ request('lead_score_temperature') == 'cold' ? 'selected' : '' }}>
+                                    Cold
+                                </option>
+                            </select>
                         </div>
                         @if(!in_array(Auth::user()->userType->user_type, [\App\Models\UserType::SALES_EXECUTIVE]))
                         <div class="xl:col-span-2 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
@@ -114,6 +130,7 @@
                             <tr class="border-b border-defaultborder">
 
                                 <th>Sr.No</th>
+                                <th>Lead Score</th>
                                 <th>Name</th>
                                 <!-- <th>Email</th> -->
                                 <th>Phone</th>
@@ -131,6 +148,34 @@
                             <tr class="border-b border-defaultborder" @if(!empty($obj->is_missed) && $obj->is_missed)
                                 style="background-color: #fded57ff;" @endif>
                                 <td class="text-center">{{ $intKey + 1 }}</td>
+                                <td class="text-center">
+                                    @php
+                                        $leadAiScore = $obj->enquiry->latestAiScore ?? null;
+                                        $leadScoreTemperature = strtolower((string) ($leadAiScore->temperature ?? ''));
+                                        $leadScoreValue = $leadAiScore->score ?? null;
+                                        $leadScoreClass = match ($leadScoreTemperature) {
+                                            'hot' => 'bg-danger/10 text-danger',
+                                            'neutral' => 'bg-warning/10 text-warning',
+                                            'cold' => 'bg-info/10 text-info',
+                                            default => 'bg-black/10 text-gray-600',
+                                        };
+                                    @endphp
+
+                                    @if($leadAiScore && $leadAiScore->status === 'completed' && $leadScoreTemperature)
+                                        <span class="badge {{ $leadScoreClass }}">
+                                            {{ strtoupper($leadScoreTemperature) }}
+                                            @if($leadScoreValue !== null)
+                                                {{ $leadScoreValue }}
+                                            @endif
+                                        </span>
+                                    @elseif($leadAiScore && in_array($leadAiScore->status, ['pending', 'processing'], true))
+                                        <span class="badge bg-warning/10 text-warning">Analysing</span>
+                                    @elseif($leadAiScore && $leadAiScore->status === 'failed')
+                                        <span class="badge bg-danger/10 text-danger">Failed</span>
+                                    @else
+                                        <span class="text-muted">-</span>
+                                    @endif
+                                </td>
                                 <td>{{ $obj->enquiry->client->name }}</td>
                                 <!-- <td>{{ $obj->enquiry->client->email }}</td> -->
                                 <td>{{ $obj->enquiry->client->contact_number }}</td>

@@ -38,7 +38,7 @@ class UpcomingFollowUpController extends Controller
 
     // Base query used for both today's and missed follow-ups
     // eager load enquiry and its representative so views can display staff representative name
-    $baseQuery = LeadFollowup::with(['enquiry', 'enquiry.representative']);
+    $baseQuery = LeadFollowup::with(['enquiry', 'enquiry.representative', 'enquiry.latestAiScore']);
             // ->whereNotNull('service_ids')
             // ->whereRaw("service_ids::text != '[]'");
 
@@ -169,7 +169,7 @@ class UpcomingFollowUpController extends Controller
             // most recent scheduled follow-up date; fall back to created_at to break ties).
             // This avoids showing an older "missed" follow-up when a newer follow-up
             // for the same lead (e.g. scheduled for today) has been created.
-            $latestFollowupForLead = LeadFollowup::with(['enquiry', 'enquiry.representative'])
+            $latestFollowupForLead = LeadFollowup::with(['enquiry', 'enquiry.representative', 'enquiry.latestAiScore'])
                 ->where('lead_id', $leadId)
                 ->orderByDesc('next_followup_date')
                 ->orderByDesc('created_at')
@@ -222,24 +222,97 @@ class UpcomingFollowUpController extends Controller
         $arrFollowUps = $notMissed->values()->merge($missed->values());
 
         if ($request->filled('product_id')) {
-            $serviceIds = Service::whereJsonContains('product_ids', $request->product_id)
+            $selectedProductId = (string) $request->product_id;
+            $serviceIds = Service::query()
+                ->get(['id', 'product_ids'])
+                ->filter(function ($service) use ($selectedProductId) {
+                    return in_array(
+                        $selectedProductId,
+                        $this->normalizeIdList($service->product_ids),
+                        true
+                    );
+                })
                 ->pluck('id')
+                ->map(fn ($id) => (string) $id)
+                ->values()
                 ->toArray();
 
-            $arrFollowUps = $arrFollowUps->filter(function ($row) use ($serviceIds) {
-                if (empty($row->service_ids)) return false;
+            $arrFollowUps = $arrFollowUps
+                ->filter(fn ($row) => $this->followupMatchesProduct($row, $selectedProductId, $serviceIds))
+                ->values();
+        }
 
-                $json = trim($row->service_ids, '"');
-                $json = str_replace('\\"', '"', $json);
-                $ids = json_decode($json, true);
+        if ($request->filled('lead_score_temperature')) {
+            $selectedTemperature = strtolower((string) $request->lead_score_temperature);
 
-                return is_array($ids) && count(array_intersect($ids, $serviceIds)) > 0;
-            });
+            if (in_array($selectedTemperature, ['hot', 'neutral', 'cold'], true)) {
+                $arrFollowUps = $arrFollowUps
+                    ->filter(function ($row) use ($selectedTemperature) {
+                        $temperature = strtolower(
+                            (string) optional(optional($row->enquiry)->latestAiScore)->temperature
+                        );
+
+                        return $temperature === $selectedTemperature;
+                    })
+                    ->values();
+            }
         }
 
         $products = Product::where('status', 1)->get();
 
         return view('admin.pages.follow-ups.index-upcoming-follow-up', compact('fromDate', 'arrFollowUps', 'products', 'assignedExecutives'));
+    }
+
+    private function followupMatchesProduct(LeadFollowup $followup, string $productId, array $serviceIdsForProduct): bool
+    {
+        $lead = $followup->enquiry;
+
+        if (!$lead) {
+            return false;
+        }
+
+        $leadProductIds = $this->normalizeIdList($lead->product_ids ?? []);
+        if (in_array($productId, $leadProductIds, true)) {
+            return true;
+        }
+
+        $leadServiceIds = $this->normalizeIdList($lead->service_ids ?? []);
+        if (!empty(array_intersect($leadServiceIds, $serviceIdsForProduct))) {
+            return true;
+        }
+
+        $followupServiceIds = $this->normalizeIdList($followup->service_ids ?? []);
+
+        return !empty(array_intersect($followupServiceIds, $serviceIdsForProduct));
+    }
+
+    private function normalizeIdList($value): array
+    {
+        if ($value instanceof \Illuminate\Support\Collection) {
+            $value = $value->all();
+        }
+
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+
+            if (!is_array($decoded)) {
+                $decoded = json_decode(
+                    str_replace('\\"', '"', trim($value, '"')),
+                    true
+                );
+            }
+
+            $value = is_array($decoded) ? $decoded : [];
+        }
+
+        if (!is_array($value)) {
+            return [];
+        }
+
+        return array_values(array_unique(array_filter(array_map(
+            fn ($id) => (string) $id,
+            $value
+        ), fn ($id) => $id !== '')));
     }
 
 
