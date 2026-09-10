@@ -59,6 +59,16 @@ class Kernel extends ConsoleKernel
         ->withoutOverlapping()
         ->appendOutputTo(storage_path('logs/vi-ivr-sync.log'));
 
+        $schedule
+            ->command('lead-ai:process-pending --limit=2')
+            ->everyMinute()
+            ->withoutOverlapping()
+            ->appendOutputTo(
+                storage_path(
+                    'logs/lead-ai-scoring.log'
+                )
+            );
+
          $schedule->command('email:fetch-leads')
         ->everyFiveMinutes()
         ->withoutOverlapping()

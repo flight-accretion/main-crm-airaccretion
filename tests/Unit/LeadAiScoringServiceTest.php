@@ -15,6 +15,7 @@ use App\Services\LeadAiOpenAiClient;
 use App\Services\LeadAiScoringService;
 use Carbon\Carbon;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Schema;
@@ -379,6 +380,61 @@ class LeadAiScoringServiceTest extends TestCase
         $this->assertTrue(
             $capturedPayload['crm']['email_source_lead'] ?? false
         );
+    }
+
+    public function test_pending_ai_score_command_processes_unclaimed_pending_scores(): void
+    {
+        $user =
+            $this->salesUser();
+
+        $lead =
+            Lead::create([
+                'id' => (string) Str::uuid(),
+                'representative_user_id' => $user->id,
+            ]);
+
+        $followup =
+            $this->followup(
+                $lead,
+                $user,
+                'Customer confirmed yacht requirement.',
+                null,
+                Carbon::create(2026, 9, 8, 9, 0, 0)
+            );
+
+        $score =
+            LeadAiScore::create([
+                'id' => (string) Str::uuid(),
+                'lead_id' => $lead->id,
+                'followup_id' => $followup->id,
+                'status' => 'pending',
+                'created_at' => Carbon::create(2026, 9, 8, 9, 1, 0),
+                'updated_at' => Carbon::create(2026, 9, 8, 9, 1, 0),
+            ]);
+
+        $this->mock(
+            LeadAiOpenAiClient::class,
+            function ($mock) {
+                $mock
+                    ->shouldReceive('analyse')
+                    ->once()
+                    ->andReturn($this->aiResult());
+            }
+        );
+
+        $exitCode =
+            Artisan::call(
+                'lead-ai:process-pending',
+                [
+                    '--limit' => 10,
+                ]
+            );
+
+        $score->refresh();
+
+        $this->assertSame(0, $exitCode);
+        $this->assertSame('completed', $score->status);
+        $this->assertNotNull($score->processed_at);
     }
 
     private function activeSetting(): void
