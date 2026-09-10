@@ -1195,6 +1195,31 @@
                             </li>
                         @endif
 
+                        @if (canAccess($userType, $adminRoles) || canAccess($userType, $salesRoles) || canAccess($userType, $operationsRoles) || canAccess($userType, $accountRoles))
+                            <li class="slide has-sub {{ Route::is('admin.kpi.*') ? 'open active' : '' }}">
+                                <a href="javascript:void(0);" class="side-menu__item">
+                                    <i class="bx bx-bar-chart-alt-2 side-menu__icon"></i>
+                                    <span class="side-menu__label">KPI</span>
+                                    <i class="fe fe-chevron-right side-menu__angle"></i>
+                                </a>
+                                <ul class="slide-menu child1">
+                                    <li class="slide {{ Route::is('admin.kpi.index') ? 'active' : '' }}">
+                                        <a href="{{ route('admin.kpi.index') }}" class="side-menu__item">KPI Dashboard</a>
+                                    </li>
+                                    @if (canAccess($userType, $salesRoles) || canAccess($userType, $adminRoles))
+                                        <li class="slide {{ Route::is('admin.kpi.outreach.*') ? 'active' : '' }}">
+                                            <a href="{{ route('admin.kpi.outreach.index') }}" class="side-menu__item">Daily Outreach</a>
+                                        </li>
+                                    @endif
+                                    @if (auth()->user()?->isSuperAdmin())
+                                        <li class="slide {{ Route::is('admin.kpi.manage') ? 'active' : '' }}">
+                                            <a href="{{ route('admin.kpi.manage') }}" class="side-menu__item">KPI Management</a>
+                                        </li>
+                                    @endif
+                                </ul>
+                            </li>
+                        @endif
+
                         <li class="slide {{ Route::is('admin.report') ? 'active' : '' }}">
                             <a href="{{ route('admin.report') }}" class="side-menu__item">
                                 <i class="bx bx-task side-menu__icon"></i>

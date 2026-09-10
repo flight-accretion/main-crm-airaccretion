@@ -102,7 +102,7 @@
                 ● NEUTRAL
             @endif
 
-            {{ $aiScore->score }}/100
+            <!-- {{ $aiScore->score }}/100 -->
 
             @if($aiMovement !== null)
 
@@ -139,14 +139,20 @@
      ========================================================== --}}
 <div
     id="lead-ai-score-modal"
-    class="hidden fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4"
+    class="hidden fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4 overflow-y-auto"
     role="dialog"
     aria-modal="true"
     aria-labelledby="lead-ai-score-modal-title"
 >
-
     <div
-        class="bg-white dark:bg-bodybg rounded-lg shadow-xl  max-h-[90vh] overflow-y-auto"
+        class="min-h-full flex items-center justify-center px-4 py-8"
+    >
+    <div
+        class="bg-white dark:bg-bodybg rounded-lg shadow-xl overflow-y-auto"
+        style="border: 1px solid #dcdbdbe8;
+                margin-top: 20px;
+                margin-bottom: 20px;   
+                width: 60vw;"
     >
 
         {{-- HEADER --}}
@@ -252,7 +258,7 @@
                     </div>
 
 
-                    <div
+                    <!-- <div
                         class="md:col-span-4 col-span-12"
                     >
 
@@ -265,7 +271,7 @@
                             class="font-bold text-xl mt-1"
                         ></div>
 
-                    </div>
+                    </div> -->
 
 
                     <div
@@ -305,7 +311,7 @@
 
 
                 {{-- SUMMARY --}}
-                <div class="mb-6">
+                <!-- <div class="mb-6">
 
                     <h5 class="font-semibold mb-2">
                         AI Summary
@@ -316,11 +322,11 @@
                         class="list-disc ps-5 space-y-2"
                     ></ul>
 
-                </div>
+                </div> -->
 
 
                 {{-- SCORE REASON --}}
-                <div class="mb-6">
+                <!-- <div class="mb-6">
 
                     <h5 class="font-semibold mb-2">
                         Why This Score
@@ -331,11 +337,11 @@
                         class="text-gray-700 dark:text-white/70"
                     ></p>
 
-                </div>
+                </div> -->
 
 
                 {{-- SCORE CHANGE REASON --}}
-                <div class="mb-6">
+                <!-- <div class="mb-6">
 
                     <h5 class="font-semibold mb-2">
                         Why Score Changed
@@ -346,7 +352,7 @@
                         class="text-gray-700 dark:text-white/70"
                     ></p>
 
-                </div>
+                </div> -->
 
 
                 {{-- SALES COACHING --}}
@@ -444,7 +450,7 @@
         </div>
 
     </div>
-
+</div>
 </div>
 
 

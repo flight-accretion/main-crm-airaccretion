@@ -379,7 +379,7 @@
 
                     <div class="inline-flex items-center justify-center gap-2">
 
-                        <span class="badge bg-success/10 text-success">
+                        <span class="badge bg-success/10 text-success" style="width: auto;">
                             Your Lead
                         </span>
 
@@ -388,6 +388,7 @@
                                 type="button"
                                 class="ti-btn ti-btn-sm ti-btn-info-full inline-flex items-center justify-center gap-1 whitespace-nowrap !px-3 !py-1.5 !text-white open-lead-transfer-offer-btn"
                                 data-lead-id="{{ $payment->lead_id }}"
+                                style="width: auto;"
                             >
                                 <i class="ri-share-forward-line"></i>
                                 Transfer

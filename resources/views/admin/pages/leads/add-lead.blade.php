@@ -77,6 +77,13 @@
                     <div class="col-span-12">
                        <form class="ti-custom-validation" method="POST" action="{{ route('admin.clients.store') }}" novalidate>
                             @csrf
+                            @if(!empty($outreachAssignment))
+                                <input
+                                    type="hidden"
+                                    name="outreach_assignment"
+                                    value="{{ $outreachAssignment->id }}"
+                                >
+                            @endif
                             <div class="box">
                                 <div class="box-header">
                                     <h5 class="box-title">Basic Information</h5>
@@ -86,7 +93,7 @@
                                         <div class="space-y-2">
                                             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Full Name<span class="text-danger">*</span></label>
                                             <input type="hidden" name="client_id" id="client_id_field" value="">
-                                            <input type="text" name="name" class="firstName ti-form-input  rounded-sm form-control-sm" placeholder="Full Name" value="{{ old('name') }}" >
+                                            <input type="text" name="name" class="firstName ti-form-input  rounded-sm form-control-sm" placeholder="Full Name" value="{{ old('name', optional(optional($outreachAssignment ?? null)->pool)->display_name) }}" >
                                             @error('name')
                                                     <span class="text-red-500 text-xs">{{ $message }}</span>
                                             @enderror
@@ -116,8 +123,8 @@
                                             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Phone Number<span class="text-danger">*</span></label>
                                             <input id="phone" type="tel" name="contact_number"
                                             class="ti-form-input rounded-sm form-control-sm intl-phone-input"
-                                                value="{{ old('contact_number') }}" required>
-                                            <input type="hidden" name="contact_country_code" id="contact_country_code" value="{{ old('contact_country_code') }}">
+                                                value="{{ old('contact_number', optional($outreachAssignment ?? null)->normalized_phone) }}" required>
+                                            <input type="hidden" name="contact_country_code" id="contact_country_code" value="{{ old('contact_country_code', !empty($outreachAssignment) ? '+91' : '') }}">
                                             @error('contact_number') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                                         </div>
 
@@ -125,8 +132,8 @@
                                             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">WhatsApp Number</label>
                                             <input id="whatsapp" type="tel" name="alternate_number"
                                                 class="ti-form-input rounded-sm form-control-sm intl-phone-input"
-                                                value="{{ old('alternate_number') }}" required>
-                                            <input type="hidden" name="whatsapp_country_code" id="whatsapp_country_code" value="{{ old('whatsapp_country_code') }}">
+                                                value="{{ old('alternate_number', optional($outreachAssignment ?? null)->normalized_phone) }}" required>
+                                            <input type="hidden" name="whatsapp_country_code" id="whatsapp_country_code" value="{{ old('whatsapp_country_code', !empty($outreachAssignment) ? '+91' : '') }}">
                                             @error('alternate_number') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                                         </div>
                                         <div class="space-y-2">

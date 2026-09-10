@@ -20,6 +20,7 @@ class UserType extends Model
     const OPERATIONS_MANAGER = 'Operations Manager';
     const OPERATIONS_EXECUTIVE = 'Operations Executive';
     const HR = 'Hr';
+    // const owner = 'owner';
 
     // Group roles by team or permission
     const ACCOUNTS_ROLES = [

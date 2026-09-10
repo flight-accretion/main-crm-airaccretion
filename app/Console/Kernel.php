@@ -54,6 +54,16 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping()
             ->appendOutputTo(storage_path('logs/lead-allocation.log'));
 
+        $schedule->command('kpi:sync-outreach-pool')
+            ->dailyAt('00:15')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/kpi-outreach-pool.log'));
+
+        $schedule->command('kpi:purge-outreach-remarks')
+            ->dailyAt('00:45')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/kpi-outreach-remarks.log'));
+
         $schedule->command('ivr:fetch-vi-leads')
         ->everyFiveMinutes()
         ->withoutOverlapping()

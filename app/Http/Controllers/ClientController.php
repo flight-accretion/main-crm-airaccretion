@@ -40,6 +40,8 @@ use function App\Helpers\getRepresentativeIds;
 use App\Services\ActiveLeadService;
 use App\Models\LeadAllocationQueue;
 use App\Models\LeadAiScore;
+use App\Models\KpiOutreachAssignment;
+use App\Services\Kpi\KpiOutreachService;
 
 class ClientController extends Controller
 {
@@ -572,13 +574,23 @@ if ($isSuperAdmin) {
     );
     }
 
-    public function create()
+    public function create(Request $request)
     {
         $products = Product::where('status', 1)->get();
         // Get staff based on logged-in user hierarchy
         $staff = $this->getUsersInHierarchy();
         $countries = Country::all();
         $cities = collect();
+        $outreachAssignment = null;
+
+        if ($request->filled('outreach_assignment')) {
+            $outreachAssignment = KpiOutreachAssignment::with('pool')
+                ->where('id', $request->input('outreach_assignment'))
+                ->where('user_id', auth()->id())
+                ->where('status', 'pending')
+                ->first();
+        }
+
         $existingClients = Client::with('country')
             ->where('status', 1)
             ->orderBy('name')
@@ -601,7 +613,7 @@ if ($isSuperAdmin) {
                 ->where('status', 1)
                 ->get();
         }
-        return view('admin.pages.leads.add-lead', compact('products', 'staff', 'countries', 'cities', 'existingClients'));
+        return view('admin.pages.leads.add-lead', compact('products', 'staff', 'countries', 'cities', 'existingClients', 'outreachAssignment'));
     }
 
     public function store(Request $request)
@@ -687,6 +699,7 @@ if ($isSuperAdmin) {
             'requirement_description' => ['nullable', 'string', 'max:1000'],
             // Status validation
             'status' => 'required|integer|in:0,2', // 0=Initiated, 2=Cancelled
+            'outreach_assignment' => 'nullable|uuid|exists:kpi_outreach_assignments,id',
         ];
 
         // Client-specific validation rules
@@ -964,10 +977,31 @@ try {
                 'followed_by' => auth()->id(),
                 'status' => $request->status,
             ]);
+
+            if ($request->filled('outreach_assignment')) {
+                $assignment = KpiOutreachAssignment::query()
+                    ->where('id', $request->input('outreach_assignment'))
+                    ->where('user_id', auth()->id())
+                    ->where('status', 'pending')
+                    ->firstOrFail();
+
+                app(KpiOutreachService::class)->completeWithLead(
+                    $assignment,
+                    $request->user(),
+                    $enquiry
+                );
+            }
+
             DB::commit();
 
             $statusMessage = $request->status == 2 ? 'Lead cancelled and' : 'Lead created successfully.';
             $clientMessage = $usingExistingClient ? 'Client information has been updated.' : 'New client has been created.';
+
+            if ($request->filled('outreach_assignment')) {
+                return redirect()
+                    ->route('admin.kpi.outreach.index')
+                    ->with('success', $statusMessage . ' ' . $clientMessage . ' KPI outreach action completed.');
+            }
 
             return redirect()
                 ->route('admin.clients.create')
