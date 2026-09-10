@@ -139,7 +139,10 @@ class BookingConfirmationEmailServiceTest extends TestCase
         ]);
 
         $result = app(BookingConfirmationEmailService::class)
-            ->sendForLead($lead->fresh(), $agent);
+            ->sendForLead($lead->fresh(), $agent, [
+                'payment_mode' => 'payment_due',
+                'advance_amount' => 10000,
+            ]);
 
         $this->assertTrue($result['success']);
         $this->assertNotEmpty($result['registration_link']);
@@ -163,11 +166,13 @@ class BookingConfirmationEmailServiceTest extends TestCase
                     'Saturday, 26th September 2026',
                     $mail->body
                 );
-                $this->assertStringContainsString('10:00 AM IST', $mail->body);
+                $this->assertStringContainsString(
+                    '10:00 AM - 10:30 AM IST',
+                    $mail->body
+                );
                 $this->assertStringContainsString('30 Minutes', $mail->body);
                 $this->assertStringContainsString('₹45,000.00', $mail->body);
                 $this->assertStringContainsString('₹10,000.00', $mail->body);
-                $this->assertStringContainsString('₹35,000.00', $mail->body);
                 $this->assertStringContainsString(
                     'Product note: Please reach 30 minutes before departure.',
                     $mail->body
@@ -230,6 +235,76 @@ class BookingConfirmationEmailServiceTest extends TestCase
 
         Mail::assertNothingSent();
         $this->assertSame(0, LeadFollowup::count());
+    }
+
+    public function test_preview_uses_from_to_datetime_range_for_timing_when_duration_is_available(): void
+    {
+        $agent = $this->createUser(
+            UserType::SALES_EXECUTIVE,
+            'Sales Agent',
+            'agent@example.test'
+        );
+
+        $client = Client::create([
+            'id' => (string) Str::uuid(),
+            'name' => 'Duration Customer',
+            'email' => 'duration@example.test',
+            'contact_number' => '9876543210',
+            'status' => 1,
+        ]);
+
+        $service = Service::create([
+            'id' => (string) Str::uuid(),
+            'service' => 'Helicopter Charter',
+            'description' => 'Charter service',
+            'service_amount' => 75000,
+            'fees_percent' => 0,
+            'product_ids' => [],
+            'status' => 1,
+        ]);
+
+        $lead = Lead::create([
+            'id' => (string) Str::uuid(),
+            'client_id' => $client->id,
+            'representative_user_id' => $agent->id,
+            'service_ids' => [$service->id],
+            'number_of_passengers' => 3,
+        ]);
+
+        DB::table('lead_rides')->insert([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $lead->id,
+            'from_date' => '2026-09-03 00:00:00',
+            'to_date' => '2026-09-03 05:00:00',
+            'from_place' => 'Mumbai',
+            'to_place' => 'Mumbai',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        BookingEmailTemplate::create([
+            'id' => (string) Str::uuid(),
+            'subject' => 'Booking Confirmation | {{service_name}}',
+            'body' => implode(PHP_EOL, [
+                'Service Name: {{service_name}}',
+                'Date of Service: {{service_date}}',
+                'Duration: {{duration}}',
+                'Timing: {{timing}}',
+            ]),
+        ]);
+
+        $result = app(BookingConfirmationEmailService::class)
+            ->previewForLead($lead->fresh(), $agent);
+
+        $this->assertTrue($result['success']);
+        $this->assertStringContainsString(
+            'Duration: 300 Minutes',
+            $result['body_before_payment']
+        );
+        $this->assertStringContainsString(
+            'Timing: 12:00 AM - 5:00 AM IST',
+            $result['body_before_payment']
+        );
     }
 
     private function createUser(

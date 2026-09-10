@@ -1807,6 +1807,61 @@ private function paymentSectionPositions(
                 $ride->from_date
             );
 
+        $toDate =
+            !empty(
+                $ride->to_date
+            )
+                ? Carbon::parse(
+                    $ride->to_date
+                )
+                : null;
+
+        if (
+            $toDate
+            &&
+            $date->lt(
+                $toDate
+            )
+            &&
+            (
+                $date->format(
+                    'H:i:s'
+                )
+                !== '00:00:00'
+                ||
+                $toDate->format(
+                    'H:i:s'
+                )
+                !== '00:00:00'
+            )
+        ) {
+            if (
+                $date->toDateString()
+                ===
+                $toDate->toDateString()
+            ) {
+                return
+                    $date->format(
+                        'g:i A'
+                    )
+                    . ' - '
+                    . $toDate->format(
+                        'g:i A'
+                    )
+                    . ' IST';
+            }
+
+            return
+                $date->format(
+                    'j M Y g:i A'
+                )
+                . ' - '
+                . $toDate->format(
+                    'j M Y g:i A'
+                )
+                . ' IST';
+        }
+
 
         if (
             $date->format(
