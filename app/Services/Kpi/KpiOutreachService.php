@@ -8,6 +8,7 @@ use App\Models\KpiOutreachPool;
 use App\Models\Lead;
 use App\Models\User;
 use App\Services\ActiveLeadService;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -90,6 +91,31 @@ class KpiOutreachService
             ->where('allocation_type', 'extra')
             ->where('status', 'pending')
             ->exists();
+    }
+
+    public function pendingAssignments(
+        User $user,
+        string $type,
+        array $filters = []
+    ): Collection {
+        $query = KpiOutreachAssignment::with('pool')
+            ->where('user_id', $user->id)
+            ->where('allocation_type', $type)
+            ->where('status', 'pending');
+
+        $number = $this->normalizePhoneFilter($filters['number'] ?? null);
+
+        if ($number !== null) {
+            $query->where('normalized_phone', 'like', "%{$number}%");
+        }
+
+        if (!empty($filters['date'])) {
+            $query->whereDate('assigned_at', $filters['date']);
+        }
+
+        return $query
+            ->orderBy('assigned_at')
+            ->get();
     }
 
     public function requestExtra(User $user): KpiOutreachBatch
@@ -268,5 +294,18 @@ class KpiOutreachService
         ) {
             abort(403, 'This outreach record is not available to this user.');
         }
+    }
+
+    private function normalizePhoneFilter(?string $value): ?string
+    {
+        $digits = preg_replace('/\D+/', '', (string) $value);
+
+        if ($digits === '') {
+            return null;
+        }
+
+        return strlen($digits) > 10
+            ? substr($digits, -10)
+            : $digits;
     }
 }

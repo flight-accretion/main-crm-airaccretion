@@ -7,7 +7,6 @@
                     <th>Mobile</th>
                     <th>Last Called</th>
                     <th>Last Product</th>
-                    <th>Skyrec Summary</th>
                     <th>DNP</th>
                     <th>Remark</th>
                     <th>Fresh Lead</th>
@@ -22,9 +21,6 @@
                             {{ $row->last_called_at_display ? \Carbon\Carbon::parse($row->last_called_at_display)->format('d M Y, h:i A') : 'Never' }}
                         </td>
                         <td>{{ $row->last_product_display ?: '-' }}</td>
-                        <td style="white-space:normal;min-width:260px;max-width:420px;">
-                            {{ $row->latest_skyrec_summary ?: 'No connected call summary yet' }}
-                        </td>
                         <td>
                             <form method="POST" action="{{ route('admin.kpi.outreach.dnp', $row) }}">
                                 @csrf
@@ -39,20 +35,20 @@
                                     <span>DNP</span>
                                 </label>
                                 <button class="ti-btn ti-btn-warning mt-1" {{ $locked ? 'disabled' : '' }}>
-                                    Save DNP
+                                    DNP
                                 </button>
                             </form>
                         </td>
-                        <td style="min-width:280px;">
+                        <td style="min-width:360px;">
                             <form method="POST" action="{{ route('admin.kpi.outreach.remark', $row) }}">
                                 @csrf
                                 <textarea
                                     name="remark"
-                                    rows="2"
+                                    rows="3"
                                     class="ti-form-input"
-                                    placeholder="Outcome / next context"
+                                    placeholder="Skyrec summary / outcome / next context"
                                     {{ $locked ? 'disabled' : '' }}
-                                ></textarea>
+                                >{{ old('remark', $row->latest_skyrec_summary ?: '') }}</textarea>
                                 <button class="ti-btn ti-btn-info mt-1" {{ $locked ? 'disabled' : '' }}>
                                     Save Remark
                                 </button>
@@ -73,7 +69,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="8" class="text-center text-muted">No outreach numbers available.</td>
+                        <td colspan="7" class="text-center text-muted">No outreach numbers available.</td>
                     </tr>
                 @endforelse
             </tbody>

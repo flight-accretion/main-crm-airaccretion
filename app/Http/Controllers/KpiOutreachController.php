@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\KpiOutreachAssignment;
 use App\Services\Kpi\KpiOutreachContextService;
 use App\Services\Kpi\KpiOutreachService;
 use Illuminate\Http\Request;
@@ -15,30 +14,25 @@ class KpiOutreachController extends Controller
         KpiOutreachContextService $context
     ) {
         $user = $request->user();
+        $filters = $request->validate([
+            'number' => 'nullable|string|max:30',
+            'date' => 'nullable|date_format:Y-m-d',
+        ]);
 
         $service->releaseAssignmentsThatNowHaveActiveLeads($user);
         $service->ensureStandardQueue($user);
 
-        $standard = KpiOutreachAssignment::with('pool')
-            ->where('user_id', $user->id)
-            ->where('allocation_type', 'standard')
-            ->where('status', 'pending')
-            ->orderBy('assigned_at')
-            ->get();
-
-        $extra = KpiOutreachAssignment::with('pool')
-            ->where('user_id', $user->id)
-            ->where('allocation_type', 'extra')
-            ->where('status', 'pending')
-            ->orderBy('assigned_at')
-            ->get();
-
         return view('admin.pages.kpi.outreach', [
-            'standard' => $context->enrich($standard),
-            'extra' => $context->enrich($extra),
+            'standard' => $context->enrich(
+                $service->pendingAssignments($user, 'standard', $filters)
+            ),
+            'extra' => $context->enrich(
+                $service->pendingAssignments($user, 'extra', $filters)
+            ),
             'standardCompletedToday' => $service->standardCompletedToday($user),
             'standardLocked' => $service->standardActionsLocked($user),
             'canRequestExtra' => $service->canRequestExtra($user),
+            'filters' => $filters,
         ]);
     }
 

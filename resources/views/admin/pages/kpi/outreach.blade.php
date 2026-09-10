@@ -29,6 +29,40 @@
     </div>
 @endif
 
+<div class="box mb-4">
+    <div class="box-body">
+        <form method="GET" action="{{ route('admin.kpi.outreach.index') }}" class="grid grid-cols-12 gap-3 items-end">
+            <div class="col-span-12 md:col-span-4">
+                <label class="form-label">Mobile Number</label>
+                <input
+                    type="text"
+                    name="number"
+                    value="{{ $filters['number'] ?? '' }}"
+                    class="ti-form-input"
+                    placeholder="Search mobile number"
+                >
+            </div>
+
+            <div class="col-span-12 md:col-span-3">
+                <label class="form-label">Outreach Date</label>
+                <input
+                    type="date"
+                    name="date"
+                    value="{{ $filters['date'] ?? '' }}"
+                    class="ti-form-input"
+                >
+            </div>
+
+            <div class="col-span-12 md:col-span-5 flex gap-2">
+                <button class="ti-btn ti-btn-primary">Filter</button>
+                <a href="{{ route('admin.kpi.outreach.index') }}" class="ti-btn ti-btn-light">
+                    Reset
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
 <h5 class="font-semibold mb-2">Standard Rolling Queue ({{ $standard->count() }})</h5>
 @include('admin.pages.kpi.partials.outreach-table', ['rows' => $standard, 'locked' => $standardLocked])
 

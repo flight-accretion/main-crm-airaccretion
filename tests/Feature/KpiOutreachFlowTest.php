@@ -97,6 +97,32 @@ class KpiOutreachFlowTest extends TestCase
         $this->assertNull($assignment->active_phone_key);
     }
 
+    public function test_pending_assignments_can_be_filtered_by_number_and_date(): void
+    {
+        $user = $this->user('Filtered Sales');
+        $other = $this->user('Other Sales');
+
+        $this->pool('6500009001');
+        $this->pool('6500009002');
+        $this->pool('6500009003');
+
+        $this->assignment($user, '6500009001', 'standard', '2026-09-10 09:00:00');
+        $this->assignment($user, '6500009002', 'standard', '2026-09-09 09:00:00');
+        $this->assignment($other, '6500009003', 'standard', '2026-09-10 09:00:00');
+
+        $rows = app(KpiOutreachService::class)->pendingAssignments(
+            $user,
+            'standard',
+            [
+                'number' => '+91 6500009001',
+                'date' => '2026-09-10',
+            ]
+        );
+
+        $this->assertCount(1, $rows);
+        $this->assertSame('6500009001', $rows->first()->normalized_phone);
+    }
+
     private function user(string $name): User
     {
         $user = new User([
@@ -116,6 +142,25 @@ class KpiOutreachFlowTest extends TestCase
             'normalized_phone' => $phone,
             'display_name' => 'Customer ' . substr($phone, -2),
             'last_seen_at' => now(),
+        ]);
+    }
+
+    private function assignment(
+        User $user,
+        string $phone,
+        string $type,
+        string $assignedAt
+    ): void {
+        $pool = KpiOutreachPool::where('normalized_phone', $phone)->firstOrFail();
+
+        KpiOutreachAssignment::create([
+            'pool_id' => $pool->id,
+            'user_id' => $user->id,
+            'allocation_type' => $type,
+            'normalized_phone' => $phone,
+            'active_phone_key' => $phone,
+            'status' => 'pending',
+            'assigned_at' => $assignedAt,
         ]);
     }
 
