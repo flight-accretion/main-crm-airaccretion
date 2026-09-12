@@ -1548,7 +1548,7 @@
                                                     ${!payment.file ? 'disabled' : ''}>
                                                 <i class="ri-eye-line me-1"></i>View Receipt
                                             </button>
-                                            <a href="${payment.file ? (payment.file.startsWith('followups/') ? '/storage/' + payment.file : '/storage/followups/' + payment.file) : '#'}" 
+                                            <a href="${payment.file ? followupReceiptUrl(payment.file) : '#'}"
                                                class="ti-btn ti-btn-outline-info download-receipt-btn ${!payment.file ? 'disabled pointer-events-none opacity-50' : ''}" 
                                                download
                                                ${!payment.file ? 'disabled' : ''}>
@@ -1680,17 +1680,22 @@
                 viewReceipt(fileName, paymentId);
             });
 
+            const followupReceiptBaseUrl = "{{ url('/admin/followups/files') }}";
+
+            function followupReceiptUrl(fileName) {
+                const normalizedFileName = String(fileName || '')
+                    .replace(/\\/g, '/')
+                    .split('/')
+                    .pop();
+
+                return normalizedFileName
+                    ? `${followupReceiptBaseUrl}/${encodeURIComponent(normalizedFileName)}`
+                    : '#';
+            }
+
             // Function to view receipt
             function viewReceipt(fileName, paymentId) {
-                // Handle file names that already include the followups/ path
-                let fileUrl;
-                if (fileName.startsWith('followups/')) {
-                    // File name already includes the folder path
-                    fileUrl = `/storage/${fileName}`;
-                } else {
-                    // File name is just the filename
-                    fileUrl = `/storage/followups/${fileName}`;
-                }
+                const fileUrl = followupReceiptUrl(fileName);
                 const fileExtension = fileName.split('.').pop().toLowerCase();
 
                 let content = '';

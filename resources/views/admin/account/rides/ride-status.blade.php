@@ -4771,17 +4771,22 @@ function closeRefundSuccessModal() {
             viewReceipt(fileName, paymentId);
         });
 
+        const followupReceiptBaseUrl = "{{ url('/admin/followups/files') }}";
+
+        function followupReceiptUrl(fileName) {
+            const normalizedFileName = String(fileName || '')
+                .replace(/\\/g, '/')
+                .split('/')
+                .pop();
+
+            return normalizedFileName
+                ? `${followupReceiptBaseUrl}/${encodeURIComponent(normalizedFileName)}`
+                : '#';
+        }
+
         // Function to view receipt
         function viewReceipt(fileName, paymentId) {
-            // Handle file names that already include the followups/ path
-            let fileUrl;
-            if (fileName.startsWith('followups/')) {
-                // File name already includes the folder path
-                fileUrl = `/storage/${fileName}`;
-            } else {
-                // File name doesn't include the folder path, add it
-                fileUrl = `/storage/followups/${fileName}`;
-            }
+            const fileUrl = followupReceiptUrl(fileName);
 
             // opening file url
 
