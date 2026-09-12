@@ -40,6 +40,7 @@ use function App\Helpers\getRepresentativeIds;
 use App\Services\ActiveLeadService;
 use App\Models\LeadAllocationQueue;
 use App\Models\LeadAiScore;
+use App\Models\LeadAiScoringSetting;
 use App\Models\KpiOutreachAssignment;
 use App\Services\Kpi\KpiOutreachService;
 
@@ -3298,6 +3299,9 @@ try {
         )
         ->first();
 
+        $leadAiScoringSetting =
+            LeadAiScoringSetting::active();
+
         $aiBookedClosed =
             app(LeadAiCurrentFactsService::class)
                 ->isBookedClosed($lead);
@@ -3309,6 +3313,8 @@ try {
             'lead' => $lead,
             'latestAiScore' =>
              $latestAiScore,
+            'leadAiScoringSetting' =>
+                $leadAiScoringSetting,
             'aiBookedClosed' => $aiBookedClosed,
             'services' => $services,
             'allExtraServices' => $allExtraServices,

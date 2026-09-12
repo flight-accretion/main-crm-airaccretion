@@ -94,4 +94,30 @@ class LeadAiScore extends Model
             'previous_score_id'
         );
     }
+
+    public function displayTemperature(
+        ?LeadAiScoringSetting $setting = null
+    ): ?string {
+        if ($this->score !== null) {
+            if (!$setting) {
+                $setting =
+                    LeadAiScoringSetting::active();
+            }
+
+            return $setting->temperatureFor(
+                (int) $this->score
+            );
+        }
+
+        $temperature =
+            strtolower(
+                trim(
+                    (string) $this->temperature
+                )
+            );
+
+        return $temperature !== ''
+            ? $temperature
+            : null;
+    }
 }

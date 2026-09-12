@@ -250,6 +250,9 @@ class LeadAiScoreController extends Controller
     private function payload(
         LeadAiScore $score
     ): array {
+        $setting =
+            LeadAiScoringSetting::active();
+
         $previous =
             $score->previousScore;
 
@@ -278,7 +281,9 @@ class LeadAiScoreController extends Controller
                 $score->status,
 
             'temperature' =>
-                $score->temperature,
+                $score->displayTemperature(
+                    $setting
+                ),
 
             'score' =>
                 $score->score,

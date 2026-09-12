@@ -185,11 +185,17 @@ PROMPT;
     public function temperatureFor(
         int $score
     ): string {
-        if ($score <= 39) {
+        $coldMax =
+            (int) ($this->cold_max ?? 39);
+
+        $neutralMax =
+            (int) ($this->neutral_max ?? 69);
+
+        if ($score <= $coldMax) {
             return 'cold';
         }
 
-        if ($score <= 69) {
+        if ($score <= $neutralMax) {
             return 'neutral';
         }
 

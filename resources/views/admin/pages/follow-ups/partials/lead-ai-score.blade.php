@@ -32,12 +32,16 @@
     $temperature = '';
 
     if (
-        $aiScore !== null &&
-        $aiScore->temperature !== null
+        $aiScore !== null
     ) {
         $temperature =
             strtolower(
-                (string) $aiScore->temperature
+                (string) (
+                    $aiScore->displayTemperature(
+                        $leadAiScoringSetting ?? null
+                    )
+                    ?? ''
+                )
             );
     }
 @endphp
@@ -102,9 +106,9 @@
                 ● NEUTRAL
             @endif
 
-            <!-- {{ $aiScore->score }}/100 -->
+            {{ $aiScore->score }}/100
 
-            @if($aiMovement !== null)
+            @if($aiMovement !== null && $aiMovement !== 0)
 
                 @if($aiMovement > 0)
 
@@ -113,10 +117,6 @@
                 @elseif($aiMovement < 0)
 
                     ▼ {{ $aiMovement }}
-
-                @else
-
-                    — 0
 
                 @endif
 
@@ -258,7 +258,7 @@
                     </div>
 
 
-                    <!-- <div
+                    <div
                         class="md:col-span-4 col-span-12"
                     >
 
@@ -271,7 +271,7 @@
                             class="font-bold text-xl mt-1"
                         ></div>
 
-                    </div> -->
+                    </div>
 
 
                     <div
@@ -952,7 +952,7 @@
                 } else {
 
                     movementElement.textContent =
-                        `${data.previous_score} → ${data.score}  — 0`;
+                        `${data.previous_score} -> ${data.score} (no change)`;
 
                 }
 
@@ -1259,11 +1259,6 @@
 
                 movementText =
                     ` ▼ ${data.movement}`;
-
-            } else {
-
-                movementText =
-                    ' — 0';
 
             }
 

@@ -14,6 +14,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
+use App\Models\LeadAiScoringSetting;
 use function App\Helpers\getRepresentativeIds;
 
 class UpcomingFollowUpController extends Controller
@@ -36,9 +37,10 @@ class UpcomingFollowUpController extends Controller
             $assignedExecutives = \App\Models\User::whereIn('user_type_id', $allTypes)->where('status', 1)->get();
         }
 
-    // Base query used for both today's and missed follow-ups
-    // eager load enquiry and its representative so views can display staff representative name
-    $baseQuery = LeadFollowup::with(['enquiry', 'enquiry.representative', 'enquiry.latestAiScore']);
+        // Base query used for both today's and missed follow-ups
+        // eager load enquiry and its representative so views can display staff representative name
+        $baseQuery = LeadFollowup::with(['enquiry', 'enquiry.representative', 'enquiry.latestAiScore']);
+        $leadAiScoringSetting = LeadAiScoringSetting::active();
             // ->whereNotNull('service_ids')
             // ->whereRaw("service_ids::text != '[]'");
 
@@ -89,7 +91,7 @@ class UpcomingFollowUpController extends Controller
 
             $products = Product::where('status', 1)->get();
             $arrFollowUps = collect();
-            return view('admin.pages.follow-ups.index-upcoming-follow-up', compact('fromDate', 'arrFollowUps', 'products', 'assignedExecutives'));
+            return view('admin.pages.follow-ups.index-upcoming-follow-up', compact('fromDate', 'arrFollowUps', 'products', 'assignedExecutives', 'leadAiScoringSetting'));
         }
 
         // if ($effectiveReps) {
@@ -247,9 +249,20 @@ class UpcomingFollowUpController extends Controller
 
             if (in_array($selectedTemperature, ['hot', 'neutral', 'cold'], true)) {
                 $arrFollowUps = $arrFollowUps
-                    ->filter(function ($row) use ($selectedTemperature) {
+                    ->filter(function ($row) use ($selectedTemperature, $leadAiScoringSetting) {
+                        $score =
+                            optional(
+                                optional($row->enquiry)
+                                    ->latestAiScore
+                            );
+
                         $temperature = strtolower(
-                            (string) optional(optional($row->enquiry)->latestAiScore)->temperature
+                            (string) (
+                                $score->displayTemperature(
+                                    $leadAiScoringSetting
+                                )
+                                ?? ''
+                            )
                         );
 
                         return $temperature === $selectedTemperature;
@@ -260,7 +273,7 @@ class UpcomingFollowUpController extends Controller
 
         $products = Product::where('status', 1)->get();
 
-        return view('admin.pages.follow-ups.index-upcoming-follow-up', compact('fromDate', 'arrFollowUps', 'products', 'assignedExecutives'));
+        return view('admin.pages.follow-ups.index-upcoming-follow-up', compact('fromDate', 'arrFollowUps', 'products', 'assignedExecutives', 'leadAiScoringSetting'));
     }
 
     private function followupMatchesProduct(LeadFollowup $followup, string $productId, array $serviceIdsForProduct): bool

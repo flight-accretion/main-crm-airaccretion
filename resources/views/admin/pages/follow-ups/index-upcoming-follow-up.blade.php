@@ -151,7 +151,11 @@
                                 <td class="text-center">
                                     @php
                                         $leadAiScore = $obj->enquiry->latestAiScore ?? null;
-                                        $leadScoreTemperature = strtolower((string) ($leadAiScore->temperature ?? ''));
+                                        $leadScoreTemperature = strtolower((string) (
+                                            $leadAiScore
+                                                ? $leadAiScore->displayTemperature($leadAiScoringSetting ?? null)
+                                                : ''
+                                        ));
                                         $leadScoreValue = $leadAiScore->score ?? null;
                                         $leadScoreClass = match ($leadScoreTemperature) {
                                             'hot' => 'bg-danger/10 text-danger',
