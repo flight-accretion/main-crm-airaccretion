@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Models\Client;
+use App\Models\IvrCallLog;
 use App\Models\Lead;
 use App\Models\LeadFollowup;
 use App\Models\User;
@@ -178,6 +179,153 @@ class CallSummaryIntegrationServiceTest extends TestCase
             'followup_recording_id' => 2001,
             'followup_note' => 'Customer asked Skyrack to send a revised quotation.',
             'status' => 1,
+        ]);
+    }
+
+    public function test_ivr_lead_id_is_not_trusted_when_call_phone_belongs_to_another_customer(): void
+    {
+        $user = User::create([
+            'name' => 'Pallavi Singh',
+            'email' => 'pallavi-stale-ivr@example.test',
+            'password' => 'secret',
+            'status' => 1,
+        ]);
+
+        $wrongClient = Client::create([
+            'id' => (string) Str::uuid(),
+            'name' => 'Wrong Customer',
+            'contact_number' => '9000000001',
+            'alternate_number' => null,
+            'status' => 1,
+        ]);
+
+        $wrongLead = Lead::create([
+            'id' => (string) Str::uuid(),
+            'client_id' => $wrongClient->id,
+            'representative_user_id' => $user->id,
+        ]);
+
+        $correctClient = Client::create([
+            'id' => (string) Str::uuid(),
+            'name' => 'Correct Customer',
+            'contact_number' => '9000000002',
+            'alternate_number' => null,
+            'status' => 1,
+        ]);
+
+        $correctLead = Lead::create([
+            'id' => (string) Str::uuid(),
+            'client_id' => $correctClient->id,
+            'representative_user_id' => $user->id,
+        ]);
+
+        IvrCallLog::create([
+            'id' => (string) Str::uuid(),
+            'cli' => '9000000002',
+            'normalized_phone' => '9000000002',
+            'agent_name' => 'Pallavi Singh',
+            'call_start_at' => '2026-08-14 16:10:00',
+            'call_end_at' => '2026-08-14 16:18:20',
+            'lead_id' => $wrongLead->id,
+        ]);
+
+        $integration = app(CallSummaryIntegrationService::class)->receive([
+            'phone_number' => '9000000002',
+            'summary' => 'Correct customer asked for a revised quotation.',
+            'followup_date' => '2026-08-15 11:30:00',
+            'call_start_at' => '2026-08-14 16:10:00',
+            'call_end_at' => '2026-08-14 16:18:20',
+            'agent_name' => 'Pallavi Singh',
+            'direction' => 'incoming',
+            'sentiment_score' => 82,
+            'followup_recording_id' => 3001,
+        ]);
+
+        $this->assertSame('ambiguous_match', $integration->status);
+        $this->assertSame('ivr_lead_id_phone_mismatch', $integration->match_method);
+        $this->assertDatabaseMissing('lead_followups', [
+            'lead_id' => $wrongLead->id,
+            'followup_note' => 'Correct customer asked for a revised quotation.',
+        ]);
+        $this->assertDatabaseMissing('lead_followups', [
+            'lead_id' => $correctLead->id,
+            'followup_note' => 'Correct customer asked for a revised quotation.',
+        ]);
+    }
+
+    public function test_phone_fallback_does_not_write_summary_when_same_phone_belongs_to_multiple_customers(): void
+    {
+        $user = User::create([
+            'name' => 'Pallavi Singh',
+            'email' => 'pallavi-duplicate-phone@example.test',
+            'password' => 'secret',
+            'status' => 1,
+        ]);
+
+        $firstClient = Client::create([
+            'id' => (string) Str::uuid(),
+            'name' => 'First Duplicate Phone Customer',
+            'contact_number' => '9000000003',
+            'alternate_number' => null,
+            'status' => 1,
+        ]);
+
+        $secondClient = Client::create([
+            'id' => (string) Str::uuid(),
+            'name' => 'Second Duplicate Phone Customer',
+            'contact_number' => '9000000003',
+            'alternate_number' => null,
+            'status' => 1,
+        ]);
+
+        $firstLead = Lead::create([
+            'id' => (string) Str::uuid(),
+            'client_id' => $firstClient->id,
+            'representative_user_id' => $user->id,
+            'created_at' => now()->subDay(),
+            'updated_at' => now()->subDay(),
+        ]);
+
+        $secondLead = Lead::create([
+            'id' => (string) Str::uuid(),
+            'client_id' => $secondClient->id,
+            'representative_user_id' => $user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        foreach ([$firstLead, $secondLead] as $lead) {
+            LeadFollowup::create([
+                'id' => (string) Str::uuid(),
+                'lead_id' => $lead->id,
+                'next_followup_date' => '2026-08-14 10:00:00',
+                'followup_note' => 'Existing active follow-up',
+                'followed_by' => $user->id,
+                'status' => 1,
+            ]);
+        }
+
+        $integration = app(CallSummaryIntegrationService::class)->receive([
+            'phone_number' => '9000000003',
+            'summary' => 'Duplicate phone caller asked for callback.',
+            'followup_date' => '2026-08-15 11:30:00',
+            'call_start_at' => '2026-08-14 16:10:00',
+            'call_end_at' => '2026-08-14 16:18:20',
+            'agent_name' => 'Pallavi Singh',
+            'direction' => 'incoming',
+            'sentiment_score' => 82,
+            'followup_recording_id' => 3002,
+        ]);
+
+        $this->assertSame('ambiguous_match', $integration->status);
+        $this->assertSame('active_lead_phone_ambiguous', $integration->match_method);
+        $this->assertDatabaseMissing('lead_followups', [
+            'lead_id' => $firstLead->id,
+            'followup_note' => 'Duplicate phone caller asked for callback.',
+        ]);
+        $this->assertDatabaseMissing('lead_followups', [
+            'lead_id' => $secondLead->id,
+            'followup_note' => 'Duplicate phone caller asked for callback.',
         ]);
     }
 

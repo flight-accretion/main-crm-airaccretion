@@ -344,33 +344,93 @@
                                     {{-- Email Product Mapping --}}
                                     <td style="min-width: 450px;">
 
-                                        <select
-                                            name="email_product_assignments[{{ $user->id }}][]"
-                                            class="ti-form-select email-product-select"
-                                            multiple
-                                            data-placeholder="Select Lead Products"
-                                        >
+                                        <div data-lead-product-picker>
 
-                                            @foreach($products as $product)
+                                            <div class="rounded-sm border border-defaultborder bg-white dark:bg-bodybg dark:border-white/10">
 
-                                                <option
-                                                    value="{{ $product->id }}"
-                                                    {{
-                                                        in_array(
-                                                            (string) $product->id,
-                                                            $selectedProducts,
-                                                            true
-                                                        )
-                                                            ? 'selected'
-                                                            : ''
-                                                    }}
+                                                <div class="p-3 border-b border-defaultborder dark:border-white/10">
+
+                                                    <input
+                                                        type="search"
+                                                        class="ti-form-input rounded-sm form-control-sm w-full"
+                                                        placeholder="Search products"
+                                                        aria-label="Search products for {{ $user->name }}"
+                                                        data-lead-product-search
+                                                    >
+
+                                                </div>
+
+                                                <div
+                                                    class="p-3 space-y-2 whitespace-normal"
+                                                    style="max-height: 190px; overflow-y: auto;"
+                                                    data-lead-product-list
                                                 >
-                                                    {{ $product->product }}
-                                                </option>
 
-                                            @endforeach
+                                                    @forelse($products as $product)
 
-                                        </select>
+                                                        @php
+                                                            $productId = (string) $product->id;
+                                                            $isSelected = in_array(
+                                                                $productId,
+                                                                $selectedProducts,
+                                                                true
+                                                            );
+                                                            $searchText = Str::lower(
+                                                                trim((string) $product->product)
+                                                            );
+                                                        @endphp
+
+                                                        <label
+                                                            class="lead-product-option flex items-start gap-3 rounded-sm border border-defaultborder/60 p-2 hover:bg-gray-50 dark:border-white/10 dark:hover:bg-white/5"
+                                                            data-lead-product-option
+                                                            data-search="{{ $searchText }}"
+                                                        >
+
+                                                            <input
+                                                                type="checkbox"
+                                                                name="email_product_assignments[{{ $user->id }}][]"
+                                                                value="{{ $product->id }}"
+                                                                class="ti-form-checkbox mt-1"
+                                                                {{ $isSelected ? 'checked' : '' }}
+                                                            >
+
+                                                            <span class="min-w-0">
+
+                                                                <span class="block font-medium text-defaulttextcolor dark:text-defaulttextcolor/70 break-words">
+                                                                    {{ $product->product }}
+                                                                </span>
+
+                                                            </span>
+
+                                                        </label>
+
+                                                    @empty
+
+                                                        <p class="text-sm text-gray-500 dark:text-white/50">
+                                                            No active products available.
+                                                        </p>
+
+                                                    @endforelse
+
+                                                    <p
+                                                        class="hidden text-sm text-gray-500 dark:text-white/50"
+                                                        data-lead-product-empty
+                                                    >
+                                                        No matching products found.
+                                                    </p>
+
+                                                </div>
+
+                                            </div>
+
+                                            <p
+                                                class="mt-2 text-xs text-gray-500 dark:text-white/50"
+                                                data-lead-product-summary
+                                            >
+                                                Selected: {{ count($selectedProducts) }}
+                                            </p>
+
+                                        </div>
 
                                     </td>
 
@@ -426,3 +486,64 @@
     </form>
 
 @endsection
+
+@push('scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('[data-lead-product-picker]').forEach(function(picker) {
+                const searchInput = picker.querySelector('[data-lead-product-search]');
+                const options = Array.from(picker.querySelectorAll('[data-lead-product-option]'));
+                const emptyMessage = picker.querySelector('[data-lead-product-empty]');
+                const summary = picker.querySelector('[data-lead-product-summary]');
+
+                function updatePicker() {
+                    const query = (searchInput && searchInput.value ? searchInput.value : '').trim().toLowerCase();
+                    let visibleCount = 0;
+                    let selectedCount = 0;
+
+                    options.forEach(function(option) {
+                        const checkbox = option.querySelector('input[type="checkbox"]');
+                        const matches = !query || (option.getAttribute('data-search') || '').includes(query);
+
+                        option.classList.toggle('hidden', !matches);
+
+                        if (matches) {
+                            visibleCount++;
+                        }
+
+                        if (checkbox && checkbox.checked) {
+                            selectedCount++;
+                        }
+                    });
+
+                    if (emptyMessage) {
+                        emptyMessage.classList.toggle('hidden', visibleCount > 0 || options.length === 0);
+                    }
+
+                    if (summary) {
+                        summary.textContent = 'Selected: ' + selectedCount;
+                    }
+                }
+
+                if (searchInput) {
+                    searchInput.addEventListener('input', updatePicker);
+                    searchInput.addEventListener('keydown', function(event) {
+                        if (event.key === 'Enter') {
+                            event.preventDefault();
+                        }
+                    });
+                }
+
+                options.forEach(function(option) {
+                    const checkbox = option.querySelector('input[type="checkbox"]');
+
+                    if (checkbox) {
+                        checkbox.addEventListener('change', updatePicker);
+                    }
+                });
+
+                updatePicker();
+            });
+        });
+    </script>
+@endpush

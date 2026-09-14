@@ -611,6 +611,21 @@ class CallSummaryIntegrationService
 
                 if ($lead) {
 
+                    if (
+                        !$this->ivrLeadPhoneMatches(
+                            $lead,
+                            $ivrLog,
+                            $integration
+                        )
+                    ) {
+
+                        return $this->markAmbiguousMatch(
+                            $integration,
+                            'ivr_lead_id_phone_mismatch',
+                            'IVR call matched an existing lead_id, but the IVR customer phone does not match that lead client.'
+                        );
+                    }
+
                     $integration->lead_id =
                         $lead->id;
 
@@ -645,6 +660,16 @@ class CallSummaryIntegrationService
             | to find it from the customer phone number.
             |
             */
+
+            if ($this->phoneMatchesMultipleCustomers($integration)) {
+
+                return $this->markAmbiguousMatch(
+                    $integration,
+                    'active_lead_phone_ambiguous',
+                    'Phone matched leads for multiple customers, so CRM did not choose one automatically.'
+                );
+            }
+
 
             $activeLead =
                 $this->findActiveLead(
@@ -773,6 +798,16 @@ class CallSummaryIntegrationService
         | No IVR match - search CRM directly by phone
         |--------------------------------------------------------------------------
         */
+
+        if ($this->phoneMatchesMultipleCustomers($integration)) {
+
+            return $this->markAmbiguousMatch(
+                $integration,
+                'active_lead_phone_ambiguous',
+                'Phone matched leads for multiple customers, so CRM did not choose one automatically.'
+            );
+        }
+
 
         $activeLead =
             $this->findActiveLead(
@@ -1519,6 +1554,205 @@ if (
 
 
         return null;
+    }
+
+
+    private function markAmbiguousMatch(
+        CallSummaryIntegration $integration,
+        string $matchMethod,
+        string $message
+    ): CallSummaryIntegration {
+
+        $integration->status =
+            'ambiguous_match';
+
+        $integration->match_method =
+            $matchMethod;
+
+        $integration->match_score =
+            0;
+
+        $integration->last_error =
+            $message;
+
+        $integration->save();
+
+        return $integration->fresh();
+    }
+
+
+    private function phoneMatchesMultipleCustomers(
+        CallSummaryIntegration $integration
+    ): bool {
+
+        $phone =
+            $this->normalizePhone(
+                $integration->normalized_phone
+            );
+
+        if ($phone === '') {
+
+            return false;
+        }
+
+        return $this->leadClientIdsForPhone(
+            $phone
+        )->count() > 1;
+    }
+
+
+    private function leadClientIdsForPhone(
+        string $phone
+    ) {
+
+        [
+            $phoneExpression,
+            $alternatePhoneExpression,
+        ] = $this->clientPhoneSqlExpressions();
+
+        return Lead::query()
+            ->join(
+                'clients',
+                'clients.id',
+                '=',
+                'leads.client_id'
+            )
+            ->where(function ($query) use (
+                $phoneExpression,
+                $alternatePhoneExpression,
+                $phone
+            ) {
+                $query
+                    ->whereRaw(
+                        "{$phoneExpression} LIKE ?",
+                        ['%' . $phone]
+                    )
+                    ->orWhereRaw(
+                        "{$alternatePhoneExpression} LIKE ?",
+                        ['%' . $phone]
+                    );
+            })
+            ->pluck('leads.client_id')
+            ->filter()
+            ->unique()
+            ->values();
+    }
+
+
+    private function ivrLeadPhoneMatches(
+        Lead $lead,
+        IvrCallLog $ivrLog,
+        CallSummaryIntegration $integration
+    ): bool {
+
+        $ivrCustomerPhones =
+            collect([
+                $ivrLog->normalized_phone,
+                $ivrLog->cli,
+            ])
+                ->map(function ($phone) {
+                    return $this->normalizePhone(
+                        $phone
+                    );
+                })
+                ->filter()
+                ->unique()
+                ->values();
+
+        foreach (
+            $ivrCustomerPhones
+            as
+            $phone
+        ) {
+
+            if (
+                $this->leadPhoneStrictlyMatches(
+                    $lead,
+                    $phone
+                )
+            ) {
+
+                return true;
+            }
+        }
+
+        if ($ivrCustomerPhones->isEmpty()) {
+
+            return $this->leadPhoneStrictlyMatches(
+                $lead,
+                $integration->normalized_phone
+            );
+        }
+
+        return false;
+    }
+
+
+    private function leadPhoneStrictlyMatches(
+        Lead $lead,
+        ?string $normalizedPhone
+    ): bool {
+
+        $phone =
+            $this->normalizePhone(
+                $normalizedPhone
+            );
+
+        if ($phone === '') {
+
+            return false;
+        }
+
+        $lead->loadMissing(
+            'client'
+        );
+
+        $crmPhones =
+            collect(
+                [
+                    optional($lead->client)->contact_number,
+                    optional($lead->client)->alternate_number,
+                ]
+            )
+                ->map(function ($crmPhone) {
+                    return $this->normalizePhone(
+                        $crmPhone
+                    );
+                })
+                ->filter()
+                ->values()
+                ->all();
+
+        if (empty($crmPhones)) {
+
+            return false;
+        }
+
+        return in_array(
+            $phone,
+            $crmPhones,
+            true
+        );
+    }
+
+
+    private function clientPhoneSqlExpressions(): array
+    {
+
+        if (config('database.default') === 'pgsql') {
+
+            return [
+                "regexp_replace(clients.contact_number, '[^0-9]', '', 'g')",
+                "regexp_replace(clients.alternate_number, '[^0-9]', '', 'g')",
+            ];
+        }
+
+        return [
+            "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(" .
+            "clients.contact_number, '+', ''), '-', ''), ' ', ''), '(', ''), ')', '')",
+            "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(" .
+            "clients.alternate_number, '+', ''), '-', ''), ' ', ''), '(', ''), ')', '')",
+        ];
     }
 
 
