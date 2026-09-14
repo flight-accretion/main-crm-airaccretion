@@ -447,6 +447,20 @@ Route::post(
             ->whereUuid('lead')
             ->name('admin.leads.booking-confirmation-email.send');
 
+        Route::post(
+            '/{lead}/generate-passenger-registration-link',
+            [ClientController::class, 'generateLeadPassengerRegistrationLink']
+        )
+            ->whereUuid('lead')
+            ->name('admin.leads.generate-passenger-registration-link');
+
+        Route::get(
+            '/{lead}/get-passenger-registration-link',
+            [ClientController::class, 'getLeadPassengerRegistrationLink']
+        )
+            ->whereUuid('lead')
+            ->name('admin.leads.get-passenger-registration-link');
+
         // Dynamic routes that expect a UUID lead identifier
         Route::get('/{lead}', [ClientController::class, 'viewLead'])
             ->whereUuid('lead')

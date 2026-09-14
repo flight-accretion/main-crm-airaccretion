@@ -1341,11 +1341,17 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @php $visibleIndex = 0; @endphp
-                                    @if (isset($voucher) && $voucher->passengers->count() > 0)
-                                        @foreach ($voucher->passengers as $passenger)
-                                            @if (!$passenger->is_handler && !$passenger->is_additional_person)
-                                                @php $i = $visibleIndex++; @endphp
+                                    @php
+                                        $visibleIndex = 0;
+                                        $voucherPassengers = isset($voucher)
+                                            ? $voucher->passengers
+                                                ->filter(fn ($passenger) => !$passenger->is_handler && !$passenger->is_additional_person)
+                                                ->values()
+                                            : collect();
+                                    @endphp
+                                    @if ($voucherPassengers->count() > 0)
+                                        @foreach ($voucherPassengers as $passenger)
+                                            @php $i = $visibleIndex++; @endphp
                                                 <tr class="passenger-row border-b border-defaultborder"
                                                     data-index="{{ $i }}">
                                                     <input type="hidden" name="passengers[{{ $i }}][id]" value="{{ $passenger->id }}">
@@ -1447,7 +1453,6 @@
                                                         @endif
                                                     </td>
                                                 </tr>
-                                            @endif
                                         @endforeach
                                     @elseif (isset($preVoucherPassengers) && $preVoucherPassengers->count() > 0)
                                         {{-- Use pre-registered passengers from registration form --}}
@@ -5303,7 +5308,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const MAX_PASSENGERS = {!! json_encode($lead->number_of_passengers ?? 1) !!};
 
             let passengerIndex = {!! json_encode(
-                isset($voucher) && $voucher->passengers->count() > 0
+                isset($voucher) && $voucher->passengers->filter(fn($p) => !$p->is_handler && !$p->is_additional_person)->count() > 0
                     ? $voucher->passengers->filter(fn($p) => !$p->is_handler && !$p->is_additional_person)->count()
                     : (isset($preVoucherPassengers) && $preVoucherPassengers->count() > 0
                         ? $preVoucherPassengers->count()

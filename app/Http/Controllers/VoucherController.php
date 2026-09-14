@@ -478,7 +478,8 @@ class VoucherController extends Controller
 
             // Get pre-voucher passengers (from registration form) if they exist
             $preVoucherPassengers = $lead->preVoucherPassengers()
-                ->where('name', '!=', '')
+                ->whereNotNull('name')
+                ->whereRaw("TRIM(name) != ''")
                 ->get();
 
                 /*
@@ -1149,6 +1150,12 @@ $allVendors =
         ->orderBy('name')
         ->get();
 
+            // Get pre-voucher passengers (from registration form) if they exist
+            $preVoucherPassengers = $lead->preVoucherPassengers()
+                ->whereNotNull('name')
+                ->whereRaw("TRIM(name) != ''")
+                ->get();
+
             return view('admin.pages.vouchers.generate-voucher', compact(
                 'lead',
                 'selectedServices',
@@ -1161,6 +1168,7 @@ $allVendors =
                 'showHandlerSections',
                 'isAirAmbulance',
                 'voucher',
+                'preVoucherPassengers',
                 'allVendorExtraServices',
                 'allVendors',
                 'selectedVendorExtraGroups',

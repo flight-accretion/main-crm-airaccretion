@@ -1893,31 +1893,27 @@ try {
     public function generatePassengerRegistrationLink(Client $client)
     {
         try {
-            $lead = $client->latestLead;
+            $lead = $this->resolvePassengerRegistrationLeadForClient($client);
             if (!$lead) {
                 return response()->json(['success' => false, 'message' => 'No lead found for this client']);
             }
 
-            // Ensure a passenger record and token exist
-            $token = $lead->generatePassengerRegistrationToken();
-
-            // Ensure a short slug exists on the passenger
-            $passenger = $lead->passengers()->whereNull('voucher_id')->first();
-            if ($passenger && empty($passenger->registration_slug)) {
-                $passenger->generateRegistrationSlug();
-            }
-
-            $longLink = route('lead.register.form', ['lead' => $lead->id, 'token' => $token]);
-            $shortLink = $passenger ? $passenger->getShortRegistrationLink() : null;
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Registration link generated successfully',
-                'link' => $longLink,
-                'short_link' => $shortLink,
-            ]);
+            return response()->json($this->generatePassengerRegistrationLinkPayload($lead));
         } catch (\Exception $e) {
             Log::error('Error generating passenger registration link: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Error generating registration link']);
+        }
+    }
+
+    /**
+     * Generate passenger registration token for an exact lead.
+     */
+    public function generateLeadPassengerRegistrationLink(Lead $lead)
+    {
+        try {
+            return response()->json($this->generatePassengerRegistrationLinkPayload($lead));
+        } catch (\Exception $e) {
+            Log::error('Error generating lead passenger registration link: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Error generating registration link']);
         }
     }
@@ -1928,28 +1924,72 @@ try {
     public function getPassengerRegistrationLink(Client $client)
     {
         try {
-            $lead = $client->latestLead;
+            $lead = $this->resolvePassengerRegistrationLeadForClient($client);
             if (!$lead) {
                 return response()->json(['success' => false, 'message' => 'No lead found for this client']);
             }
 
-            // Return both short and long link where available
-            $passenger = $lead->passengers()->whereNull('voucher_id')->whereNotNull('registration_token')->first();
-            if ($passenger && $passenger->isTokenValid()) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Registration link retrieved successfully',
-                    'link' => $passenger->getRegistrationLink(),
-                    'short_link' => $passenger->getShortRegistrationLink(),
-                ]);
-            }
-
-            return response()->json(['success' => false, 'message' => 'No active registration link found']);
+            return response()->json($this->getPassengerRegistrationLinkPayload($lead));
         } catch (\Exception $e) {
             Log::error('Error retrieving passenger registration link: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Error retrieving registration link']);
         }
     }
+
+    /**
+     * Get existing passenger registration link for an exact lead.
+     */
+    public function getLeadPassengerRegistrationLink(Lead $lead)
+    {
+        try {
+            return response()->json($this->getPassengerRegistrationLinkPayload($lead));
+        } catch (\Exception $e) {
+            Log::error('Error retrieving lead passenger registration link: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Error retrieving registration link']);
+        }
+    }
+
+    private function resolvePassengerRegistrationLeadForClient(Client $client)
+    {
+        return $client->leads()->latest('created_at')->first();
+    }
+
+    private function generatePassengerRegistrationLinkPayload(Lead $lead): array
+    {
+        $token = $lead->generatePassengerRegistrationToken();
+        $passenger = $lead->passengers()->whereNull('voucher_id')->first();
+
+        if ($passenger && empty($passenger->registration_slug)) {
+            $passenger->generateRegistrationSlug();
+        }
+
+        return [
+            'success' => true,
+            'message' => 'Registration link generated successfully',
+            'link' => route('lead.register.form', ['lead' => $lead->id, 'token' => $token]),
+            'short_link' => $passenger ? $passenger->getShortRegistrationLink() : null,
+        ];
+    }
+
+    private function getPassengerRegistrationLinkPayload(Lead $lead): array
+    {
+        $passenger = $lead->passengers()
+            ->whereNull('voucher_id')
+            ->whereNotNull('registration_token')
+            ->first();
+
+        if ($passenger && $passenger->isTokenValid()) {
+            return [
+                'success' => true,
+                'message' => 'Registration link retrieved successfully',
+                'link' => $passenger->getRegistrationLink(),
+                'short_link' => $passenger->getShortRegistrationLink(),
+            ];
+        }
+
+        return ['success' => false, 'message' => 'No active registration link found'];
+    }
+
     public function indexClient(Request $request)
     {
         $perPage = min(max((int) $request->input('per_page', 20), 1), 100);

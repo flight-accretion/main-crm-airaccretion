@@ -62,7 +62,8 @@
 
                             <div class="flex gap-2 mb-3">
                                 <button type="button" id="generate-registration-link-btn"
-                                    class="ti-btn ti-btn-secondary ti-btn" data-client-id="{{ $client->id }}">
+                                    class="ti-btn ti-btn-secondary ti-btn" data-client-id="{{ $client->id }}"
+                                    data-lead-id="{{ $lead->id }}">
                                     Generate Registration Link
                                 </button>
                                 <button type="button" id="send-booking-confirmation-email-btn"
@@ -2646,14 +2647,14 @@
 
         // Registration Link Functionality
         document.getElementById('generate-registration-link-btn').addEventListener('click', function() {
-            const clientId = this.getAttribute('data-client-id');
+            const leadId = this.getAttribute('data-lead-id');
             const btn = this;
 
             btn.disabled = true;
             btn.textContent = 'Generating...';
 
-            fetch(`{{ route('admin.clients.generate-passenger-registration-link', ['client' => ':client']) }}`
-                    .replace(':client', clientId), {
+            fetch(`{{ route('admin.leads.generate-passenger-registration-link', ['lead' => ':lead']) }}`
+                    .replace(':lead', leadId), {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -4181,12 +4182,11 @@ document
 
         // Load existing registration link on page load
         document.addEventListener('DOMContentLoaded', function() {
-            const clientId = document.getElementById('generate-registration-link-btn').getAttribute(
-                'data-client-id');
             const genBtn = document.getElementById('generate-registration-link-btn');
+            const leadId = genBtn.getAttribute('data-lead-id');
 
-            fetch(`{{ route('admin.clients.get-passenger-registration-link', ['client' => ':client']) }}`.replace(
-                    ':client', clientId))
+            fetch(`{{ route('admin.leads.get-passenger-registration-link', ['lead' => ':lead']) }}`.replace(
+                    ':lead', leadId))
                 .then(response => response.json())
                 .then(data => {
                     if (data.success && (data.link || data.short_link)) {

@@ -35,7 +35,7 @@ class Client extends Model
     }
     public function latestLead()
     {
-        return $this->hasOne(Lead::class, 'client_id')->latest('id');
+        return $this->hasOne(Lead::class, 'client_id')->latest('created_at');
     }
     public function country()
     {
