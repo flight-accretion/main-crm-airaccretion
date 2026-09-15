@@ -583,6 +583,9 @@ if ($isSuperAdmin) {
         $countries = Country::all();
         $cities = collect();
         $outreachAssignment = null;
+        $repeatLead = $this->resolveManualRepeatLead($request);
+        $repeatClient = $repeatLead ? $repeatLead->client : null;
+        $repeatClientId = $repeatClient ? $repeatClient->id : null;
 
         if ($request->filled('outreach_assignment')) {
             $outreachAssignment = KpiOutreachAssignment::with('pool')
@@ -609,12 +612,35 @@ if ($isSuperAdmin) {
                 'address'
             ]);
 
-        if (old('country_id')) {
-            $cities = City::where('country_id', old('country_id'))
+        $selectedCountryId = old(
+            'country_id',
+            $repeatClient ? $repeatClient->country_id : null
+        );
+
+        if ($selectedCountryId) {
+            $cities = City::where('country_id', $selectedCountryId)
                 ->where('status', 1)
                 ->get();
         }
-        return view('admin.pages.leads.add-lead', compact('products', 'staff', 'countries', 'cities', 'existingClients', 'outreachAssignment'));
+        return view('admin.pages.leads.add-lead', compact('products', 'staff', 'countries', 'cities', 'existingClients', 'outreachAssignment', 'repeatLead', 'repeatClient', 'repeatClientId'));
+    }
+
+    private function resolveManualRepeatLead(Request $request): ?Lead
+    {
+        if (!$request->filled('repeat_from_lead')) {
+            return null;
+        }
+
+        $lead = Lead::with(['client', 'leadFollowups'])
+            ->find($request->input('repeat_from_lead'));
+
+        if (!$lead || !$lead->client) {
+            return null;
+        }
+
+        return $lead->canStartManualRepeatLead()
+            ? $lead
+            : null;
     }
 
     public function store(Request $request)
@@ -701,6 +727,7 @@ if ($isSuperAdmin) {
             // Status validation
             'status' => 'required|integer|in:0,2', // 0=Initiated, 2=Cancelled
             'outreach_assignment' => 'nullable|uuid|exists:kpi_outreach_assignments,id',
+            'repeat_from_lead' => 'nullable|uuid|exists:leads,id',
         ];
 
         // Client-specific validation rules
@@ -822,6 +849,13 @@ if ($isSuperAdmin) {
 try {
 
     $activeLeadService = app(ActiveLeadService::class);
+    $manualRepeatLead = $this->resolveManualRepeatLead($request);
+    $excludedActiveLeadIds = (
+        $manualRepeatLead
+        && (string) $manualRepeatLead->client_id === (string) $request->client_id
+    )
+        ? [$manualRepeatLead->id]
+        : [];
 
     $fullPhone =
         $request->contact_country_code .
@@ -830,7 +864,8 @@ try {
 
     $existingActiveLead =
         $activeLeadService->findByPhone(
-            $fullPhone
+            $fullPhone,
+            $excludedActiveLeadIds
         );
 
     if ($existingActiveLead) {

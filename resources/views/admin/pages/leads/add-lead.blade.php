@@ -1,5 +1,28 @@
 @extends('admin.layouts.header')
 @section('content')
+@php
+    $repeatLead = $repeatLead ?? null;
+    $repeatClient = $repeatClient ?? null;
+    $repeatClientId = $repeatClientId ?? null;
+    $selectedClientId = old('client_id', $repeatClientId ?: 'new');
+    $selectedClient = ($selectedClientId && $selectedClientId !== 'new')
+        ? $existingClients->firstWhere('id', $selectedClientId)
+        : null;
+
+    if (!$selectedClient && $repeatClient) {
+        $selectedClient = $repeatClient;
+        $selectedClientId = $repeatClient->id;
+    }
+
+    $contactParts = explode('-', (string) optional($selectedClient)->contact_number, 2);
+    $contactCountryCode = count($contactParts) === 2 ? $contactParts[0] : '';
+    $contactNumber = count($contactParts) === 2 ? $contactParts[1] : ($contactParts[0] ?? '');
+    $alternateParts = explode('-', (string) optional($selectedClient)->alternate_number, 2);
+    $alternateCountryCode = count($alternateParts) === 2 ? $alternateParts[0] : '';
+    $alternateNumber = count($alternateParts) === 2 ? $alternateParts[1] : ($alternateParts[0] ?? '');
+    $defaultContactCountryCode = $contactCountryCode ?: (!empty($outreachAssignment) ? '+91' : '');
+    $defaultWhatsappCountryCode = $alternateCountryCode ?: (!empty($outreachAssignment) ? '+91' : '');
+@endphp
     <!-- Page Header -->
                 <div class="block justify-between page-header md:flex">
                     <div>
@@ -39,7 +62,7 @@
                             <div class="xxl:col-span-4 xl:col-span-4  col-span-12">
                                 <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Select Existing Client or Add New</label>
                                 <select id="clientSelect" class="ti-form-select rounded-sm form-control-sm w-1/3" name="client_id">
-                                    <option value="new">+ Add New Client</option>
+                                    <option value="new" {{ $selectedClientId === 'new' ? 'selected' : '' }}>+ Add New Client</option>
                                     @foreach($existingClients as $client)
                                         @php
                                             // Extract country code and phone number from contact_number
@@ -53,6 +76,7 @@
                                             $altPhoneNumber = $altParts[1] ?? $client->alternate_number ?? '';
                                         @endphp
                                         <option value="{{ $client->id }}"
+                                            {{ (string) $selectedClientId === (string) $client->id ? 'selected' : '' }}
                                             data-email="{{ $client->email }}"
                                             data-phone="{{ $contactPhoneNumber }}"
                                             data-phone-country-code="{{ $contactCountryCode }}"
@@ -84,6 +108,13 @@
                                     value="{{ $outreachAssignment->id }}"
                                 >
                             @endif
+                            @if(!empty($repeatLead))
+                                <input
+                                    type="hidden"
+                                    name="repeat_from_lead"
+                                    value="{{ $repeatLead->id }}"
+                                >
+                            @endif
                             <div class="box">
                                 <div class="box-header">
                                     <h5 class="box-title">Basic Information</h5>
@@ -92,29 +123,29 @@
                                     <div class="grid lg:grid-cols-2 gap-6">
                                         <div class="space-y-2">
                                             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Full Name<span class="text-danger">*</span></label>
-                                            <input type="hidden" name="client_id" id="client_id_field" value="">
-                                            <input type="text" name="name" class="firstName ti-form-input  rounded-sm form-control-sm" placeholder="Full Name" value="{{ old('name', optional(optional($outreachAssignment ?? null)->pool)->display_name) }}" >
+                                            <input type="hidden" name="client_id" id="client_id_field" value="{{ $selectedClientId !== 'new' ? $selectedClientId : '' }}">
+                                            <input type="text" name="name" class="firstName ti-form-input  rounded-sm form-control-sm" placeholder="Full Name" value="{{ old('name', optional($selectedClient)->name ?: optional(optional($outreachAssignment ?? null)->pool)->display_name) }}" >
                                             @error('name')
                                                     <span class="text-red-500 text-xs">{{ $message }}</span>
                                             @enderror
                                         </div>
                                         <div class="space-y-2">
                                             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Email Address</label>
-                                            <input type="email" name="email" class="email-address ti-form-input  rounded-sm form-control-sm" placeholder="your@site.com" value="{{ old('email') }}">
+                                            <input type="email" name="email" class="email-address ti-form-input  rounded-sm form-control-sm" placeholder="your@site.com" value="{{ old('email', optional($selectedClient)->email) }}">
                                             @error('email')
                                                 <span class="text-red-500 text-xs">{{ $message }}</span>
                                             @enderror
                                         </div>
                                         <div class="space-y-2">
                                             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Company Name</label>
-                                            <input type="text" name="company_name" class="ti-form-input rounded-sm form-control-sm" placeholder="Company Name" value="{{ old('company_name') }}">
+                                            <input type="text" name="company_name" class="ti-form-input rounded-sm form-control-sm" placeholder="Company Name" value="{{ old('company_name', optional($selectedClient)->company_name) }}">
                                             @error('company_name')
                                                 <span class="text-red-500 text-xs">{{ $message }}</span>
                                             @enderror
                                         </div>
                                         <div class="space-y-2">
                                             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">GST Number</label>
-                                            <input type="text" name="gst_number" class="ti-form-input rounded-sm form-control-sm" placeholder="GST Number" value="{{ old('gst_number') }}">
+                                            <input type="text" name="gst_number" class="ti-form-input rounded-sm form-control-sm" placeholder="GST Number" value="{{ old('gst_number', optional($selectedClient)->gst_number) }}">
                                             @error('gst_number')
                                                 <span class="text-red-500 text-xs">{{ $message }}</span>
                                             @enderror
@@ -123,8 +154,8 @@
                                             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Phone Number<span class="text-danger">*</span></label>
                                             <input id="phone" type="tel" name="contact_number"
                                             class="ti-form-input rounded-sm form-control-sm intl-phone-input"
-                                                value="{{ old('contact_number', optional($outreachAssignment ?? null)->normalized_phone) }}" required>
-                                            <input type="hidden" name="contact_country_code" id="contact_country_code" value="{{ old('contact_country_code', !empty($outreachAssignment) ? '+91' : '') }}">
+                                                value="{{ old('contact_number', $contactNumber ?: optional($outreachAssignment ?? null)->normalized_phone) }}" required>
+                                            <input type="hidden" name="contact_country_code" id="contact_country_code" value="{{ old('contact_country_code', $defaultContactCountryCode) }}">
                                             @error('contact_number') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                                         </div>
 
@@ -132,8 +163,8 @@
                                             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">WhatsApp Number</label>
                                             <input id="whatsapp" type="tel" name="alternate_number"
                                                 class="ti-form-input rounded-sm form-control-sm intl-phone-input"
-                                                value="{{ old('alternate_number', optional($outreachAssignment ?? null)->normalized_phone) }}" required>
-                                            <input type="hidden" name="whatsapp_country_code" id="whatsapp_country_code" value="{{ old('whatsapp_country_code', !empty($outreachAssignment) ? '+91' : '') }}">
+                                                value="{{ old('alternate_number', $alternateNumber ?: optional($outreachAssignment ?? null)->normalized_phone) }}" required>
+                                            <input type="hidden" name="whatsapp_country_code" id="whatsapp_country_code" value="{{ old('whatsapp_country_code', $defaultWhatsappCountryCode) }}">
                                             @error('alternate_number') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                                         </div>
                                         <div class="space-y-2">
@@ -145,14 +176,14 @@
                                         </div>
                                        <div class="space-y-2">
                                             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Date of Birth</label>
-                                            <input type="date" name="date_of_birth" class="ti-form-input  rounded-sm form-control-sm" aria-label="dateofbirth" value="{{ old('date_of_birth') }}">
+                                            <input type="date" name="date_of_birth" class="ti-form-input  rounded-sm form-control-sm" aria-label="dateofbirth" value="{{ old('date_of_birth', optional($selectedClient)->date_of_birth) }}">
                                             @error('date_of_birth')
                                                 <span class="text-red-500 text-xs">{{ $message }}</span>
                                             @enderror
                                         </div>
                                         <div class="space-y-2">
                                             <label for="inputAddress" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Address</label>
-                                            <textarea name="address" class="ti-form-input w-full rounded-sm form-control-sm" rows="1">{{ old('address') }}</textarea>
+                                            <textarea name="address" class="ti-form-input w-full rounded-sm form-control-sm" rows="1">{{ old('address', optional($selectedClient)->address) }}</textarea>
                                             @error('address') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                                         </div>
                                         <div class="space-y-2">
@@ -163,7 +194,7 @@
                                                         <option value="{{ $country->id }}"
                                                             data-iso="{{ $country->iso2 ?? $country->iso_code ?? $country->iso ?? '' }}"
                                                             data-phonecode="{{ $country->isd_code ?? '' }}"
-                                                            {{ old('country_id') == $country->id ? 'selected' : '' }}>
+                                                            {{ old('country_id', optional($selectedClient)->country_id) == $country->id ? 'selected' : '' }}>
                                                             {{ $country->name }}
                                                         </option>
                                                     @endforeach
@@ -174,7 +205,7 @@
                                             <select name="city" id="citySelect" class="ti-form-select rounded-sm form-control-sm w-1/3" >
                                                 <option value="">Select City</option>
                                                 @foreach($cities as $city)
-                                                    <option value="{{ $city->id }}" {{ old('city') == $city->id ? 'selected' : '' }}>
+                                                    <option value="{{ $city->id }}" {{ old('city', optional($selectedClient)->city_id) == $city->id ? 'selected' : '' }}>
                                                         {{ $city->name }}
                                                     </option>
                                                 @endforeach
@@ -928,6 +959,13 @@ document.addEventListener('DOMContentLoaded', function () {
     container.addEventListener('click', handleRepeatableClick);
     document.getElementById('clientSelect').addEventListener('change', handleClientSelectionChange);
 
+    const __preselectedClientId = @json($selectedClientId !== 'new' ? $selectedClientId : null);
+    if (__preselectedClientId) {
+        setTimeout(function () {
+            $('#clientSelect').val(__preselectedClientId).trigger('change');
+        }, 0);
+    }
+
     // Toggle Travel Details required when selected product is "Call not Connected"
     function setTravelFieldsRequired(isRequired) {
         // Number of passengers
@@ -1284,8 +1322,10 @@ document.addEventListener('DOMContentLoaded', function () {
     }, 100);
 
     // If country_id is already selected from old input, trigger it
-    const __oldCountryId = "{{ old('country_id') }}";
+    const __oldCountryId = @json(old('country_id', optional($selectedClient)->country_id));
+    const __oldCityId = @json(old('city', optional($selectedClient)->city_id));
     if (__oldCountryId) {
+        window.pendingCityId = __oldCityId || window.pendingCityId;
         $('#countryCodeSelect').val(__oldCountryId).trigger('change');
     }
 

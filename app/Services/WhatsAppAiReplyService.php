@@ -166,13 +166,16 @@ class WhatsAppAiReplyService
             $setting,
             $conversation,
             $messages,
-            Product::query()
-                ->where('status', 1)
-                ->orderBy('product')
-                ->get([
-                    'id',
-                    'product',
-                ]),
+          Product::query()
+    ->where('status', 1)
+    ->orderBy('product')
+    ->get([
+        'id',
+        'product',
+        'website_service_type_id',
+        'is_private',
+        'is_airambulance',
+    ]),
             $contextMessages
         );
 

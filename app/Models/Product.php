@@ -14,6 +14,7 @@ class Product extends Model
 
     protected $fillable = [
         'id',
+        'website_service_type_id',
         'product',
         'vendor_id',
         'is_private',

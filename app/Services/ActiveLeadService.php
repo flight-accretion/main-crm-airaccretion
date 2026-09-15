@@ -47,13 +47,19 @@ class ActiveLeadService
      * considered active so automation cannot create duplicates while
      * it is waiting in the allocation queue.
      */
-    public function findByPhone(?string $phone): ?Lead
+    public function findByPhone(?string $phone, array $excludedLeadIds = []): ?Lead
     {
         $phone = $this->normalizePhone($phone);
 
         if (!$phone) {
             return null;
         }
+
+        $excludedLeadIds = array_values(
+            array_filter(
+                array_map('strval', $excludedLeadIds)
+            )
+        );
 
         $phoneExpression = $this->digitsSqlExpression(
             'clients.contact_number'
@@ -75,6 +81,10 @@ class ActiveLeadService
             ->get();
 
         foreach ($leads as $lead) {
+            if (in_array((string) $lead->id, $excludedLeadIds, true)) {
+                continue;
+            }
+
             $latestFollowup = $lead->leadFollowups()
                 ->orderByDesc('created_at')
                 ->first();

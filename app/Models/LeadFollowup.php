@@ -35,6 +35,11 @@ class LeadFollowup extends Model
         self::STATUS_REJECTED,
     ];
 
+    public const MANUAL_REPEAT_LEAD_SOURCE_STATUSES = [
+        self::STATUS_FULL_PAYMENT_RECEIVED,
+        self::STATUS_PARTIAL_PAYMENT_RECEIVED,
+    ];
+
     public const CONTACT_OUTCOME_NO_ANSWER = 'no_answer';
 
     public static function hiddenFromTodayFollowups($status): bool
@@ -42,6 +47,15 @@ class LeadFollowup extends Model
         return in_array(
             (int) $status,
             self::TODAY_FOLLOWUP_HIDDEN_STATUSES,
+            true
+        );
+    }
+
+    public static function allowsManualRepeatLeadCreation($status): bool
+    {
+        return in_array(
+            (int) $status,
+            self::MANUAL_REPEAT_LEAD_SOURCE_STATUSES,
             true
         );
     }

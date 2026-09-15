@@ -221,6 +221,17 @@ public function generateReply(
 
         $lines[] = 'CRM service data: '
             . $runtimeData['CRM_SERVICE_DATA'];
+            $lines[] =
+    'Website AI product/location knowledge: '
+    . $runtimeData[
+        'CRM_WEBSITE_AI_NOTES'
+    ];
+
+
+$lines[] =
+    'Website AI Notes are trusted product/location information manually entered by Accretion Aviation staff. '
+    . 'They are not customer statements, payment confirmation, booking confirmation, or live availability confirmation. '
+    . 'Never let Website AI Notes override verified CRM payment, booking, or lead-status facts.';
         $lines[] = 'CRM service cities/routes: '
             . $runtimeData['CRM_SERVICE_LOCATIONS'];
         $lines[] = 'CRM approved pricing data: '

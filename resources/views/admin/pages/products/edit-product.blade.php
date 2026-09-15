@@ -65,6 +65,197 @@
         </div>
     </div>
 
+    {{-- ========================================================= --}}
+{{-- WEBSITE AI INFORMATION - READ ONLY                        --}}
+{{-- ========================================================= --}}
+
+<div class="grid grid-cols-12 gap-6 text-defaultsize mt-6">
+
+    <div class="xl:col-span-12 col-span-12">
+
+        <div class="box">
+
+            <div class="box-header">
+
+                <div class="box-title">
+                    Website AI Information
+                </div>
+
+            </div>
+
+
+            <div class="box-body">
+
+                @if(
+                    ($websiteAiInfo['status'] ?? null)
+                    === 'ok'
+                )
+
+                    @forelse(
+                        $websiteAiInfo['locations'] ?? []
+                        as $location
+                    )
+
+                        <div
+                            class="
+                                mb-5
+                                pb-5
+                                border-b
+                                border-gray-200
+                                dark:border-white/10
+                                last:border-b-0
+                                last:mb-0
+                                last:pb-0
+                            "
+                        >
+
+                            <div
+                                class="
+                                    flex
+                                    flex-wrap
+                                    items-center
+                                    gap-2
+                                    mb-2
+                                "
+                            >
+
+                                <span class="font-semibold">
+
+                                    {{
+                                        $location['name']
+                                        ?: 'Website Location'
+                                    }}
+
+                                </span>
+
+
+                                @if(
+                                    !empty(
+                                        $location['city']
+                                    )
+                                )
+
+                                    <span
+                                        class="
+                                            badge
+                                            bg-primary/10
+                                            text-primary
+                                        "
+                                    >
+
+                                        {{
+                                            $location['city']
+                                        }}
+
+                                    </span>
+
+                                @endif
+
+                            </div>
+
+
+                            @if(
+                                !empty(
+                                    $location['slug']
+                                )
+                            )
+
+                                <div
+                                    class="
+                                        text-xs
+                                        text-gray-500
+                                        dark:text-white/40
+                                        mb-3
+                                    "
+                                >
+                                    Website slug:
+                                    {{
+                                        $location['slug']
+                                    }}
+                                </div>
+
+                            @endif
+
+
+                            <div
+                                class="
+                                    p-4
+                                    rounded-sm
+                                    border
+                                    border-gray-200
+                                    dark:border-white/10
+                                    bg-gray-50
+                                    dark:bg-black/20
+                                    whitespace-pre-line
+                                "
+                            >{{ $location['ai_note'] }}</div>
+
+                        </div>
+
+                    @empty
+
+                        <p
+                            class="
+                                text-gray-500
+                                dark:text-white/50
+                            "
+                        >
+                            No Website AI Notes have been entered
+                            for this Product.
+                        </p>
+
+                    @endforelse
+
+
+                    <div
+                        class="
+                            mt-4
+                            text-xs
+                            text-gray-500
+                            dark:text-white/40
+                        "
+                    >
+                        Source:
+                        Accretion Aviation Website Location Admin.
+                        This information is read only in CRM.
+                    </div>
+
+                @elseif(
+                    ($websiteAiInfo['status'] ?? null)
+                    === 'not_mapped'
+                )
+
+                    <div
+                        class="
+                            alert
+                            alert-warning
+                        "
+                    >
+                        This CRM Product is not mapped to a
+                        Website Service Type yet.
+                    </div>
+
+                @else
+
+                    <div
+                        class="
+                            alert
+                            alert-warning
+                        "
+                    >
+                        Website AI Notes temporarily unavailable.
+                    </div>
+
+                @endif
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
     <script>
         $(document).ready(function() {
             $('.js-example-basic-multiple').select2({

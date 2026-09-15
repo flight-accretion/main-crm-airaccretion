@@ -74,6 +74,199 @@
         </div>
     </div>
 
+    {{-- ========================================================= --}}
+{{-- WEBSITE AI INFORMATION                                    --}}
+{{-- ========================================================= --}}
+
+<div class="grid grid-cols-12 gap-6 mt-6">
+
+    <div class="col-span-12">
+
+        <div class="box">
+
+            <div class="box-header">
+
+                <h5 class="box-title">
+                    Website AI Information
+                </h5>
+
+            </div>
+
+
+            <div class="box-body">
+
+                @if(
+                    ($websiteAiInfo['status'] ?? null)
+                    === 'ok'
+                )
+
+                    @forelse(
+                        $websiteAiInfo['locations'] ?? []
+                        as $location
+                    )
+
+                        <div
+                            class="
+                                mb-5
+                                pb-5
+                                border-b
+                                border-gray-200
+                                dark:border-white/10
+                                last:border-b-0
+                                last:mb-0
+                                last:pb-0
+                            "
+                        >
+
+                            <div
+                                class="
+                                    flex
+                                    flex-wrap
+                                    items-center
+                                    gap-2
+                                    mb-2
+                                "
+                            >
+
+                                <span
+                                    class="
+                                        font-semibold
+                                        text-gray-800
+                                        dark:text-white
+                                    "
+                                >
+
+                                    {{
+                                        $location['name']
+                                        ?: 'Website Location'
+                                    }}
+
+                                </span>
+
+
+                                @if(
+                                    !empty(
+                                        $location['city']
+                                    )
+                                )
+
+                                    <span
+                                        class="
+                                            badge
+                                            bg-primary/10
+                                            text-primary
+                                        "
+                                    >
+
+                                        {{
+                                            $location['city']
+                                        }}
+
+                                    </span>
+
+                                @endif
+
+                            </div>
+
+
+                            @if(
+                                !empty(
+                                    $location['slug']
+                                )
+                            )
+
+                                <p
+                                    class="
+                                        text-xs
+                                        text-gray-500
+                                        dark:text-white/40
+                                        mb-3
+                                    "
+                                >
+                                    Website slug:
+                                    {{
+                                        $location['slug']
+                                    }}
+                                </p>
+
+                            @endif
+
+
+                            <div
+                                class="
+                                    p-4
+                                    rounded-sm
+                                    border
+                                    border-gray-200
+                                    dark:border-white/10
+                                    bg-gray-50
+                                    dark:bg-black/20
+                                    whitespace-pre-line
+                                    text-gray-800
+                                    dark:text-white
+                                "
+                            >{{ $location['ai_note'] }}</div>
+
+                        </div>
+
+                    @empty
+
+                        <p
+                            class="
+                                text-gray-500
+                                dark:text-white/50
+                            "
+                        >
+                            No Website AI Notes have been entered
+                            for this Product.
+                        </p>
+
+                    @endforelse
+
+
+                    <p
+                        class="
+                            text-xs
+                            text-gray-500
+                            dark:text-white/40
+                            mt-4
+                        "
+                    >
+                        Source:
+                        Accretion Aviation Website Location Admin.
+                        Read only.
+                    </p>
+
+                @elseif(
+                    ($websiteAiInfo['status'] ?? null)
+                    === 'not_mapped'
+                )
+
+                    <div class="alert alert-warning">
+
+                        This CRM Product is not mapped to a
+                        Website Service Type yet.
+
+                    </div>
+
+                @else
+
+                    <div class="alert alert-warning">
+
+                        Website AI Notes temporarily unavailable.
+
+                    </div>
+
+                @endif
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             // Initialize any necessary scripts here

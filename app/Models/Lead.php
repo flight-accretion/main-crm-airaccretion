@@ -155,6 +155,29 @@ class Lead extends Model
         return $this->hasOne(LeadFollowup::class, 'lead_id')->latest('created_at');
     }
 
+    public function latestFollowupByCreation(): ?LeadFollowup
+    {
+        if ($this->relationLoaded('leadFollowups')) {
+            return $this->leadFollowups
+                ->sortByDesc('created_at')
+                ->first();
+        }
+
+        return $this->leadFollowups()
+            ->orderByDesc('created_at')
+            ->first();
+    }
+
+    public function canStartManualRepeatLead(): bool
+    {
+        $latestFollowup = $this->latestFollowupByCreation();
+
+        return $latestFollowup
+            && LeadFollowup::allowsManualRepeatLeadCreation(
+                $latestFollowup->status
+            );
+    }
+
     public function latestAiScore()
     {
         return $this->hasOne(LeadAiScore::class, 'lead_id')->latest('created_at');

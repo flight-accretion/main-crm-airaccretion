@@ -72,5 +72,7 @@ class Kernel extends HttpKernel
             \App\Http\Middleware\VerifyCallSummaryWebhook::class,
         'website.lead.auth' =>
             \App\Http\Middleware\VerifyWebsiteLeadWebhook::class,
+            'website.catalog.auth' =>
+    \App\Http\Middleware\VerifyWebsiteCatalogWebhook::class,
     ];
 }

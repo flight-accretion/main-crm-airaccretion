@@ -777,6 +777,8 @@
                                     $status =
                                     $enquiry->leadFollowups()->orderBy('created_at', 'desc')->first()
                                     ->status ?? null;
+                                    $canCreateManualRepeatLead =
+                                    \App\Models\LeadFollowup::allowsManualRepeatLeadCreation($status);
                                     @endphp
 
                                     @if ($status === 0)
@@ -843,6 +845,12 @@
                                         <a aria-label="anchor" href="{{ route('admin.leads.view', $enquiry->id) }}"
                                             class="ti-btn ti-btn-icon ti-btn-sm ti-btn-primary-full" target="_blank"
                                             title="View Lead"><i class="ri-eye-line"></i></a>
+                                        @if ($canCreateManualRepeatLead)
+                                        <a aria-label="Create New Lead"
+                                            href="{{ route('admin.clients.create', ['repeat_from_lead' => $enquiry->id]) }}"
+                                            class="ti-btn ti-btn-icon ti-btn-sm ti-btn-secondary-full" target="_blank"
+                                            title="Create New Lead for Same Customer"><i class="ri-add-circle-line"></i></a>
+                                        @endif
                                             {{-- @if($status !== 8) --}}
                                         <a aria-label="anchor" href="{{ route('admin.leads.edit', $enquiry->id) }}"
                                             class="ti-btn ti-btn-icon ti-btn-sm ti-btn-info-full" title="Edit Lead"><i

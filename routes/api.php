@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\InstagramLeadController;
 use App\Http\Controllers\Api\CallSummaryController;
 use App\Http\Controllers\Api\WebsiteLeadWebhookController;
 use App\Http\Controllers\Api\LeadApiController;
+use App\Http\Controllers\Api\WebsiteCatalogProductController;
 
 
 /*
@@ -99,4 +100,19 @@ Route::post(
 )
 ->name(
     'api.call-summaries.store'
+);
+
+Route::post(
+    '/website-catalog/products',
+    [
+        WebsiteCatalogProductController::class,
+        'store',
+    ]
+)
+->middleware([
+    'website.catalog.auth',
+    'throttle:120,1',
+])
+->name(
+    'api.website-catalog.products.store'
 );

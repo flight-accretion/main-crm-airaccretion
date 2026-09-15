@@ -7,12 +7,14 @@ use App\Models\Client;
 use App\Models\Lead;
 use App\Models\LeadFollowup;
 use App\Models\Product;
+use App\Models\Service;
 use App\Models\User;
 use App\Models\UserType;
 use App\Services\ActiveLeadService;
 use Carbon\Carbon;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
+use Illuminate\Support\ViewErrorBag;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -217,6 +219,154 @@ class LeadVisibilityAndDuplicateTest extends TestCase
         );
     }
 
+    public function test_paid_lead_opens_add_lead_form_with_same_client_preselected(): void
+    {
+        $salesperson = $this->createUser(UserType::SALES_EXECUTIVE, 'Sales User');
+        $lead = $this->createLeadWithClient([
+            'name' => 'Paid Lead Customer',
+            'contact_number' => '+91-9437938762',
+            'alternate_number' => '+91-9437938762',
+        ], [
+            'representative_user_id' => $salesperson->id,
+        ]);
+
+        LeadFollowup::create([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $lead->id,
+            'next_followup_date' => now()->addDay(),
+            'followup_note' => 'Full payment received',
+            'followed_by' => $salesperson->id,
+            'status' => LeadFollowup::STATUS_FULL_PAYMENT_RECEIVED,
+            'created_at' => '2026-09-14 10:00:00',
+            'updated_at' => '2026-09-14 10:00:00',
+        ]);
+
+        $this->actingAs($salesperson);
+
+        $view = app(ClientController::class)->create(
+            Request::create('/admin/lead/create', 'GET', [
+                'repeat_from_lead' => $lead->id,
+            ])
+        );
+
+        $data = $view->getData();
+
+        $this->assertSame($lead->id, $data['repeatLead']->id);
+        $this->assertSame($lead->client_id, $data['repeatClientId']);
+        $this->assertSame($lead->client_id, $data['repeatClient']->id);
+    }
+
+    public function test_paid_repeat_create_form_posts_repeat_source_with_selected_client(): void
+    {
+        $salesperson = $this->createUser(UserType::SALES_EXECUTIVE, 'Sales User');
+        $lead = $this->createLeadWithClient([
+            'name' => 'Paid Lead Customer',
+            'contact_number' => '+91-9437938762',
+            'alternate_number' => '+91-9437938762',
+        ], [
+            'representative_user_id' => $salesperson->id,
+        ]);
+
+        LeadFollowup::create([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $lead->id,
+            'next_followup_date' => now()->addDay(),
+            'followup_note' => 'Partial payment received',
+            'followed_by' => $salesperson->id,
+            'status' => LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
+        ]);
+
+        $this->actingAs($salesperson);
+        view()->share('errors', new ViewErrorBag());
+
+        $html = app(ClientController::class)
+            ->create(Request::create('/admin/lead/create', 'GET', [
+                'repeat_from_lead' => $lead->id,
+            ]))
+            ->render();
+
+        $this->assertStringContainsString(
+            'name="repeat_from_lead"',
+            $html
+        );
+        $this->assertStringContainsString(
+            'value="' . e($lead->id) . '"',
+            $html
+        );
+        $this->assertStringContainsString(
+            'id="client_id_field" value="' . e($lead->client_id) . '"',
+            $html
+        );
+    }
+
+    public function test_manual_repeat_booking_creates_new_lead_for_same_paid_client(): void
+    {
+        $this->withoutMiddleware(\App\Http\Middleware\VerifyCsrfToken::class);
+
+        $salesperson = $this->createUser(UserType::SALES_EXECUTIVE, 'Sales User');
+        $product = Product::create([
+            'id' => (string) Str::uuid(),
+            'product' => 'Helicopter Charter',
+            'status' => 1,
+        ]);
+        $service = Service::create([
+            'id' => (string) Str::uuid(),
+            'service' => 'Helicopter Charter',
+            'status' => 1,
+        ]);
+        $lead = $this->createLeadWithClient([
+            'name' => 'Paid Lead Customer',
+            'contact_number' => '+91-9437938762',
+            'alternate_number' => '+91-9437938762',
+        ], [
+            'representative_user_id' => $salesperson->id,
+            'product_ids' => [$product->id],
+            'service_ids' => [$service->id],
+        ]);
+
+        LeadFollowup::create([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $lead->id,
+            'next_followup_date' => now()->addDay(),
+            'followup_note' => 'Full payment received',
+            'followed_by' => $salesperson->id,
+            'status' => LeadFollowup::STATUS_FULL_PAYMENT_RECEIVED,
+        ]);
+
+        $this->actingAs($salesperson);
+
+        $response = $this->post(route('admin.clients.store'), [
+            'client_id' => $lead->client_id,
+            'repeat_from_lead' => $lead->id,
+            'name' => 'Paid Lead Customer',
+            'contact_country_code' => '+91',
+            'contact_number' => '9437938762',
+            'alternate_number' => '9437938762',
+            'whatsapp_country_code' => '+91',
+            'product_ids' => [$product->id],
+            'service_ids' => [$service->id],
+            'number_of_passengers' => 1,
+            'trips' => [[
+                'from_date' => now()->addDays(2)->format('Y-m-d H:i'),
+                'to_date' => now()->addDays(2)->addHour()->format('Y-m-d H:i'),
+                'from_place' => 'Mumbai',
+                'to_place' => 'Goa',
+            ]],
+            'next_follow_up' => now()->addDay()->format('Y-m-d H:i'),
+            'representative_user_id' => $salesperson->id,
+            'status' => LeadFollowup::STATUS_INITIATED,
+        ]);
+
+        $response->assertRedirect(route('admin.clients.create'));
+
+        $this->assertSame(
+            2,
+            Lead::query()
+                ->where('client_id', $lead->client_id)
+                ->count()
+        );
+    }
+
     public function test_manual_assignment_creates_today_followup_when_lead_has_no_followup(): void
     {
         $this->withoutMiddleware(\App\Http\Middleware\VerifyCsrfToken::class);
@@ -357,6 +507,22 @@ class LeadVisibilityAndDuplicateTest extends TestCase
             $table->string('email')->nullable();
             $table->string('password')->nullable();
             $table->uuid('user_type_id')->nullable();
+            $table->integer('status')->default(1);
+            $table->timestamps();
+        });
+
+        Schema::create('countries', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->integer('status')->default(1);
+            $table->string('isd_code')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('cities', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->unsignedBigInteger('country_id')->nullable();
             $table->integer('status')->default(1);
             $table->timestamps();
         });

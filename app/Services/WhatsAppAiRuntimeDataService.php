@@ -29,10 +29,12 @@ class WhatsAppAiRuntimeDataService
         9 => 'Rejected',
     ];
 
-    public function __construct(
-        private WhatsAppAiPricingSheetService $pricingSheet
-    ) {
-    }
+  public function __construct(
+    private WhatsAppAiPricingSheetService $pricingSheet,
+
+    private WebsiteCatalogAiNotesService $websiteAiNotes
+) {
+}
 
     public function build(
         WhatsAppConversation $conversation,
@@ -60,6 +62,11 @@ class WhatsAppAiRuntimeDataService
         ]);
         $previousService = $this->previousService($lead, $products);
         $cityOrRoute = $this->cityOrRoute($ride);
+        $websiteProductAiNotes =
+    $this->websiteProductAiNotes(
+        $lead,
+        $products
+    );
         $lastBookingDate = $this->lastBookingDate(
             $lead,
             $followup,
@@ -106,6 +113,8 @@ class WhatsAppAiRuntimeDataService
                 $this->activeProducts($products),
             'CRM_SERVICE_DATA' =>
                 $this->serviceData($products),
+                'CRM_WEBSITE_AI_NOTES' =>
+             $websiteProductAiNotes,
             'CRM_SERVICE_LOCATIONS' =>
                 $this->serviceLocations($cityOrRoute),
             'CRM_PRICING_DATA' =>
@@ -428,6 +437,206 @@ class WhatsAppAiRuntimeDataService
             ->values()
             ->implode(PHP_EOL);
     }
+
+    private function websiteProductAiNotes(
+    ?Lead $lead,
+    Collection $products
+): string {
+    /*
+    |--------------------------------------------------------------------------
+    | No Lead
+    |--------------------------------------------------------------------------
+    |
+    | AI Notes should only be fetched when we know which CRM Product
+    | belongs to the current lead.
+    |
+    */
+
+    if (!$lead) {
+        return self::NOT_PROVIDED;
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Selected CRM Product IDs
+    |--------------------------------------------------------------------------
+    */
+
+    $productIds =
+        array_map(
+            'strval',
+            $lead->product_ids_array ?? []
+        );
+
+
+    if (empty($productIds)) {
+        return self::NOT_PROVIDED;
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Get only Products attached to this Lead
+    |--------------------------------------------------------------------------
+    */
+
+    $selectedProducts =
+        $products
+            ->filter(
+                function (
+                    Product $product
+                ) use (
+                    $productIds
+                ) {
+                    return in_array(
+                        (string) $product->id,
+                        $productIds,
+                        true
+                    );
+                }
+            )
+            ->values();
+
+
+    if ($selectedProducts->isEmpty()) {
+        return self::NOT_PROVIDED;
+    }
+
+
+    $blocks = [];
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Fetch Website AI Notes
+    |--------------------------------------------------------------------------
+    |
+    | Only mapped Products cause Website API calls.
+    |
+    */
+
+    foreach (
+        $selectedProducts
+        as $product
+    ) {
+
+        $websiteServiceTypeId =
+            (int) (
+                $product->website_service_type_id
+                ?? 0
+            );
+
+
+        if ($websiteServiceTypeId <= 0) {
+            continue;
+        }
+
+
+        $result =
+            $this
+                ->websiteAiNotes
+                ->forProduct(
+                    $product
+                );
+
+
+        if (
+            ($result['status'] ?? '')
+            !== 'ok'
+        ) {
+            continue;
+        }
+
+
+        foreach (
+            $result['locations'] ?? []
+            as $location
+        ) {
+
+            $note =
+                trim(
+                    (string) (
+                        $location['ai_note']
+                        ?? ''
+                    )
+                );
+
+
+            if ($note === '') {
+                continue;
+            }
+
+
+            $locationName =
+                trim(
+                    (string) (
+                        $location['name']
+                        ?? ''
+                    )
+                );
+
+
+            $city =
+                trim(
+                    (string) (
+                        $location['city']
+                        ?? ''
+                    )
+                );
+
+
+            $lines = [
+                'Product: '
+                    . $product->product,
+            ];
+
+
+            if ($city !== '') {
+                $lines[] =
+                    'City: '
+                    . $city;
+            }
+
+
+            if ($locationName !== '') {
+                $lines[] =
+                    'Location: '
+                    . $locationName;
+            }
+
+
+            $lines[] =
+                'AI Note: '
+                . $note;
+
+
+            $blocks[] =
+                implode(
+                    PHP_EOL,
+                    $lines
+                );
+        }
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | No Website knowledge available
+    |--------------------------------------------------------------------------
+    */
+
+    if (empty($blocks)) {
+        return self::NOT_PROVIDED;
+    }
+
+
+    return implode(
+        PHP_EOL
+        . PHP_EOL,
+        $blocks
+    );
+}
 
     private function serviceLocations(?string $cityOrRoute): string
     {

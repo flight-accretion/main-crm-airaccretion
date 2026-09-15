@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use App\Services\WebsiteCatalogAiNotesService;
 
 class ProductController extends Controller
 {
@@ -143,29 +144,70 @@ public function index(Request $request)
     }
 
 // Similarly update other methods (update, toggleStatus, destroy) with this pattern
-    public function edit($id)
-    {
-        $product = Product::findOrFail($id);
-        if ($product->status == 0) {
-            if (request()->wantsJson()) {
-                return response()->json([
+  public function edit(
+    $id,
+    WebsiteCatalogAiNotesService $websiteAiNotes
+) {
+    $product =
+        Product::findOrFail(
+            $id
+        );
+
+
+    if ($product->status == 0) {
+
+        if (
+            request()->wantsJson()
+        ) {
+            return response()->json(
+                [
                     'success' => false,
-                    'message' => 'Inactive product cannot be edited.'
-                ], 400);
-            }
-            return redirect()->route('admin.products.index')
-                ->with('error', 'Inactive product cannot be edited.');
+                    'message' =>
+                        'Inactive product cannot be edited.',
+                ],
+                400
+            );
         }
 
-        if (request()->ajax() || request()->wantsJson()) {
-            return response()->json([
-                'success' => true,
-                'product' => $product
-            ]);
-        }
-        
-        return view('admin.pages.products.edit-product', compact('product'));
+
+        return redirect()
+            ->route(
+                'admin.products.index'
+            )
+            ->with(
+                'error',
+                'Inactive product cannot be edited.'
+            );
     }
+
+
+    if (
+        request()->ajax()
+        ||
+        request()->wantsJson()
+    ) {
+        return response()->json([
+            'success' => true,
+            'product' => $product,
+        ]);
+    }
+
+
+    $websiteAiInfo =
+        $websiteAiNotes
+            ->forProduct(
+                $product
+            );
+
+
+    return view(
+        'admin.pages.products.edit-product',
+        compact(
+            'product',
+            'websiteAiInfo'
+        )
+    );
+}
 
     public function update(Request $request, $id)
     {
@@ -274,19 +316,43 @@ public function index(Request $request)
             ], 500);
         }
     }
-    public function show($id)
-    {
-        $product = Product::findOrFail($id);
-        
-        if (request()->ajax() || request()->wantsJson()) {
-            return response()->json([
-                'success' => true,
-                'product' => $product
-            ]);
-        }
-        
-        return view('admin.pages.products.view-product', compact('product'));
+   public function show(
+    $id,
+    WebsiteCatalogAiNotesService $websiteAiNotes
+) {
+    $product =
+        Product::findOrFail(
+            $id
+        );
+
+
+    if (
+        request()->ajax()
+        ||
+        request()->wantsJson()
+    ) {
+        return response()->json([
+            'success' => true,
+            'product' => $product,
+        ]);
     }
+
+
+    $websiteAiInfo =
+        $websiteAiNotes
+            ->forProduct(
+                $product
+            );
+
+
+    return view(
+        'admin.pages.products.view-product',
+        compact(
+            'product',
+            'websiteAiInfo'
+        )
+    );
+}
 
     public function view($id)
     {
