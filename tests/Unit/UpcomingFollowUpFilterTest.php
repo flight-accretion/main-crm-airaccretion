@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\UpcomingFollowUpController;
 use App\Models\Client;
 use App\Models\Lead;
@@ -11,6 +12,7 @@ use App\Models\Product;
 use App\Models\Service;
 use App\Models\User;
 use App\Models\UserType;
+use Carbon\Carbon;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -37,6 +39,13 @@ class UpcomingFollowUpFilterTest extends TestCase
         DB::reconnect('sqlite');
 
         $this->createSchema();
+    }
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+
+        parent::tearDown();
     }
 
     public function test_product_filter_matches_service_stored_on_lead_when_followup_has_no_service_ids(): void
@@ -127,6 +136,129 @@ class UpcomingFollowUpFilterTest extends TestCase
         $this->assertSame($hotLead->id, $rows->first()->lead_id);
     }
 
+    public function test_cancelled_lead_is_hidden_even_when_older_active_followup_is_due_today(): void
+    {
+        $admin = $this->createUser(UserType::ADMIN, 'Admin User');
+        $salesperson = $this->createUser(UserType::SALES_EXECUTIVE, 'Samarpit Sharma');
+
+        $product = $this->createProduct('Helicopter');
+        $service = $this->createService('Gangtok To Bagdogra By Helicopter', $product);
+
+        $cancelledLead = $this->createLeadWithFollowup(
+            'Cancelled Customer',
+            $salesperson,
+            [$service->id],
+            [$service->id],
+            '2026-09-10 15:00:00'
+        );
+
+        LeadFollowup::forceCreate([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $cancelledLead->id,
+            'status' => 2,
+            'followup_note' => 'Lead cancelled by customer.',
+            'next_followup_date' => '2026-09-09 11:00:00',
+            'service_ids' => [$service->id],
+            'created_at' => '2026-09-10 16:00:00',
+            'updated_at' => '2026-09-10 16:00:00',
+        ]);
+
+        $this->actingAs($admin);
+
+        $response = app(UpcomingFollowUpController::class)->index(
+            Request::create('/admin/upcoming-follow-up', 'GET', [
+                'from_date' => '2026-09-10',
+            ])
+        );
+
+        $this->assertInstanceOf(View::class, $response);
+
+        $rows = $response->getData()['arrFollowUps'];
+
+        $this->assertCount(0, $rows);
+    }
+
+    public function test_rejected_lead_is_hidden_from_today_followups(): void
+    {
+        $admin = $this->createUser(UserType::ADMIN, 'Admin User');
+        $salesperson = $this->createUser(UserType::SALES_EXECUTIVE, 'Samarpit Sharma');
+
+        $product = $this->createProduct('Helicopter');
+        $service = $this->createService('Gangtok To Bagdogra By Helicopter', $product);
+
+        $rejectedLead = $this->createLeadWithFollowup(
+            'Rejected Customer',
+            $salesperson,
+            [$service->id],
+            [$service->id],
+            '2026-09-10 15:00:00'
+        );
+
+        LeadFollowup::forceCreate([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $rejectedLead->id,
+            'status' => 9,
+            'followup_note' => 'Lead rejected.',
+            'next_followup_date' => '2026-09-10 16:00:00',
+            'service_ids' => [$service->id],
+            'created_at' => '2026-09-10 16:00:00',
+            'updated_at' => '2026-09-10 16:00:00',
+        ]);
+
+        $this->actingAs($admin);
+
+        $response = app(UpcomingFollowUpController::class)->index(
+            Request::create('/admin/upcoming-follow-up', 'GET', [
+                'from_date' => '2026-09-10',
+            ])
+        );
+
+        $this->assertInstanceOf(View::class, $response);
+
+        $rows = $response->getData()['arrFollowUps'];
+
+        $this->assertCount(0, $rows);
+    }
+
+    public function test_dashboard_today_followup_feed_hides_cancelled_lead(): void
+    {
+        Carbon::setTestNow('2026-09-10 12:00:00');
+
+        $admin = $this->createUser(UserType::ADMIN, 'Admin User');
+        $salesperson = $this->createUser(UserType::SALES_EXECUTIVE, 'Samarpit Sharma');
+
+        $product = $this->createProduct('Helicopter');
+        $service = $this->createService('Gangtok To Bagdogra By Helicopter', $product);
+
+        $cancelledLead = $this->createLeadWithFollowup(
+            'Cancelled Dashboard Customer',
+            $salesperson,
+            [$service->id],
+            [$service->id],
+            '2026-09-10 15:00:00'
+        );
+
+        LeadFollowup::forceCreate([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $cancelledLead->id,
+            'status' => 2,
+            'followup_note' => 'Lead cancelled by customer.',
+            'next_followup_date' => '2026-09-09 11:00:00',
+            'service_ids' => [$service->id],
+            'created_at' => '2026-09-10 16:00:00',
+            'updated_at' => '2026-09-10 16:00:00',
+        ]);
+
+        $this->actingAs($admin);
+
+        $response = app(DashboardController::class)->getTodayFollowUpsData(
+            Request::create('/admin/dashboard/today-follow-ups', 'GET')
+        );
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertCount(0, $response->getData(true)['data']);
+    }
+
     private function createSchema(): void
     {
         Schema::create('user_types', function (Blueprint $table) {
@@ -202,6 +334,21 @@ class UpcomingFollowUpFilterTest extends TestCase
             $table->string('status', 20)->default('completed');
             $table->string('temperature', 20)->nullable();
             $table->unsignedSmallInteger('score')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('lead_ai_scoring_settings', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->boolean('enabled')->default(false);
+            $table->boolean('auto_analyse')->default(true);
+            $table->string('model')->nullable();
+            $table->longText('prompt')->nullable();
+            $table->unsignedSmallInteger('cold_max')->default(39);
+            $table->unsignedSmallInteger('neutral_max')->default(69);
+            $table->uuid('created_by')->nullable();
+            $table->uuid('updated_by')->nullable();
+            $table->uuid('ai_model_profile_id')->nullable();
+            $table->uuid('ai_agent_id')->nullable();
             $table->timestamps();
         });
     }

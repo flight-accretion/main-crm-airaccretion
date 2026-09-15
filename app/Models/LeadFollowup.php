@@ -11,9 +11,40 @@ class LeadFollowup extends Model
     public $incrementing = false;
     protected $keyType = 'string';
 
+    public const STATUS_INITIATED = 0;
+    public const STATUS_ACTIVE = 1;
+    public const STATUS_CANCELLED = 2;
+    public const STATUS_FULL_PAYMENT_RECEIVED = 3;
+    public const STATUS_PARTIAL_PAYMENT_RECEIVED = 4;
+    public const STATUS_CONFIRMED = 5;
+    public const STATUS_PENDING = 6;
+    public const STATUS_RESCHEDULED = 7;
+    public const STATUS_APPROVED = 8;
+    public const STATUS_REJECTED = 9;
+
     public const SALES_AMOUNT_STATUSES = [2, 3, 4, 5, 7, 8];
+    public const TODAY_FOLLOWUP_MISSED_OPEN_STATUSES = [
+        self::STATUS_INITIATED,
+        self::STATUS_ACTIVE,
+        self::STATUS_PARTIAL_PAYMENT_RECEIVED,
+    ];
+
+    public const TODAY_FOLLOWUP_HIDDEN_STATUSES = [
+        self::STATUS_CANCELLED,
+        self::STATUS_CONFIRMED,
+        self::STATUS_REJECTED,
+    ];
 
     public const CONTACT_OUTCOME_NO_ANSWER = 'no_answer';
+
+    public static function hiddenFromTodayFollowups($status): bool
+    {
+        return in_array(
+            (int) $status,
+            self::TODAY_FOLLOWUP_HIDDEN_STATUSES,
+            true
+        );
+    }
 
     protected $fillable = [
         'id',

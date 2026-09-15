@@ -397,6 +397,11 @@ class BookingConfirmationEmailService
                 $variables
             );
 
+        $body =
+            $this->normalizeTimeLabel(
+                $body
+            );
+
 
         /*
          * Completely replace old fixed payment block.
@@ -552,10 +557,14 @@ class BookingConfirmationEmailService
             );
 
 
-        $firstRide =
-            $this->firstRideSegment(
+        $rideSegments =
+            $this->rideSegments(
                 $lead
             );
+
+        $firstRide =
+            $rideSegments
+                ->first();
 
 
         /*
@@ -569,6 +578,11 @@ class BookingConfirmationEmailService
                 $amountFollowup,
                 $services,
                 $extraServices
+            );
+
+        $timing =
+            $this->timing(
+                $rideSegments
             );
 
 
@@ -618,13 +632,14 @@ class BookingConfirmationEmailService
                 'duration' =>
                     $this->duration(
                         $services,
-                        $firstRide
+                        $rideSegments
                     ),
 
                 'timing' =>
-                    $this->timing(
-                        $firstRide
-                    ),
+                    $timing,
+
+                'time' =>
+                    $timing,
 
                 'passengers' =>
                     $this->value(
@@ -732,6 +747,20 @@ class BookingConfirmationEmailService
 
 
         return $template;
+    }
+
+
+    private function normalizeTimeLabel(
+        string $body
+    ): string {
+        return
+            preg_replace(
+                '/(^|\R)([ \t]*)Timing\s*:/',
+                '$1$2Time:',
+                $body
+            )
+            ??
+            $body;
     }
 
 
@@ -1746,9 +1775,9 @@ private function paymentSectionPositions(
     }
 
 
-    private function firstRideSegment(
+    private function rideSegments(
         Lead $lead
-    ) {
+    ): Collection {
         return
             $lead
                 ->rideSegments
@@ -1762,7 +1791,7 @@ private function paymentSectionPositions(
                 ->sortBy(
                     'from_date'
                 )
-                ->first();
+                ->values();
     }
 
 
@@ -1789,6 +1818,37 @@ private function paymentSectionPositions(
 
 
     private function timing(
+        Collection $rides
+    ): string {
+        if (
+            $rides
+                ->isEmpty()
+        ) {
+            return
+                PHP_EOL
+                . '1. TBA';
+        }
+
+        return
+            PHP_EOL
+            .
+            $rides
+                ->values()
+                ->map(function ($ride, int $index) {
+                    return
+                        ($index + 1)
+                        . '. '
+                        . $this->rideTiming(
+                            $ride
+                        );
+                })
+                ->implode(
+                    PHP_EOL
+                );
+    }
+
+
+    private function rideTiming(
         $ride
     ): string {
         if (
@@ -1797,74 +1857,45 @@ private function paymentSectionPositions(
             empty(
                 $ride->from_date
             )
+            ||
+            empty(
+                $ride->to_date
+            )
+            ||
+            !empty(
+                $ride->is_tba
+            )
         ) {
             return 'TBA';
         }
 
 
-        $date =
+        $fromDate =
             Carbon::parse(
                 $ride->from_date
             );
 
         $toDate =
-            !empty(
+            Carbon::parse(
                 $ride->to_date
-            )
-                ? Carbon::parse(
-                    $ride->to_date
-                )
-                : null;
+            );
 
         if (
-            $toDate
-            &&
-            $date->lt(
+            !$fromDate->lt(
                 $toDate
             )
-            &&
-            (
-                $date->format(
-                    'H:i:s'
-                )
-                !== '00:00:00'
-                ||
-                $toDate->format(
-                    'H:i:s'
-                )
-                !== '00:00:00'
-            )
         ) {
-            if (
-                $date->toDateString()
-                ===
-                $toDate->toDateString()
-            ) {
-                return
-                    $date->format(
-                        'g:i A'
-                    )
-                    . ' - '
-                    . $toDate->format(
-                        'g:i A'
-                    )
-                    . ' IST';
-            }
-
-            return
-                $date->format(
-                    'j M Y g:i A'
-                )
-                . ' - '
-                . $toDate->format(
-                    'j M Y g:i A'
-                )
-                . ' IST';
+            return 'TBA';
         }
 
 
         if (
-            $date->format(
+            $fromDate->format(
+                'H:i:s'
+            )
+            === '00:00:00'
+            &&
+            $toDate->format(
                 'H:i:s'
             )
             === '00:00:00'
@@ -1874,74 +1905,261 @@ private function paymentSectionPositions(
 
 
         return
-            $date->format(
-                'g:i A'
+            $fromDate->format(
+                'j M Y, g:i A'
             )
-            . ' IST';
+            . ', '
+            . $this->value(
+                $ride->from_place
+            )
+            . ' to '
+            . $toDate->format(
+                'j M Y, g:i A'
+            )
+            . ', '
+            . $this->value(
+                $ride->to_place
+            );
     }
 
 
     private function duration(
         Collection $services,
-        $ride
+        Collection $rides
     ): string {
+        if (
+            $rides
+                ->count()
+            > 1
+        ) {
+            $totalMinutes = 0;
+            $allSegmentsHaveDuration = true;
+
+            foreach (
+                $rides
+                as $ride
+            ) {
+                $minutes =
+                    $this->rideDurationMinutes(
+                        $ride
+                    );
+
+                if (
+                    $minutes === null
+                ) {
+                    $allSegmentsHaveDuration =
+                        false;
+
+                    break;
+                }
+
+                $totalMinutes +=
+                    $minutes;
+            }
+
+            if (
+                $allSegmentsHaveDuration
+                &&
+                $totalMinutes > 0
+            ) {
+                return
+                    $this->formatDurationMinutes(
+                        $totalMinutes
+                    );
+            }
+        }
+
+
+        $serviceDurationMinutes =
+            $this->serviceDurationMinutes(
+                $services
+            );
+
+        if (
+            $serviceDurationMinutes !== null
+        ) {
+            return
+                $this->formatDurationMinutes(
+                    $serviceDurationMinutes
+                );
+        }
+
+
+        $ride =
+            $rides
+                ->first();
+
+        $minutes =
+            $this->rideDurationMinutes(
+                $ride
+            );
+
+        if (
+            $minutes !== null
+        ) {
+            return
+                $this->formatDurationMinutes(
+                    $minutes
+                );
+        }
+
+
+        return 'TBA';
+    }
+
+
+    private function serviceDurationMinutes(
+        Collection $services
+    ): ?int {
         foreach (
             $services
             as $service
         ) {
             if (
                 preg_match(
-                    '/\b(\d+\s*(?:minutes?|mins?|min|hours?|hrs?|hr))\b/i',
+                    '/\b(\d+)\s*(minutes?|mins?|min|hours?|hrs?|hr)\b/i',
                     (string)
                     $service->service,
                     $match
                 )
             ) {
-                return
-                    (string)
-                    Str::of(
-                        $match[1]
-                    )
-                        ->lower()
-                        ->title();
-            }
-        }
+                $quantity =
+                    (int)
+                    $match[1];
 
-
-        if (
-            $ride
-            &&
-            !empty(
-                $ride->from_date
-            )
-            &&
-            !empty(
-                $ride->to_date
-            )
-        ) {
-            $minutes =
-                Carbon::parse(
-                    $ride->from_date
-                )
-                    ->diffInMinutes(
-                        Carbon::parse(
-                            $ride->to_date
-                        ),
-                        false
+                $unit =
+                    strtolower(
+                        $match[2]
                     );
 
-
-            if (
-                $minutes > 0
-            ) {
                 return
-                    $minutes
-                    . ' Minutes';
+                    Str::startsWith(
+                        $unit,
+                        'h'
+                    )
+                        ? $quantity * 60
+                        : $quantity;
             }
         }
 
 
-        return 'TBA';
+        return null;
+    }
+
+
+    private function rideDurationMinutes(
+        $ride
+    ): ?int {
+        if (
+            !$ride
+            ||
+            empty(
+                $ride->from_date
+            )
+            ||
+            empty(
+                $ride->to_date
+            )
+            ||
+            !empty(
+                $ride->is_tba
+            )
+        ) {
+            return null;
+        }
+
+
+        $fromDate =
+            Carbon::parse(
+                $ride->from_date
+            );
+
+        $toDate =
+            Carbon::parse(
+                $ride->to_date
+            );
+
+        if (
+            !$fromDate->lt(
+                $toDate
+            )
+        ) {
+            return null;
+        }
+
+        if (
+            $fromDate->format(
+                'H:i:s'
+            )
+            === '00:00:00'
+            &&
+            $toDate->format(
+                'H:i:s'
+            )
+            === '00:00:00'
+        ) {
+            return null;
+        }
+
+        return
+            $fromDate
+                ->diffInMinutes(
+                    $toDate,
+                    false
+                );
+    }
+
+
+    private function formatDurationMinutes(
+        int $minutes
+    ): string {
+        if (
+            $minutes <= 0
+        ) {
+            return 'TBA';
+        }
+
+        $hours =
+            intdiv(
+                $minutes,
+                60
+            );
+
+        $remainingMinutes =
+            $minutes % 60;
+
+        $parts = [];
+
+        if (
+            $hours > 0
+        ) {
+            $parts[] =
+                $hours
+                . ' '
+                . (
+                    $hours === 1
+                        ? 'Hour'
+                        : 'Hours'
+                );
+        }
+
+        if (
+            $remainingMinutes > 0
+        ) {
+            $parts[] =
+                $remainingMinutes
+                . ' '
+                . (
+                    $remainingMinutes === 1
+                        ? 'Minute'
+                        : 'Minutes'
+                );
+        }
+
+        return implode(
+            ' ',
+            $parts
+        );
     }
 
 

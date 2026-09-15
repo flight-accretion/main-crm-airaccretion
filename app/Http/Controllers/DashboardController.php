@@ -769,13 +769,13 @@ class DashboardController extends Controller
         // ── STEP 1: Get candidate lead IDs (today + missed) in 2 queries ──────
         $todayLeadIds = (clone $followUpQuery)
             ->whereDate('next_followup_date', '=', $currentDate)
-            ->whereNotIn('status', [2, 5])
+            ->whereNotIn('status', LeadFollowup::TODAY_FOLLOWUP_HIDDEN_STATUSES)
             ->pluck('lead_id')
             ->unique();
 
         $missedLeadIds = (clone $followUpQuery)
             ->whereDate('next_followup_date', '<', $currentDate)
-            ->whereIn('status', [0, 1, 4])
+            ->whereIn('status', LeadFollowup::TODAY_FOLLOWUP_MISSED_OPEN_STATUSES)
             ->pluck('lead_id')
             ->unique();
 
@@ -788,22 +788,22 @@ class DashboardController extends Controller
             // Get all followups for these leads, ordered so we can pick latest per lead
             $allFollowupsForLeads = LeadFollowup::with(['enquiry', 'enquiry.representative', 'enquiry.client'])
                 ->whereIn('lead_id', $allLeadIds)
-                ->orderByDesc('next_followup_date')
                 ->orderByDesc('created_at')
+                ->orderByDesc('next_followup_date')
                 ->get()
                 ->groupBy('lead_id')
                 ->map(fn($group) => $group->first()); // first = latest due to ordering
 
             // Apply same rules as UpcomingFollowUpController
             foreach ($allFollowupsForLeads as $leadId => $latest) {
-                if (in_array($latest->status, [2, 5])) continue;
+                if (LeadFollowup::hiddenFromTodayFollowups($latest->status)) continue;
                 if (!$latest->next_followup_date) continue;
 
                 $latestDate = $latest->next_followup_date->toDateString();
                 if ($latestDate === $currentDate) {
                     $latest->is_missed = false;
                     $latestFollowups->push($latest);
-                } elseif ($latestDate < $currentDate && in_array($latest->status, [0, 1, 4])) {
+                } elseif ($latestDate < $currentDate && in_array($latest->status, LeadFollowup::TODAY_FOLLOWUP_MISSED_OPEN_STATUSES)) {
                     $latest->is_missed = true;
                     $latestFollowups->push($latest);
                 }
@@ -1169,13 +1169,13 @@ class DashboardController extends Controller
 
         $todayLeadIds = (clone $followUpQuery)
             ->whereDate('next_followup_date', '=', $currentDate)
-            ->whereNotIn('status', [2, 5])
+            ->whereNotIn('status', LeadFollowup::TODAY_FOLLOWUP_HIDDEN_STATUSES)
             ->pluck('lead_id')
             ->unique();
 
         $missedLeadIds = (clone $followUpQuery)
             ->whereDate('next_followup_date', '<', $currentDate)
-            ->whereIn('status', [0, 1, 4])
+            ->whereIn('status', LeadFollowup::TODAY_FOLLOWUP_MISSED_OPEN_STATUSES)
             ->pluck('lead_id')
             ->unique();
 
@@ -1184,21 +1184,21 @@ class DashboardController extends Controller
         if ($allLeadIds->isNotEmpty()) {
             $allFollowupsForLeads = LeadFollowup::with(['enquiry', 'enquiry.representative', 'enquiry.client'])
                 ->whereIn('lead_id', $allLeadIds)
-                ->orderByDesc('next_followup_date')
                 ->orderByDesc('created_at')
+                ->orderByDesc('next_followup_date')
                 ->get()
                 ->groupBy('lead_id')
                 ->map(fn($group) => $group->first());
 
             foreach ($allFollowupsForLeads as $latest) {
-                if (in_array($latest->status, [2, 5])) continue;
+                if (LeadFollowup::hiddenFromTodayFollowups($latest->status)) continue;
                 if (!$latest->next_followup_date) continue;
 
                 $latestDate = $latest->next_followup_date->toDateString();
                 if ($latestDate === $currentDate) {
                     $latest->is_missed = false;
                     $latestFollowups->push($latest);
-                } elseif ($latestDate < $currentDate && in_array($latest->status, [0, 1, 4])) {
+                } elseif ($latestDate < $currentDate && in_array($latest->status, LeadFollowup::TODAY_FOLLOWUP_MISSED_OPEN_STATUSES)) {
                     $latest->is_missed = true;
                     $latestFollowups->push($latest);
                 }
@@ -1384,12 +1384,12 @@ class DashboardController extends Controller
         // ── Bulk fetch: get candidate lead IDs ───────────────────────────────
         $todayLeadIds = (clone $followUpQuery)
             ->whereDate('next_followup_date', '=', $currentDate)
-            ->whereNotIn('status', [2, 5])
+            ->whereNotIn('status', LeadFollowup::TODAY_FOLLOWUP_HIDDEN_STATUSES)
             ->pluck('lead_id')->unique();
 
         $missedLeadIds = (clone $followUpQuery)
             ->whereDate('next_followup_date', '<', $currentDate)
-            ->whereIn('status', [0, 1, 4])
+            ->whereIn('status', LeadFollowup::TODAY_FOLLOWUP_MISSED_OPEN_STATUSES)
             ->pluck('lead_id')->unique();
 
         $allLeadIds = $todayLeadIds->merge($missedLeadIds)->unique()->values();
@@ -1399,21 +1399,21 @@ class DashboardController extends Controller
             // ONE bulk query — get latest followup per lead
             $allFollowupsForLeads = LeadFollowup::with(['enquiry', 'enquiry.client', 'enquiry.representative'])
                 ->whereIn('lead_id', $allLeadIds)
-                ->orderByDesc('next_followup_date')
                 ->orderByDesc('created_at')
+                ->orderByDesc('next_followup_date')
                 ->get()
                 ->groupBy('lead_id')
                 ->map(fn($group) => $group->first());
 
             $latestPerLead = collect();
             foreach ($allFollowupsForLeads as $leadId => $latest) {
-                if (in_array($latest->status, [2, 5])) continue;
+                if (LeadFollowup::hiddenFromTodayFollowups($latest->status)) continue;
                 if (!$latest->next_followup_date) continue;
                 $latestDate = $latest->next_followup_date->toDateString();
                 if ($latestDate === $currentDate) {
                     $latest->is_missed = false;
                     $latestPerLead->push($latest);
-                } elseif ($latestDate < $currentDate && in_array($latest->status, [0, 1, 4])) {
+                } elseif ($latestDate < $currentDate && in_array($latest->status, LeadFollowup::TODAY_FOLLOWUP_MISSED_OPEN_STATUSES)) {
                     $latest->is_missed = true;
                     $latestPerLead->push($latest);
                 }

@@ -61,14 +61,14 @@ class BookingConfirmationEmailServicePaymentBreakdownTest extends TestCase
                     'installments' => [
                         [
                             'date' =>
-                                '2026-09-15',
+                                '15/09/26',
 
                             'amount' =>
                                 20000,
                         ],
                         [
                             'date' =>
-                                '2026-09-25',
+                                '25/09/26',
 
                             'amount' =>
                                 33000,

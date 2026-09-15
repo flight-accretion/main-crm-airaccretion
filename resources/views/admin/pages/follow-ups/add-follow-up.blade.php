@@ -4250,23 +4250,46 @@ document
         }
 
         function showSuccessMessage(message) {
-            // Create a temporary success message
-            const alertDiv = document.createElement('div');
-            alertDiv.className = 'alert alert-success alert-dismissible fade show position-fixed';
-            alertDiv.style.top = '20px';
-            alertDiv.style.right = '20px';
-            alertDiv.style.zIndex = '9999';
-            alertDiv.innerHTML = `
-                ${message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            `;
+            document
+                .querySelectorAll('.booking-success-toast')
+                .forEach(function(existingToast) {
+                    existingToast.remove();
+                });
 
-            document.body.appendChild(alertDiv);
+            const toastDiv = document.createElement('div');
+            toastDiv.className = 'booking-success-toast fixed top-5 right-5 z-[10000] max-w-sm rounded-sm border border-emerald-200 bg-white px-4 py-3 text-sm text-emerald-800 shadow-lg';
+            toastDiv.setAttribute('role', 'status');
+            toastDiv.setAttribute('aria-live', 'polite');
 
-            // Auto remove after 3 seconds
+            const content = document.createElement('div');
+            content.className = 'flex items-start gap-3';
+
+            const icon = document.createElement('i');
+            icon.className = 'ri-checkbox-circle-line text-lg text-emerald-600';
+            icon.setAttribute('aria-hidden', 'true');
+
+            const text = document.createElement('div');
+            text.className = 'min-w-0 flex-1';
+            text.textContent = message;
+
+            const closeButton = document.createElement('button');
+            closeButton.type = 'button';
+            closeButton.className = 'ms-2 text-lg leading-none text-emerald-700 hover:text-emerald-900';
+            closeButton.setAttribute('aria-label', 'Close');
+            closeButton.textContent = 'x';
+            closeButton.addEventListener('click', function() {
+                toastDiv.remove();
+            });
+
+            content.appendChild(icon);
+            content.appendChild(text);
+            content.appendChild(closeButton);
+            toastDiv.appendChild(content);
+            document.body.appendChild(toastDiv);
+
             setTimeout(function() {
-                if (alertDiv && alertDiv.parentNode) {
-                    alertDiv.parentNode.removeChild(alertDiv);
+                if (toastDiv && toastDiv.parentNode) {
+                    toastDiv.parentNode.removeChild(toastDiv);
                 }
             }, 3000);
         }

@@ -123,7 +123,7 @@ class UpcomingFollowUpController extends Controller
         $missedQuery = (clone $baseQuery)
             ->whereDate('next_followup_date', '<', $fromDate)
             ->orderBy('next_followup_date', 'asc')
-            ->whereIn('status', [0, 1, 4]);
+            ->whereIn('status', LeadFollowup::TODAY_FOLLOWUP_MISSED_OPEN_STATUSES);
         $missedFollowUps = $missedQuery->orderBy('next_followup_date', 'asc')->get()->map(function ($f) {
             $f->is_missed = true;
             return $f;
@@ -143,13 +143,13 @@ class UpcomingFollowUpController extends Controller
         // Get today's open follow-ups
         $todayOpenQuery = (clone $baseQuery)
             ->whereDate('next_followup_date', '=', $fromDate)
-            ->whereNotIn('status', [2, 5]); // Exclude cancelled and completed
+            ->whereNotIn('status', LeadFollowup::TODAY_FOLLOWUP_HIDDEN_STATUSES);
         $todayOpenFollowUps = $todayOpenQuery->get();
         
         // Get missed open follow-ups
         $missedOpenQuery = (clone $baseQuery)
             ->whereDate('next_followup_date', '<', $fromDate)
-            ->whereIn('status', [0, 1, 4]); // Only open statuses
+            ->whereIn('status', LeadFollowup::TODAY_FOLLOWUP_MISSED_OPEN_STATUSES);
         $missedOpenFollowUps = $missedOpenQuery->get();
         
         // Combine all relevant follow-ups
@@ -167,19 +167,17 @@ class UpcomingFollowUpController extends Controller
                 continue;
             }
             
-            // Get the absolute latest follow-up for this lead (prefer the one with the
-            // most recent scheduled follow-up date; fall back to created_at to break ties).
-            // This avoids showing an older "missed" follow-up when a newer follow-up
-            // for the same lead (e.g. scheduled for today) has been created.
+            // Get the latest actual activity first so a cancelled lead cannot be
+            // reintroduced by an older active follow-up that was scheduled for today.
             $latestFollowupForLead = LeadFollowup::with(['enquiry', 'enquiry.representative', 'enquiry.latestAiScore'])
                 ->where('lead_id', $leadId)
-                ->orderByDesc('next_followup_date')
                 ->orderByDesc('created_at')
+                ->orderByDesc('next_followup_date')
                 ->first();
             
             if ($latestFollowupForLead) {
                 // If the latest follow-up is completed/cancelled, don't show this lead
-                if (in_array($latestFollowupForLead->status, [2, 5])) {
+                if (LeadFollowup::hiddenFromTodayFollowups($latestFollowupForLead->status)) {
                     $processedLeads->push($leadId);
                     continue;
                 }
@@ -194,7 +192,7 @@ class UpcomingFollowUpController extends Controller
                         $latestFollowupForLead->is_missed = false;
                         $latestPerLead->push($latestFollowupForLead);
                     } elseif ($latestFollowupForLead->next_followup_date->lt($fromDate) &&
-                             in_array($latestFollowupForLead->status, [0, 1, 4])) {
+                             in_array($latestFollowupForLead->status, LeadFollowup::TODAY_FOLLOWUP_MISSED_OPEN_STATUSES)) {
                         // This is a missed follow-up that's still open
                         $latestFollowupForLead->is_missed = true;
                         $latestPerLead->push($latestFollowupForLead);
