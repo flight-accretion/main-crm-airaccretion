@@ -139,7 +139,7 @@
      ========================================================== --}}
 <div
     id="lead-ai-score-modal"
-    class="hidden fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4 overflow-y-auto"
+    class="hidden fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4"
     role="dialog"
     aria-modal="true"
     aria-labelledby="lead-ai-score-modal-title"
@@ -148,11 +148,11 @@
         class="min-h-full flex items-center justify-center px-4 py-8"
     >
     <div
-        class="bg-white dark:bg-bodybg rounded-lg shadow-xl overflow-y-auto"
+        class="bg-white dark:bg-bodybg rounded-lg shadow-xl"
         style="border: 1px solid #dcdbdbe8;
                 margin-top: 20px;
                 margin-bottom: 20px;   
-                width: 60vw;"
+                width: 60vw;height: 90vh; overflow-y: scroll;"
     >
 
         {{-- HEADER --}}
