@@ -1269,6 +1269,7 @@
 
     </div>
 </div>
+@include('admin.partials.modals.success-error-modals')
 @endsection
 @push('scripts')
     <script>
@@ -2676,7 +2677,7 @@
                         btn.setAttribute('aria-disabled', 'true');
 
                         // Show success message
-                        showSuccessMessage('Registration link generated successfully!');
+                        showFollowupToastMessage('Registration link generated successfully!');
                     } else {
                         // Re-enable on failure so user can retry
                         btn.disabled = false;
@@ -4060,6 +4061,7 @@ confirmSendButton
 
 
                 showSuccessMessage(
+                    'send-booking-email',
                     data.message
                     ||
                     'Booking confirmation email sent successfully!'
@@ -4214,7 +4216,7 @@ document
 
             if (navigator.clipboard) {
                 navigator.clipboard.writeText(text).then(function() {
-                    showSuccessMessage('Registration link copied to clipboard!');
+                    showFollowupToastMessage('Registration link copied to clipboard!');
                 }, function(err) {
                     console.error('Could not copy text: ', err);
                     fallbackCopyTextToClipboard(text);
@@ -4238,7 +4240,7 @@ document
             try {
                 const successful = document.execCommand('copy');
                 if (successful) {
-                    showSuccessMessage('Registration link copied to clipboard!');
+                    showFollowupToastMessage('Registration link copied to clipboard!');
                 } else {
                     console.error('Fallback: Oops, unable to copy');
                 }
@@ -4249,7 +4251,7 @@ document
             document.body.removeChild(textArea);
         }
 
-        function showSuccessMessage(message) {
+        function showFollowupToastMessage(message) {
             document
                 .querySelectorAll('.booking-success-toast')
                 .forEach(function(existingToast) {
