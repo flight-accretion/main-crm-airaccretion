@@ -154,6 +154,13 @@ class WhatCrmAssignmentCustomerMessageService
             );
         }
 
+        if (
+            $integration
+            && !$this->claimAssignmentMessage($integration)
+        ) {
+            return true;
+        }
+
         try {
             $result = $this->outbound->sendTemplate(
                 $templatePayload
@@ -163,7 +170,8 @@ class WhatCrmAssignmentCustomerMessageService
                 if ($integration) {
                     $this->storeError(
                         $integration,
-                        'WhatCRM did not accept the assignment template message.'
+                        'WhatCRM did not accept the assignment template message.',
+                        true
                     );
                 }
 
@@ -179,7 +187,8 @@ class WhatCrmAssignmentCustomerMessageService
             if ($integration) {
                 $this->storeError(
                     $integration,
-                    $exception->getMessage()
+                    $exception->getMessage(),
+                    true
                 );
             }
 
@@ -222,6 +231,27 @@ class WhatCrmAssignmentCustomerMessageService
 
         return (bool) optional($fresh)
             ->assignment_message_sent_at;
+    }
+
+    private function claimAssignmentMessage(
+        WhatsAppLeadIntegration $integration
+    ): bool {
+        if (!$this->hasTrackingColumn('assignment_message_sent_at')) {
+            return true;
+        }
+
+        $updates = [
+            'assignment_message_sent_at' => now(),
+        ];
+
+        if ($this->hasTrackingColumn('assignment_message_error')) {
+            $updates['assignment_message_error'] = null;
+        }
+
+        return WhatsAppLeadIntegration::query()
+            ->whereKey($integration->id)
+            ->whereNull('assignment_message_sent_at')
+            ->update($updates) === 1;
     }
 
     private function customerNumber(
@@ -305,16 +335,28 @@ class WhatCrmAssignmentCustomerMessageService
 
     private function storeError(
         WhatsAppLeadIntegration $integration,
-        string $message
+        string $message,
+        bool $releaseClaim = false
     ): void {
-        if (!$this->hasTrackingColumn('assignment_message_error')) {
+        $updates = [];
+
+        if (
+            $releaseClaim
+            && $this->hasTrackingColumn('assignment_message_sent_at')
+        ) {
+            $updates['assignment_message_sent_at'] = null;
+        }
+
+        if ($this->hasTrackingColumn('assignment_message_error')) {
+            $updates['assignment_message_error'] =
+                mb_substr($message, 0, 2000);
+        }
+
+        if (empty($updates)) {
             return;
         }
 
-        $integration->update([
-            'assignment_message_error' =>
-                mb_substr($message, 0, 2000),
-        ]);
+        $integration->update($updates);
     }
 
     private function hasTrackingColumn(string $column): bool

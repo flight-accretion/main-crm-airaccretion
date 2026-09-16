@@ -11,6 +11,7 @@ use App\Models\Product;
 use App\Models\SalespersonAvailability;
 use App\Models\User;
 use App\Models\UserType;
+use App\Models\WhatsAppLeadIntegration;
 use App\Services\LeadAllocationService;
 use App\Services\WhatsAppLeadService;
 use Carbon\Carbon;
@@ -565,6 +566,126 @@ class WhatsAppLeadServiceTest extends TestCase
                 'sender_user_id' => $salesperson->id,
                 'message_type' => 'template',
             ]
+        );
+    }
+
+    public function test_assignment_customer_template_is_claimed_before_send_to_prevent_duplicate_assignment_triggers(): void
+    {
+        config()->set(
+            'whatcrm.assignment_customer_message_enabled',
+            true
+        );
+        config()->set(
+            'whatcrm.assignment_customer_template',
+            'lead_qualified'
+        );
+        config()->set(
+            'whatcrm.template_message_url',
+            'https://web.airaccretion.com/api/v1/send_templet'
+        );
+        config()->set('whatcrm.template_message_token', 'test-token');
+
+        $salesperson =
+            $this->createSalesUser(
+                'Race Agent',
+                '9000090000'
+            );
+
+        $client =
+            Client::create([
+                'id' => (string) Str::uuid(),
+                'name' => 'Race Customer',
+                'contact_number' => '+91-9894498718',
+                'alternate_number' => null,
+                'status' => 1,
+            ]);
+
+        $lead =
+            Lead::withoutEvents(function () use (
+                $client,
+                $salesperson
+            ) {
+                return Lead::create([
+                    'id' => (string) Str::uuid(),
+                    'client_id' => $client->id,
+                    'representative_user_id' => $salesperson->id,
+                    'service_ids' => null,
+                    'product_ids' => null,
+                    'number_of_passengers' => 1,
+                    'description' => 'Race lead',
+                    'occasion' => null,
+                ]);
+            });
+
+        $integration =
+            WhatsAppLeadIntegration::create([
+                'lead_id' => $lead->id,
+                'product_id' => null,
+                'phone' => '9894498718',
+                'external_id' => 'WA-RACE-ASSIGNMENT-1',
+                'status' => 'assigned',
+                'assigned_user_id' => $salesperson->id,
+                'assigned_at' => now(),
+                'payload' => [],
+            ]);
+
+        $requestCount = 0;
+
+        Http::fake([
+            'https://web.airaccretion.com/api/v1/send_templet' =>
+                function () use (
+                    &$requestCount,
+                    $lead
+                ) {
+                    $requestCount++;
+                    $messageId =
+                        'wamid.RACE-ASSIGNMENT-'
+                        . $requestCount;
+
+                    if ($requestCount === 1) {
+                        app(
+                            \App\Services\WhatCrmAssignmentCustomerMessageService::class
+                        )->sendForLeadId($lead->id);
+                    }
+
+                    return Http::response(
+                        [
+                            'success' => true,
+                            'metaResponse' => [
+                                'messages' => [
+                                    [
+                                        'id' => $messageId,
+                                        'message_status' => 'accepted',
+                                    ],
+                                ],
+                            ],
+                        ],
+                        200
+                    );
+                },
+            '*' => Http::response(['success' => false], 500),
+        ]);
+
+        app(\App\Services\WhatCrmAssignmentCustomerMessageService::class)
+            ->send($integration);
+
+        Http::assertSentCount(1);
+
+        $this->assertSame(
+            1,
+            $requestCount
+        );
+
+        $this->assertDatabaseHas(
+            'whatsapp_lead_integrations',
+            [
+                'id' => $integration->id,
+                'assignment_message_error' => null,
+            ]
+        );
+
+        $this->assertNotNull(
+            $integration->fresh()->assignment_message_sent_at
         );
     }
 
