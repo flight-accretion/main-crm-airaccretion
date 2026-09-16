@@ -383,4 +383,142 @@ class WhatsAppOpenAiClientTest extends TestCase
                 && !str_contains($instructions, '{{CRM_');
         });
     }
+
+    public function test_website_catalog_data_is_added_to_whatsapp_ai_runtime_instructions(): void
+    {
+        config()->set(
+            'whatcrm.openai_responses_url',
+            'https://api.openai.test/v1/responses'
+        );
+        config()->set(
+            'services.website_catalog.catalog_url',
+            'https://www.accretionaviation.test/api/catalog-products.php'
+        );
+        config()->set(
+            'services.website_catalog.notes_secret',
+            'catalog-secret'
+        );
+
+        $setting = new WhatsAppAiAgentSetting([
+            'model' => 'gpt-4o-mini',
+            'prompt' =>
+                'Use current CRM and website catalog data for replies.',
+        ]);
+        $setting->setApiKey('openai-key');
+
+        $conversation = new WhatsAppConversation();
+        $conversation->setRelation(
+            'contact',
+            new WhatsAppContact([
+                'name' => 'Catalog Customer',
+                'normalized_phone' => '919812345678',
+            ])
+        );
+
+        Http::fake([
+            'https://www.accretionaviation.test/api/catalog-products.php' =>
+                Http::response([
+                    'success' => true,
+                    'catalog' => [
+                        [
+                            'website_service_type_id' => 2,
+                            'service_type_name' => 'Helicopter Joyride',
+                            'location' => [
+                                'name' => 'Mumbai',
+                                'city' => 'Mumbai',
+                                'ai_note' => 'Use this for Mumbai joyride FAQs.',
+                            ],
+                            'services' => [
+                                [
+                                    'website_service_product_id' => 21,
+                                    'name' => 'Mumbai Helicopter Joyride 30 Minutes',
+                                    'filtered_url' => 'https://www.accretionaviation.test/mumbai-helicopter-joyride.php?search=Mumbai%20Helicopter%20Joyride%2030%20Minutes',
+                                    'duration' => '30 Minutes',
+                                    'price' => '34550',
+                                    'city' => 'Mumbai',
+                                    'meeting_point' => 'Juhu Helipad',
+                                    'highlights' => ['Mumbai skyline'],
+                                    'add_ons' => [
+                                        ['name' => 'Cake', 'price' => '950'],
+                                    ],
+                                ],
+                            ],
+                            'similar_services' => [
+                                [
+                                    'name' => 'Mumbai Plane Joyride',
+                                    'filtered_url' => 'https://www.accretionaviation.test/mumbai-plane-joyride.php?search=Mumbai%20Plane%20Joyride',
+                                ],
+                            ],
+                        ],
+                    ],
+                    'similar_services' => [
+                        [
+                            'name' => 'Mumbai Plane Joyride',
+                            'filtered_url' => 'https://www.accretionaviation.test/mumbai-plane-joyride.php?search=Mumbai%20Plane%20Joyride',
+                        ],
+                    ],
+                ], 200),
+            'https://api.openai.test/v1/responses' => Http::response([
+                'output_text' => json_encode([
+                    'reply' => 'Mumbai helicopter joyride details shared.',
+                    'product_name' => 'Helicopter Joyride',
+                    'service' => 'Mumbai Helicopter Joyride 30 Minutes',
+                    'service_url' => 'https://www.accretionaviation.test/mumbai-helicopter-joyride.php?search=Mumbai%20Helicopter%20Joyride%2030%20Minutes',
+                ]),
+            ], 200),
+        ]);
+
+        app(WhatsAppOpenAiClient::class)->generateReply(
+            $setting,
+            $conversation,
+            collect([
+                new WhatsAppMessage([
+                    'direction' => 'incoming',
+                    'message_type' => 'text',
+                    'body' => 'Mumbai helicopter joyride price?',
+                    'message_at' => now(),
+                ]),
+            ]),
+            collect([
+                new Product([
+                    'id' => 'product-heli',
+                    'product' => 'Helicopter Joyride',
+                    'website_service_type_id' => 2,
+                ]),
+            ])
+        );
+
+        Http::assertSent(function ($request) {
+            if ($request->url() !== 'https://api.openai.test/v1/responses') {
+                return false;
+            }
+
+            $instructions = (string) data_get(
+                $request->data(),
+                'instructions'
+            );
+
+            return str_contains(
+                $instructions,
+                'Website catalog data:'
+            )
+                && str_contains(
+                    $instructions,
+                    'Mumbai Helicopter Joyride 30 Minutes'
+                )
+                && str_contains(
+                    $instructions,
+                    'https://www.accretionaviation.test/mumbai-helicopter-joyride.php?search=Mumbai%20Helicopter%20Joyride%2030%20Minutes'
+                )
+                && str_contains(
+                    $instructions,
+                    'Similar website services:'
+                )
+                && str_contains($instructions, 'Mumbai Plane Joyride')
+                && str_contains(
+                    $instructions,
+                    'Use Website catalog data for product/service facts, duration, city, add-ons, highlights, meeting point, AI notes, service links, and similar-service suggestions.'
+                );
+        });
+    }
 }

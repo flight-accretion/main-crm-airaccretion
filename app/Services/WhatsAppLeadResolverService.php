@@ -306,7 +306,10 @@ class WhatsAppLeadResolverService
 
         foreach (
             [
+                'product_name' => 'Product',
                 'service' => 'Service',
+                'service_url' => 'Website Service Link',
+                'website_service_product_id' => 'Website Service Product ID',
                 'date' => 'Date',
                 'city' => 'City',
                 'guest' => 'Guests',

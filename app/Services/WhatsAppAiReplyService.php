@@ -345,10 +345,16 @@ class WhatsAppAiReplyService
         array $aiResult
     ): array {
         return [
-            'service' => $aiResult['product_name']
+            'service' => $aiResult['service']
+                ?? $aiResult['product_name']
                 ?? $aiResult['product']
-                ?? $aiResult['service']
                 ?? null,
+            'product_name' => $aiResult['product_name']
+                ?? $aiResult['product']
+                ?? null,
+            'service_url' => $aiResult['service_url'] ?? null,
+            'website_service_product_id' =>
+                $aiResult['website_service_product_id'] ?? null,
             'date' => $aiResult['date']
                 ?? $aiResult['service_date']
                 ?? null,

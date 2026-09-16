@@ -132,25 +132,30 @@ return [
         'leads@accretionaviation.com'
     ),
 
+    ],
+
     'website_catalog' => [
 
-    'webhook_secret' =>
-        env(
-            'WEBSITE_CATALOG_WEBHOOK_SECRET'
-        ),
+        'webhook_secret' =>
+            env(
+                'WEBSITE_CATALOG_WEBHOOK_SECRET'
+            ),
 
-    'notes_url' =>
-        env(
-            'WEBSITE_CATALOG_NOTES_URL'
-        ),
+        'notes_url' =>
+            env(
+                'WEBSITE_CATALOG_NOTES_URL'
+            ),
 
-    'notes_secret' =>
-        env(
-            'WEBSITE_CATALOG_NOTES_SECRET'
-        ),
+        'catalog_url' =>
+            env(
+                'WEBSITE_CATALOG_DATA_URL'
+            ),
 
-],
+        'notes_secret' =>
+            env(
+                'WEBSITE_CATALOG_NOTES_SECRET'
+            ),
 
-],
+    ],
 
 ];

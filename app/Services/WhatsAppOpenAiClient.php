@@ -160,6 +160,9 @@ public function generateReply(
             . '"service_family":null,'
             . '"product_id":null,'
             . '"product_name":null,'
+            . '"service":null,'
+            . '"service_url":null,'
+            . '"website_service_product_id":null,'
             . '"extracted_fields":{'
             . '"origin":null,'
             . '"destination":null,'
@@ -274,6 +277,14 @@ public function generateReply(
             . $runtimeData['CRM_SERVICE_DATA'];
         $lines[] = 'CRM live product data: '
             . $runtimeData['CRM_LIVE_PRODUCT_DATA'];
+        $lines[] = 'Website catalog data: '
+            . $runtimeData['CRM_WEBSITE_CATALOG_DATA'];
+        $lines[] = 'Similar website services: '
+            . $runtimeData['CRM_WEBSITE_SIMILAR_SERVICES'];
+        $lines[] =
+            'Use Website catalog data for product/service facts, duration, city, add-ons, highlights, meeting point, AI notes, service links, and similar-service suggestions.';
+        $lines[] =
+            'When a customer asks pricing or available options, share the relevant website service filtered_url/url from Website catalog data. If the exact requested service is unavailable, recommend similar website services instead of saying the service is unavailable.';
         $lines[] = 'CRM recommended alternatives: '
             . $runtimeData['CRM_RECOMMENDED_ALTERNATIVES'];
         $lines[] = 'CRM value comparison: '
@@ -477,6 +488,24 @@ $lines[] =
                 ['service_family', 'family']
             ),
             'service' => $service,
+            'service_url' => $this->firstText(
+                $decoded,
+                [
+                    'service_url',
+                    'website_service_url',
+                    'product_link',
+                    'lead.service_url',
+                ]
+            ),
+            'website_service_product_id' => $this->firstText(
+                $decoded,
+                [
+                    'website_service_product_id',
+                    'website_product_id',
+                    'service_product_id',
+                    'lead.website_service_product_id',
+                ]
+            ),
             'date' => $date,
             'service_date' => $date,
             'passengers' => $passengers,

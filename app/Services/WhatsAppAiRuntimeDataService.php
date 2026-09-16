@@ -33,6 +33,7 @@ class WhatsAppAiRuntimeDataService
     private WhatsAppAiPricingSheetService $pricingSheet,
 
     private WebsiteCatalogAiNotesService $websiteAiNotes,
+    private WebsiteCatalogDataService $websiteCatalog,
     private WhatsAppAiStateService $aiState,
     private WhatsAppRequiredFieldsService $requiredFields,
     private WhatsAppCrossSellService $crossSell
@@ -85,6 +86,21 @@ class WhatsAppAiRuntimeDataService
             $followup
         );
         $state = $this->aiState->get($conversation);
+        $currentCustomerMessage =
+            $this->currentCustomerMessage($messages);
+        $websiteCatalogData =
+            $this->websiteCatalog->forProducts(
+                $products,
+                array_merge(
+                    $state,
+                    [
+                        'current_customer_message' =>
+                            $currentCustomerMessage !== self::NOT_PROVIDED
+                                ? $currentCustomerMessage
+                                : null,
+                    ]
+                )
+            );
         $aiMissingFields =
             $this->requiredFields->missing($state);
         $missingFields =
@@ -157,13 +173,25 @@ class WhatsAppAiRuntimeDataService
                     $recommendedAlternatives,
                     JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
                 ),
+            'CRM_WEBSITE_CATALOG_DATA' =>
+                json_encode(
+                    $websiteCatalogData['catalog'] ?? [],
+                    JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+                ),
+            'CRM_WEBSITE_SIMILAR_SERVICES' =>
+                json_encode(
+                    $websiteCatalogData['similar_services'] ?? [],
+                    JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+                ),
             'CRM_VALUE_COMPARISON' =>
                 json_encode(
                     $valueComparison,
                     JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
                 ),
             'CRM_WEBSITE_DATA_ERROR' =>
-                'NO',
+                ($websiteCatalogData['status'] ?? '') === 'ok'
+                    ? 'NO'
+                    : (string) ($websiteCatalogData['status'] ?? 'unavailable'),
                 'CRM_WEBSITE_AI_NOTES' =>
              $websiteProductAiNotes,
             'CRM_SERVICE_LOCATIONS' =>
@@ -179,7 +207,7 @@ class WhatsAppAiRuntimeDataService
             'CRM_CONVERSATION_HISTORY' =>
                 $this->messageLines($contextMessages ?: collect()),
             'CRM_CURRENT_CUSTOMER_MESSAGE' =>
-                $this->currentCustomerMessage($messages),
+                $currentCustomerMessage,
         ];
 
         return array_map(

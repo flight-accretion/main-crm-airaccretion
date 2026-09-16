@@ -88,7 +88,15 @@ class WhatsAppPreLeadHandoffService
                 'message_at' => optional($latest)->message_at ?: now(),
                 'whatcrm_chat_id' => $conversation->whatcrm_chat_id,
                 'chat_id' => $conversation->whatcrm_chat_id,
-                'service' => $state['product_name'] ?? $state['service_family'] ?? null,
+                'service' =>
+                    $state['service']
+                    ?? $state['product_name']
+                    ?? $state['service_family']
+                    ?? null,
+                'product_name' => $state['product_name'] ?? null,
+                'service_url' => $state['service_url'] ?? null,
+                'website_service_product_id' =>
+                    $state['website_service_product_id'] ?? null,
                 'date' => $state['date'] ?? null,
                 'guest' => $state['passengers'] ?? null,
                 'route' => $this->routeText($state),
