@@ -138,6 +138,18 @@ class Kernel extends ConsoleKernel
 
         $schedule
         ->command(
+            'whatsapp:handoff-inactive-ai-conversations'
+        )
+        ->everyMinute()
+        ->withoutOverlapping()
+        ->appendOutputTo(
+            storage_path(
+                'logs/whatsapp-ai-handoff.log'
+            )
+        );
+
+        $schedule
+        ->command(
             'skyrack:sync-leads'
         )
         ->everyMinute()

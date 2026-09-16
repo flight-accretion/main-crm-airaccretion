@@ -22,11 +22,27 @@ class WhatsAppConversation extends Model
         'status',
         'last_message',
         'last_message_at',
+        'conversation_owner',
+        'ai_state',
+        'last_conversation_activity_at',
+        'last_customer_message_at',
+        'last_ai_message_at',
+        'human_handoff_at',
+        'handoff_reason',
+        'handoff_priority',
+        'human_summary',
+        'activity_version',
         'unread_count',
     ];
 
     protected $casts = [
         'last_message_at' => 'datetime',
+        'ai_state' => 'array',
+        'last_conversation_activity_at' => 'datetime',
+        'last_customer_message_at' => 'datetime',
+        'last_ai_message_at' => 'datetime',
+        'human_handoff_at' => 'datetime',
+        'activity_version' => 'integer',
         'unread_count' => 'integer',
     ];
 

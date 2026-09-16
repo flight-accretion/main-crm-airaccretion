@@ -30,6 +30,14 @@ class WhatsAppAiBufferService
     ): ?WhatsAppAiReplyBatch {
         $this->lastStatus = null;
 
+        if (!app(WhatsAppAiEligibilityService::class)->canAiOwn($conversation)) {
+            return $this->skip(
+                'ai_not_eligible',
+                $conversation,
+                $message
+            );
+        }
+
         if (
             !Schema::hasTable('whatsapp_ai_agent_settings')
             || !Schema::hasTable('whatsapp_ai_reply_batches')

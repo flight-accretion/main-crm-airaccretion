@@ -3,6 +3,8 @@
 namespace Tests\Unit;
 
 use App\Models\EmailLeadProductUserAssignment;
+use App\Models\AiAgent;
+use App\Models\AiModelProfile;
 use App\Models\Lead;
 use App\Models\Product;
 use App\Models\SalespersonAvailability;
@@ -61,7 +63,7 @@ class WhatsAppAiReplyServiceTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_due_buffer_generates_ai_reply_assigns_detected_product_agent_and_sends_to_whatcrm(): void
+    public function test_due_buffer_generates_ai_reply_updates_prelead_state_without_assigning_salesperson(): void
     {
         $productAgent = $this->createSalesUser('Helicopter Agent');
         $this->makeAvailable($productAgent);
@@ -78,17 +80,11 @@ class WhatsAppAiReplyServiceTest extends TestCase
             'is_active' => true,
         ]);
 
-        $setting = WhatsAppAiAgentSetting::create([
-            'enabled' => true,
-            'auto_reply_enabled' => true,
-            'provider' => 'openai',
-            'model' => 'gpt-4o-mini',
-            'prompt' => 'Reply for Accretion Aviation and detect the product.',
-            'buffer_seconds' => 10,
-            'context_message_limit' => 2,
-        ]);
-        $setting->setApiKey('openai-key');
-        $setting->save();
+        $setting = $this->createReadyAiSetting(
+            'Reply for Accretion Aviation and detect the product.',
+            10,
+            2
+        );
 
         Http::fake([
             'https://api.openai.com/v1/responses' =>
@@ -148,6 +144,8 @@ class WhatsAppAiReplyServiceTest extends TestCase
                 'status' => 'delivered',
             ]);
 
+        $this->assertNull($result['lead_id']);
+
         DB::table('whatsapp_messages')->insert([
             [
                 'id' => (string) Str::uuid(),
@@ -204,16 +202,24 @@ class WhatsAppAiReplyServiceTest extends TestCase
 
         $this->assertSame(1, $summary['processed']);
 
-        $lead = Lead::find($result['lead_id']);
-
-        $this->assertNotNull($lead);
-        $this->assertSame(
-            [$product->id],
-            $lead->product_ids
+        $this->assertDatabaseCount('leads', 0);
+        $this->assertDatabaseHas(
+            'whatsapp_conversations',
+            [
+                'id' => $result['conversation_id'],
+                'lead_id' => null,
+                'assigned_user_id' => null,
+                'conversation_owner' => 'AI',
+            ]
         );
+
+        $state = DB::table('whatsapp_conversations')
+            ->where('id', $result['conversation_id'])
+            ->value('ai_state');
+
         $this->assertSame(
-            $productAgent->id,
-            $lead->representative_user_id
+            'Gangtok To Bagdogra By Helicopter',
+            data_get(json_decode($state, true), 'product_name')
         );
 
         $this->assertDatabaseHas(
@@ -222,7 +228,7 @@ class WhatsAppAiReplyServiceTest extends TestCase
                 'provider_message_id' => 'wamid.AI-OUT-1',
                 'direction' => 'outgoing',
                 'sender_type' => 'agent',
-                'sender_user_id' => $productAgent->id,
+                'sender_user_id' => null,
                 'body' =>
                     'Yes, we can help with the Gangtok to Bagdogra helicopter.',
             ]
@@ -233,7 +239,7 @@ class WhatsAppAiReplyServiceTest extends TestCase
             [
                 'conversation_id' => $result['conversation_id'],
                 'status' => 'sent',
-                'assigned_user_id' => $productAgent->id,
+                'assigned_user_id' => null,
                 'detected_product' =>
                     'Gangtok To Bagdogra By Helicopter',
             ]
@@ -249,23 +255,11 @@ class WhatsAppAiReplyServiceTest extends TestCase
 
             $payload = $request->data();
 
-            return $request->hasHeader(
-                    'Authorization',
-                    'Bearer openai-key'
-                )
+            return $request->hasHeader('Authorization', 'Bearer openai-key')
                 && $payload['model'] === 'gpt-4o-mini'
-                && str_contains(
-                    data_get($payload, 'input.0.content.0.text', ''),
-                    'Need Gangtok to Bagdogra helicopter tomorrow'
-                )
-                && str_contains(
-                    data_get($payload, 'input.0.content.0.text', ''),
-                    'Previous context says 4 passengers'
-                )
-                && !str_contains(
-                    data_get($payload, 'input.0.content.0.text', ''),
-                    'Very old message outside context window'
-                );
+                && str_contains($payload['input'] ?? '', 'Need Gangtok to Bagdogra helicopter tomorrow')
+                && str_contains($payload['input'] ?? '', 'Previous context says 4 passengers')
+                && !str_contains($payload['input'] ?? '', 'Very old message outside context window');
         });
 
         Http::assertSent(function ($request) {
@@ -295,7 +289,7 @@ class WhatsAppAiReplyServiceTest extends TestCase
         });
     }
 
-    public function test_ai_qualification_updates_lead_service_date_guests_and_whatsapp_note(): void
+    public function test_ai_qualification_merges_extracted_fields_into_conversation_state_without_crm_lead(): void
     {
         $productAgent = $this->createSalesUser('Charter Agent');
         $this->makeAvailable($productAgent);
@@ -320,17 +314,11 @@ class WhatsAppAiReplyServiceTest extends TestCase
             'is_active' => true,
         ]);
 
-        $setting = WhatsAppAiAgentSetting::create([
-            'enabled' => true,
-            'auto_reply_enabled' => true,
-            'provider' => 'openai',
-            'model' => 'gpt-4o-mini',
-            'prompt' => 'Reply for Accretion Aviation and detect lead details.',
-            'buffer_seconds' => 4,
-            'context_message_limit' => 20,
-        ]);
-        $setting->setApiKey('openai-key');
-        $setting->save();
+        $setting = $this->createReadyAiSetting(
+            'Reply for Accretion Aviation and detect lead details.',
+            4,
+            20
+        );
 
         Http::fake([
             'https://api.openai.com/v1/responses' =>
@@ -338,12 +326,20 @@ class WhatsAppAiReplyServiceTest extends TestCase
                     'output_text' => json_encode([
                         'reply' =>
                             'Thank you Abhishek, our team will share the exact itinerary shortly.',
-                        'product' => 'Helicopter Charters',
-                        'service' =>
-                            'Helicopter Charter Indore to Ujjain',
-                        'service_date' => '07-Sep-2026',
-                        'guests' => 2,
-                        'route' => 'Indore to Ujjain',
+                        'service_family' => 'private_helicopter_charter',
+                        'product_name' => 'Helicopter Charters',
+                        'extracted_fields' => [
+                            'origin' => 'Indore',
+                            'destination' => 'Ujjain',
+                            'date' => '07-Sep-2026',
+                            'passengers' => 2,
+                            'occasion' => 'Early morning bhasma aarti',
+                        ],
+                        'initial_booking_intent' => false,
+                        'initial_payment_intent' => false,
+                        'customer_ready_to_book' => false,
+                        'customer_ready_to_pay' => false,
+                        'needs_human' => false,
                     ]),
                 ], 200),
             'https://web.airaccretion.com/api/v1/send-message*' =>
@@ -401,50 +397,44 @@ class WhatsAppAiReplyServiceTest extends TestCase
 
         $this->assertSame(1, $summary['processed']);
 
-        $lead = Lead::with('rideSegments')
-            ->findOrFail($result['lead_id']);
+        $this->assertNull($result['lead_id']);
+        $this->assertDatabaseCount('leads', 0);
+        $this->assertDatabaseCount('lead_rides', 0);
 
-        $this->assertSame([$product->id], $lead->product_ids_array);
-        $this->assertSame([$service->id], $lead->service_ids_array);
-        $this->assertSame(2, $lead->number_of_passengers);
+        $state = json_decode(
+            DB::table('whatsapp_conversations')
+                ->where('id', $result['conversation_id'])
+                ->value('ai_state'),
+            true
+        );
 
-        $ride = $lead->rideSegments->first();
-
-        $this->assertNotNull($ride);
         $this->assertSame(
-            '2026-09-07',
-            $ride->from_date->toDateString()
+            'private_helicopter_charter',
+            data_get($state, 'service_family')
         );
-        $this->assertSame('Indore', $ride->from_place);
-        $this->assertSame('Ujjain', $ride->to_place);
-
-        $this->assertStringContainsString(
-            'Customer: Abhishek Zula',
-            $lead->description
+        $this->assertSame(
+            'Helicopter Charters',
+            data_get($state, 'product_name')
         );
-        $this->assertStringContainsString(
-            'Product: Helicopter Charters',
-            $lead->description
+        $this->assertSame(
+            'Indore',
+            data_get($state, 'origin')
         );
-        $this->assertStringContainsString(
-            'Service: Helicopter Charter Indore to Ujjain',
-            $lead->description
+        $this->assertSame(
+            'Ujjain',
+            data_get($state, 'destination')
         );
-        $this->assertStringContainsString(
-            'Date: 07-Sep-2026',
-            $lead->description
+        $this->assertSame(
+            '07-Sep-2026',
+            data_get($state, 'date')
         );
-        $this->assertStringContainsString(
-            'Guests: 2',
-            $lead->description
+        $this->assertSame(
+            2,
+            data_get($state, 'passengers')
         );
-        $this->assertStringContainsString(
-            'Indore to ujjain temple in helicopter',
-            $lead->description
-        );
-        $this->assertStringContainsString(
-            'Early morning bhasma aarti',
-            $lead->description
+        $this->assertSame(
+            false,
+            data_get($state, 'customer_ready_to_book')
         );
     }
 
@@ -483,6 +473,45 @@ class WhatsAppAiReplyServiceTest extends TestCase
         ]);
     }
 
+    private function createReadyAiSetting(
+        string $prompt,
+        int $bufferSeconds = 4,
+        int $contextMessageLimit = 10000
+    ): WhatsAppAiAgentSetting {
+        WhatsAppAiAgentSetting::query()->delete();
+
+        $profile = AiModelProfile::create([
+            'id' => (string) Str::uuid(),
+            'name' => 'WhatsApp Test Profile',
+            'provider' => 'openai',
+            'model' => 'gpt-4o-mini',
+            'enabled' => true,
+        ]);
+        $profile->setApiKey('openai-key');
+        $profile->save();
+
+        $agent = AiAgent::create([
+            'id' => (string) Str::uuid(),
+            'name' => 'WhatsApp Test Agent',
+            'agent_type' => 'whatsapp',
+            'ai_model_profile_id' => $profile->id,
+            'prompt' => $prompt,
+            'enabled' => true,
+        ]);
+
+        return WhatsAppAiAgentSetting::create([
+            'id' => (string) Str::uuid(),
+            'enabled' => true,
+            'auto_reply_enabled' => true,
+            'provider' => 'openai',
+            'model' => 'gpt-4o-mini',
+            'prompt' => $prompt,
+            'buffer_seconds' => $bufferSeconds,
+            'context_message_limit' => $contextMessageLimit,
+            'ai_agent_id' => $agent->id,
+        ]);
+    }
+
     private function createSchema(): void
     {
         Schema::create('user_types', function (Blueprint $table) {
@@ -499,6 +528,30 @@ class WhatsAppAiReplyServiceTest extends TestCase
             $table->string('password')->nullable();
             $table->uuid('user_type_id')->nullable();
             $table->integer('status')->default(1);
+            $table->timestamps();
+        });
+
+        Schema::create('ai_model_profiles', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('name');
+            $table->string('provider');
+            $table->string('model');
+            $table->text('api_key_encrypted')->nullable();
+            $table->boolean('enabled')->default(true);
+            $table->uuid('created_by')->nullable();
+            $table->uuid('updated_by')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('ai_agents', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('name');
+            $table->string('agent_type');
+            $table->uuid('ai_model_profile_id');
+            $table->text('prompt')->nullable();
+            $table->boolean('enabled')->default(true);
+            $table->uuid('created_by')->nullable();
+            $table->uuid('updated_by')->nullable();
             $table->timestamps();
         });
 
@@ -663,6 +716,16 @@ class WhatsAppAiReplyServiceTest extends TestCase
             $table->string('status', 30)->default('open');
             $table->text('last_message')->nullable();
             $table->timestamp('last_message_at')->nullable();
+            $table->string('conversation_owner', 20)->default('AI');
+            $table->json('ai_state')->nullable();
+            $table->timestamp('last_conversation_activity_at')->nullable();
+            $table->timestamp('last_customer_message_at')->nullable();
+            $table->timestamp('last_ai_message_at')->nullable();
+            $table->timestamp('human_handoff_at')->nullable();
+            $table->string('handoff_reason', 100)->nullable();
+            $table->string('handoff_priority', 10)->nullable();
+            $table->text('human_summary')->nullable();
+            $table->unsignedInteger('activity_version')->default(0);
             $table->unsignedInteger('unread_count')->default(0);
             $table->timestamps();
         });
@@ -696,6 +759,8 @@ class WhatsAppAiReplyServiceTest extends TestCase
             $table->text('api_key_encrypted')->nullable();
             $table->unsignedInteger('buffer_seconds')->default(10);
             $table->unsignedInteger('context_message_limit')->default(10000);
+            $table->uuid('ai_model_profile_id')->nullable();
+            $table->uuid('ai_agent_id')->nullable();
             $table->timestamps();
         });
 

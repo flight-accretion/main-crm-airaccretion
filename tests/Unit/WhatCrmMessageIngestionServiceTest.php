@@ -4,6 +4,8 @@ namespace Tests\Unit;
 
 use App\Models\Client;
 use App\Models\EmailLeadProductUserAssignment;
+use App\Models\AiAgent;
+use App\Models\AiModelProfile;
 use App\Models\Lead;
 use App\Models\LeadFollowup;
 use App\Models\Product;
@@ -58,6 +60,7 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
     {
         $salesperson = $this->createSalesUser('Samarpit Sharma');
         $lead = $this->createActiveLead('Rajesh Sharma', '9876543210', $salesperson);
+        $this->createReadyAiSetting();
 
         $payload = [
             'message_id' => 'wamid.INGEST-1',
@@ -81,6 +84,7 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
         $this->assertTrue($second['duplicate']);
         $this->assertSame($lead->id, $first['lead_id']);
         $this->assertSame($salesperson->id, $first['assigned_user_id']);
+        $this->assertNull($first['ai_reply_batch_id']);
 
         $this->assertDatabaseCount('whatsapp_contacts', 1);
         $this->assertDatabaseCount('whatsapp_conversations', 1);
@@ -100,6 +104,7 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
             [
                 'lead_id' => $lead->id,
                 'assigned_user_id' => $salesperson->id,
+                'conversation_owner' => 'HUMAN',
                 'last_message' => 'Please call me',
                 'unread_count' => 1,
             ]
@@ -131,6 +136,44 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
             $followup->followup_note
         );
         $this->assertSame($salesperson->id, $followup->followed_by);
+        $this->assertDatabaseCount('whatsapp_ai_reply_batches', 0);
+    }
+
+    public function test_active_lead_without_representative_still_stops_ai_queue(): void
+    {
+        $lead = $this->createActiveLead(
+            'Unassigned Active',
+            '9876543221',
+            null
+        );
+        $this->createReadyAiSetting();
+
+        $result = app(WhatCrmMessageIngestionService::class)
+            ->process([
+                'message_id' => 'wamid.ACTIVE-NO-REP-1',
+                'chat_id' => 'chat-active-no-rep',
+                'number' => '+91 98765 43221',
+                'customer_name' => 'Unassigned Active',
+                'message' => 'Need details',
+                'message_type' => 'text',
+                'direction' => 'incoming',
+                'message_at' => now()->toIso8601String(),
+                'status' => 'delivered',
+            ]);
+
+        $this->assertSame($lead->id, $result['lead_id']);
+        $this->assertNull($result['assigned_user_id']);
+        $this->assertNull($result['ai_reply_batch_id']);
+        $this->assertDatabaseCount('whatsapp_ai_reply_batches', 0);
+        $this->assertDatabaseHas(
+            'whatsapp_conversations',
+            [
+                'id' => $result['conversation_id'],
+                'lead_id' => $lead->id,
+                'assigned_user_id' => null,
+                'conversation_owner' => 'HUMAN',
+            ]
+        );
     }
 
     public function test_repeated_customer_message_does_not_create_duplicate_followup_but_new_message_does(): void
@@ -333,18 +376,9 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
         );
     }
 
-    public function test_incoming_message_without_active_lead_creates_one_assigned_lead_and_initial_followup(): void
+    public function test_incoming_message_without_active_lead_stays_ai_prelead_without_creating_crm_lead(): void
     {
-        $salesperson = $this->createSalesUser('Available Salesperson');
-        $product = $this->createProduct('Yacht in Goa');
-
-        EmailLeadProductUserAssignment::create([
-            'user_id' => $salesperson->id,
-            'product_id' => $product->id,
-            'is_active' => true,
-        ]);
-
-        $this->makeAvailable($salesperson);
+        $this->createReadyAiSetting(10);
 
         $result = app(WhatCrmMessageIngestionService::class)
             ->process([
@@ -363,31 +397,27 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
             ]);
 
         $this->assertFalse($result['duplicate']);
-        $this->assertNotNull($result['lead_id']);
-        $this->assertSame($salesperson->id, $result['assigned_user_id']);
-        $this->assertDatabaseCount('clients', 1);
-        $this->assertDatabaseCount('leads', 1);
-        $this->assertDatabaseCount('lead_followups', 1);
+        $this->assertNull($result['lead_id']);
+        $this->assertNull($result['assigned_user_id']);
+        $this->assertSame('queued', $result['ai_status']);
+        $this->assertNotNull($result['ai_reply_batch_id']);
+        $this->assertDatabaseCount('clients', 0);
+        $this->assertDatabaseCount('leads', 0);
+        $this->assertDatabaseCount('lead_followups', 0);
         $this->assertDatabaseHas(
-            'clients',
+            'whatsapp_contacts',
             [
                 'name' => 'New Customer',
-                'contact_number' => '9876543213',
-            ]
-        );
-        $this->assertDatabaseHas(
-            'leads',
-            [
-                'id' => $result['lead_id'],
-                'representative_user_id' => $salesperson->id,
-                'number_of_passengers' => 4,
+                'normalized_phone' => '9876543213',
             ]
         );
         $this->assertDatabaseHas(
             'whatsapp_conversations',
             [
-                'lead_id' => $result['lead_id'],
-                'assigned_user_id' => $salesperson->id,
+                'id' => $result['conversation_id'],
+                'lead_id' => null,
+                'assigned_user_id' => null,
+                'conversation_owner' => 'AI',
                 'unread_count' => 1,
             ]
         );
@@ -395,9 +425,6 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
 
     public function test_minimal_whatcrm_payload_without_message_id_is_accepted(): void
     {
-        $salesperson = $this->createSalesUser('Minimal Payload Owner');
-        $this->makeAvailable($salesperson);
-
         $result = app(WhatCrmMessageIngestionService::class)
             ->process([
                 'name' => 'Minimal Customer',
@@ -407,7 +434,8 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
 
         $this->assertFalse($result['duplicate']);
         $this->assertNotNull($result['conversation_id']);
-        $this->assertNotNull($result['lead_id']);
+        $this->assertNull($result['lead_id']);
+        $this->assertDatabaseCount('leads', 0);
 
         $this->assertDatabaseHas(
             'whatsapp_contacts',
@@ -427,7 +455,7 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
         );
     }
 
-    public function test_message_text_routes_to_mapped_product_salesperson_when_service_is_missing(): void
+    public function test_message_text_does_not_assign_product_salesperson_before_handoff(): void
     {
         $mappedProductUser =
             $this->createSalesUser(
@@ -452,6 +480,7 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
 
         $this->makeAvailable($mappedProductUser);
         $this->makeAvailable($emptyProductUser);
+        $this->createReadyAiSetting();
 
         $result = app(WhatCrmMessageIngestionService::class)
             ->process([
@@ -466,27 +495,16 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
                 'status' => 'delivered',
             ]);
 
-        $lead = Lead::query()
-            ->whereKey($result['lead_id'])
-            ->firstOrFail();
-
-        $this->assertSame(
-            $mappedProductUser->id,
-            $result['assigned_user_id']
-        );
-        $this->assertSame(
-            $mappedProductUser->id,
-            $lead->representative_user_id
-        );
-        $this->assertSame(
-            [$yachtProduct->id],
-            $lead->product_ids_array
-        );
+        $this->assertNull($result['lead_id']);
+        $this->assertNull($result['assigned_user_id']);
+        $this->assertSame('queued', $result['ai_status']);
+        $this->assertDatabaseCount('leads', 0);
         $this->assertDatabaseHas(
             'whatsapp_conversations',
             [
                 'id' => $result['conversation_id'],
-                'assigned_user_id' => $mappedProductUser->id,
+                'assigned_user_id' => null,
+                'conversation_owner' => 'AI',
             ]
         );
     }
@@ -562,18 +580,7 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
         );
         $this->assertDatabaseCount('whatsapp_ai_reply_batches', 0);
 
-        $setting = WhatsAppAiAgentSetting::active();
-        $setting->fill([
-            'enabled' => true,
-            'auto_reply_enabled' => true,
-            'provider' => 'openai',
-            'model' => 'gpt-4o-mini',
-            'prompt' => 'Reply as Accretion Aviation.',
-            'buffer_seconds' => 10,
-            'context_message_limit' => 10000,
-        ]);
-        $setting->setApiKey('openai-key');
-        $setting->save();
+        $this->createReadyAiSetting(10);
 
         $second = app(WhatCrmMessageIngestionService::class)
             ->process($payload);
@@ -593,17 +600,7 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
 
     public function test_ai_buffer_default_queues_reply_after_four_seconds(): void
     {
-        $setting = WhatsAppAiAgentSetting::active();
-        $setting->fill([
-            'enabled' => true,
-            'auto_reply_enabled' => true,
-            'provider' => 'openai',
-            'model' => 'gpt-4o-mini',
-            'prompt' => 'Reply as Accretion Aviation.',
-            'context_message_limit' => 10000,
-        ]);
-        $setting->setApiKey('openai-key');
-        $setting->save();
+        $this->createReadyAiSetting();
 
         $result = app(WhatCrmMessageIngestionService::class)
             ->process([
@@ -654,7 +651,7 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
     private function createActiveLead(
         string $clientName,
         string $phone,
-        User $salesperson
+        ?User $salesperson
     ): Lead {
         $client = Client::create([
             'id' => (string) Str::uuid(),
@@ -666,7 +663,7 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
         $lead = Lead::create([
             'id' => (string) Str::uuid(),
             'client_id' => $client->id,
-            'representative_user_id' => $salesperson->id,
+            'representative_user_id' => optional($salesperson)->id,
             'number_of_passengers' => 1,
             'description' => 'Existing lead',
         ]);
@@ -676,7 +673,7 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
             'lead_id' => $lead->id,
             'next_followup_date' => now(),
             'followup_note' => 'Existing active followup',
-            'followed_by' => $salesperson->id,
+            'followed_by' => optional($salesperson)->id,
             'status' => 1,
             'created_at' => now()->subMinute(),
             'updated_at' => now()->subMinute(),
@@ -694,6 +691,42 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
             'is_available' => true,
             'is_opted_in' => true,
             'last_response_at' => now(),
+        ]);
+    }
+
+    private function createReadyAiSetting(int $bufferSeconds = 4): WhatsAppAiAgentSetting
+    {
+        WhatsAppAiAgentSetting::query()->delete();
+
+        $profile = AiModelProfile::create([
+            'id' => (string) Str::uuid(),
+            'name' => 'WhatsApp Test Profile',
+            'provider' => 'openai',
+            'model' => 'gpt-4o-mini',
+            'enabled' => true,
+        ]);
+        $profile->setApiKey('openai-key');
+        $profile->save();
+
+        $agent = AiAgent::create([
+            'id' => (string) Str::uuid(),
+            'name' => 'WhatsApp Test Agent',
+            'agent_type' => 'whatsapp',
+            'ai_model_profile_id' => $profile->id,
+            'prompt' => 'Reply as Accretion Aviation.',
+            'enabled' => true,
+        ]);
+
+        return WhatsAppAiAgentSetting::create([
+            'id' => (string) Str::uuid(),
+            'enabled' => true,
+            'auto_reply_enabled' => true,
+            'provider' => 'openai',
+            'model' => 'gpt-4o-mini',
+            'prompt' => 'Reply as Accretion Aviation.',
+            'buffer_seconds' => $bufferSeconds,
+            'context_message_limit' => 10000,
+            'ai_agent_id' => $agent->id,
         ]);
     }
 
@@ -722,6 +755,30 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
             $table->string('password')->nullable();
             $table->uuid('user_type_id')->nullable();
             $table->integer('status')->default(1);
+            $table->timestamps();
+        });
+
+        Schema::create('ai_model_profiles', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('name');
+            $table->string('provider');
+            $table->string('model');
+            $table->text('api_key_encrypted')->nullable();
+            $table->boolean('enabled')->default(true);
+            $table->uuid('created_by')->nullable();
+            $table->uuid('updated_by')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('ai_agents', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('name');
+            $table->string('agent_type');
+            $table->uuid('ai_model_profile_id');
+            $table->text('prompt')->nullable();
+            $table->boolean('enabled')->default(true);
+            $table->uuid('created_by')->nullable();
+            $table->uuid('updated_by')->nullable();
             $table->timestamps();
         });
 
@@ -857,6 +914,16 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
             $table->string('status', 30)->default('open');
             $table->text('last_message')->nullable();
             $table->timestamp('last_message_at')->nullable();
+            $table->string('conversation_owner', 20)->default('AI');
+            $table->json('ai_state')->nullable();
+            $table->timestamp('last_conversation_activity_at')->nullable();
+            $table->timestamp('last_customer_message_at')->nullable();
+            $table->timestamp('last_ai_message_at')->nullable();
+            $table->timestamp('human_handoff_at')->nullable();
+            $table->string('handoff_reason', 100)->nullable();
+            $table->string('handoff_priority', 10)->nullable();
+            $table->text('human_summary')->nullable();
+            $table->unsignedInteger('activity_version')->default(0);
             $table->unsignedInteger('unread_count')->default(0);
             $table->timestamps();
         });
@@ -890,6 +957,8 @@ class WhatCrmMessageIngestionServiceTest extends TestCase
             $table->text('api_key_encrypted')->nullable();
             $table->unsignedInteger('buffer_seconds')->default(10);
             $table->unsignedInteger('context_message_limit')->default(10000);
+            $table->uuid('ai_model_profile_id')->nullable();
+            $table->uuid('ai_agent_id')->nullable();
             $table->timestamps();
         });
 

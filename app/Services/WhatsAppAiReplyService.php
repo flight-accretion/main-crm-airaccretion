@@ -26,7 +26,10 @@ class WhatsAppAiReplyService
         private WhatsAppProductAllocationService $allocator,
         private WhatsAppLeadFollowupService $followupService,
         private LeadProductRoutingService $productRouter,
-        private LeadSourceDataHydrationService $sourceDataHydrator
+        private LeadSourceDataHydrationService $sourceDataHydrator,
+        private WhatsAppAiEligibilityService $aiEligibility,
+        private WhatsAppAiStateService $aiState,
+        private WhatsAppRequiredFieldsService $requiredFields
     ) {
     }
 
@@ -143,6 +146,12 @@ class WhatsAppAiReplyService
             );
         }
 
+        if (!$this->aiEligibility->canAiOwn($conversation)) {
+            $this->skipBatch($batch);
+
+            return false;
+        }
+
         $messages = $this->pendingIncomingMessages(
             $conversation
         );
@@ -179,12 +188,50 @@ class WhatsAppAiReplyService
             $contextMessages
         );
 
-        $assignedUser = $this->applyProductAssignment(
+        $state = $this->updateAiState(
             $conversation,
-            $aiResult,
-            $messages,
-            $contextMessages
+            $aiResult
         );
+
+        if ($this->shouldHandoff($state, $aiResult)) {
+            app(WhatsAppPreLeadHandoffService::class)
+                ->handoff(
+                    $conversation,
+                    $this->handoffData($conversation, $aiResult),
+                    $aiResult['needs_human_reason']
+                        ?: $this->handoffReason($state),
+                    $this->handoffPriority($state, $aiResult),
+                    $aiResult['reply']
+                );
+
+            WhatsAppMessage::query()
+                ->whereIn('id', $messages->pluck('id')->all())
+                ->update([
+                    'ai_reply_batch_id' => $batch->id,
+                    'ai_processed_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+            $batch->update([
+                'status' => 'handoff',
+                'processed_at' => now(),
+                'assigned_user_id' => null,
+                'detected_product' => $state['product_name']
+                    ?? ($aiResult['product'] ?? null),
+                'message_ids' => $messages->pluck('id')->values()->all(),
+                'error' => null,
+            ]);
+
+            return true;
+        }
+
+        $conversation->refresh();
+
+        if (!$this->aiEligibility->canAiOwn($conversation)) {
+            $this->skipBatch($batch);
+
+            return false;
+        }
 
         $outboundResult = $this->outbound->sendText([
             'number' =>
@@ -193,9 +240,9 @@ class WhatsAppAiReplyService
             'name' => optional($conversation->contact)->name,
             'message' => $aiResult['reply'],
             'chat_id' => $conversation->whatcrm_chat_id,
-            'agent_user_id' => optional($assignedUser)->id,
-            'assigned_agent_user_id' => optional($assignedUser)->id,
-            'assigned_agent' => optional($assignedUser)->name,
+            'agent_user_id' => null,
+            'assigned_agent_user_id' => null,
+            'assigned_agent' => null,
         ]);
 
         if (!($outboundResult['success'] ?? false)) {
@@ -217,13 +264,142 @@ class WhatsAppAiReplyService
             'processed_at' => now(),
             'response_message_id' =>
                 $outboundResult['crm_message_id'] ?? null,
-            'assigned_user_id' => optional($assignedUser)->id,
-            'detected_product' => $aiResult['product'],
+            'assigned_user_id' => null,
+            'detected_product' => $state['product_name']
+                ?? ($aiResult['product'] ?? null),
             'message_ids' => $messages->pluck('id')->values()->all(),
             'error' => null,
         ]);
 
+        $this->markAiResponseActivity($conversation);
+
         return true;
+    }
+
+    private function updateAiState(
+        WhatsAppConversation $conversation,
+        array $aiResult
+    ): array {
+        $state = $this->aiState->merge($conversation, $aiResult);
+        $qualified = $this->requiredFields->isQualified($state);
+
+        if (!$qualified) {
+            $state['customer_ready_to_book'] = false;
+            $state['customer_ready_to_pay'] = false;
+        } elseif ($state['initial_payment_intent'] ?? false) {
+            $state['customer_ready_to_book'] = true;
+            $state['customer_ready_to_pay'] = true;
+        } elseif ($state['initial_booking_intent'] ?? false) {
+            $state['customer_ready_to_book'] = true;
+        }
+
+        if (
+            Schema::hasTable('whatsapp_conversations')
+            && Schema::hasColumn('whatsapp_conversations', 'ai_state')
+        ) {
+            $conversation->ai_state = $state;
+            $conversation->save();
+        }
+
+        return $state;
+    }
+
+    private function shouldHandoff(array $state, array $aiResult): bool
+    {
+        return (bool) ($aiResult['needs_human'] ?? false)
+            || (bool) ($state['customer_ready_to_book'] ?? false)
+            || (bool) ($state['customer_ready_to_pay'] ?? false);
+    }
+
+    private function handoffReason(array $state): string
+    {
+        if ($state['customer_ready_to_pay'] ?? false) {
+            return 'ready_to_pay';
+        }
+
+        if ($state['customer_ready_to_book'] ?? false) {
+            return 'ready_to_book';
+        }
+
+        return 'ai_requested_handoff';
+    }
+
+    private function handoffPriority(array $state, array $aiResult): string
+    {
+        if (
+            ($state['customer_ready_to_pay'] ?? false)
+            || ($state['customer_ready_to_book'] ?? false)
+        ) {
+            return 'P1';
+        }
+
+        if (($aiResult['needs_human_reason'] ?? null) === 'customer_requested_human') {
+            return 'P2';
+        }
+
+        return 'P3';
+    }
+
+    private function handoffData(
+        WhatsAppConversation $conversation,
+        array $aiResult
+    ): array {
+        return [
+            'service' => $aiResult['product_name']
+                ?? $aiResult['product']
+                ?? $aiResult['service']
+                ?? null,
+            'date' => $aiResult['date']
+                ?? $aiResult['service_date']
+                ?? null,
+            'guest' => $aiResult['passengers']
+                ?? $aiResult['guests']
+                ?? null,
+            'route' => $aiResult['route'] ?? null,
+            'origin' => $aiResult['origin'] ?? null,
+            'destination' => $aiResult['destination'] ?? null,
+            'city' => $aiResult['city'] ?? null,
+            'occasion' => $aiResult['occasion'] ?? null,
+        ];
+    }
+
+    private function skipBatch(WhatsAppAiReplyBatch $batch): void
+    {
+        $batch->update([
+            'status' => 'skipped',
+            'processed_at' => now(),
+            'error' => null,
+        ]);
+    }
+
+    private function markAiResponseActivity(
+        WhatsAppConversation $conversation
+    ): void {
+        $conversation->refresh();
+
+        if (
+            Schema::hasTable('whatsapp_conversations')
+            && Schema::hasColumn('whatsapp_conversations', 'last_ai_message_at')
+        ) {
+            $conversation->last_ai_message_at = now();
+        }
+
+        if (
+            Schema::hasTable('whatsapp_conversations')
+            && Schema::hasColumn('whatsapp_conversations', 'last_conversation_activity_at')
+        ) {
+            $conversation->last_conversation_activity_at = now();
+        }
+
+        if (
+            Schema::hasTable('whatsapp_conversations')
+            && Schema::hasColumn('whatsapp_conversations', 'activity_version')
+        ) {
+            $conversation->activity_version =
+                (int) $conversation->activity_version + 1;
+        }
+
+        $conversation->save();
     }
 
     private function pendingIncomingMessages(

@@ -32,7 +32,10 @@ class WhatsAppAiRuntimeDataService
   public function __construct(
     private WhatsAppAiPricingSheetService $pricingSheet,
 
-    private WebsiteCatalogAiNotesService $websiteAiNotes
+    private WebsiteCatalogAiNotesService $websiteAiNotes,
+    private WhatsAppAiStateService $aiState,
+    private WhatsAppRequiredFieldsService $requiredFields,
+    private WhatsAppCrossSellService $crossSell
 ) {
 }
 
@@ -81,8 +84,27 @@ class WhatsAppAiRuntimeDataService
             $lead,
             $followup
         );
+        $state = $this->aiState->get($conversation);
+        $aiMissingFields =
+            $this->requiredFields->missing($state);
+        $missingFields =
+            !empty($state['service_family'])
+                ? json_encode(
+                    $aiMissingFields,
+                    JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+                )
+                : $this->missingFields($leadState);
+        $recommendedAlternatives =
+            $this->crossSell->recommendations($state);
+        $valueComparison =
+            data_get($recommendedAlternatives, '0.comparison')
+            ?: [
+                'comparison_available' => false,
+            ];
 
         $runtime = [
+            'CRM_CONVERSATION_OWNER' =>
+                $conversation->conversation_owner ?: 'AI',
             'CRM_CURRENT_DATETIME_IST' =>
                 $currentIst->format('d-M-Y h:i A') . ' IST',
             'CRM_CURRENT_DATE_IST' =>
@@ -101,8 +123,20 @@ class WhatsAppAiRuntimeDataService
                 $lastBookingDate ?: self::NOT_PROVIDED,
             'CRM_LEAD_STATE' =>
                 json_encode($leadState, JSON_UNESCAPED_SLASHES),
+            'CRM_AI_STATE' =>
+                json_encode(
+                    $state,
+                    JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+                ),
+            'CRM_REQUIRED_FIELDS' =>
+                json_encode(
+                    $this->requiredFields->required(
+                        $state['service_family'] ?? null
+                    ),
+                    JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+                ),
             'CRM_MISSING_FIELDS' =>
-                $this->missingFields($leadState),
+                $missingFields,
             'CRM_NOTES' =>
                 $this->notes($lead, $followup),
             'CRM_ASSIGNED_AGENT_NAME' =>
@@ -113,6 +147,23 @@ class WhatsAppAiRuntimeDataService
                 $this->activeProducts($products),
             'CRM_SERVICE_DATA' =>
                 $this->serviceData($products),
+            'CRM_LIVE_PRODUCT_DATA' =>
+                json_encode(
+                    $this->liveProductData($state, $products),
+                    JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+                ),
+            'CRM_RECOMMENDED_ALTERNATIVES' =>
+                json_encode(
+                    $recommendedAlternatives,
+                    JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+                ),
+            'CRM_VALUE_COMPARISON' =>
+                json_encode(
+                    $valueComparison,
+                    JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+                ),
+            'CRM_WEBSITE_DATA_ERROR' =>
+                'NO',
                 'CRM_WEBSITE_AI_NOTES' =>
              $websiteProductAiNotes,
             'CRM_SERVICE_LOCATIONS' =>
@@ -150,6 +201,38 @@ class WhatsAppAiRuntimeDataService
             : null;
     }
 
+    private function liveProductData(
+        array $state,
+        Collection $products
+    ): array {
+        $productId = $state['product_id'] ?? null;
+        $productName = $this->normalize($state['product_name'] ?? null);
+
+        return $products
+            ->filter(function (Product $product) use ($productId, $productName) {
+                if ($productId && (string) $product->id === (string) $productId) {
+                    return true;
+                }
+
+                if ($productName === '') {
+                    return false;
+                }
+
+                return str_contains(
+                    $this->normalize($product->product),
+                    $productName
+                );
+            })
+            ->take(3)
+            ->map(fn (Product $product) => [
+                'product_id' => $product->id,
+                'service_type_id' => $product->website_service_type_id,
+                'name' => $product->product,
+            ])
+            ->values()
+            ->all();
+    }
+
     private function firstNonEmpty(array $values): ?string
     {
         foreach ($values as $value) {
@@ -161,6 +244,19 @@ class WhatsAppAiRuntimeDataService
         }
 
         return null;
+    }
+
+    private function normalize($value): string
+    {
+        $value = strtolower(trim((string) $value));
+
+        if ($value === '') {
+            return '';
+        }
+
+        return trim(
+            preg_replace('/\s+/', ' ', preg_replace('/[^a-z0-9]+/', ' ', $value) ?: '') ?: ''
+        );
     }
 
     private function latestFollowup(?Lead $lead): ?LeadFollowup

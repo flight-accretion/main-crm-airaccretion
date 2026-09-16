@@ -239,6 +239,11 @@ class LeadAllocationService
             ]);
         });
 
+        $this->markWhatsAppConversationHuman(
+            $lead,
+            $salesperson
+        );
+
         /*
 |--------------------------------------------------------------------------
 | WhatsApp / WhatCRM assignment callback
@@ -292,6 +297,15 @@ class LeadAllocationService
             )->send(
                 $whatsAppIntegration
             );
+        } elseif (
+            str_starts_with(
+                (string) $queueItem->reason,
+                'whatsapp_'
+            )
+        ) {
+            app(
+                \App\Services\WhatCrmAssignmentCustomerMessageService::class
+            )->sendForLeadId($lead->id);
         }
 
         $ivrCallLog = $lead->ivrCallLogs()
@@ -420,7 +434,21 @@ public function finalizeManualQueuedAssignment(
         )->send(
             $whatsAppIntegration
         );
+    } elseif (
+        str_starts_with(
+            (string) $queueReason,
+            'whatsapp_'
+        )
+    ) {
+        app(
+            \App\Services\WhatCrmAssignmentCustomerMessageService::class
+        )->sendForLeadId($lead->id);
     }
+
+    $this->markWhatsAppConversationHuman(
+        $lead,
+        $salesperson
+    );
 
     /*
      * IVR
@@ -470,6 +498,41 @@ public function finalizeManualQueuedAssignment(
         );
     }
 }
+
+    private function markWhatsAppConversationHuman(
+        Lead $lead,
+        User $salesperson
+    ): void {
+        if (
+            !\Illuminate\Support\Facades\Schema::hasTable(
+                'whatsapp_conversations'
+            )
+        ) {
+            return;
+        }
+
+        $conversation =
+            \App\Models\WhatsAppConversation::query()
+                ->where('lead_id', $lead->id)
+                ->orderByDesc('last_message_at')
+                ->first();
+
+        if (!$conversation) {
+            return;
+        }
+
+        if (
+            \Illuminate\Support\Facades\Schema::hasColumn(
+                'whatsapp_conversations',
+                'conversation_owner'
+            )
+        ) {
+            $conversation->conversation_owner = 'HUMAN';
+        }
+
+        $conversation->assigned_user_id = $salesperson->id;
+        $conversation->save();
+    }
 
     private function whatsAppSourceServiceText(
         ?array $payload

@@ -7,6 +7,7 @@ use App\Models\WhatsAppAiReplyBatch;
 use App\Models\WhatsAppConversation;
 use App\Models\WhatsAppMessage;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
 
 class WhatCrmMessageIngestionService
@@ -16,7 +17,11 @@ class WhatCrmMessageIngestionService
         private WhatCrmAgentResolver $agentResolver,
         private WhatsAppLeadResolverService $leadResolver,
         private WhatsAppLeadFollowupService $followupService,
-        private WhatsAppAiBufferService $aiBufferService
+        private WhatsAppAiBufferService $aiBufferService,
+        private WhatsAppAiEligibilityService $aiEligibility,
+        private WhatsAppAiStateService $aiState,
+        private WhatsAppDeterministicRouterService $deterministicRouter,
+        private WhatsAppPreLeadHandoffService $handoffService
     ) {
     }
 
@@ -117,12 +122,14 @@ class WhatCrmMessageIngestionService
                 ->first();
 
             if (!$conversation) {
-                $conversation = WhatsAppConversation::create([
+                $conversation = WhatsAppConversation::create(
+                    $this->conversationCreateAttributes([
                     'contact_id' => $contact->id,
                     'whatcrm_chat_id' => $data['whatcrm_chat_id'],
                     'status' => 'open',
                     'unread_count' => 0,
-                ]);
+                    ])
+                );
             }
 
             $agent = $this->agentResolver->resolve(
@@ -172,31 +179,67 @@ class WhatCrmMessageIngestionService
             $aiBatch = null;
 
             if ($data['direction'] === 'incoming') {
-                $lead = $this->leadResolver
-                    ->resolveForIncoming(
-                        $contact,
+                $this->markCustomerActivity(
+                    $conversation,
+                    $message
+                );
+
+                $activeLead = $this->aiEligibility
+                    ->activeLead($conversation);
+
+                if ($activeLead) {
+                    $this->aiEligibility->markHumanOwned(
                         $conversation,
-                        $data
+                        $activeLead,
+                        'active_lead_found'
                     );
 
-                if ($lead) {
                     $this->followupService
                         ->createForIncomingMessage(
-                            $lead,
+                            $activeLead,
                             $message,
                             $data,
                             $conversation
                         );
+                } else {
+                    $this->markAiPreLead($conversation);
+
+                    $routerResult = $this->deterministicRouter
+                        ->route(
+                            (string) $message->body,
+                            $this->aiState->get($conversation)
+                        );
+
+                    if (!empty($routerResult['updates'])) {
+                        $this->aiState->merge(
+                            $conversation,
+                            $routerResult['updates']
+                        );
+                    }
+
+                    if ($routerResult['handoff'] ?? false) {
+                        $this->handoffService->handoff(
+                            $conversation,
+                            $data,
+                            $routerResult['reason']
+                                ?? 'customer_requested_human',
+                            $routerResult['priority']
+                                ?? 'P2'
+                        );
+                    }
                 }
 
                 $conversation->refresh();
                 $conversation->unread_count =
                     (int) $conversation->unread_count + 1;
+                $conversation->save();
 
-                $aiBatch = $this->queueAiIfNeeded(
-                    $message,
-                    $conversation
-                );
+                if ($this->aiEligibility->canAiOwn($conversation)) {
+                    $aiBatch = $this->queueAiIfNeeded(
+                        $message,
+                        $conversation
+                    );
+                }
             }
 
             $conversation->last_message = $data['body'];
@@ -254,6 +297,60 @@ class WhatCrmMessageIngestionService
         return $contact;
     }
 
+    private function conversationCreateAttributes(array $attributes): array
+    {
+        if ($this->hasConversationColumn('conversation_owner')) {
+            $attributes['conversation_owner'] = 'AI';
+        }
+
+        if ($this->hasConversationColumn('activity_version')) {
+            $attributes['activity_version'] = 0;
+        }
+
+        return $attributes;
+    }
+
+    private function markCustomerActivity(
+        WhatsAppConversation $conversation,
+        WhatsAppMessage $message
+    ): void {
+        $changed = false;
+        $activityAt = $message->message_at ?: now();
+
+        if ($this->hasConversationColumn('last_customer_message_at')) {
+            $conversation->last_customer_message_at = $activityAt;
+            $changed = true;
+        }
+
+        if ($this->hasConversationColumn('last_conversation_activity_at')) {
+            $conversation->last_conversation_activity_at = $activityAt;
+            $changed = true;
+        }
+
+        if ($this->hasConversationColumn('activity_version')) {
+            $conversation->activity_version =
+                (int) $conversation->activity_version + 1;
+            $changed = true;
+        }
+
+        if ($changed) {
+            $conversation->save();
+        }
+    }
+
+    private function markAiPreLead(
+        WhatsAppConversation $conversation
+    ): void {
+        $conversation->lead_id = null;
+        $conversation->assigned_user_id = null;
+
+        if ($this->hasConversationColumn('conversation_owner')) {
+            $conversation->conversation_owner = 'AI';
+        }
+
+        $conversation->save();
+    }
+
     private function response(
         bool $duplicate,
         ?WhatsAppConversation $conversation,
@@ -272,6 +369,12 @@ class WhatCrmMessageIngestionService
             'ai_status' => $this->aiBufferService->lastStatus(),
             'ai_reply_batch_id' => optional($aiBatch)->id,
         ];
+    }
+
+    private function hasConversationColumn(string $column): bool
+    {
+        return Schema::hasTable('whatsapp_conversations')
+            && Schema::hasColumn('whatsapp_conversations', $column);
     }
 
     private function queueAiIfNeeded(

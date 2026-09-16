@@ -2110,7 +2110,7 @@
                             name="prompt"
                             id="ai-agent-prompt"
                             rows="18"
-                            maxlength="30000"
+                            maxlength="{{ \App\Models\AiAgent::PROMPT_MAX_LENGTH }}"
                             class="form-control"
                             placeholder="Enter the complete business prompt for this agent..."
                             required
@@ -2123,7 +2123,9 @@
                             model and API key.
 
                             This prompt controls the behaviour and
-                            business role of this AI Agent.
+                            business role of this AI Agent. Maximum
+                            {{ number_format(\App\Models\AiAgent::PROMPT_MAX_LENGTH) }}
+                            characters.
 
                         </small>
 

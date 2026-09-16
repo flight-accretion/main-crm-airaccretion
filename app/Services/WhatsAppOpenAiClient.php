@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AiModelProfile;
 use App\Models\WhatsAppAiAgentSetting;
 use App\Models\WhatsAppConversation;
 use Illuminate\Support\Collection;
@@ -33,22 +34,20 @@ public function generateReply(
             ->first();
 
 
-    if (!$agent) {
-        throw new RuntimeException(
-            'WhatsApp AI Agent is not configured.'
-        );
-    }
-
-
-    if (!$agent->isReady()) {
+    if ($agent && !$agent->isReady()) {
         throw new RuntimeException(
             'WhatsApp AI Agent is unavailable.'
         );
     }
 
 
-    $profile =
-        $agent->modelProfile;
+    $profile = $agent
+        ? $agent->modelProfile
+        : $this->legacyProfile($setting);
+
+    $agentPrompt = $agent
+        ? (string) $agent->prompt
+        : (string) $setting->prompt;
 
 
     $text =
@@ -56,7 +55,7 @@ public function generateReply(
             $profile,
 
             $this->instructions(
-                (string) $agent->prompt,
+                $agentPrompt,
                 $conversation,
                 $messages,
                 $products,
@@ -76,6 +75,28 @@ public function generateReply(
         $text
     );
 }
+
+    private function legacyProfile(
+        WhatsAppAiAgentSetting $setting
+    ): AiModelProfile {
+        $apiKey = $setting->apiKey();
+
+        if (!$apiKey) {
+            throw new RuntimeException(
+                'WhatsApp AI Agent is not configured.'
+            );
+        }
+
+        $profile = new AiModelProfile([
+            'name' => 'Legacy WhatsApp AI Setting',
+            'provider' => $setting->provider ?: 'openai',
+            'model' => $setting->model ?: WhatsAppAiAgentSetting::defaultModel(),
+            'enabled' => true,
+        ]);
+        $profile->setApiKey($apiKey);
+
+        return $profile;
+    }
 
     private function prompt(
         WhatsAppConversation $conversation,
@@ -134,7 +155,34 @@ public function generateReply(
         }
 
         $lines[] =
-            'Return JSON only: {"reply":"message to customer","product":"matching CRM product name or N/A","service":"matching CRM service/package name or N/A","service_date":"DD-MMM-YYYY or N/A","guests":"number or N/A","route":"Origin to Destination or N/A","origin":"origin city or N/A","destination":"destination city or N/A","occasion":"occasion or N/A"}';
+            'Return JSON only with exactly this structure: '
+            . '{"reply":"customer-facing reply",'
+            . '"service_family":null,'
+            . '"product_id":null,'
+            . '"product_name":null,'
+            . '"extracted_fields":{'
+            . '"origin":null,'
+            . '"destination":null,'
+            . '"city":null,'
+            . '"date":null,'
+            . '"departure_time":null,'
+            . '"passengers":null,'
+            . '"occasion":null,'
+            . '"patient_location":null,'
+            . '"date_or_urgency":null,'
+            . '"budget":null,'
+            . '"preferred_option":null'
+            . '},'
+            . '"initial_booking_intent":false,'
+            . '"initial_payment_intent":false,'
+            . '"customer_ready_to_book":false,'
+            . '"customer_ready_to_pay":false,'
+            . '"main_objection":null,'
+            . '"unresolved_question":null,'
+            . '"language":null,'
+            . '"confidence":0.0,'
+            . '"needs_human":false,'
+            . '"needs_human_reason":null}';
 
         return implode(PHP_EOL, $lines);
     }
@@ -197,10 +245,13 @@ public function generateReply(
                 . $runtimeData['CRM_CURRENT_DATETIME_IST'],
             'Customer number: ' . $customerNumber,
             'Customer name: ' . $runtimeData['CRM_CUSTOMER_NAME'],
+            'Conversation owner: ' . $runtimeData['CRM_CONVERSATION_OWNER'],
             'Lead status: ' . $runtimeData['CRM_LEAD_STATUS'],
             'Previous service: ' . $runtimeData['CRM_PREVIOUS_SERVICE'],
             'Last booking date: ' . $runtimeData['CRM_LAST_BOOKING_DATE'],
             'Lead qualification state: ' . $runtimeData['CRM_LEAD_STATE'],
+            'AI pre-lead state: ' . $runtimeData['CRM_AI_STATE'],
+            'Required pre-lead fields: ' . $runtimeData['CRM_REQUIRED_FIELDS'],
             'Missing qualification fields: '
                 . $runtimeData['CRM_MISSING_FIELDS'],
             'CRM notes: ' . $runtimeData['CRM_NOTES'],
@@ -221,6 +272,14 @@ public function generateReply(
 
         $lines[] = 'CRM service data: '
             . $runtimeData['CRM_SERVICE_DATA'];
+        $lines[] = 'CRM live product data: '
+            . $runtimeData['CRM_LIVE_PRODUCT_DATA'];
+        $lines[] = 'CRM recommended alternatives: '
+            . $runtimeData['CRM_RECOMMENDED_ALTERNATIVES'];
+        $lines[] = 'CRM value comparison: '
+            . $runtimeData['CRM_VALUE_COMPARISON'];
+        $lines[] = 'CRM website data error: '
+            . $runtimeData['CRM_WEBSITE_DATA_ERROR'];
             $lines[] =
     'Website AI product/location knowledge: '
     . $runtimeData[
@@ -307,11 +366,14 @@ $lines[] =
             );
         }
 
+        $extracted = data_get($decoded, 'extracted_fields');
+        $extracted = is_array($extracted) ? $extracted : [];
+
         $product = $this->firstText(
             $decoded,
             [
-                'product',
                 'product_name',
+                'product',
                 'crm_product',
                 'lead.product',
             ]
@@ -333,34 +395,92 @@ $lines[] =
             $product = $service ?: 'N/A';
         }
 
+        $productName = strtolower((string) $product) === 'n/a'
+            ? null
+            : $product;
+
+        $date = $this->firstText(
+            $decoded,
+            [
+                'date',
+                'service_date',
+                'travel_date',
+                'ride_date',
+                'departure_date',
+                'lead.date',
+                'lead.service_date',
+            ]
+        ) ?: $this->firstText($extracted, ['date']);
+
+        $passengers = $this->firstText(
+            $decoded,
+            [
+                'passengers',
+                'guests',
+                'guest',
+                'number_of_guests',
+                'number_of_passengers',
+                'pax',
+                'lead.guests',
+            ]
+        ) ?: $this->firstText($extracted, ['passengers']);
+
+        $origin = $this->firstText(
+            $decoded,
+            [
+                'origin',
+                'from',
+                'from_place',
+                'departure_city',
+                'lead.origin',
+            ]
+        ) ?: $this->firstText($extracted, ['origin']);
+
+        $destination = $this->firstText(
+            $decoded,
+            [
+                'destination',
+                'to',
+                'to_place',
+                'arrival_city',
+                'lead.destination',
+            ]
+        ) ?: $this->firstText($extracted, ['destination']);
+
+        $city = $this->firstText(
+            $decoded,
+            [
+                'city',
+                'service_city',
+                'location',
+                'lead.city',
+            ]
+        ) ?: $this->firstText($extracted, ['city']);
+
+        $occasion = $this->firstText(
+            $decoded,
+            [
+                'occasion',
+                'ocassion',
+                'event',
+                'lead.occasion',
+            ]
+        ) ?: $this->firstText($extracted, ['occasion']);
+
         return [
             'reply' => $reply,
             'product' => $product === '' ? 'N/A' : $product,
+            'product_id' => $this->firstText($decoded, ['product_id']),
+            'product_name' => $productName,
+            'service_family' => $this->firstText(
+                $decoded,
+                ['service_family', 'family']
+            ),
             'service' => $service,
-            'service_date' => $this->firstText(
-                $decoded,
-                [
-                    'service_date',
-                    'date',
-                    'travel_date',
-                    'ride_date',
-                    'departure_date',
-                    'lead.date',
-                    'lead.service_date',
-                ]
-            ),
-            'guests' => $this->firstText(
-                $decoded,
-                [
-                    'guests',
-                    'guest',
-                    'number_of_guests',
-                    'number_of_passengers',
-                    'passengers',
-                    'pax',
-                    'lead.guests',
-                ]
-            ),
+            'date' => $date,
+            'service_date' => $date,
+            'passengers' => $passengers,
+            'guests' => $passengers,
             'route' => $this->firstText(
                 $decoded,
                 [
@@ -370,45 +490,59 @@ $lines[] =
                     'lead.route',
                 ]
             ),
-            'origin' => $this->firstText(
-                $decoded,
-                [
-                    'origin',
-                    'from',
-                    'from_place',
-                    'departure_city',
-                    'lead.origin',
-                ]
+            'origin' => $origin,
+            'destination' => $destination,
+            'city' => $city,
+            'departure_time' => $this->firstText($extracted, ['departure_time']),
+            'occasion' => $occasion,
+            'patient_location' => $this->firstText($extracted, ['patient_location']),
+            'date_or_urgency' => $this->firstText($extracted, ['date_or_urgency']),
+            'budget' => $this->firstText($extracted, ['budget']),
+            'preferred_option' => $this->firstText($extracted, ['preferred_option']),
+            'extracted_fields' => $extracted,
+            'initial_booking_intent' => $this->boolValue(
+                $decoded['initial_booking_intent'] ?? false
             ),
-            'destination' => $this->firstText(
-                $decoded,
-                [
-                    'destination',
-                    'to',
-                    'to_place',
-                    'arrival_city',
-                    'lead.destination',
-                ]
+            'initial_payment_intent' => $this->boolValue(
+                $decoded['initial_payment_intent'] ?? false
             ),
-            'city' => $this->firstText(
-                $decoded,
-                [
-                    'city',
-                    'service_city',
-                    'location',
-                    'lead.city',
-                ]
+            'customer_ready_to_book' => $this->boolValue(
+                $decoded['customer_ready_to_book'] ?? false
             ),
-            'occasion' => $this->firstText(
+            'customer_ready_to_pay' => $this->boolValue(
+                $decoded['customer_ready_to_pay'] ?? false
+            ),
+            'main_objection' => $this->firstText($decoded, ['main_objection']),
+            'unresolved_question' => $this->firstText($decoded, ['unresolved_question']),
+            'language' => $this->firstText($decoded, ['language']),
+            'confidence' => is_numeric($decoded['confidence'] ?? null)
+                ? (float) $decoded['confidence']
+                : null,
+            'needs_human' => $this->boolValue(
+                $decoded['needs_human'] ?? false
+            ),
+            'needs_human_reason' => $this->firstText(
                 $decoded,
-                [
-                    'occasion',
-                    'ocassion',
-                    'event',
-                    'lead.occasion',
-                ]
+                ['needs_human_reason']
             ),
         ];
+    }
+
+    private function boolValue($value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_numeric($value)) {
+            return (bool) $value;
+        }
+
+        return in_array(
+            strtolower(trim((string) $value)),
+            ['1', 'true', 'yes', 'y'],
+            true
+        );
     }
 
     private function firstText(array $payload, array $keys): ?string

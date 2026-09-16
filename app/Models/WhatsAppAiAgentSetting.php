@@ -162,10 +162,20 @@ public function isReady(): bool
     $agent =
         $this->aiAgent;
 
-    return
-        $agent
-        &&
-        $agent->isReady();
+    if ($agent) {
+        return $agent->isReady();
+    }
+
+    return !empty($this->apiKey())
+        && trim((string) $this->model) !== ''
+        && in_array(
+            strtolower(trim((string) $this->provider)),
+            [
+                'openai',
+                'gemini',
+            ],
+            true
+        );
 }
 
     public function getApiKeyStatusAttribute(): string

@@ -53,7 +53,7 @@ class AiAgentController extends Controller
                 'prompt' => [
                     'required',
                     'string',
-                    'max:30000',
+                    'max:' . AiAgent::PROMPT_MAX_LENGTH,
                 ],
 
                 'enabled' => [
@@ -154,7 +154,7 @@ class AiAgentController extends Controller
                 'prompt' => [
                     'required',
                     'string',
-                    'max:30000',
+                    'max:' . AiAgent::PROMPT_MAX_LENGTH,
                 ],
 
                 'enabled' => [

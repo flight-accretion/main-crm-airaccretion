@@ -7,6 +7,8 @@ use Illuminate\Support\Str;
 
 class AiAgent extends Model
 {
+    public const PROMPT_MAX_LENGTH = 100000;
+
     public $incrementing = false;
 
     protected $keyType = 'string';
