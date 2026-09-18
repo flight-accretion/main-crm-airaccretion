@@ -15,6 +15,95 @@
     <div class="alert alert-danger">{{ $errors->first() }}</div>
 @endif
 
+@php
+    $defaultKpiDefinitions = $defaultKpiDefinitions ?? [];
+    $defaultKpiCoverage = $defaultKpiCoverage ?? [];
+@endphp
+
+@if(!empty($defaultKpiDefinitions))
+    <div class="box mb-6">
+        <div class="box-header flex justify-between items-center">
+            <div>
+                <h5 class="box-title mb-0">Automated KPI Setup</h5>
+                <small class="text-muted">
+                    Sync the standard KPI table into active templates and assign it to employees without an active KPI assignment.
+                </small>
+            </div>
+        </div>
+        <div class="box-body">
+            @foreach($defaultKpiDefinitions as $departmentKey => $definition)
+                @php
+                    $coverage = $defaultKpiCoverage[$departmentKey] ?? [];
+                    $metrics = collect($definition['metrics'] ?? []);
+                @endphp
+
+                <div class="border rounded p-4 mb-5">
+                    <div class="flex flex-wrap justify-between gap-3 mb-4">
+                        <div>
+                            <h6 class="font-semibold mb-1">
+                                {{ $definition['department_label'] ?? ucfirst($departmentKey) }} Department KPI
+                            </h6>
+                            <div class="text-sm text-gray-500">
+                                {{ $coverage['assigned_users'] ?? 0 }} / {{ $coverage['eligible_users'] ?? 0 }} eligible users assigned.
+                            </div>
+                        </div>
+                        <form method="POST" action="{{ route('admin.kpi.automation.sync') }}">
+                            @csrf
+                            <input type="hidden" name="department" value="{{ $departmentKey }}">
+                            <button class="ti-btn ti-btn-primary">
+                                Sync {{ ucfirst($departmentKey) }} KPI
+                            </button>
+                        </form>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="table whitespace-nowrap min-w-full">
+                            <thead>
+                                <tr>
+                                    <th>Scope of Work</th>
+                                    <th class="text-center">Weightage</th>
+                                    <th class="text-center">5</th>
+                                    <th class="text-center">4</th>
+                                    <th class="text-center">3</th>
+                                    <th class="text-center">2</th>
+                                    <th class="text-center">1</th>
+                                    <th>Automation</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($metrics as $metric)
+                                    <tr>
+                                        <td>
+                                            <div class="font-semibold">{{ $metric['name'] ?? '-' }}</div>
+                                            <div class="text-xs text-gray-500">{{ $metric['description'] ?? '' }}</div>
+                                        </td>
+                                        <td class="text-center">{{ (float) ($metric['weightage'] ?? 0) }}</td>
+                                        @foreach([5, 4, 3, 2, 1] as $score)
+                                            <td class="text-center">
+                                                {{ $metric['score_labels'][$score] ?? $metric['score_rules'][$score] ?? '-' }}
+                                            </td>
+                                        @endforeach
+                                        <td>
+                                            {{ ($metric['measurement_type'] ?? '') === 'automatic'
+                                                ? 'Auto: ' . ($metric['source_key'] ?? '-')
+                                                : 'Manual entry' }}
+                                        </td>
+                                    </tr>
+                                @endforeach
+                                <tr class="font-semibold">
+                                    <td>Total Weightage</td>
+                                    <td class="text-center">{{ (float) $metrics->sum(fn ($metric) => (float) ($metric['weightage'] ?? 0)) }}</td>
+                                    <td colspan="6"></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            @endforeach
+        </div>
+    </div>
+@endif
+
 <div class="grid grid-cols-12 gap-6">
     <div class="xl:col-span-6 col-span-12">
         <div class="box">
@@ -241,6 +330,84 @@
                     </div>
                 </form>
             </div>
+        </div>
+    </div>
+</div>
+
+<div class="box mt-6">
+    <div class="box-header">
+        <h5 class="box-title">KPI Team Scope - Accounts / Operations</h5>
+    </div>
+    <div class="box-body">
+        <form method="POST" action="{{ route('admin.kpi.team-memberships.store') }}" class="grid grid-cols-12 gap-4 mb-6">
+            @csrf
+
+            <div class="md:col-span-3 col-span-12">
+                <label class="ti-form-label">Department</label>
+                <select class="ti-form-select" name="department" required>
+                    <option value="accounts">Accounts</option>
+                    <option value="operations">Operations</option>
+                </select>
+            </div>
+
+            <div class="md:col-span-4 col-span-12">
+                <label class="ti-form-label">Manager</label>
+                <select class="ti-form-select" name="manager_user_id" required>
+                    @foreach($users as $user)
+                        <option value="{{ $user->id }}">
+                            {{ $user->name }} - {{ optional($user->userType)->user_type }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+
+            <div class="md:col-span-4 col-span-12">
+                <label class="ti-form-label">Team Member</label>
+                <select class="ti-form-select" name="member_user_id" required>
+                    @foreach($users as $user)
+                        <option value="{{ $user->id }}">
+                            {{ $user->name }} - {{ optional($user->userType)->user_type }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+
+            <div class="md:col-span-1 col-span-12 flex items-end">
+                <button class="ti-btn ti-btn-primary">Add</button>
+            </div>
+        </form>
+
+        <div class="overflow-x-auto">
+            <table class="table whitespace-nowrap min-w-full">
+                <thead>
+                    <tr>
+                        <th>Department</th>
+                        <th>Manager</th>
+                        <th>Member</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse($teamMemberships as $membership)
+                        <tr>
+                            <td>{{ ucfirst($membership->department) }}</td>
+                            <td>{{ optional($membership->manager)->name }}</td>
+                            <td>{{ optional($membership->member)->name }}</td>
+                            <td>
+                                <form method="POST" action="{{ route('admin.kpi.team-memberships.delete', $membership) }}">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button class="ti-btn ti-btn-danger ti-btn-sm">Remove</button>
+                                </form>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="4">No Accounts/Operations KPI team memberships configured.</td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
         </div>
     </div>
 </div>

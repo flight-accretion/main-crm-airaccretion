@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Lead;
+use App\Models\WhatsAppMessage;
 use App\Models\WhatsAppLeadIntegration;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -106,6 +107,25 @@ class WhatCrmAssignmentCustomerMessageService
             return false;
         }
 
+        $renderedBody = $this->templateBody(
+            $agentName,
+            $agentNumber
+        );
+
+        if (
+            $this->assignmentMessageAlreadyRecorded(
+                $lead,
+                (string) $representative->id,
+                $renderedBody
+            )
+        ) {
+            if ($integration) {
+                $this->storeSuccess($integration);
+            }
+
+            return true;
+        }
+
         $templateName = trim(
             (string) config(
                 'whatcrm.assignment_customer_template',
@@ -121,11 +141,7 @@ class WhatCrmAssignmentCustomerMessageService
                 $agentName,
                 $agentNumber,
             ],
-            'rendered_body' =>
-                $this->templateBody(
-                    $agentName,
-                    $agentNumber
-                ),
+            'rendered_body' => $renderedBody,
             'chat_id' =>
                 $integration
                     ? (
@@ -313,6 +329,71 @@ class WhatCrmAssignmentCustomerMessageService
             $agentName,
             $agentNumber
         );
+    }
+
+    private function assignmentMessageAlreadyRecorded(
+        Lead $lead,
+        string $representativeId,
+        string $body
+    ): bool {
+        if (
+            !Schema::hasTable('whatsapp_messages')
+            || !Schema::hasTable('whatsapp_conversations')
+        ) {
+            return false;
+        }
+
+        foreach (
+            [
+                'whatsapp_messages' => [
+                    'conversation_id',
+                    'direction',
+                    'message_type',
+                    'sender_user_id',
+                    'body',
+                ],
+                'whatsapp_conversations' => [
+                    'id',
+                    'lead_id',
+                ],
+            ]
+            as $table => $columns
+        ) {
+            foreach ($columns as $column) {
+                if (!Schema::hasColumn($table, $column)) {
+                    return false;
+                }
+            }
+        }
+
+        return WhatsAppMessage::query()
+            ->join(
+                'whatsapp_conversations',
+                'whatsapp_messages.conversation_id',
+                '=',
+                'whatsapp_conversations.id'
+            )
+            ->where(
+                'whatsapp_conversations.lead_id',
+                $lead->id
+            )
+            ->where(
+                'whatsapp_messages.direction',
+                'outgoing'
+            )
+            ->where(
+                'whatsapp_messages.message_type',
+                'template'
+            )
+            ->where(
+                'whatsapp_messages.sender_user_id',
+                $representativeId
+            )
+            ->where(
+                'whatsapp_messages.body',
+                $body
+            )
+            ->exists();
     }
 
     private function storeSuccess(

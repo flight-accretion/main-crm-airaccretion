@@ -71,6 +71,7 @@ return [
         'enabled' => env('SKYRACK_LEADS_API_ENABLED', false),
         'timeout' => env('SKYRACK_LEADS_API_TIMEOUT', 10),
         'backfill_limit' => env('SKYRACK_LEADS_BACKFILL_LIMIT', 1000),
+        'token' => env('SKYRACK_LEADS_API_TOKEN'),
     ],
 
     // ═══════════════════════════════════════════════════════════════════════

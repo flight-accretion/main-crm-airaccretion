@@ -1,16 +1,148 @@
 @extends('admin.layouts.header')
 
 @section('content')
+
+@php
+    $isAdminMonitor =
+        $isAdminMonitor ?? false;
+
+    $availableSalesUsers =
+        $availableSalesUsers
+        ?? collect();
+
+    $selectedSalesUser =
+        $selectedSalesUser
+        ?? null;
+@endphp
 <div class="block justify-between page-header md:flex">
     <div>
         <h3 class="text-[1.125rem] font-semibold">Daily Customer Outreach</h3>
-        <p class="text-sm text-gray-500">Standard completed today: {{ $standardCompletedToday }} / 50</p>
+        @if($isAdminMonitor)
+
+    <div class="box mb-4">
+
+        <div class="box-body">
+
+            <form
+                method="GET"
+                action="{{
+                    route(
+                        'admin.kpi.outreach.index'
+                    )
+                }}"
+                class="
+                    grid
+                    grid-cols-12
+                    gap-4
+                    items-end
+                "
+            >
+
+                <div
+                    class="
+                        col-span-12
+                        md:col-span-5
+                    "
+                >
+
+                    <label class="form-label">
+                        Sales Executive
+                    </label>
+
+                    <select
+                        name="user_id"
+                        class="ti-form-select"
+                        required
+                    >
+
+                        @foreach(
+                            $availableSalesUsers
+                            as $salesUser
+                        )
+
+                            <option
+                                value="{{
+                                    $salesUser->id
+                                }}"
+                                {{
+                                    optional(
+                                        $selectedSalesUser
+                                    )->id
+                                    ===
+                                    $salesUser->id
+                                        ? 'selected'
+                                        : ''
+                                }}
+                            >
+
+                                {{
+                                    $salesUser->name
+                                }}
+
+                            </option>
+
+                        @endforeach
+
+                    </select>
+
+                </div>
+
+
+                <div
+                    class="
+                        col-span-12
+                        md:col-span-2
+                    "
+                >
+
+                    <button
+                        type="submit"
+                        class="
+                            ti-btn
+                            ti-btn-primary
+                        "
+                    >
+                        View Queue
+                    </button>
+
+                </div>
+
+            </form>
+
+
+            <div
+                class="
+                    mt-3
+                    text-sm
+                    text-gray-500
+                "
+            >
+                Super Admin monitor mode.
+                Viewing this page does not
+                allocate or replenish customer
+                numbers.
+            </div>
+
+        </div>
+
     </div>
 
-    @if($canRequestExtra)
+@endif
+        <p class="text-sm text-gray-500">
+            Standard completed today: {{ (int) $standardCompletedToday }} / {{ (int) $dailyTarget }}
+        </p>
+    </div>
+
+    @if(
+    !$isAdminMonitor
+    &&
+    $canRequestExtra
+)
         <form method="POST" action="{{ route('admin.kpi.outreach.extra') }}">
             @csrf
-            <button class="ti-btn ti-btn-primary">Get More Numbers (+50)</button>
+            <button class="ti-btn ti-btn-primary">
+                Get More Numbers (+{{ (int) $extraBatchSize }})
+            </button>
         </form>
     @endif
 </div>
@@ -25,13 +157,28 @@
 
 @if($standardLocked)
     <div class="alert alert-success">
-        Your standard 50 are complete for today. Additional KPI work must use Get More Numbers.
+        Your standard {{ (int) $dailyTarget }} are complete for today. Additional KPI work must use Get More Numbers.
     </div>
 @endif
 
 <div class="box mb-4">
     <div class="box-body">
         <form method="GET" action="{{ route('admin.kpi.outreach.index') }}" class="grid grid-cols-12 gap-3 items-end">
+            @if(
+    $isAdminMonitor
+    &&
+    $selectedSalesUser
+)
+
+    <input
+        type="hidden"
+        name="user_id"
+        value="{{
+            $selectedSalesUser->id
+        }}"
+    >
+
+@endif
             <div class="col-span-12 md:col-span-4">
                 <label class="form-label">Mobile Number</label>
                 <input

@@ -2,58 +2,123 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\User;
-use App\Models\UserType;
+use App\Services\Kpi\KpiDashboardDetailService;
+use App\Services\Kpi\KpiDashboardFilterService;
 use App\Services\Kpi\KpiDashboardService;
-use Carbon\Carbon;
+use App\Services\Kpi\KpiDataScopeService;
 use Illuminate\Http\Request;
 
 class KpiDashboardController extends Controller
 {
-    public function index(
+public function index(
+    Request $request,
+    KpiDashboardService $dashboard,
+    KpiDataScopeService $scope
+) {
+    $current = $request->user()->load('userType');
+
+    /*
+     * Super Admin / Admin:
+     * KPI Dashboard defaults to Retail Sales.
+     *
+     * Sales Manager:
+     * own + assigned team.
+     *
+     * Sales Executive:
+     * own KPI only.
+     *
+     * Accounts / Operations:
+     * own configured department scope.
+     */
+    $department = $scope->isAdmin($current)
+        ? 'sales'
+        : $scope->departmentFor($current);
+
+    if (!$department) {
+        abort(
+            403,
+            'No KPI department is configured for this role.'
+        );
+    }
+
+    $users = $scope
+        ->allowedUsers($current, $department)
+        ->values();
+
+    if ($users->isEmpty()) {
+        abort(
+            403,
+            'No KPI users are available for this scope.'
+        );
+    }
+
+    /*
+     * KPI Dashboard now shows current KPI status only.
+     * There is no date/filter/dashboard-card layer here.
+     */
+    $asOf = now()->endOfDay();
+
+    $team = $users
+        ->map(function ($user) use ($dashboard, $asOf) {
+            return $dashboard->forUser(
+                $user,
+                $asOf
+            );
+        })
+        ->values();
+
+    return view(
+        'admin.pages.kpi.dashboard',
+        [
+            'team' => $team,
+            'asOf' => $asOf,
+            'department' => $department,
+        ]
+    );
+}
+
+    public function details(
         Request $request,
-        KpiDashboardService $dashboard
+        string $metric,
+        KpiDashboardFilterService $filters,
+        KpiDataScopeService $scope,
+        KpiDashboardDetailService $details
     ) {
         $current = $request->user()->load('userType');
-        $asOf = Carbon::parse(
-            $request->input('date', now()->toDateString())
-        )->endOfDay();
+        $filter = $filters->fromRequest($request);
 
-        $role = $current->userType->user_type ?? '';
-        $oversight = in_array($role, [
-            UserType::SUPER_ADMIN,
-            UserType::HR,
-        ], true);
+        $department = $scope->isAdmin($current)
+            ? ($filter['department'] ?: 'sales')
+            : $scope->departmentFor($current);
 
-        if ($oversight) {
-            $users = User::with('userType')
-                ->where('status', 1)
-                ->whereHas('userType', function ($query) {
-                    $query->whereIn(
-                        'user_type',
-                        array_merge(
-                            UserType::SALES_ROLES,
-                            UserType::OPERATIONS_ROLES,
-                            UserType::ACCOUNTS_ROLES
-                        )
-                    );
-                })
-                ->orderBy('name')
-                ->get();
-
-            return view('admin.pages.kpi.dashboard', [
-                'mode' => 'team',
-                'team' => $users->map(fn ($user) => $dashboard->forUser($user, $asOf)),
-                'result' => null,
-                'asOf' => $asOf,
+        if ($department !== 'sales') {
+            return response()->json([
+                'columns' => [],
+                'rows' => [],
+                'message' => 'Detailed drill-down is not configured for this department metric yet.',
             ]);
         }
 
-        return view('admin.pages.kpi.dashboard', [
-            'mode' => 'self',
-            'team' => collect(),
-            'result' => $dashboard->forUser($current, $asOf),
-            'asOf' => $asOf,
-        ]);
+        $scope->assertRequestedUserAllowed(
+            $current,
+            $filter['user_id'],
+            $department
+        );
+
+        $ids = $scope->allowedUserIds($current, $department);
+
+        if ($filter['user_id']) {
+            $ids = [(string) $filter['user_id']];
+        }
+
+        return response()->json(
+            $details->sales(
+                $metric,
+                $ids,
+                $filter['from'],
+                $filter['to'],
+                $filter['lead_source']
+            )
+        );
     }
 }

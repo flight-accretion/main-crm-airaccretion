@@ -87,6 +87,10 @@ class KpiDashboardService
                 'target_value' => $resolved['target_value'] ?? null,
                 'achievement_percent' => $resolved['achievement_percent'] ?? null,
                 'evidence' => $resolved['evidence'] ?? [],
+                'sort_order' => (int) $metric->sort_order,
+                'score_rules' => (array) $metric->score_rules,
+                'rating_labels' => $this->ratingLabels($metric->code, (array) $metric->score_rules),
+                'direction' => $metric->direction,
                 'display_actual' => $this->displayActual($metric->code, $resolved),
                 'next_score' => $improvement['next_score'],
                 'next_threshold' => $improvement['next_threshold'],
@@ -207,5 +211,37 @@ class KpiDashboardService
                 ? (string) $resolved['actual_value']
                 : '-',
         };
+    }
+
+    private function ratingLabels(string $code, array $rules): array
+    {
+        $configured = config("kpi.rating_labels.{$code}");
+
+        if (is_array($configured)) {
+            return $configured;
+        }
+
+        foreach ((array) config('kpi.default_templates', []) as $template) {
+            foreach (($template['metrics'] ?? []) as $metric) {
+                if (($metric['code'] ?? null) === $code) {
+                    return $metric['score_labels'] ?? $this->numericLabels($rules);
+                }
+            }
+        }
+
+        return $this->numericLabels($rules);
+    }
+
+    private function numericLabels(array $rules): array
+    {
+        $labels = [];
+
+        foreach ([5, 4, 3, 2, 1] as $score) {
+            $labels[$score] = isset($rules[(string) $score])
+                ? (string) $rules[(string) $score]
+                : (isset($rules[$score]) ? (string) $rules[$score] : '-');
+        }
+
+        return $labels;
     }
 }

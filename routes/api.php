@@ -10,6 +10,8 @@ use App\Http\Controllers\Api\CallSummaryController;
 use App\Http\Controllers\Api\WebsiteLeadWebhookController;
 use App\Http\Controllers\Api\LeadApiController;
 use App\Http\Controllers\Api\WebsiteCatalogProductController;
+use App\Http\Controllers\Api\SkyrackDashboardController;
+use App\Http\Middleware\VerifySkyrackToken;
 
 
 /*
@@ -116,3 +118,19 @@ Route::post(
 ->name(
     'api.website-catalog.products.store'
 );
+
+
+Route::prefix('skyrack')
+    ->middleware(VerifySkyrackToken::class)
+    ->group(function () {
+
+        Route::get(
+            '/today-followups',
+            [SkyrackDashboardController::class, 'todayFollowups']
+        );
+
+        Route::get(
+            '/daily-kpi-outreach',
+            [SkyrackDashboardController::class, 'dailyKpiOutreach']
+        );
+    });

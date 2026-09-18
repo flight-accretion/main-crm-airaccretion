@@ -43,6 +43,7 @@ use App\Models\LeadAiScore;
 use App\Models\LeadAiScoringSetting;
 use App\Models\KpiOutreachAssignment;
 use App\Services\Kpi\KpiOutreachService;
+use App\Services\Kpi\KpiActivityRecorder;
 
 class ClientController extends Controller
 {
@@ -2941,6 +2942,12 @@ try {
                 $followupNote = 'Customer did not pick up.';
             }
 
+            $previousStatus = LeadFollowup::query()
+                ->where('lead_id', $lead->id)
+                ->orderByDesc('created_at')
+                ->orderByDesc('id')
+                ->value('status');
+
             $followup = LeadFollowup::create([
                 'id' => Str::uuid(),
                 'lead_id' => $lead->id,
@@ -2966,6 +2973,12 @@ try {
                 'customer_not_picked_up' =>
                     $customerNotPickedUp,
             ]);
+
+            app(KpiActivityRecorder::class)->recordSalesFollowup(
+                $followup,
+                $previousStatus,
+                $request->user()
+            );
 
             // Status 3 = Full Payment Received, 4 = Partial Payment Received
             if (in_array((int)$request->status, [3, 4]) && $request->filled('received_amount') && $request->received_amount > 0) {

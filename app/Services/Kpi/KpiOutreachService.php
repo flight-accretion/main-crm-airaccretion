@@ -5,6 +5,7 @@ namespace App\Services\Kpi;
 use App\Models\KpiOutreachAssignment;
 use App\Models\KpiOutreachBatch;
 use App\Models\KpiOutreachPool;
+use App\Models\KpiUserAssignment;
 use App\Models\Lead;
 use App\Models\User;
 use App\Services\ActiveLeadService;
@@ -24,6 +25,45 @@ class KpiOutreachService
         private KpiOutreachCallVerifier $verifier,
         private ActiveLeadService $activeLeadService
     ) {}
+
+    public function dailyTarget(User $user): int
+    {
+        $assignment = KpiUserAssignment::query()
+            ->with(['template.metrics'])
+            ->where('user_id', $user->id)
+            ->where('active', true)
+            ->whereDate('effective_from', '<=', now()->toDateString())
+            ->where(function ($query) {
+                $query->whereNull('effective_to')
+                    ->orWhereDate('effective_to', '>=', now()->toDateString());
+            })
+            ->orderByDesc('effective_from')
+            ->first();
+
+        $metric = $assignment?->template?->metrics
+            ?->first(function ($metric) {
+                return $metric->active
+                    && $metric->code === 'daily_outreach';
+            });
+
+        return max(0, (int) ($metric?->target_value ?? 0));
+    }
+
+    public function standardQueueSize(): int
+    {
+        return max(
+            1,
+            (int) config('kpi.outreach.standard_queue_size', self::STANDARD_QUEUE_SIZE)
+        );
+    }
+
+    public function extraBatchSize(): int
+    {
+        return max(
+            1,
+            (int) config('kpi.outreach.extra_batch_size', self::EXTRA_BATCH_SIZE)
+        );
+    }
 
     public function releaseAssignmentsThatNowHaveActiveLeads(User $user): int
     {
@@ -60,7 +100,7 @@ class KpiOutreachService
 
         return $this->allocator->allocate(
             $user,
-            max(0, self::STANDARD_QUEUE_SIZE - $pending),
+            max(0, $this->standardQueueSize() - $pending),
             'standard'
         );
     }
@@ -77,7 +117,10 @@ class KpiOutreachService
 
     public function standardActionsLocked(User $user): bool
     {
-        return $this->standardCompletedToday($user) >= self::DAILY_STANDARD_TARGET;
+        $target = $this->dailyTarget($user);
+
+        return $target > 0
+            && $this->standardCompletedToday($user) >= $target;
     }
 
     public function canRequestExtra(User $user): bool
@@ -121,23 +164,28 @@ class KpiOutreachService
     public function requestExtra(User $user): KpiOutreachBatch
     {
         if (!$this->canRequestExtra($user)) {
+            $target = $this->dailyTarget($user);
+            $extraSize = $this->extraBatchSize();
+
             throw ValidationException::withMessages([
-                'extra' => 'Complete the daily 50 and any current extra batch before requesting another 50 numbers.',
+                'extra' => "Complete the daily {$target} and any current extra batch before requesting another {$extraSize} numbers.",
             ]);
         }
 
-        return DB::transaction(function () use ($user) {
+        $extraSize = $this->extraBatchSize();
+
+        return DB::transaction(function () use ($user, $extraSize) {
             $batch = KpiOutreachBatch::create([
                 'user_id' => $user->id,
                 'batch_type' => 'extra',
-                'requested_count' => self::EXTRA_BATCH_SIZE,
+                'requested_count' => $extraSize,
                 'allocated_count' => 0,
                 'requested_at' => now(),
             ]);
 
             $this->allocator->allocate(
                 $user,
-                self::EXTRA_BATCH_SIZE,
+                $extraSize,
                 'extra',
                 $batch
             );
@@ -278,8 +326,10 @@ class KpiOutreachService
             $assignment->allocation_type === 'standard'
             && $this->standardActionsLocked($user)
         ) {
+            $target = $this->dailyTarget($user);
+
             throw ValidationException::withMessages([
-                'outreach' => 'Daily standard 50 is complete. Use Get More Numbers for additional KPI work.',
+                'outreach' => "Daily standard {$target} is complete. Use Get More Numbers for additional KPI work.",
             ]);
         }
     }

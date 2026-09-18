@@ -49,6 +49,8 @@ use App\Http\Controllers\AiAgentController;
 use App\Http\Controllers\KpiDashboardController;
 use App\Http\Controllers\KpiOutreachController;
 use App\Http\Controllers\KpiManagementController;
+use App\Http\Controllers\KpiWorkDoneController;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -117,22 +119,104 @@ Route::middleware('auth')->group(function () {
         ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES')
         ->name('admin.kpi.index');
 
-    Route::prefix('admin/kpi/outreach')
+    Route::get('/admin/kpi/details/{metric}', [KpiDashboardController::class, 'details'])
+        ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES')
+        ->name('admin.kpi.details');
+
+/*
+|--------------------------------------------------------------------------
+| KPI Daily Outreach
+|--------------------------------------------------------------------------
+|
+| GET page:
+| Admin/Super Admin + Sales + Accounts + Operations
+|
+| Actions:
+| Preserve existing Sales/Admin action permissions.
+|
+*/
+
+Route::get(
+    '/admin/kpi/outreach',
+    [
+        KpiOutreachController::class,
+        'index'
+    ]
+)
+    ->middleware(
+        'role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES'
+    )
+    ->name(
+        'admin.kpi.outreach.index'
+    );
+
+
+Route::prefix(
+    'admin/kpi/outreach'
+)
+    ->middleware(
+        'role:SALES_ROLES,ADMIN_ROLES'
+    )
+    ->group(function () {
+
+        Route::post(
+            '/{assignment}/dnp',
+            [
+                KpiOutreachController::class,
+                'dnp'
+            ]
+        )
+            ->whereUuid('assignment')
+            ->name(
+                'admin.kpi.outreach.dnp'
+            );
+
+
+        Route::post(
+            '/{assignment}/remark',
+            [
+                KpiOutreachController::class,
+                'remark'
+            ]
+        )
+            ->whereUuid('assignment')
+            ->name(
+                'admin.kpi.outreach.remark'
+            );
+
+
+        Route::post(
+            '/get-more',
+            [
+                KpiOutreachController::class,
+                'extra'
+            ]
+        )
+            ->name(
+                'admin.kpi.outreach.extra'
+            );
+
+
+        Route::get(
+            '/{assignment}/create-lead',
+            [
+                KpiOutreachController::class,
+                'createLead'
+            ]
+        )
+            ->whereUuid('assignment')
+            ->name(
+                'admin.kpi.outreach.create-lead'
+            );
+    });
+
+    Route::prefix('admin/kpi/work-done')
         ->middleware('role:SALES_ROLES,ADMIN_ROLES')
         ->group(function () {
-            Route::get('/', [KpiOutreachController::class, 'index'])
-                ->name('admin.kpi.outreach.index');
-            Route::post('/{assignment}/dnp', [KpiOutreachController::class, 'dnp'])
-                ->whereUuid('assignment')
-                ->name('admin.kpi.outreach.dnp');
-            Route::post('/{assignment}/remark', [KpiOutreachController::class, 'remark'])
-                ->whereUuid('assignment')
-                ->name('admin.kpi.outreach.remark');
-            Route::post('/get-more', [KpiOutreachController::class, 'extra'])
-                ->name('admin.kpi.outreach.extra');
-            Route::get('/{assignment}/create-lead', [KpiOutreachController::class, 'createLead'])
-                ->whereUuid('assignment')
-                ->name('admin.kpi.outreach.create-lead');
+            Route::get('/', [KpiWorkDoneController::class, 'index'])
+                ->name('admin.kpi.work-done.index');
+            Route::get('/details', [KpiWorkDoneController::class, 'details'])
+                ->name('admin.kpi.work-done.details');
         });
 
     Route::prefix('admin/kpi-management')
@@ -158,6 +242,13 @@ Route::middleware('auth')->group(function () {
                 ->name('admin.kpi.user-non-working-days.store');
             Route::post('/manual-values', [KpiManagementController::class, 'saveManualValue'])
                 ->name('admin.kpi.manual-values.store');
+            Route::post('/automation/sync', [KpiManagementController::class, 'syncDefaultTemplate'])
+                ->name('admin.kpi.automation.sync');
+            Route::post('/team-memberships', [KpiManagementController::class, 'saveTeamMembership'])
+                ->name('admin.kpi.team-memberships.store');
+            Route::delete('/team-memberships/{membership}', [KpiManagementController::class, 'deleteTeamMembership'])
+                ->whereUuid('membership')
+                ->name('admin.kpi.team-memberships.delete');
         });
 
     Route::prefix('admin/whatsapp')
@@ -920,6 +1011,7 @@ Route::post(
         Route::get('/kpi', [ReportController::class, 'kpiReport'])->name('admin.report.kpi');
         Route::get('/kpi/export', [ReportController::class, 'exportKpiReport'])->name('admin.report.kpi.export');
         Route::get('/kpi/export-individual/{representative_id}', [ReportController::class, 'exportKpiReportIndividual'])->name('admin.report.kpi.export.individual');
+        // Route::get('/kpi/work-done', [ReportController::class, 'workDone'])->name('admin.report.kpi.workDone');
     });
 });
 //Route::get('/home', [UserController::class, 'applyUuid'])->name('home')->middleware('auth');

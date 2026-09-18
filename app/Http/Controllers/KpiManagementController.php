@@ -4,16 +4,20 @@ namespace App\Http\Controllers;
 
 use App\Models\KpiManualValue;
 use App\Models\KpiMetric;
+use App\Models\KpiTeamMembership;
 use App\Models\KpiTemplate;
 use App\Models\KpiUserAssignment;
 use App\Models\KpiUserNonWorkingDay;
 use App\Models\KpiWorkingDay;
 use App\Models\User;
+use App\Models\UserType;
+use App\Services\Kpi\KpiTemplateAutomationService;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class KpiManagementController extends Controller
 {
-    public function index()
+    public function index(KpiTemplateAutomationService $automation)
     {
         return view('admin.pages.kpi.manage', [
             'templates' => KpiTemplate::with('metrics')
@@ -27,6 +31,15 @@ class KpiManagementController extends Controller
             'assignments' => KpiUserAssignment::with(['user', 'template'])
                 ->where('active', true)
                 ->get(),
+            'teamMemberships' => KpiTeamMembership::with([
+                'manager.userType',
+                'member.userType',
+            ])
+                ->where('active', true)
+                ->orderBy('department')
+                ->get(),
+            'defaultKpiDefinitions' => $automation->definitions(),
+            'defaultKpiCoverage' => $automation->coverage(),
         ]);
     }
 
@@ -175,6 +188,91 @@ class KpiManagementController extends Controller
         );
 
         return back()->with('success', 'Manual KPI value saved.');
+    }
+
+    public function syncDefaultTemplate(
+        Request $request,
+        KpiTemplateAutomationService $automation
+    ) {
+        $data = $request->validate([
+            'department' => 'required|in:sales,accounts,operations',
+        ]);
+
+        if (!$automation->definition($data['department'])) {
+            throw ValidationException::withMessages([
+                'department' => 'Default KPI automation is not configured for this department yet.',
+            ]);
+        }
+
+        $result = $automation->syncDepartment(
+            $data['department'],
+            $request->user()->id
+        );
+
+        return back()->with(
+            'success',
+            sprintf(
+                '%s synced: %d metrics updated and %d unassigned users assigned.',
+                $result['template_name'],
+                $result['metrics_synced'],
+                $result['users_assigned']
+            )
+        );
+    }
+
+    public function saveTeamMembership(Request $request)
+    {
+        $data = $request->validate([
+            'department' => 'required|in:accounts,operations',
+            'manager_user_id' => 'required|uuid|exists:users,id',
+            'member_user_id' => 'required|uuid|exists:users,id|different:manager_user_id',
+        ]);
+
+        $manager = User::with('userType')
+            ->findOrFail($data['manager_user_id']);
+        $member = User::with('userType')
+            ->findOrFail($data['member_user_id']);
+
+        $managerRoles = $data['department'] === 'accounts'
+            ? [UserType::SENIOR_ACCOUNTS_MANAGER, UserType::ACCOUNTS_MANAGER]
+            : [UserType::SENIOR_OPERATIONS_MANAGER, UserType::OPERATIONS_MANAGER];
+
+        $memberRoles = $data['department'] === 'accounts'
+            ? UserType::ACCOUNTS_ROLES
+            : UserType::OPERATIONS_ROLES;
+
+        if (!in_array($manager->userType->user_type ?? '', $managerRoles, true)) {
+            throw ValidationException::withMessages([
+                'manager_user_id' => 'Selected manager does not belong to the selected department manager roles.',
+            ]);
+        }
+
+        if (!in_array($member->userType->user_type ?? '', $memberRoles, true)) {
+            throw ValidationException::withMessages([
+                'member_user_id' => 'Selected member does not belong to the selected department.',
+            ]);
+        }
+
+        KpiTeamMembership::updateOrCreate(
+            [
+                'department' => $data['department'],
+                'manager_user_id' => $data['manager_user_id'],
+                'member_user_id' => $data['member_user_id'],
+            ],
+            [
+                'active' => true,
+                'created_by' => $request->user()->id,
+            ]
+        );
+
+        return back()->with('success', 'KPI team membership saved.');
+    }
+
+    public function deleteTeamMembership(KpiTeamMembership $membership)
+    {
+        $membership->update(['active' => false]);
+
+        return back()->with('success', 'KPI team membership removed.');
     }
 
     private function metricData(Request $request): array

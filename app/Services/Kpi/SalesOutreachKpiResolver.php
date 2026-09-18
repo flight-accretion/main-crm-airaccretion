@@ -25,7 +25,7 @@ class SalesOutreachKpiResolver implements KpiMetricResolverInterface
             $workingDaysPerMonth
         );
 
-        $dailyTarget = (int) ($metric->target_value ?: 50);
+        $dailyTarget = max(0, (int) $metric->target_value);
         $expectedToDate = $stats['working_days_elapsed'] * $dailyTarget;
         $monthlyTarget = $stats['working_days_total'] * $dailyTarget;
         $monthStart = $asOf->copy()->startOfMonth();

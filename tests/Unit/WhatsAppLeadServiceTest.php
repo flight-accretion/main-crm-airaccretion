@@ -11,8 +11,11 @@ use App\Models\Product;
 use App\Models\SalespersonAvailability;
 use App\Models\User;
 use App\Models\UserType;
+use App\Models\WhatsAppContact;
+use App\Models\WhatsAppConversation;
 use App\Models\WhatsAppLeadIntegration;
 use App\Services\LeadAllocationService;
+use App\Services\WhatsAppPreLeadHandoffService;
 use App\Services\WhatsAppLeadService;
 use Carbon\Carbon;
 use Illuminate\Database\Schema\Blueprint;
@@ -686,6 +689,116 @@ class WhatsAppLeadServiceTest extends TestCase
 
         $this->assertNotNull(
             $integration->fresh()->assignment_message_sent_at
+        );
+    }
+
+    public function test_ai_handoff_without_whatcrm_integration_sends_assignment_template_once(): void
+    {
+        config()->set(
+            'whatcrm.assignment_customer_message_enabled',
+            true
+        );
+        config()->set(
+            'whatcrm.assignment_customer_template',
+            'lead_qualified'
+        );
+        config()->set(
+            'whatcrm.template_message_url',
+            'https://web.airaccretion.com/api/v1/send_templet'
+        );
+        config()->set('whatcrm.template_message_token', 'test-token');
+
+        $salesperson =
+            $this->createSalesUser(
+                'AI Handoff Agent',
+                '9000013333'
+            );
+
+        $emptyProduct =
+            $this->createProduct(
+                'Empty'
+            );
+
+        EmailLeadProductUserAssignment::create([
+            'user_id' =>
+                $salesperson->id,
+            'product_id' =>
+                $emptyProduct->id,
+            'is_active' =>
+                true,
+        ]);
+
+        $this->makeAvailable($salesperson);
+
+        $contact =
+            WhatsAppContact::create([
+                'name' => 'AI Handoff Customer',
+                'normalized_phone' => '9894498718',
+                'raw_phone' => '+91 9894498718',
+            ]);
+
+        $conversation =
+            WhatsAppConversation::create([
+                'contact_id' => $contact->id,
+                'whatcrm_chat_id' => 'chat-ai-handoff-once',
+                'status' => 'open',
+                'last_message' => 'Please connect me to an agent',
+                'last_message_at' => now(),
+            ]);
+
+        $requestCount = 0;
+
+        Http::fake([
+            'https://web.airaccretion.com/api/v1/send_templet' =>
+                function () use (&$requestCount) {
+                    $requestCount++;
+
+                    return Http::response(
+                        [
+                            'success' => true,
+                            'metaResponse' => [
+                                'messages' => [
+                                    [
+                                        'id' => 'wamid.AI-HANDOFF-'
+                                            . $requestCount,
+                                        'message_status' => 'accepted',
+                                    ],
+                                ],
+                            ],
+                        ],
+                        200
+                    );
+                },
+            '*' => Http::response(['success' => false], 500),
+        ]);
+
+        $lead =
+            app(WhatsAppPreLeadHandoffService::class)
+                ->handoff(
+                    $conversation,
+                    [
+                        'message' => 'Please connect me to an agent',
+                    ],
+                    'customer_requested_human'
+                );
+
+        $this->assertNotNull($lead);
+
+        Http::assertSentCount(1);
+
+        $this->assertSame(
+            1,
+            $requestCount
+        );
+
+        $this->assertDatabaseCount(
+            'whatsapp_lead_integrations',
+            0
+        );
+
+        $this->assertDatabaseCount(
+            'whatsapp_messages',
+            1
         );
     }
 
