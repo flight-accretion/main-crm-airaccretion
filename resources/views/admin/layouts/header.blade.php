@@ -657,20 +657,37 @@
                         </svg>
                     </div>
                     @php
-                        use App\Models\UserType;
+                    use App\Models\UserType;
 
-                        $accountRoles = UserType::ACCOUNTS_ROLES; // Accounts
-                        $operationsRoles = UserType::OPERATIONS_ROLES; // Operations (includes exec)
-                        // Roles specifically for operations managers (exclude executives)
-                        $operationsManagerRoles = [
-                            UserType::SENIOR_OPERATIONS_MANAGER,
-                            UserType::OPERATIONS_MANAGER,
-                        ];
-                        $salesRoles = UserType::SALES_ROLES; // Sales
-                        $adminRoles = UserType::ADMIN_ROLES; // Admins
+                    $accountRoles = UserType::ACCOUNTS_ROLES;
+                    $operationsRoles = UserType::OPERATIONS_ROLES;
 
-                        $canAccess = function ($userType, $allowedRoles) { return $userType && in_array($userType, $allowedRoles, true); };
-                    @endphp
+                    $operationsManagerRoles = [
+                        UserType::SENIOR_OPERATIONS_MANAGER,
+                        UserType::OPERATIONS_MANAGER,
+                    ];
+
+                    $salesRoles = UserType::SALES_ROLES;
+                    $adminRoles = UserType::ADMIN_ROLES;
+
+                    /*
+                    * Header permission helper.
+                    *
+                    * Guard prevents duplicate-function errors when
+                    * Blade layouts are rendered more than once in tests.
+                    */
+                    if (!function_exists('canAccess')) {
+                        function canAccess($userType, $allowedRoles)
+                        {
+                            return !empty($userType)
+                                && in_array(
+                                    $userType,
+                                    (array) $allowedRoles,
+                                    true
+                                );
+                        }
+                    }
+                @endphp
                     <ul class="main-menu">
                         <!-- Start::slide__category -->
                         <li class="slide__category"><span class="category-name">Main</span></li>
@@ -1256,10 +1273,12 @@
 
 
             <!-- Daily Outreach - Sales/Admin only -->
-            @if (
-                $canAccess($userType, $salesRoles)
-                || $canAccess($userType, $adminRoles)
-            )
+          @if (
+        canAccess($userType, $salesRoles)
+        || canAccess($userType, $adminRoles)
+        || canAccess($userType, $operationsRoles)
+        || canAccess($userType, $accountRoles)
+      )
                 <li class="slide {{
                     Route::is('admin.kpi.outreach.*')
                         ? 'active'

@@ -25,7 +25,44 @@ class SalesOutreachKpiResolver implements KpiMetricResolverInterface
             $workingDaysPerMonth
         );
 
-        $dailyTarget = max(0, (int) $metric->target_value);
+        $dailyTarget = max(
+            0,
+            (int) round(
+                (float) ($metric->target_value ?? 0)
+            )
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | KPI configuration guard
+        |--------------------------------------------------------------------------
+        |
+        | Do not silently invent a target of 50.
+        | The KPI target must come from KPI Management.
+        |
+        */
+        if ($dailyTarget <= 0) {
+            return [
+                'actual_value' => 0,
+                'target_value' => 0,
+                'achievement_percent' => 0,
+
+                'evidence' => [
+                    'configuration_error' =>
+                        'Daily outreach target is not configured for this KPI metric.',
+
+                    'today_completed' => 0,
+                    'mtd_completed' => 0,
+                    'expected_to_date' => 0,
+                    'monthly_target' => 0,
+                    'working_days_elapsed' => 0,
+                    'working_days_total' => $workingDaysPerMonth,
+                    'working_days_remaining' => $workingDaysPerMonth,
+                    'remaining_monthly_calls' => 0,
+                    'required_per_remaining_working_day' => 0,
+                ],
+            ];
+        }
         $expectedToDate = $stats['working_days_elapsed'] * $dailyTarget;
         $monthlyTarget = $stats['working_days_total'] * $dailyTarget;
         $monthStart = $asOf->copy()->startOfMonth();
@@ -45,9 +82,9 @@ class SalesOutreachKpiResolver implements KpiMetricResolverInterface
             ->whereDate('completed_at', $asOf->toDateString())
             ->count();
 
-        $achievement = $expectedToDate > 0
-            ? ($mtd / $expectedToDate) * 100
-            : 100.0;
+       $achievement = $expectedToDate > 0
+        ? ($mtd / $expectedToDate) * 100
+        : 0.0;
 
         $remainingCalls = max(0, $monthlyTarget - $mtd);
         $requiredPerRemainingDay = $stats['working_days_remaining'] > 0

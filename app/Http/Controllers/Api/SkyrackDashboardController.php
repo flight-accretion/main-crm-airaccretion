@@ -15,130 +15,257 @@ class SkyrackDashboardController extends Controller
     /**
      * GET /api/skyrack/today-followups
      */
- public function todayFollowups(Request $request): JsonResponse
+public function todayFollowups(Request $request): JsonResponse
 {
     try {
         $now = Carbon::now('Asia/Kolkata');
         $currentDate = $now->toDateString();
 
         /*
-         * Use the CRM's real LeadFollowup model.
-         *
-         * Important:
-         * A lead may have several followups. We first find candidate
-         * lead IDs, then fetch the latest followup for each lead.
+         * -----------------------------
+         * Request filters
+         * -----------------------------
          */
-        $followUpQuery = LeadFollowup::query();
+        $agentId = $request->filled('agent_id')
+            ? (string) $request->input('agent_id')
+            : null;
 
         /*
-         * Optional SkyRack agent filter.
+         * Keep only digits from the mobile filter.
          *
-         * Uses the same enquiry relationship already used by the CRM.
+         * Example:
+         * +91 99819-01043
+         * becomes:
+         * 919981901043
          */
-        if ($request->filled('agent_id')) {
-            $agentId = (string) $request->input('agent_id');
+        $mobile = $request->filled('mobile')
+            ? preg_replace('/\D+/', '', (string) $request->input('mobile'))
+            : null;
 
-            $followUpQuery->whereHas('enquiry', function ($query) use ($agentId) {
-                $query->where('assigned_to', $agentId);
-            });
+        /*
+         * Pagination.
+         *
+         * Default = 20
+         * Maximum = 100 to prevent very large API responses.
+         */
+        $page = max(
+            1,
+            (int) $request->input('page', 1)
+        );
+
+        $perPage = min(
+            100,
+            max(1, (int) $request->input('per_page', 20))
+        );
+
+        /*
+         * -----------------------------
+         * Base follow-up query
+         * -----------------------------
+         *
+         * Same relationships used by CRM DashboardController.
+         */
+        $followUpQuery = LeadFollowup::with([
+            'enquiry',
+            'enquiry.representative',
+            'enquiry.client',
+            'followedBy',
+        ]);
+
+        /*
+         * Representative filter.
+         */
+        if ($agentId !== null) {
+            $followUpQuery->whereHas(
+                'enquiry',
+                function ($query) use ($agentId) {
+                    $query->where(
+                        'representative_user_id',
+                        $agentId
+                    );
+                }
+            );
         }
 
         /*
-         * 1. Followups actually scheduled for today.
+         * -----------------------------
+         * Mobile filter
+         * -----------------------------
          *
-         * Cancelled/confirmed/rejected/etc. statuses that the CRM hides
-         * from Today's Followups must also be hidden from SkyRack.
+         * LeadFollowup
+         *   -> enquiry (Lead)
+         *      -> client (Client)
+         *
+         * Client fields verified:
+         * contact_number
+         * alternate_number
+         */
+        if ($mobile !== null && $mobile !== '') {
+            $followUpQuery->whereHas(
+                'enquiry.client',
+                function ($query) use ($mobile) {
+                    /*
+                     * PostgreSQL-safe normalization.
+                     *
+                     * Remove everything except digits before comparison,
+                     * so numbers stored with +91, spaces, dashes etc.
+                     * can still be searched.
+                     */
+                    $query->where(function ($q) use ($mobile) {
+                        $q->whereRaw(
+                            "REGEXP_REPLACE(COALESCE(contact_number, ''), '[^0-9]', '', 'g') LIKE ?",
+                            ['%' . $mobile . '%']
+                        )
+                        ->orWhereRaw(
+                            "REGEXP_REPLACE(COALESCE(alternate_number, ''), '[^0-9]', '', 'g') LIKE ?",
+                            ['%' . $mobile . '%']
+                        );
+                    });
+                }
+            );
+        }
+
+        /*
+         * -----------------------------
+         * STEP 1
+         * Today's candidate leads
+         * -----------------------------
          */
         $todayLeadIds = (clone $followUpQuery)
-            ->whereNotNull('next_followup_date')
-            ->whereDate('next_followup_date', '=', $currentDate)
+            ->whereDate(
+                'next_followup_date',
+                '=',
+                $currentDate
+            )
             ->whereNotIn(
                 'status',
                 LeadFollowup::TODAY_FOLLOWUP_HIDDEN_STATUSES
             )
-            ->pluck('lead_id');
+            ->pluck('lead_id')
+            ->unique();
 
         /*
-         * 2. Previous followups that are still open/missed.
-         *
-         * These are intentionally included because the CRM dashboard
-         * treats them as outstanding Today's Followups.
+         * -----------------------------
+         * STEP 2
+         * Missed/open candidate leads
+         * -----------------------------
          */
         $missedLeadIds = (clone $followUpQuery)
-            ->whereNotNull('next_followup_date')
-            ->whereDate('next_followup_date', '<', $currentDate)
+            ->whereDate(
+                'next_followup_date',
+                '<',
+                $currentDate
+            )
             ->whereIn(
                 'status',
                 LeadFollowup::TODAY_FOLLOWUP_MISSED_OPEN_STATUSES
             )
-            ->pluck('lead_id');
+            ->pluck('lead_id')
+            ->unique();
 
-        $candidateLeadIds = $todayLeadIds
+        $allLeadIds = $todayLeadIds
             ->merge($missedLeadIds)
-            ->filter()
             ->unique()
             ->values();
 
-        if ($candidateLeadIds->isEmpty()) {
-            return response()->json([
-                'success' => true,
-                'date' => $currentDate,
-                'timezone' => 'Asia/Kolkata',
-                'count' => 0,
-                'today_count' => 0,
-                'missed_count' => 0,
-                'data' => [],
-            ]);
-        }
-
         /*
-         * Fetch all relevant followups.
-         *
-         * We need the latest followup per lead because an older row can
-         * still have today's date even though the lead's latest status
-         * has subsequently changed.
+         * -----------------------------
+         * STEP 3
+         * Absolute latest follow-up
+         * per lead
+         * -----------------------------
          */
-        $latestFollowups = LeadFollowup::query()
-            ->with([
+        $latestFollowups = collect();
+
+        if ($allLeadIds->isNotEmpty()) {
+            $latestQuery = LeadFollowup::with([
                 'enquiry',
+                'enquiry.representative',
+                'enquiry.client',
+                'followedBy',
             ])
-            ->whereIn('lead_id', $candidateLeadIds)
-            ->orderByDesc('next_followup_date')
-            ->orderByDesc('created_at')
-            ->get()
-            ->groupBy('lead_id')
-            ->map(function ($followups) {
-                return $followups
-                    ->sortByDesc('created_at')
-                    ->first();
-            })
-            ->filter(function ($latest) use ($currentDate) {
+                ->whereIn('lead_id', $allLeadIds);
 
-                if (!$latest) {
-                    return false;
-                }
+            /*
+             * Apply representative again.
+             *
+             * This protects against a lead being transferred
+             * after an older follow-up was created.
+             */
+            if ($agentId !== null) {
+                $latestQuery->whereHas(
+                    'enquiry',
+                    function ($query) use ($agentId) {
+                        $query->where(
+                            'representative_user_id',
+                            $agentId
+                        );
+                    }
+                );
+            }
 
-                if (LeadFollowup::hiddenFromTodayFollowups($latest->status)) {
-                    return false;
+            /*
+             * Apply mobile filter again against the current
+             * lead/client relationship.
+             */
+            if ($mobile !== null && $mobile !== '') {
+                $latestQuery->whereHas(
+                    'enquiry.client',
+                    function ($query) use ($mobile) {
+                        $query->where(function ($q) use ($mobile) {
+                            $q->whereRaw(
+                                "REGEXP_REPLACE(COALESCE(contact_number, ''), '[^0-9]', '', 'g') LIKE ?",
+                                ['%' . $mobile . '%']
+                            )
+                            ->orWhereRaw(
+                                "REGEXP_REPLACE(COALESCE(alternate_number, ''), '[^0-9]', '', 'g') LIKE ?",
+                                ['%' . $mobile . '%']
+                            );
+                        });
+                    }
+                );
+            }
+
+            $allFollowupsForLeads = $latestQuery
+                ->orderByDesc('created_at')
+                ->orderByDesc('next_followup_date')
+                ->get()
+                ->groupBy('lead_id')
+                ->map(fn ($group) => $group->first());
+
+            /*
+             * Apply exact CRM Today Followups rules.
+             */
+            foreach ($allFollowupsForLeads as $latest) {
+                if (
+                    LeadFollowup::hiddenFromTodayFollowups(
+                        $latest->status
+                    )
+                ) {
+                    continue;
                 }
 
                 if (!$latest->next_followup_date) {
-                    return false;
+                    continue;
                 }
 
-                $latestDate = $latest->next_followup_date->toDateString();
+                $latestDate = $latest
+                    ->next_followup_date
+                    ->toDateString();
 
                 /*
-                 * Scheduled today.
+                 * Today's follow-up.
                  */
                 if ($latestDate === $currentDate) {
                     $latest->is_missed = false;
 
-                    return true;
+                    $latestFollowups->push($latest);
+
+                    continue;
                 }
 
                 /*
-                 * Previous date but still an open/missed status.
+                 * Missed but still open.
                  */
                 if (
                     $latestDate < $currentDate &&
@@ -150,107 +277,209 @@ class SkyrackDashboardController extends Controller
                 ) {
                     $latest->is_missed = true;
 
-                    return true;
+                    $latestFollowups->push($latest);
                 }
-
-                return false;
-            })
-            ->values();
-
-        /*
-         * Apply agent filter again against the latest lead assignment.
-         * This prevents stale followups from another salesperson being
-         * returned after a lead transfer.
-         */
-        if ($request->filled('agent_id')) {
-            $agentId = (string) $request->input('agent_id');
-
-            $latestFollowups = $latestFollowups
-                ->filter(function ($followup) use ($agentId) {
-                    return (string) optional($followup->enquiry)->assigned_to
-                        === $agentId;
-                })
-                ->values();
+            }
         }
 
         /*
-         * Match dashboard ordering:
-         *
-         * Today's followups -> nearest first
-         * Missed followups  -> most recent missed first
+         * -----------------------------
+         * STEP 4
+         * Same sorting as CRM
+         * -----------------------------
          */
+
+        // Today's follow-ups:
+        // earliest scheduled time first.
         $todayFollowups = $latestFollowups
-            ->where('is_missed', false)
-            ->sortBy(function ($followup) {
-                return $followup->next_followup_date?->timestamp
-                    ?? PHP_INT_MAX;
-            })
+            ->filter(
+                fn ($followup) => !$followup->is_missed
+            )
+            ->sortBy(
+                fn ($followup) =>
+                    $followup->next_followup_date?->timestamp
+                    ?? PHP_INT_MAX
+            )
             ->values();
 
+        // Missed:
+        // most recently missed first.
         $missedFollowups = $latestFollowups
-            ->where('is_missed', true)
-            ->sortByDesc(function ($followup) {
-                return $followup->next_followup_date?->timestamp
-                    ?? PHP_INT_MIN;
-            })
+            ->filter(
+                fn ($followup) => $followup->is_missed
+            )
+            ->sortByDesc(
+                fn ($followup) =>
+                    $followup->next_followup_date?->timestamp
+                    ?? PHP_INT_MIN
+            )
             ->values();
 
-        $allFollowups = $todayFollowups
-            ->concat($missedFollowups)
+        $allSorted = $todayFollowups
+            ->merge($missedFollowups)
             ->values();
 
         /*
-         * API response.
+         * -----------------------------
+         * STEP 5
+         * Pagination
+         * -----------------------------
          *
-         * Keep the response explicit rather than returning entire
-         * Eloquent models to SkyRack.
+         * Important:
+         * Pagination happens AFTER:
+         *
+         * - latest follow-up resolution
+         * - hidden-status filtering
+         * - missed filtering
+         * - sorting
+         *
+         * Therefore total/count remain correct.
          */
-        $data = $allFollowups
-            ->map(function ($followup) {
+        $total = $allSorted->count();
 
+        $lastPage = max(
+            1,
+            (int) ceil($total / $perPage)
+        );
+
+        /*
+         * If someone asks for page 999, returning an empty data
+         * array is standard API pagination behaviour.
+         */
+        $offset = ($page - 1) * $perPage;
+
+        $paginatedFollowups = $allSorted
+            ->slice($offset, $perPage)
+            ->values();
+
+        /*
+         * -----------------------------
+         * STEP 6
+         * SkyRack response mapping
+         * -----------------------------
+         */
+        $data = $paginatedFollowups
+            ->map(function (LeadFollowup $followup) {
                 $lead = $followup->enquiry;
+                $client = $lead?->client;
 
                 return [
                     'followup_id' => $followup->id,
+
                     'lead_id' => $followup->lead_id,
 
-                    'customer_name' => $lead->name ?? null,
-                    'customer_phone' => $lead->phone ?? null,
+                    'customer' => [
+                        'id' => $client?->id,
+                        'name' => $client?->name,
+                        'phone' => $client?->contact_number,
+                        'alternate_phone' =>
+                            $client?->alternate_number,
+                        'email' => $client?->email,
+                    ],
 
-                    'agent_id' => $lead->assigned_to ?? null,
+                    'representative' => [
+                        'id' =>
+                            $lead?->representative_user_id,
 
-                    'status' => $followup->status,
+                        'name' =>
+                            $lead?->representative?->name,
+                    ],
+
+                    'followed_by' => [
+                        'id' => $followup->followed_by,
+
+                        'name' =>
+                            $followup->followedBy?->name,
+                    ],
+
+                    'status' => (int) $followup->status,
 
                     'next_followup_date' =>
-                        $followup->next_followup_date?->toIso8601String(),
+                        $followup->next_followup_date
+                            ?->timezone('Asia/Kolkata')
+                            ->format('Y-m-d H:i:s'),
 
-                    'followup_note' => $followup->followup_note,
+                    'followup_note' =>
+                        $followup->followup_note,
 
-                    'is_missed' => (bool) $followup->is_missed,
+                    'contact_outcome' =>
+                        $followup->contact_outcome,
+
+                    'customer_not_picked_up' =>
+                        (bool) $followup
+                            ->customer_not_picked_up,
+
+                    'is_missed' =>
+                        (bool) $followup->is_missed,
+
+                    'created_at' =>
+                        $followup->created_at
+                            ?->timezone('Asia/Kolkata')
+                            ->format('Y-m-d H:i:s'),
                 ];
             })
             ->values();
 
+        /*
+         * -----------------------------
+         * Final response
+         * -----------------------------
+         */
         return response()->json([
             'success' => true,
 
             'date' => $currentDate,
             'timezone' => 'Asia/Kolkata',
 
-            'count' => $data->count(),
-            'today_count' => $todayFollowups->count(),
-            'missed_count' => $missedFollowups->count(),
+            'filters' => [
+                'agent_id' => $agentId,
+                'mobile' => $mobile,
+            ],
+
+            /*
+             * Counts BEFORE pagination.
+             */
+            'count' => $total,
+
+            'today_count' =>
+                $todayFollowups->count(),
+
+            'missed_count' =>
+                $missedFollowups->count(),
+
+            /*
+             * Pagination metadata.
+             */
+            'pagination' => [
+                'current_page' => $page,
+                'per_page' => $perPage,
+                'total' => $total,
+                'last_page' => $lastPage,
+
+                'from' => $total > 0 && $offset < $total
+                    ? $offset + 1
+                    : null,
+
+                'to' => $total > 0 && $offset < $total
+                    ? min(
+                        $offset + $perPage,
+                        $total
+                    )
+                    : null,
+
+                'has_more' => $page < $lastPage,
+            ],
 
             'data' => $data,
         ]);
 
     } catch (Throwable $e) {
-
         report($e);
 
         return response()->json([
             'success' => false,
-            'message' => 'Unable to fetch today follow-ups.',
+            'message' =>
+                'Unable to fetch today follow-ups.',
         ], 500);
     }
 }

@@ -71,4 +71,76 @@ class KpiDashboardAuthorizationTest extends KpiFeatureTestCase
             ])
             ->assertForbidden();
     }
+
+    public function test_operations_user_can_open_daily_activity_but_cannot_use_sales_outreach_actions(): void
+{
+    $operations =
+        $this->createUserWithRole(
+            'Operations Executive',
+            \App\Models\UserType::OPERATIONS_EXECUTIVE
+        );
+
+    $this->actingAs($operations)
+        ->get('/admin/kpi/outreach')
+        ->assertOk()
+        ->assertSee(
+            'Operations Daily Activity'
+        );
+
+    $fakeAssignment =
+        (string) Str::uuid();
+
+    $this->actingAs($operations)
+        ->post(
+            "/admin/kpi/outreach/{$fakeAssignment}/dnp"
+        )
+        ->assertForbidden();
+
+    $this->actingAs($operations)
+        ->post(
+            "/admin/kpi/outreach/{$fakeAssignment}/remark",
+            [
+                'remark' =>
+                    'Should not be allowed',
+            ]
+        )
+        ->assertForbidden();
+
+    $this->actingAs($operations)
+        ->post(
+            '/admin/kpi/outreach/get-more'
+        )
+        ->assertForbidden();
+}
+
+public function test_accounts_user_can_see_daily_outreach_menu_link(): void
+{
+    $accounts =
+        $this->createUserWithRole(
+            'Accounts Executive',
+            \App\Models\UserType::ACCOUNTS_EXECUTIVE
+        );
+
+    $this->actingAs($accounts)
+        ->get('/admin/kpi')
+        ->assertOk()
+        ->assertSee(
+            'Daily Outreach'
+        );
+}
+public function test_operations_user_can_see_daily_outreach_menu_link(): void
+{
+    $operations =
+        $this->createUserWithRole(
+            'Operations Executive',
+            \App\Models\UserType::OPERATIONS_EXECUTIVE
+        );
+
+    $this->actingAs($operations)
+        ->get('/admin/kpi')
+        ->assertOk()
+        ->assertSee(
+            'Daily Outreach'
+        );
+}
 }

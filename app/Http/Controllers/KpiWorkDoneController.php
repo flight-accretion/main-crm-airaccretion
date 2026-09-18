@@ -24,6 +24,13 @@ class KpiWorkDoneController extends Controller
             'users' => $result['users'],
             'selectedUserId' => $result['selected_user_id'],
             'filters' => $filters,
+            'leadHistoryAvailable' =>
+            $result['lead_history_available']
+            ?? true,
+
+        'leadHistoryNotice' =>
+            $result['lead_history_notice']
+            ?? null,
         ]);
     }
 

@@ -130,6 +130,23 @@
     </div>
 </div>
 
+@if(!empty($leadHistoryNotice))
+
+    <div
+        class="
+            alert
+            alert-warning
+            mb-4
+        "
+        role="alert"
+    >
+        {{ $leadHistoryNotice }}
+    </div>
+
+@endif
+
+@if($leadHistoryAvailable ?? true)
+
 
 {{-- SECTION 1 --}}
 <div class="mb-3">
@@ -192,6 +209,23 @@
     @endforeach
 
 </div>
+
+@else
+
+    <div class="box mb-6">
+
+        <div class="box-body">
+
+            <div class="text-gray-500">
+                Lead Work data is not available
+                for the selected historical period.
+            </div>
+
+        </div>
+
+    </div>
+
+@endif
 
 
 {{-- SECTION 2 --}}

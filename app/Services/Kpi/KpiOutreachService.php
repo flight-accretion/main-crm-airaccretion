@@ -26,28 +26,45 @@ class KpiOutreachService
         private ActiveLeadService $activeLeadService
     ) {}
 
-    public function dailyTarget(User $user): int
-    {
-        $assignment = KpiUserAssignment::query()
-            ->with(['template.metrics'])
-            ->where('user_id', $user->id)
-            ->where('active', true)
-            ->whereDate('effective_from', '<=', now()->toDateString())
-            ->where(function ($query) {
-                $query->whereNull('effective_to')
-                    ->orWhereDate('effective_to', '>=', now()->toDateString());
-            })
-            ->orderByDesc('effective_from')
-            ->first();
+  public function dailyTarget(User $user): int
+{
+    $assignment = KpiUserAssignment::query()
+        ->with(['template.metrics'])
+        ->where('user_id', $user->id)
+        ->where('active', true)
+        ->whereDate(
+            'effective_from',
+            '<=',
+            now()->toDateString()
+        )
+        ->where(function ($query) {
+            $query
+                ->whereNull('effective_to')
+                ->orWhereDate(
+                    'effective_to',
+                    '>=',
+                    now()->toDateString()
+                );
+        })
+        ->orderByDesc('effective_from')
+        ->first();
 
-        $metric = $assignment?->template?->metrics
-            ?->first(function ($metric) {
-                return $metric->active
-                    && $metric->code === 'daily_outreach';
-            });
+    $metric = $assignment
+        ?->template
+        ?->metrics
+        ?->first(function ($metric) {
+            return $metric->active
+                && $metric->code === 'daily_outreach';
+        });
 
-        return max(0, (int) ($metric?->target_value ?? 0));
-    }
+    return max(
+        0,
+        (int) (
+            $metric?->target_value
+            ?? 0
+        )
+    );
+}
 
     public function standardQueueSize(): int
     {

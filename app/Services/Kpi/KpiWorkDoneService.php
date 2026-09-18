@@ -10,6 +10,7 @@ use App\Models\SalesExecutiveAssignment;
 use App\Models\User;
 use App\Models\UserType;
 use Illuminate\Support\Collection;
+use Carbon\Carbon;
 
 class KpiWorkDoneService
 {
@@ -39,11 +40,26 @@ class KpiWorkDoneService
             ? [$selectedUserId]
             : $users->pluck('id')->all();
 
-        $leadIds = $this->leadIdsByCategory(
-            $userIds,
-            $filters['from'],
-            $filters['to']
-        );
+            $leadWindow =
+            $this->leadActivityWindow(
+                $filters['from'],
+                $filters['to']
+            );
+
+        if ($leadWindow['available']) {
+
+            $leadIds =
+                $this->leadIdsByCategory(
+                    $userIds,
+                    $leadWindow['from'],
+                    $leadWindow['to']
+                );
+
+        } else {
+
+            $leadIds =
+                $this->emptyBuckets();
+        }
 
         $summary = [
             'completed' => count($leadIds['completed']),
@@ -68,6 +84,11 @@ class KpiWorkDoneService
             'summary' => $summary,
             'users' => $users,
             'selected_user_id' => $selectedUserId,
+            'lead_history_available' =>
+    $leadWindow['available'],
+
+'lead_history_notice' =>
+    $leadWindow['notice'],
         ];
     }
 
@@ -426,4 +447,74 @@ class KpiWorkDoneService
 
         return $requestedUserId;
     }
+
+    private function leadActivityWindow(
+    Carbon $from,
+    Carbon $to
+): array {
+    $configured =
+        config(
+            'kpi.activity_event_cutover_at'
+        );
+
+    /*
+     * If no cutover is configured,
+     * preserve existing behaviour.
+     */
+    if (!$configured) {
+        return [
+            'available' => true,
+            'from' => $from->copy(),
+            'to' => $to->copy(),
+            'notice' => null,
+        ];
+    }
+
+    $cutover =
+        Carbon::parse($configured);
+
+    /*
+     * Entire requested range is before
+     * trustworthy KPI event tracking.
+     */
+    if ($to->lt($cutover)) {
+        return [
+            'available' => false,
+            'from' => null,
+            'to' => null,
+
+            'notice' =>
+                'Historical Lead Work data is not available before '
+                . $cutover->format('d M Y h:i A')
+                . '.',
+        ];
+    }
+
+    /*
+     * Selected range crosses the cutover.
+     *
+     * Only Lead Work is clamped.
+     * Daily Outreach continues using the
+     * user's complete selected range.
+     */
+    if ($from->lt($cutover)) {
+        return [
+            'available' => true,
+            'from' => $cutover->copy(),
+            'to' => $to->copy(),
+
+            'notice' =>
+                'Lead Work is calculated only from '
+                . $cutover->format('d M Y h:i A')
+                . ' because earlier KPI activity history is not reliable.',
+        ];
+    }
+
+    return [
+        'available' => true,
+        'from' => $from->copy(),
+        'to' => $to->copy(),
+        'notice' => null,
+    ];
+}
 }
