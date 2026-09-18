@@ -133,15 +133,19 @@ class WhatCrmAssignmentCustomerMessageService
             )
         );
 
-        $templatePayload = [
+            $templatePayload = [
             'number' => $customerNumber,
             'name' => optional($lead->client)->name,
             'template_name' => $templateName,
+
             'body_values' => [
-                $agentName,
-                $agentNumber,
+                $agentName,                         // {{1}} Agent Name
+                $agentNumber,                       // {{2}} Agent Number
+                'https://accretionaviation.com/',   // {{3}} Website URL - static
             ],
+
             'rendered_body' => $renderedBody,
+
             'chat_id' =>
                 $integration
                     ? (
@@ -155,6 +159,7 @@ class WhatCrmAssignmentCustomerMessageService
                         )
                     )
                     : null,
+
             'agent_user_id' => $representative->id,
             'assigned_agent_user_id' => $representative->id,
             'assigned_agent' => $representative->name,
