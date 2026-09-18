@@ -3,6 +3,8 @@
 namespace App\Services\Kpi;
 
 use App\Models\KpiManualValue;
+use App\Models\KpiMetric;
+use App\Models\KpiTemplate;
 use App\Models\KpiUserAssignment;
 use App\Models\User;
 use Carbon\Carbon;
@@ -44,31 +46,71 @@ class KpiDashboardService
 
         foreach ($template->metrics->where('active', true) as $metric) {
             if ($metric->measurement_type === 'automatic') {
-                $resolved = $this->registry
-                    ->resolver((string) $metric->source_key)
-                    ->resolve(
-                        $user,
-                        $metric,
-                        $asOf,
-                        (int) $template->working_days_per_month
-                    );
 
-                $score = $metric->direction === 'lower_better'
-                    ? $this->scores->scoreLowerIsBetter(
-                        (float) ($resolved['actual_value'] ?? 0),
-                        (array) $metric->score_rules
-                    )
-                    : $this->scores->scoreHigherIsBetter(
-                        (float) ($resolved['achievement_percent'] ?? 0),
-                        (array) $metric->score_rules
-                    );
-            } else {
-                [$score, $resolved] = $this->manualMetric(
-                    $user,
-                    $metric,
-                    $asOf
+    $resolved = $this->registry
+        ->resolver((string) $metric->source_key)
+        ->resolve(
+            $user,
+            $metric,
+            $asOf,
+            (int) $template->working_days_per_month
+        );
+
+    /*
+     * No eligible data must never produce a perfect KPI score.
+     *
+     * Examples:
+     * Response Time:
+     * actual = 0 minutes because there were no enquiries.
+     *
+     * Payment:
+     * achievement = 100 because denominator was zero.
+     *
+     * Follow-Up:
+     * achievement = 100 because there were no eligible cases.
+     *
+     * Approved business rule:
+     * KPI scale is always 1/5 to 5/5.
+     * No eligible data = 1/5.
+     */
+    if (
+        $this->hasNoEligibleData(
+            (string) $metric->code,
+            $resolved
+        )
+    ) {
+
+        $score = 1;
+
+    } else {
+
+        $score =
+            $metric->direction === 'lower_better'
+                ? $this->scores->scoreLowerIsBetter(
+                    (float) (
+                        $resolved['actual_value']
+                        ?? 0
+                    ),
+                    (array) $metric->score_rules
+                )
+                : $this->scores->scoreHigherIsBetter(
+                    (float) (
+                        $resolved['achievement_percent']
+                        ?? 0
+                    ),
+                    (array) $metric->score_rules
                 );
-            }
+    }
+
+} else {
+
+    [$score, $resolved] =
+        $this->manualMetric(
+            $user,
+            $metric,
+            $asOf
+        );
+}
 
             $improvement = $this->improvements->build(
                 $metric,
@@ -91,7 +133,16 @@ class KpiDashboardService
                 'score_rules' => (array) $metric->score_rules,
                 'rating_labels' => $this->ratingLabels($metric->code, (array) $metric->score_rules),
                 'direction' => $metric->direction,
-                'display_actual' => $this->displayActual($metric->code, $resolved),
+                'display_actual' =>
+    $this->hasNoEligibleData(
+        (string) $metric->code,
+        $resolved
+    )
+        ? '0'
+        : $this->displayActual(
+            (string) $metric->code,
+            $resolved
+        ),
                 'next_score' => $improvement['next_score'],
                 'next_threshold' => $improvement['next_threshold'],
                 'gap_value' => $improvement['gap_value'],
@@ -110,6 +161,552 @@ class KpiDashboardService
             'overall_score' => $this->scores->displayOverallScore($raw),
         ];
     }
+
+private function hasNoEligibleData(
+    string $code,
+    array $resolved
+): bool {
+    $evidence =
+        $resolved['evidence']
+        ?? [];
+
+    return match ($code) {
+
+        'lead_conversion' =>
+            (int) (
+                $evidence['total_leads']
+                ?? 0
+            ) === 0,
+
+
+        'response_time' =>
+            (int) (
+                $evidence['eligible_leads']
+                ?? 0
+            ) === 0,
+
+
+        'followup_sla' =>
+            (int) (
+                $evidence[
+                    'eligible_pending_cases'
+                ]
+                ?? 0
+            ) === 0,
+
+
+        'payment_collection' =>
+            (int) (
+                $evidence[
+                    'eligible_payment_customers'
+                ]
+                ?? 0
+            ) === 0,
+
+
+        default =>
+            false,
+    };
+}
+
+/**
+ * Return the KPI matrix definition independently
+ * of any employee assignment/activity.
+ *
+ * This guarantees that all Retail KPI rows remain
+ * visible on the dashboard.
+ */
+public function matrixDefinition(
+    string $department,
+    Carbon $asOf
+): array {
+    /*
+     * First use the current active template from
+     * KPI Management.
+     */
+    $template = KpiTemplate::query()
+        ->with([
+            'metrics' => function ($query) {
+                $query
+                    ->where('active', true)
+                    ->orderBy('sort_order');
+            },
+        ])
+        ->where('department', $department)
+        ->where('active', true)
+        ->whereDate(
+            'effective_from',
+            '<=',
+            $asOf->toDateString()
+        )
+        ->where(function ($query) use ($asOf) {
+
+            $query
+                ->whereNull('effective_to')
+                ->orWhereDate(
+                    'effective_to',
+                    '>=',
+                    $asOf->toDateString()
+                );
+
+        })
+        ->orderByDesc('effective_from')
+        ->first();
+
+    if (
+        $template
+        &&
+        $template->metrics->isNotEmpty()
+    ) {
+
+        return $template
+            ->metrics
+            ->map(
+                fn (KpiMetric $metric) =>
+                    $this->matrixMetric(
+                        $metric
+                    )
+            )
+            ->values()
+            ->all();
+    }
+
+
+    /*
+     * Fallback:
+     * use config/kpi.php default definition.
+     *
+     * This prevents an empty KPI Dashboard when
+     * the database template has not yet been synced.
+     */
+    $templates =
+        (array) config(
+            'kpi.default_templates',
+            []
+        );
+
+    $definition =
+        $templates[$department]
+        ?? collect($templates)
+            ->first(
+                fn ($item) =>
+                    (
+                        $item['department']
+                        ?? null
+                    )
+                    === $department
+            );
+
+    if (
+        !$definition
+        ||
+        empty(
+            $definition['metrics']
+        )
+    ) {
+        return [];
+    }
+
+    return collect(
+        $definition['metrics']
+    )
+        ->sortBy('sort_order')
+        ->map(function (array $data) {
+
+            /*
+             * Temporary model only.
+             * Nothing is saved to database.
+             */
+            $metric =
+                new KpiMetric();
+
+            $metric->forceFill([
+                'id' =>
+                    'default-'
+                    . (
+                        $data['code']
+                        ?? 'metric'
+                    ),
+
+                'code' =>
+                    $data['code']
+                    ?? '',
+
+                'name' =>
+                    $data['name']
+                    ?? '',
+
+                'description' =>
+                    $data['description']
+                    ?? null,
+
+                'weightage' =>
+                    $data['weightage']
+                    ?? 0,
+
+                'measurement_type' =>
+                    $data[
+                        'measurement_type'
+                    ]
+                    ?? 'automatic',
+
+                'source_key' =>
+                    $data['source_key']
+                    ?? null,
+
+                'target_value' =>
+                    $data['target_value']
+                    ?? 0,
+
+                'direction' =>
+                    $data['direction']
+                    ?? 'higher_better',
+
+                'score_rules' =>
+                    $data['score_rules']
+                    ?? [],
+
+                'sort_order' =>
+                    $data['sort_order']
+                    ?? 0,
+
+                'active' =>
+                    true,
+            ]);
+
+            return $this->matrixMetric(
+                $metric
+            );
+        })
+        ->values()
+        ->all();
+}
+
+
+/**
+ * Build one permanent matrix row.
+ *
+ * The empty_metric payload is used when an employee
+ * has no active KPI assignment/data.
+ */
+private function matrixMetric(
+    KpiMetric $metric
+): array {
+    $resolved =
+        $this->emptyResolvedMetric(
+            $metric
+        );
+
+    $improvement =
+        $this->improvements->build(
+            $metric,
+            1,
+            $resolved
+        );
+
+    $fallback = [
+        'id' => $metric->id,
+
+        'code' =>
+            (string) $metric->code,
+
+        'name' =>
+            (string) $metric->name,
+
+        'description' =>
+            $metric->description,
+
+        /*
+         * Minimum valid KPI rating.
+         */
+        'score' => 1,
+
+        'weightage' =>
+            (float) $metric->weightage,
+
+        'actual_value' => 0,
+
+        'target_value' =>
+            (float) (
+                $resolved[
+                    'target_value'
+                ]
+                ?? 0
+            ),
+
+        'achievement_percent' =>
+            0,
+
+        'evidence' =>
+            $resolved['evidence']
+            ?? [],
+
+        'sort_order' =>
+            (int) $metric->sort_order,
+
+        'score_rules' =>
+            (array) $metric->score_rules,
+
+        'rating_labels' =>
+            $this->ratingLabels(
+                (string) $metric->code,
+                (array) $metric->score_rules
+            ),
+
+        'direction' =>
+            $metric->direction,
+
+        /*
+         * Requirement:
+         * No employee data = show 0.
+         */
+        'display_actual' =>
+            '0',
+
+        'next_score' =>
+            $improvement[
+                'next_score'
+            ]
+            ?? 2,
+
+        'next_threshold' =>
+            $improvement[
+                'next_threshold'
+            ]
+            ?? null,
+
+        'gap_value' =>
+            $improvement[
+                'gap_value'
+            ]
+            ?? 0,
+
+        'improvement_line' =>
+            $this->emptyImprovementLine(
+                (string) $metric->code
+            ),
+    ];
+
+    return [
+        'id' => $metric->id,
+
+        'code' =>
+            (string) $metric->code,
+
+        'name' =>
+            (string) $metric->name,
+
+        'description' =>
+            $metric->description,
+
+        'weightage' =>
+            (float) $metric->weightage,
+
+        'sort_order' =>
+            (int) $metric->sort_order,
+
+        'score_rules' =>
+            (array) $metric->score_rules,
+
+        'rating_labels' =>
+            $this->ratingLabels(
+                (string) $metric->code,
+                (array) $metric->score_rules
+            ),
+
+        'direction' =>
+            $metric->direction,
+
+        /*
+         * Used when this particular employee does
+         * not have KPI data.
+         */
+        'empty_metric' =>
+            $fallback,
+    ];
+}
+
+
+/**
+ * Safe zero-data representation for every Retail KPI.
+ */
+private function emptyResolvedMetric(
+    KpiMetric $metric
+): array {
+    $code =
+        (string) $metric->code;
+
+    return match ($code) {
+
+        'daily_outreach' => [
+            'actual_value' => 0,
+
+            'target_value' =>
+                (float) (
+                    $metric->target_value
+                    ?: 50
+                ),
+
+            'achievement_percent' =>
+                0,
+
+            'evidence' => [
+                'today_completed' => 0,
+                'mtd_completed' => 0,
+                'expected_to_date' => 0,
+                'monthly_target' => 0,
+            ],
+        ],
+
+
+        'lead_conversion' => [
+            'actual_value' => 0,
+            'target_value' => 0,
+            'achievement_percent' => 0,
+
+            'evidence' => [
+                'total_leads' => 0,
+                'booked_leads' => 0,
+                'conversion_rate' => 0,
+            ],
+        ],
+
+
+        'monthly_target' => [
+            'actual_value' => 0,
+            'target_value' => 0,
+            'achievement_percent' => 0,
+
+            'evidence' => [
+                'target_amount' => 0,
+                'achieved_amount' => 0,
+                'remaining_amount' => 0,
+            ],
+        ],
+
+
+        'response_time' => [
+            'actual_value' => 0,
+
+            'target_value' =>
+                (float) (
+                    $metric->target_value
+                    ?: 15
+                ),
+
+            'achievement_percent' =>
+                0,
+
+            'evidence' => [
+                'eligible_leads' => 0,
+                'responded' => 0,
+                'unresponded' => 0,
+                'average_response_minutes' => 0,
+                'median_response_minutes' => 0,
+            ],
+        ],
+
+
+        'followup_sla' => [
+            'actual_value' => 0,
+            'target_value' => 0,
+            'achievement_percent' => 0,
+
+            'evidence' => [
+                'eligible_pending_cases' => 0,
+                'within_4_hours' => 0,
+                'outside_4_hours_or_missing' => 0,
+                'achievement_percent' => 0,
+            ],
+        ],
+
+
+        'payment_collection' => [
+            'actual_value' => 0,
+            'target_value' => 0,
+            'achievement_percent' => 0,
+
+            'evidence' => [
+                'eligible_payment_customers' => 0,
+                'full_payment_count' => 0,
+                'partial_payment_count' => 0,
+                'partial_with_followup_count' => 0,
+                'partial_without_followup_count' => 0,
+                'unpaid_count' => 0,
+                'approved_received_total' => 0,
+                'pending_balance_total' => 0,
+                'achievement_percent' => 0,
+            ],
+        ],
+
+
+        'attendance' => [
+            'actual_value' => 0,
+
+            'target_value' =>
+                (float) (
+                    $metric->target_value
+                    ?: 100
+                ),
+
+            'achievement_percent' =>
+                0,
+
+            'evidence' => [],
+        ],
+
+
+        default => [
+            'actual_value' => 0,
+
+            'target_value' =>
+                (float) (
+                    $metric->target_value
+                    ?: 0
+                ),
+
+            'achievement_percent' => 0,
+
+            'evidence' => [],
+        ],
+    };
+}
+
+
+/**
+ * Deterministic Laravel guidance for an employee
+ * who currently has no KPI activity.
+ */
+private function emptyImprovementLine(
+    string $code
+): string {
+    return match ($code) {
+
+        'daily_outreach' =>
+            'Complete verified Daily Outreach actions to improve this KPI score.',
+
+        'lead_conversion' =>
+            'Convert eligible incoming leads into successful bookings to improve this KPI score.',
+
+        'monthly_target' =>
+            'Generate approved sales against your assigned monthly target to improve this KPI score.',
+
+        'response_time' =>
+            'Respond to eligible customer enquiries faster; 15 minutes or less is the 5/5 target.',
+
+        'followup_sla' =>
+            'Complete eligible pending follow-ups within 4 hours to improve this KPI score.',
+
+        'payment_collection' =>
+            'Collect full payment or complete timely balance follow-up after partial payment to improve this KPI score.',
+
+        'attendance' =>
+            'Maintain punctual attendance on scheduled working days to improve this KPI score.',
+
+        default =>
+            'Improve the current KPI result to reach the next score.',
+    };
+}
 
     private function manualMetric(
         User $user,

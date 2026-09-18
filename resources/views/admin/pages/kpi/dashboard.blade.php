@@ -29,7 +29,21 @@
             ? 'Retail Department'
             : ucfirst($department) . ' Department';
 @endphp
+
+
+<div class="flex justify-betwwen mb-3">
 <h3 class="text-[1.125rem] font-semibold p-5">KPI Dashboad</h3>
+    <button
+        type="button"
+        id="kpiImproveAllButton"
+        class="ti-btn ti-btn-primary"
+    >
+        <i class="bx bx-trending-up me-1"></i>
+        How to Improve Score
+    </button>
+
+</div>
+
 
 <div class="box">
     <div class="box-body overflow-x-auto p-0">
@@ -424,6 +438,14 @@
     This preserves the previously approved one-line
     Laravel improvement guidance.
 --}}
+
+<script
+    type="application/json"
+    id="kpiImprovementData"
+>
+@json($improvementUsers ?? [])
+</script>
+
 @include(
     'admin.pages.kpi.partials.metric-score-modal'
 )
