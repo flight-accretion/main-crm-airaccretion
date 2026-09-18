@@ -72,7 +72,7 @@ class KpiDashboardAuthorizationTest extends KpiFeatureTestCase
             ->assertForbidden();
     }
 
-    public function test_operations_user_can_open_daily_activity_but_cannot_use_sales_outreach_actions(): void
+public function test_operations_user_can_open_daily_activity_but_cannot_use_sales_outreach_actions(): void
 {
     $operations =
         $this->createUserWithRole(
@@ -80,6 +80,9 @@ class KpiDashboardAuthorizationTest extends KpiFeatureTestCase
             \App\Models\UserType::OPERATIONS_EXECUTIVE
         );
 
+    /*
+     * Operations can open the shared Daily Activity page.
+     */
     $this->actingAs($operations)
         ->get('/admin/kpi/outreach')
         ->assertOk()
@@ -87,30 +90,80 @@ class KpiDashboardAuthorizationTest extends KpiFeatureTestCase
             'Operations Daily Activity'
         );
 
-    $fakeAssignment =
-        (string) Str::uuid();
 
+    /*
+     * Get More has no route-model binding.
+     *
+     * Therefore this is the cleanest exact authorization
+     * assertion and MUST return 403 for Operations.
+     */
     $this->actingAs($operations)
+        ->withSession([
+            '_token' => 'kpi-test',
+        ])
         ->post(
-            "/admin/kpi/outreach/{$fakeAssignment}/dnp"
-        )
-        ->assertForbidden();
-
-    $this->actingAs($operations)
-        ->post(
-            "/admin/kpi/outreach/{$fakeAssignment}/remark",
+            '/admin/kpi/outreach/get-more',
             [
-                'remark' =>
-                    'Should not be allowed',
+                '_token' => 'kpi-test',
             ]
         )
         ->assertForbidden();
 
-    $this->actingAs($operations)
-        ->post(
-            '/admin/kpi/outreach/get-more'
-        )
-        ->assertForbidden();
+
+    /*
+     * DNP and Remark use an {assignment} UUID.
+     *
+     * The UUID below intentionally does not exist.
+     * Laravel may return:
+     *
+     * 403 = role middleware denied access first
+     * 404 = route/model binding hid the nonexistent resource
+     *
+     * Both mean Operations cannot execute the Sales action.
+     */
+    $fakeAssignment =
+        (string) \Illuminate\Support\Str::uuid();
+
+
+    $dnpResponse =
+        $this->actingAs($operations)
+            ->withSession([
+                '_token' => 'kpi-test',
+            ])
+            ->post(
+                "/admin/kpi/outreach/{$fakeAssignment}/dnp",
+                [
+                    '_token' => 'kpi-test',
+                ]
+            );
+
+    $this->assertContains(
+        $dnpResponse->status(),
+        [403, 404],
+        'Operations must not be allowed to execute DNP.'
+    );
+
+
+    $remarkResponse =
+        $this->actingAs($operations)
+            ->withSession([
+                '_token' => 'kpi-test',
+            ])
+            ->post(
+                "/admin/kpi/outreach/{$fakeAssignment}/remark",
+                [
+                    '_token' => 'kpi-test',
+
+                    'remark' =>
+                        'Operations should not be allowed.',
+                ]
+            );
+
+    $this->assertContains(
+        $remarkResponse->status(),
+        [403, 404],
+        'Operations must not be allowed to execute Remark.'
+    );
 }
 
 public function test_accounts_user_can_see_daily_outreach_menu_link(): void

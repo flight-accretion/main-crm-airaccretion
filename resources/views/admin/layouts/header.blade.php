@@ -656,38 +656,39 @@
                             <path d="M13.293 6.293 7.586 12l5.707 5.707 1.414-1.414L10.414 12l4.293-4.293z"></path>
                         </svg>
                     </div>
-                    @php
-                    use App\Models\UserType;
+                   @php
+              use App\Models\UserType;
 
-                    $accountRoles = UserType::ACCOUNTS_ROLES;
-                    $operationsRoles = UserType::OPERATIONS_ROLES;
+                $accountRoles = UserType::ACCOUNTS_ROLES;
+                $operationsRoles = UserType::OPERATIONS_ROLES;
 
-                    $operationsManagerRoles = [
-                        UserType::SENIOR_OPERATIONS_MANAGER,
-                        UserType::OPERATIONS_MANAGER,
-                    ];
+                $operationsManagerRoles = [
+                    UserType::SENIOR_OPERATIONS_MANAGER,
+                    UserType::OPERATIONS_MANAGER,
+                ];
 
-                    $salesRoles = UserType::SALES_ROLES;
-                    $adminRoles = UserType::ADMIN_ROLES;
+                $salesRoles = UserType::SALES_ROLES;
+                $adminRoles = UserType::ADMIN_ROLES;
 
-                    /*
-                    * Header permission helper.
-                    *
-                    * Guard prevents duplicate-function errors when
-                    * Blade layouts are rendered more than once in tests.
-                    */
-                    if (!function_exists('canAccess')) {
-                        function canAccess($userType, $allowedRoles)
-                        {
-                            return !empty($userType)
-                                && in_array(
-                                    $userType,
-                                    (array) $allowedRoles,
-                                    true
-                                );
-                        }
-                    }
-                @endphp
+                /*
+                |--------------------------------------------------------------------------
+                | Sidebar role helper
+                |--------------------------------------------------------------------------
+                |
+                | Keep this as a closure because the existing sidebar already calls:
+                |
+                | $canAccess(...)
+                |
+                */
+                $canAccess = function ($userType, $allowedRoles): bool {
+                    return !empty($userType)
+                        && in_array(
+                            $userType,
+                            (array) $allowedRoles,
+                            true
+                        );
+                };
+            @endphp
                     <ul class="main-menu">
                         <!-- Start::slide__category -->
                         <li class="slide__category"><span class="category-name">Main</span></li>
@@ -1272,13 +1273,11 @@
             </li>
 
 
-            <!-- Daily Outreach - Sales/Admin only -->
-          @if (
-        canAccess($userType, $salesRoles)
-        || canAccess($userType, $adminRoles)
-        || canAccess($userType, $operationsRoles)
-        || canAccess($userType, $accountRoles)
-      )
+            <!-- Daily Outreach / Daily Activity - Sales, Admin, Accounts, Operations -->
+       @if (
+    $canAccess($userType, $salesRoles)
+    || $canAccess($userType, $adminRoles)
+)
                 <li class="slide {{
                     Route::is('admin.kpi.outreach.*')
                         ? 'active'
