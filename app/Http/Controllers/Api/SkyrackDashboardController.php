@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\KpiOutreachAssignment;
 use App\Models\LeadFollowup;
 use App\Models\User;
+use App\Services\Kpi\KpiOutreachService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,10 +17,12 @@ class SkyrackDashboardController extends Controller
     /**
      * GET /api/skyrack/today-followups
      *
-     * Query:
+     * Required:
      * agent_number = assigned sales agent mobile number
-     * page         = page number
-     * per_page     = records per page, max 100
+     *
+     * Optional:
+     * page     = page number
+     * per_page = records per page, max 100
      *
      * Example:
      * /api/skyrack/today-followups?agent_number=9981901043&page=1&per_page=20
@@ -29,11 +33,6 @@ class SkyrackDashboardController extends Controller
             $now = Carbon::now('Asia/Kolkata');
             $currentDate = $now->toDateString();
 
-            /*
-             * ---------------------------------------------
-             * PAGINATION
-             * ---------------------------------------------
-             */
             $page = max(
                 1,
                 (int) $request->input('page', 1)
@@ -48,83 +47,26 @@ class SkyrackDashboardController extends Controller
             );
 
             /*
-             * ---------------------------------------------
-             * AGENT NUMBER
-             * ---------------------------------------------
-             *
-             * This is the assigned sales agent's number.
-             *
-             * Accepted examples:
-             *
-             * 9981901043
-             * 919981901043
-             * +91 99819 01043
+             * -----------------------------------------------------
+             * Resolve assigned agent from agent_number
+             * -----------------------------------------------------
              */
-            $agentNumber = $request->filled('agent_number')
-                ? preg_replace(
-                    '/\D+/',
-                    '',
-                    (string) $request->input('agent_number')
-                )
-                : null;
 
-            /*
-             * Make agent_number mandatory.
-             *
-             * This prevents SkyRack from accidentally
-             * retrieving follow-ups for every salesperson.
-             */
-            if (!$agentNumber) {
+            $agentResult = $this->resolveAgentFromRequest($request);
+
+            if ($agentResult['error']) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'agent_number is required.',
+                    'message' => $agentResult['message'],
                 ], 422);
             }
 
-            /*
-             * Normalize to last 10 digits.
-             */
-            $agentDigits = $this->lastTenDigits(
-                $agentNumber
-            );
-
-            if (strlen($agentDigits) !== 10) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Invalid agent number.',
-                ], 422);
-            }
+            $agentNumber = $agentResult['agent_number'];
+            $assignedAgent = $agentResult['agent'];
 
             /*
-             * ---------------------------------------------
-             * FIND CRM AGENT
-             * ---------------------------------------------
-             *
-             * User mobile column:
-             * users.contact_number
-             */
-            $assignedAgent = User::query()
-                ->whereRaw(
-                    "RIGHT(
-                        REGEXP_REPLACE(
-                            COALESCE(contact_number, ''),
-                            '[^0-9]',
-                            '',
-                            'g'
-                        ),
-                        10
-                    ) = ?",
-                    [$agentDigits]
-                )
-                ->first();
-
-            /*
-             * Unknown number:
-             *
-             * Return zero records.
-             *
-             * IMPORTANT:
-             * Never fall back to all agents.
+             * Unknown agent:
+             * return zero records and never fall back to all agents.
              */
             if (!$assignedAgent) {
                 return $this->emptyTodayFollowupsResponse(
@@ -138,12 +80,19 @@ class SkyrackDashboardController extends Controller
             $agentId = (string) $assignedAgent->id;
 
             /*
-             * ---------------------------------------------
-             * BASE QUERY
-             * ---------------------------------------------
+             * -----------------------------------------------------
+             * Base query
+             * -----------------------------------------------------
              *
-             * Only leads CURRENTLY assigned to this agent.
+             * IMPORTANT:
+             * Follow-ups are filtered by the CURRENTLY assigned
+             * representative:
+             *
+             * leads.representative_user_id
+             *
+             * We do NOT filter by lead_followups.followed_by.
              */
+
             $followUpQuery = LeadFollowup::query()
                 ->with([
                     'enquiry',
@@ -162,10 +111,11 @@ class SkyrackDashboardController extends Controller
                 );
 
             /*
-             * ---------------------------------------------
-             * TODAY CANDIDATES
-             * ---------------------------------------------
+             * -----------------------------------------------------
+             * Today's candidate leads
+             * -----------------------------------------------------
              */
+
             $todayLeadIds = (clone $followUpQuery)
                 ->whereDate(
                     'next_followup_date',
@@ -180,17 +130,11 @@ class SkyrackDashboardController extends Controller
                 ->unique();
 
             /*
-             * ---------------------------------------------
-             * MISSED CANDIDATES
-             * ---------------------------------------------
-             *
-             * CRM considers these statuses open for
-             * missed follow-ups:
-             *
-             * 0 = initiated
-             * 1 = active
-             * 4 = partial payment received
+             * -----------------------------------------------------
+             * Missed candidate leads
+             * -----------------------------------------------------
              */
+
             $missedLeadIds = (clone $followUpQuery)
                 ->whereDate(
                     'next_followup_date',
@@ -205,18 +149,20 @@ class SkyrackDashboardController extends Controller
                 ->unique();
 
             /*
-             * Merge today + missed candidate lead IDs.
+             * Combine today + missed candidate lead IDs.
              */
+
             $allLeadIds = $todayLeadIds
                 ->merge($missedLeadIds)
                 ->unique()
                 ->values();
 
             /*
-             * ---------------------------------------------
-             * GET LATEST FOLLOW-UP PER LEAD
-             * ---------------------------------------------
+             * -----------------------------------------------------
+             * Find absolute latest follow-up for every lead
+             * -----------------------------------------------------
              */
+
             $latestFollowups = collect();
 
             if ($allLeadIds->isNotEmpty()) {
@@ -231,10 +177,6 @@ class SkyrackDashboardController extends Controller
                         'lead_id',
                         $allLeadIds
                     )
-
-                    /*
-                     * Recheck current assigned agent.
-                     */
                     ->whereHas(
                         'enquiry',
                         function ($query) use ($agentId) {
@@ -244,10 +186,6 @@ class SkyrackDashboardController extends Controller
                             );
                         }
                     )
-
-                    /*
-                     * Same latest logic as CRM dashboard.
-                     */
                     ->orderByDesc('created_at')
                     ->orderByDesc('next_followup_date')
                     ->get()
@@ -257,19 +195,15 @@ class SkyrackDashboardController extends Controller
                     );
 
                 /*
-                 * -----------------------------------------
-                 * APPLY CRM TODAY FOLLOW-UP RULES
-                 * -----------------------------------------
+                 * -------------------------------------------------
+                 * Apply exact CRM Today Follow-up rules
+                 * -------------------------------------------------
                  */
-                foreach (
-                    $allFollowupsForLeads as $latest
-                ) {
+
+                foreach ($allFollowupsForLeads as $latest) {
                     /*
-                     * Hidden statuses:
-                     *
-                     * 2 = cancelled
-                     * 5 = confirmed
-                     * 9 = rejected
+                     * Hide terminal statuses such as cancelled,
+                     * confirmed and rejected.
                      */
                     if (
                         LeadFollowup::hiddenFromTodayFollowups(
@@ -280,7 +214,8 @@ class SkyrackDashboardController extends Controller
                     }
 
                     /*
-                     * No next date = not actionable.
+                     * No next follow-up date means it is not
+                     * actionable in Today Followups.
                      */
                     if (!$latest->next_followup_date) {
                         continue;
@@ -291,14 +226,12 @@ class SkyrackDashboardController extends Controller
                         ->toDateString();
 
                     /*
-                     * Today.
+                     * Today's follow-up.
                      */
                     if ($latestDate === $currentDate) {
                         $latest->is_missed = false;
 
-                        $latestFollowups->push(
-                            $latest
-                        );
+                        $latestFollowups->push($latest);
 
                         continue;
                     }
@@ -316,56 +249,49 @@ class SkyrackDashboardController extends Controller
                     ) {
                         $latest->is_missed = true;
 
-                        $latestFollowups->push(
-                            $latest
-                        );
+                        $latestFollowups->push($latest);
                     }
 
                     /*
-                     * Future dates are ignored.
+                     * Future dates are intentionally ignored.
                      */
                 }
             }
 
             /*
-             * ---------------------------------------------
-             * SORT TODAY
-             * ---------------------------------------------
+             * -----------------------------------------------------
+             * Sort today's follow-ups
+             * -----------------------------------------------------
              *
-             * Today's follow-ups:
-             * earliest first.
+             * Earliest due first.
              */
+
             $todayFollowups = $latestFollowups
                 ->filter(
-                    fn ($followup) =>
-                        !$followup->is_missed
+                    fn ($followup) => !$followup->is_missed
                 )
                 ->sortBy(
                     fn ($followup) =>
-                        $followup
-                            ->next_followup_date
-                            ?->timestamp
+                        $followup->next_followup_date?->timestamp
                         ?? PHP_INT_MAX
                 )
                 ->values();
 
             /*
-             * ---------------------------------------------
-             * SORT MISSED
-             * ---------------------------------------------
+             * -----------------------------------------------------
+             * Sort missed follow-ups
+             * -----------------------------------------------------
              *
              * Most recently missed first.
              */
+
             $missedFollowups = $latestFollowups
                 ->filter(
-                    fn ($followup) =>
-                        $followup->is_missed
+                    fn ($followup) => $followup->is_missed
                 )
                 ->sortByDesc(
                     fn ($followup) =>
-                        $followup
-                            ->next_followup_date
-                            ?->timestamp
+                        $followup->next_followup_date?->timestamp
                         ?? PHP_INT_MIN
                 )
                 ->values();
@@ -373,33 +299,28 @@ class SkyrackDashboardController extends Controller
             /*
              * Today first, then missed.
              */
+
             $allSorted = $todayFollowups
                 ->merge($missedFollowups)
                 ->values();
 
             /*
-             * ---------------------------------------------
-             * COUNTS FOR THIS AGENT
-             * ---------------------------------------------
-             *
-             * Counts are BEFORE pagination.
+             * Counts are calculated BEFORE pagination.
              */
+
             $total = $allSorted->count();
-
             $todayCount = $todayFollowups->count();
-
             $missedCount = $missedFollowups->count();
 
             /*
-             * ---------------------------------------------
-             * PAGINATION
-             * ---------------------------------------------
+             * -----------------------------------------------------
+             * Pagination
+             * -----------------------------------------------------
              */
+
             $lastPage = max(
                 1,
-                (int) ceil(
-                    $total / $perPage
-                )
+                (int) ceil($total / $perPage)
             );
 
             $offset = ($page - 1) * $perPage;
@@ -412,133 +333,88 @@ class SkyrackDashboardController extends Controller
                 ->values();
 
             /*
-             * ---------------------------------------------
-             * RESPONSE DATA
-             * ---------------------------------------------
+             * -----------------------------------------------------
+             * Format response records
+             * -----------------------------------------------------
              */
+
             $data = $paginatedFollowups
                 ->map(
-                    function (
-                        LeadFollowup $followup
-                    ) {
+                    function (LeadFollowup $followup) {
                         $lead = $followup->enquiry;
-
                         $client = $lead?->client;
-
-                        $representative =
-                            $lead?->representative;
+                        $representative = $lead?->representative;
 
                         return [
-                            'followup_id' =>
-                                $followup->id,
+                            'followup_id' => $followup->id,
 
-                            'lead_id' =>
-                                $followup->lead_id,
+                            'lead_id' => $followup->lead_id,
 
                             /*
-                             * Customer information is returned
-                             * as data, but is NOT a filter.
+                             * Customer information is response data.
+                             * It is NOT used as an API filter.
                              */
                             'customer' => [
-                                'id' =>
-                                    $client?->id,
-
-                                'name' =>
-                                    $client?->name,
-
-                                'phone' =>
-                                    $client?->contact_number,
-
-                                'alternate_phone' =>
-                                    $client?->alternate_number,
-
-                                'email' =>
-                                    $client?->email,
+                                'id' => $client?->id,
+                                'name' => $client?->name,
+                                'phone' => $client?->contact_number,
+                                'alternate_phone' => $client?->alternate_number,
+                                'email' => $client?->email,
                             ],
 
                             /*
-                             * Assigned agent.
+                             * Currently assigned sales representative.
                              */
                             'representative' => [
-                                'id' =>
-                                    $lead
-                                        ?->representative_user_id,
-
-                                'name' =>
-                                    $representative?->name,
-
-                                'number' =>
-                                    $representative
-                                        ?->contact_number,
+                                'id' => $lead?->representative_user_id,
+                                'name' => $representative?->name,
+                                'number' => $representative?->contact_number,
                             ],
 
                             /*
-                             * User who actually recorded this
-                             * particular follow-up.
+                             * User who recorded this particular
+                             * follow-up.
                              */
                             'followed_by' => [
-                                'id' =>
-                                    $followup->followed_by,
-
-                                'name' =>
-                                    $followup
-                                        ->followedBy
-                                        ?->name,
-
-                                'number' =>
-                                    $followup
-                                        ->followedBy
-                                        ?->contact_number,
+                                'id' => $followup->followed_by,
+                                'name' => $followup->followedBy?->name,
+                                'number' => $followup->followedBy?->contact_number,
                             ],
 
-                            'status' =>
-                                (int) $followup->status,
+                            'status' => (int) $followup->status,
 
                             'next_followup_date' =>
-                                $followup
-                                    ->next_followup_date
-                                    ?->timezone(
-                                        'Asia/Kolkata'
-                                    )
-                                    ->format(
-                                        'Y-m-d H:i:s'
-                                    ),
+                                $followup->next_followup_date
+                                    ?->timezone('Asia/Kolkata')
+                                    ->format('Y-m-d H:i:s'),
 
                             'followup_note' =>
-                                $followup
-                                    ->followup_note,
+                                $followup->followup_note,
 
                             'contact_outcome' =>
-                                $followup
-                                    ->contact_outcome,
+                                $followup->contact_outcome,
 
                             'customer_not_picked_up' =>
-                                (bool) $followup
-                                    ->customer_not_picked_up,
+                                (bool) $followup->customer_not_picked_up,
 
                             'is_missed' =>
-                                (bool) $followup
-                                    ->is_missed,
+                                (bool) $followup->is_missed,
 
                             'created_at' =>
-                                $followup
-                                    ->created_at
-                                    ?->timezone(
-                                        'Asia/Kolkata'
-                                    )
-                                    ->format(
-                                        'Y-m-d H:i:s'
-                                    ),
+                                $followup->created_at
+                                    ?->timezone('Asia/Kolkata')
+                                    ->format('Y-m-d H:i:s'),
                         ];
                     }
                 )
                 ->values();
 
             /*
-             * ---------------------------------------------
-             * FINAL RESPONSE
-             * ---------------------------------------------
+             * -----------------------------------------------------
+             * Final response
+             * -----------------------------------------------------
              */
+
             return response()->json([
                 'success' => true,
 
@@ -546,66 +422,36 @@ class SkyrackDashboardController extends Controller
 
                 'timezone' => 'Asia/Kolkata',
 
-                /*
-                 * Only agent number is a business filter.
-                 */
                 'filter' => [
-                    'agent_number' =>
-                        $agentNumber,
+                    'agent_number' => $agentNumber,
                 ],
 
-                /*
-                 * Resolved assigned CRM agent.
-                 */
                 'agent' => [
-                    'id' =>
-                        $assignedAgent->id,
-
-                    'name' =>
-                        $assignedAgent->name,
-
-                    'number' =>
-                        $assignedAgent
-                            ->contact_number,
+                    'id' => $assignedAgent->id,
+                    'name' => $assignedAgent->name,
+                    'number' => $assignedAgent->contact_number,
                 ],
 
                 /*
-                 * These counts belong ONLY to
-                 * the selected assigned agent.
+                 * Counts for this assigned agent only.
                  */
                 'count' => $total,
+                'today_count' => $todayCount,
+                'missed_count' => $missedCount,
 
-                'today_count' =>
-                    $todayCount,
-
-                'missed_count' =>
-                    $missedCount,
-
-                /*
-                 * Pagination.
-                 */
                 'pagination' => [
-                    'current_page' =>
-                        $page,
-
-                    'per_page' =>
-                        $perPage,
-
-                    'total' =>
-                        $total,
-
-                    'last_page' =>
-                        $lastPage,
+                    'current_page' => $page,
+                    'per_page' => $perPage,
+                    'total' => $total,
+                    'last_page' => $lastPage,
 
                     'from' =>
-                        $total > 0 &&
-                        $offset < $total
+                        $total > 0 && $offset < $total
                             ? $offset + 1
                             : null,
 
                     'to' =>
-                        $total > 0 &&
-                        $offset < $total
+                        $total > 0 && $offset < $total
                             ? min(
                                 $offset + $perPage,
                                 $total
@@ -624,14 +470,495 @@ class SkyrackDashboardController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' =>
-                    'Unable to fetch today follow-ups.',
+                'message' => 'Unable to fetch today follow-ups.',
             ], 500);
         }
     }
 
     /**
-     * Normalize phone numbers to the last 10 digits.
+     * GET /api/skyrack/daily-kpi-outreach
+     *
+     * Required:
+     * agent_number = sales agent mobile number
+     *
+     * Optional:
+     * page     = page number
+     * per_page = records per page, max 100
+     *
+     * Example:
+     * /api/skyrack/daily-kpi-outreach?agent_number=9981901043&page=1&per_page=20
+     */
+    public function dailyKpiOutreach(Request $request): JsonResponse
+    {
+        try {
+            $now = Carbon::now('Asia/Kolkata');
+            $today = $now->toDateString();
+
+            $page = max(
+                1,
+                (int) $request->input('page', 1)
+            );
+
+            $perPage = min(
+                100,
+                max(
+                    1,
+                    (int) $request->input('per_page', 20)
+                )
+            );
+
+            /*
+             * -----------------------------------------------------
+             * Resolve agent from agent_number
+             * -----------------------------------------------------
+             */
+
+            $agentResult = $this->resolveAgentFromRequest($request);
+
+            if ($agentResult['error']) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $agentResult['message'],
+                ], 422);
+            }
+
+            $agentNumber = $agentResult['agent_number'];
+            $assignedAgent = $agentResult['agent'];
+
+            /*
+             * Unknown agent:
+             * return zero data and never expose all agents.
+             */
+            if (!$assignedAgent) {
+                return $this->emptyKpiOutreachResponse(
+                    $today,
+                    $agentNumber,
+                    $page,
+                    $perPage
+                );
+            }
+
+            $agentId = (string) $assignedAgent->id;
+
+            /*
+             * -----------------------------------------------------
+             * Real KPI daily target
+             * -----------------------------------------------------
+             *
+             * Do NOT hard-code the target.
+             */
+
+            $outreachService = app(
+                KpiOutreachService::class
+            );
+
+            $dailyTarget = (int) $outreachService->dailyTarget(
+                $assignedAgent
+            );
+
+            /*
+             * -----------------------------------------------------
+             * Completed today
+             * -----------------------------------------------------
+             *
+             * ALL completed outreach assignments:
+             * standard + extra.
+             */
+
+            $completedToday = KpiOutreachAssignment::query()
+                ->where('user_id', $agentId)
+                ->where('status', 'completed')
+                ->whereDate(
+                    'completed_at',
+                    $today
+                )
+                ->count();
+
+            /*
+             * Standard completions separately.
+             */
+
+            $standardCompletedToday = KpiOutreachAssignment::query()
+                ->where('user_id', $agentId)
+                ->where(
+                    'allocation_type',
+                    'standard'
+                )
+                ->where(
+                    'status',
+                    'completed'
+                )
+                ->whereDate(
+                    'completed_at',
+                    $today
+                )
+                ->count();
+
+            /*
+             * Extra completions separately.
+             */
+
+            $extraCompletedToday = KpiOutreachAssignment::query()
+                ->where('user_id', $agentId)
+                ->where(
+                    'allocation_type',
+                    'extra'
+                )
+                ->where(
+                    'status',
+                    'completed'
+                )
+                ->whereDate(
+                    'completed_at',
+                    $today
+                )
+                ->count();
+
+            /*
+             * Remaining KPI target.
+             */
+
+            $remainingToday = max(
+                0,
+                $dailyTarget - $completedToday
+            );
+
+            /*
+             * -----------------------------------------------------
+             * Current pending KPI queue
+             * -----------------------------------------------------
+             *
+             * IMPORTANT:
+             * This API is read-only.
+             *
+             * It does NOT:
+             * - allocate new KPI records
+             * - release records
+             * - request extra records
+             * - modify the agent queue
+             */
+
+            $pendingQuery = KpiOutreachAssignment::query()
+                ->with('pool')
+                ->where(
+                    'user_id',
+                    $agentId
+                )
+                ->where(
+                    'status',
+                    'pending'
+                );
+
+            /*
+             * -----------------------------------------------------
+             * Pending counts
+             * -----------------------------------------------------
+             */
+
+            $pendingCount = (clone $pendingQuery)
+                ->count();
+
+            $standardPendingCount = (clone $pendingQuery)
+                ->where(
+                    'allocation_type',
+                    'standard'
+                )
+                ->count();
+
+            $extraPendingCount = (clone $pendingQuery)
+                ->where(
+                    'allocation_type',
+                    'extra'
+                )
+                ->count();
+
+            /*
+             * -----------------------------------------------------
+             * Pagination
+             * -----------------------------------------------------
+             */
+
+            $lastPage = max(
+                1,
+                (int) ceil(
+                    $pendingCount / $perPage
+                )
+            );
+
+            $offset = ($page - 1) * $perPage;
+
+            /*
+             * Same basic queue order:
+             * oldest assigned first.
+             */
+
+            $assignments = (clone $pendingQuery)
+                ->orderBy('assigned_at')
+                ->offset($offset)
+                ->limit($perPage)
+                ->get();
+
+            /*
+             * -----------------------------------------------------
+             * Format KPI queue records
+             * -----------------------------------------------------
+             */
+
+            $data = $assignments
+                ->map(
+                    function (
+                        KpiOutreachAssignment $assignment
+                    ) {
+                        return [
+                            'assignment_id' =>
+                                $assignment->id,
+
+                            'pool_id' =>
+                                $assignment->pool_id,
+
+                            /*
+                             * Customer/outreach number.
+                             *
+                             * Returned as data only.
+                             * It is NOT an API filter.
+                             */
+                            'number' =>
+                                $assignment->normalized_phone,
+
+                            /*
+                             * standard / extra
+                             */
+                            'allocation_type' =>
+                                $assignment->allocation_type,
+
+                            'status' =>
+                                $assignment->status,
+
+                            'assigned_at' =>
+                                $assignment->assigned_at
+                                    ?->timezone('Asia/Kolkata')
+                                    ->format('Y-m-d H:i:s'),
+
+                            'customer' => [
+                                'name' =>
+                                    $assignment
+                                        ->pool
+                                        ?->display_name,
+                            ],
+                        ];
+                    }
+                )
+                ->values();
+
+            /*
+             * -----------------------------------------------------
+             * Final KPI response
+             * -----------------------------------------------------
+             */
+
+            return response()->json([
+                'success' => true,
+
+                'date' => $today,
+
+                'timezone' => 'Asia/Kolkata',
+
+                /*
+                 * Only the agent number is a filter.
+                 */
+                'filter' => [
+                    'agent_number' => $agentNumber,
+                ],
+
+                'agent' => [
+                    'id' =>
+                        $assignedAgent->id,
+
+                    'name' =>
+                        $assignedAgent->name,
+
+                    'number' =>
+                        $assignedAgent->contact_number,
+                ],
+
+                /*
+                 * -------------------------------------------------
+                 * KPI summary for this agent
+                 * -------------------------------------------------
+                 */
+
+                'daily_target' =>
+                    $dailyTarget,
+
+                'completed_today' =>
+                    $completedToday,
+
+                'remaining_today' =>
+                    $remainingToday,
+
+                'standard_completed_today' =>
+                    $standardCompletedToday,
+
+                'extra_completed_today' =>
+                    $extraCompletedToday,
+
+                /*
+                 * Current pending queue.
+                 */
+
+                'pending_count' =>
+                    $pendingCount,
+
+                'standard_pending_count' =>
+                    $standardPendingCount,
+
+                'extra_pending_count' =>
+                    $extraPendingCount,
+
+                /*
+                 * Standard target completed.
+                 */
+                'standard_locked' =>
+                    $dailyTarget > 0 &&
+                    $standardCompletedToday >= $dailyTarget,
+
+                /*
+                 * -------------------------------------------------
+                 * Pagination
+                 * -------------------------------------------------
+                 */
+
+                'pagination' => [
+                    'current_page' =>
+                        $page,
+
+                    'per_page' =>
+                        $perPage,
+
+                    'total' =>
+                        $pendingCount,
+
+                    'last_page' =>
+                        $lastPage,
+
+                    'from' =>
+                        $pendingCount > 0 &&
+                        $offset < $pendingCount
+                            ? $offset + 1
+                            : null,
+
+                    'to' =>
+                        $pendingCount > 0 &&
+                        $offset < $pendingCount
+                            ? min(
+                                $offset + $perPage,
+                                $pendingCount
+                            )
+                            : null,
+
+                    'has_more' =>
+                        $page < $lastPage,
+                ],
+
+                'data' => $data,
+            ]);
+
+        } catch (Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to fetch daily KPI outreach.',
+            ], 500);
+        }
+    }
+
+    /**
+     * Resolve CRM agent from agent_number.
+     *
+     * Both SkyRack endpoints use this exact same logic.
+     *
+     * User mobile field:
+     * users.contact_number
+     */
+    private function resolveAgentFromRequest(
+        Request $request
+    ): array {
+        $agentNumber = $request->filled('agent_number')
+            ? preg_replace(
+                '/\D+/',
+                '',
+                (string) $request->input('agent_number')
+            )
+            : '';
+
+        /*
+         * agent_number is mandatory.
+         */
+        if ($agentNumber === '') {
+            return [
+                'error' => true,
+                'message' => 'agent_number is required.',
+                'agent_number' => '',
+                'agent' => null,
+            ];
+        }
+
+        /*
+         * Normalize:
+         *
+         * +91 99819 01043
+         * 919981901043
+         * 9981901043
+         *
+         * all become:
+         *
+         * 9981901043
+         */
+        $agentDigits = $this->lastTenDigits(
+            $agentNumber
+        );
+
+        if (strlen($agentDigits) !== 10) {
+            return [
+                'error' => true,
+                'message' => 'Invalid agent number.',
+                'agent_number' => $agentNumber,
+                'agent' => null,
+            ];
+        }
+
+        /*
+         * PostgreSQL:
+         *
+         * Remove any non-numeric characters from
+         * users.contact_number and compare the last 10 digits.
+         */
+        $assignedAgent = User::query()
+            ->whereRaw(
+                "RIGHT(
+                    REGEXP_REPLACE(
+                        COALESCE(contact_number, ''),
+                        '[^0-9]',
+                        '',
+                        'g'
+                    ),
+                    10
+                ) = ?",
+                [$agentDigits]
+            )
+            ->first();
+
+        return [
+            'error' => false,
+            'message' => null,
+            'agent_number' => $agentNumber,
+            'agent' => $assignedAgent,
+        ];
+    }
+
+    /**
+     * Normalize a phone number to its last 10 digits.
      */
     private function lastTenDigits(
         ?string $number
@@ -657,8 +984,8 @@ class SkyrackDashboardController extends Controller
     }
 
     /**
-     * Return empty data when the supplied agent
-     * number does not belong to a CRM user.
+     * Empty Today Followups response when the supplied
+     * agent number does not match a CRM user.
      */
     private function emptyTodayFollowupsResponse(
         string $date,
@@ -674,8 +1001,7 @@ class SkyrackDashboardController extends Controller
             'timezone' => 'Asia/Kolkata',
 
             'filter' => [
-                'agent_number' =>
-                    $agentNumber,
+                'agent_number' => $agentNumber,
             ],
 
             'agent' => null,
@@ -687,20 +1013,12 @@ class SkyrackDashboardController extends Controller
             'missed_count' => 0,
 
             'pagination' => [
-                'current_page' =>
-                    $page,
-
-                'per_page' =>
-                    $perPage,
-
+                'current_page' => $page,
+                'per_page' => $perPage,
                 'total' => 0,
-
                 'last_page' => 1,
-
                 'from' => null,
-
                 'to' => null,
-
                 'has_more' => false,
             ],
 
@@ -708,9 +1026,58 @@ class SkyrackDashboardController extends Controller
         ]);
     }
 
-
-    /*
-     * KEEP YOUR EXISTING dailyKpiOutreach()
-     * AND ITS HELPER METHODS BELOW HERE.
+    /**
+     * Empty Daily KPI Outreach response when the supplied
+     * agent number does not match a CRM user.
      */
+    private function emptyKpiOutreachResponse(
+        string $date,
+        string $agentNumber,
+        int $page,
+        int $perPage
+    ): JsonResponse {
+        return response()->json([
+            'success' => true,
+
+            'date' => $date,
+
+            'timezone' => 'Asia/Kolkata',
+
+            'filter' => [
+                'agent_number' => $agentNumber,
+            ],
+
+            'agent' => null,
+
+            'daily_target' => 0,
+
+            'completed_today' => 0,
+
+            'remaining_today' => 0,
+
+            'standard_completed_today' => 0,
+
+            'extra_completed_today' => 0,
+
+            'pending_count' => 0,
+
+            'standard_pending_count' => 0,
+
+            'extra_pending_count' => 0,
+
+            'standard_locked' => false,
+
+            'pagination' => [
+                'current_page' => $page,
+                'per_page' => $perPage,
+                'total' => 0,
+                'last_page' => 1,
+                'from' => null,
+                'to' => null,
+                'has_more' => false,
+            ],
+
+            'data' => [],
+        ]);
+    }
 }
