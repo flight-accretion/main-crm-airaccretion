@@ -982,6 +982,78 @@
                             </li>
                         @endif
 
+                        {{-- Attendance Import - HR + Super Admin only --}}
+@if (
+    in_array(
+        $userType,
+        [
+            \App\Models\UserType::SUPER_ADMIN,
+            \App\Models\UserType::HR,
+        ],
+        true
+    )
+)
+
+    <li class="slide {{
+        Route::is(
+            'admin.attendance.import.*'
+        )
+            ? 'active'
+            : ''
+    }}">
+
+        <a
+            href="{{
+                route(
+                    'admin.attendance.import.index'
+                )
+            }}"
+            class="side-menu__item"
+        >
+
+            <i
+                class="bx bx-calendar-check side-menu__icon"
+            ></i>
+
+            <span class="side-menu__label">
+                Attendance Import
+            </span>
+
+        </a>
+
+    </li>
+
+    <li class="slide {{
+        Route::is(
+            'admin.attendance.settings.*'
+        )
+            ? 'active'
+            : ''
+    }}">
+
+        <a
+            href="{{
+                route(
+                    'admin.attendance.settings.index'
+                )
+            }}"
+            class="side-menu__item"
+        >
+
+            <i
+                class="bx bx-time-five side-menu__icon"
+            ></i>
+
+            <span class="side-menu__label">
+                Attendance Settings
+            </span>
+
+        </a>
+
+    </li>
+
+@endif
+
                         <!-- Target Master Section -->
                         @if ($canAccess($userType, $adminRoles) ||
                                 in_array($userType, [\App\Models\UserType::SENIOR_SALES_MANAGER, \App\Models\UserType::SALES_MANAGER]))

@@ -50,6 +50,8 @@ use App\Http\Controllers\KpiDashboardController;
 use App\Http\Controllers\KpiOutreachController;
 use App\Http\Controllers\KpiManagementController;
 use App\Http\Controllers\KpiWorkDoneController;
+use App\Http\Controllers\AttendanceImportController;
+use App\Http\Controllers\AttendanceSettingsController;
 
 
 /*
@@ -122,6 +124,91 @@ Route::middleware('auth')->group(function () {
     Route::get('/admin/kpi/details/{metric}', [KpiDashboardController::class, 'details'])
         ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES')
         ->name('admin.kpi.details');
+
+
+        Route::prefix('admin/attendance')
+    ->middleware(
+        'role:ATTENDANCE_IMPORT_ROLES'
+    )
+    ->group(function () {
+
+        Route::get(
+            '/import',
+            [
+                AttendanceImportController::class,
+                'index',
+            ]
+        )
+            ->name(
+                'admin.attendance.import.index'
+            );
+
+        Route::get(
+            '/settings',
+            [
+                AttendanceSettingsController::class,
+                'index',
+            ]
+        )
+            ->name(
+                'admin.attendance.settings.index'
+            );
+
+        Route::post(
+            '/settings/policies',
+            [
+                AttendanceSettingsController::class,
+                'storePolicy',
+            ]
+        )
+            ->name(
+                'admin.attendance.settings.policies.store'
+            );
+
+        Route::put(
+            '/settings/policies/{policy}',
+            [
+                AttendanceSettingsController::class,
+                'updatePolicy',
+            ]
+        )
+            ->name(
+                'admin.attendance.settings.policies.update'
+            );
+
+        Route::post(
+            '/settings/assignments',
+            [
+                AttendanceSettingsController::class,
+                'storeAssignments',
+            ]
+        )
+            ->name(
+                'admin.attendance.settings.assignments.store'
+            );
+
+        Route::post(
+            '/import/preview',
+            [
+                AttendanceImportController::class,
+                'preview',
+            ]
+        )
+            ->name(
+                'admin.attendance.import.preview'
+            );
+
+        Route::post(
+            '/import/confirm',
+            [
+                AttendanceImportController::class,
+                'confirm',
+            ]
+        )
+            ->name(
+                'admin.attendance.import.confirm'
+            );
+    });
 
 /*
 |--------------------------------------------------------------------------
