@@ -186,6 +186,53 @@ abstract class KpiFeatureTestCase extends TestCase
             $table->timestamps();
         });
 
+        Schema::create('attendance_records', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('user_id');
+            $table->string('paycode', 100)->nullable();
+            $table->date('attendance_date');
+            $table->string('day_name', 20)->nullable();
+            $table->time('in_time')->nullable();
+            $table->time('out_time')->nullable();
+            $table->string('raw_in', 50)->nullable();
+            $table->string('raw_out', 50)->nullable();
+            $table->string('raw_status', 50)->nullable();
+            $table->uuid('source_import_id')->nullable();
+            $table->timestamps();
+
+            $table->unique([
+                'user_id',
+                'attendance_date',
+            ]);
+        });
+
+        Schema::create('attendance_shift_policies', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('name', 150);
+            $table->time('start_time');
+            $table->time('end_time')->nullable();
+            $table->unsignedSmallInteger('grace_minutes')->default(0);
+            $table->boolean('is_default')->default(false);
+            $table->boolean('is_active')->default(true);
+            $table->uuid('created_by')->nullable();
+            $table->uuid('updated_by')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create(
+            'attendance_user_shift_assignments',
+            function (Blueprint $table) {
+                $table->uuid('id')->primary();
+                $table->uuid('user_id');
+                $table->uuid('shift_policy_id');
+                $table->date('effective_from');
+                $table->date('effective_to')->nullable();
+                $table->uuid('created_by')->nullable();
+                $table->uuid('updated_by')->nullable();
+                $table->timestamps();
+            }
+        );
+
         Schema::create(
             'sales_executive_assignments',
             function (Blueprint $table) {

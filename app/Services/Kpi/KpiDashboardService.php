@@ -202,7 +202,13 @@ private function hasNoEligibleData(
                 ]
                 ?? 0
             ) === 0,
-
+'attendance' =>
+    (int) (
+        $evidence[
+            'eligible_scheduled_days'
+        ]
+        ?? 0
+    ) === 0,
 
         default =>
             false,
@@ -640,20 +646,60 @@ private function emptyResolvedMetric(
         ],
 
 
-        'attendance' => [
-            'actual_value' => 0,
+       'attendance' => [
 
-            'target_value' =>
-                (float) (
-                    $metric->target_value
-                    ?: 100
-                ),
+    'actual_value' =>
+        0,
 
-            'achievement_percent' =>
-                0,
+    'target_value' =>
+        (float) (
+            $metric
+                ->target_value
+            ?: 95
+        ),
 
-            'evidence' => [],
-        ],
+    'achievement_percent' =>
+        0,
+
+    'evidence' => [
+
+        'eligible_scheduled_days' =>
+            0,
+
+        'punctual_days' =>
+            0,
+
+        'late_days' =>
+            0,
+
+        'absent_days' =>
+            0,
+
+        'missing_uploaded_days' =>
+            0,
+
+        'latest_attendance_date' =>
+            null,
+
+        'attendance_coverage_through' =>
+            null,
+
+        'shift_start' =>
+            null,
+
+        'grace_minutes' =>
+            null,
+
+        'punctual_cutoff' =>
+            null,
+
+        'shift_policy_breakdown' =>
+            [],
+
+        'punctuality_percent' =>
+            0,
+    ],
+],
 
 
         default => [
