@@ -33,7 +33,7 @@
             <input class="form-control" name="name" placeholder="Policy name" required>
             <input class="form-control" type="time" name="start_time" required>
             <input class="form-control" type="time" name="end_time">
-            <input class="form-control" type="number" name="grace_minutes" min="0" max="240" value="15" required>
+            <input class="form-control" type="number" name="grace_minutes" min="0" max="240" value="15" placeholder="Grace Minutes" title="Grace Minutes" required>
 
             <label class="flex items-center gap-2">
                 <input type="checkbox" name="is_default" value="1">
@@ -54,25 +54,45 @@
             <table class="table whitespace-nowrap min-w-full">
                 <thead>
                     <tr>
-                        <th>Name</th>
-                        <th>Start</th>
-                        <th>End</th>
-                        <th>Grace Minutes</th>
-                        <th>Default</th>
-                        <th>Active</th>
-                        <th>Assignments</th>
+                        <th>Office Time</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach($policies as $policy)
                         <tr>
-                            <td>{{ $policy->name }}</td>
-                            <td>{{ substr((string) $policy->start_time, 0, 5) }}</td>
-                            <td>{{ $policy->end_time ? substr((string) $policy->end_time, 0, 5) : '-' }}</td>
-                            <td>{{ $policy->grace_minutes }}</td>
-                            <td>{{ $policy->is_default ? 'Yes' : 'No' }}</td>
-                            <td>{{ $policy->is_active ? 'Yes' : 'No' }}</td>
-                            <td>{{ $policy->assignments_count }}</td>
+                            <td>
+                                <form
+                                    method="POST"
+                                    action="{{ route('admin.attendance.settings.policies.update', $policy) }}"
+                                    class="grid grid-cols-1 md:grid-cols-8 gap-3 items-center"
+                                >
+                                    @csrf
+                                    @method('PUT')
+
+                                    <input class="form-control" name="name" value="{{ $policy->name }}" required>
+                                    <input class="form-control" type="time" name="start_time" value="{{ substr((string) $policy->start_time, 0, 5) }}" required>
+                                    <input class="form-control" type="time" name="end_time" value="{{ $policy->end_time ? substr((string) $policy->end_time, 0, 5) : '' }}">
+                                    <input class="form-control" type="number" name="grace_minutes" min="0" max="240" value="{{ $policy->grace_minutes }}" placeholder="Grace Minutes" title="Grace Minutes" required>
+
+                                    <label class="flex items-center gap-2">
+                                        <input type="checkbox" name="is_default" value="1" {{ $policy->is_default ? 'checked' : '' }}>
+                                        Default
+                                    </label>
+
+                                    <label class="flex items-center gap-2">
+                                        <input type="checkbox" name="is_active" value="1" {{ $policy->is_active ? 'checked' : '' }}>
+                                        Active
+                                    </label>
+
+                                    <span class="text-sm text-gray-500">
+                                        {{ $policy->assignments_count }} assignment{{ $policy->assignments_count === 1 ? '' : 's' }}
+                                    </span>
+
+                                    <button class="ti-btn ti-btn-light ti-btn-wave" type="submit">
+                                        Update
+                                    </button>
+                                </form>
+                            </td>
                         </tr>
                     @endforeach
                 </tbody>

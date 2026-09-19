@@ -20,5 +20,8 @@ class AttendanceSettingsViewTest extends TestCase
         $this->assertStringContainsString('name="effective_to"', $source);
         $this->assertStringContainsString('Grace Minutes', $source);
         $this->assertStringContainsString('Office Time Policies', $source);
+        $this->assertStringContainsString("route('admin.attendance.settings.policies.update', \$policy)", $source);
+        $this->assertStringContainsString("@method('PUT')", $source);
+        $this->assertStringContainsString('Update', $source);
     }
 }

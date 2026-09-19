@@ -45,6 +45,56 @@ class AttendanceSettingsControllerTest extends AttendanceFeatureTestCase
         ]);
     }
 
+    public function test_update_policy_changes_office_time_and_clears_previous_default(): void
+    {
+        $admin = $this->createUserWithRole(
+            'Attendance Admin',
+            UserType::SUPER_ADMIN
+        );
+
+        $oldDefault = AttendanceShiftPolicy::create([
+            'name' => 'Default Office Time',
+            'start_time' => '10:30',
+            'end_time' => '19:30',
+            'grace_minutes' => 15,
+            'is_default' => true,
+            'is_active' => true,
+        ]);
+
+        $policy = AttendanceShiftPolicy::create([
+            'name' => 'Late Shift',
+            'start_time' => '12:00',
+            'end_time' => '21:00',
+            'grace_minutes' => 5,
+            'is_default' => false,
+            'is_active' => true,
+        ]);
+
+        $this
+            ->actingAs($admin)
+            ->put(route('admin.attendance.settings.policies.update', $policy), [
+                'name' => 'Late Shift Updated',
+                'start_time' => '12:30',
+                'end_time' => '21:30',
+                'grace_minutes' => 20,
+                'is_default' => '1',
+                'is_active' => '1',
+            ])
+            ->assertRedirect(route('admin.attendance.settings.index'))
+            ->assertSessionHasNoErrors();
+
+        $this->assertFalse($oldDefault->fresh()->is_default);
+        $this->assertDatabaseHas('attendance_shift_policies', [
+            'id' => $policy->id,
+            'name' => 'Late Shift Updated',
+            'start_time' => '12:30',
+            'end_time' => '21:30',
+            'grace_minutes' => 20,
+            'is_default' => true,
+            'is_active' => true,
+        ]);
+    }
+
     public function test_bulk_assignment_rejects_overlapping_employee_range(): void
     {
         $admin = $this->createUserWithRole(

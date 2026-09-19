@@ -13,6 +13,7 @@ class KpiMetricResolverRegistry
             'sales_response_time' => app(SalesResponseTimeKpiResolver::class),
             'sales_followup_sla' => app(SalesFollowupSlaKpiResolver::class),
             'sales_payment_collection' => app(SalesPaymentCollectionKpiResolver::class),
+            'sales_attendance' => app(SalesAttendanceKpiResolver::class),
             default => throw new \RuntimeException(
                 "No KPI resolver registered for source_key: {$sourceKey}"
             ),

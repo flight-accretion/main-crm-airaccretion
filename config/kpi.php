@@ -92,8 +92,8 @@ return [
                     'name' => 'Attendance',
                     'description' => 'Achieve a punctuality rate of 95% for scheduled shifts.',
                     'weightage' => 10,
-                    'measurement_type' => 'manual_numeric',
-                    'source_key' => null,
+                    'measurement_type' => 'automatic',
+                    'source_key' => 'sales_attendance',
                     'target_value' => 95,
                     'direction' => 'higher_better',
                     'score_rules' => [5 => 100, 4 => 90, 3 => 80, 2 => 70, 1 => 60],
@@ -113,5 +113,22 @@ return [
             'trim',
             explode(',', (string) env('KPI_OUTREACH_OUTBOUND_IVR_CODES', ''))
         ))),
+    ],
+
+    'attendance' => [
+        /*
+         * Fallback policy used only when no active default policy has been
+         * created yet during deployment.
+         */
+        'shift_start' => env('KPI_ATTENDANCE_SHIFT_START', '10:30'),
+        'grace_minutes' => (int) env('KPI_ATTENDANCE_GRACE_MINUTES', 15),
+
+        /*
+         * These statuses do not count in the punctuality denominator.
+         */
+        'non_scheduled_statuses' => [
+            'WO',
+            'HLD',
+        ],
     ],
 ];

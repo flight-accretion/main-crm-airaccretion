@@ -30,6 +30,7 @@ class KpiImprovementService
             'response_time' => $this->responseTime($nextScore, $threshold, $resolved),
             'followup_sla' => $this->followupSla($nextScore, $threshold, $resolved),
             'payment_collection' => $this->paymentCollection($nextScore, $threshold, $resolved),
+            'attendance' => $this->attendance($nextScore, $threshold, $resolved),
             default => $this->generic($metric, $nextScore, $threshold, $resolved),
         };
     }
@@ -200,6 +201,41 @@ class KpiImprovementService
                     $this->number($threshold),
                     $nextScore
                 ),
+        ];
+    }
+
+    private function attendance(
+        int $nextScore,
+        float $threshold,
+        array $resolved
+    ): array {
+        $evidence = $resolved['evidence'] ?? [];
+        $eligible = (int) ($evidence['eligible_scheduled_days'] ?? 0);
+        $current = (float) (
+            $evidence['punctuality_percent']
+            ?? $resolved['achievement_percent']
+            ?? 0
+        );
+
+        if ($eligible <= 0) {
+            return [
+                'next_score' => $nextScore,
+                'next_threshold' => $threshold,
+                'gap_value' => $threshold,
+                'improvement_line' => 'No eligible attendance records have been uploaded yet for this month.',
+            ];
+        }
+
+        return [
+            'next_score' => $nextScore,
+            'next_threshold' => $threshold,
+            'gap_value' => round(max(0, $threshold - $current), 2),
+            'improvement_line' => sprintf(
+                'Current punctuality is %s%%. Maintain punctual attendance on the remaining scheduled working days to move toward %s%% and %d/5.',
+                $this->number($current),
+                $this->number($threshold),
+                $nextScore
+            ),
         ];
     }
 

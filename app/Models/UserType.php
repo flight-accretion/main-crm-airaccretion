@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
@@ -41,18 +42,25 @@ class UserType extends Model
         self::OPERATIONS_EXECUTIVE,
     ];
 
+    const ATTENDANCE_IMPORT_ROLES = [
+        self::SUPER_ADMIN,
+        self::HR,
+    ];
+
     const ADMIN_ROLES = [
         self::SUPER_ADMIN,
         self::ADMIN,
         self::HR
     ];
 
-    protected $fillable = ['id',
-    'user_type',
-     'description',
-     'status',
-     'parent_id'
+    protected $fillable = [
+        'id',
+        'user_type',
+        'description',
+        'status',
+        'parent_id'
     ];
+
     public function parent()
     {
         return $this->belongsTo(UserType::class, 'parent_id');
@@ -76,10 +84,10 @@ class UserType extends Model
     private function loadDescendants(&$collection, $userType)
     {
         $children = UserType::where('parent_id', $userType->id)->get();
+
         foreach ($children as $child) {
             $collection[] = $child->id;
             $this->loadDescendants($collection, $child);
         }
     }
-
 }

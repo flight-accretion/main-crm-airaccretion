@@ -44,21 +44,20 @@ class AttendanceImportController extends Controller
         $validated =
             $request->validate(
                 [
-                   'from_date' => [
-                    'required',
-                    'date',
-                    'before_or_equal:today',
-                ],
+                    'from_date' => [
+                        'required',
+                        'date',
+                        'before_or_equal:today',
+                    ],
 
-                'to_date' => [
-                    'required',
-                    'date',
-                    'after_or_equal:from_date',
-                    'before_or_equal:today',
-                ],
+                    'to_date' => [
+                        'required',
+                        'date',
+                        'after_or_equal:from_date',
+                        'before_or_equal:today',
+                    ],
 
-                    'excel_file' =>
-                        'required|file|mimes:xlsx,xls,csv|max:10240',
+                    'excel_file' => 'required|file|mimes:xlsx,xls,csv|max:10240',
                 ],
                 [
                     'from_date.required' =>
@@ -87,15 +86,15 @@ class AttendanceImportController extends Controller
                 ]
             );
 
-       $fromDate =
-    Carbon::parse(
-        $validated['from_date']
-    )->startOfDay();
+        $fromDate =
+            Carbon::parse(
+                $validated['from_date']
+            )->startOfDay();
 
-$toDate =
-    Carbon::parse(
-        $validated['to_date']
-    )->endOfDay();
+        $toDate =
+            Carbon::parse(
+                $validated['to_date']
+            )->endOfDay();
 
         $file =
             $request->file(
@@ -112,7 +111,7 @@ $toDate =
         $storedPath =
             $file->storeAs(
                 'attendance-imports/'
-. $fromDate->format('Y/m'),
+                . $fromDate->format('Y/m'),
 
                 (string)
                 Str::uuid()
@@ -124,22 +123,22 @@ $toDate =
 
         try {
 
-           $parsed =
-    $parser->parse(
-        Storage::disk('local')->path(
-            $storedPath
-        ),
-        $fromDate,
-        $toDate
-    );
+            $parsed =
+                $parser->parse(
+                    Storage::disk('local')->path(
+                        $storedPath
+                    ),
+                    $fromDate,
+                    $toDate
+                );
 
             $import =
                 AttendanceImport::create([
-                   'from_date' =>
-                $fromDate->toDateString(),
+                    'from_date' =>
+                        $fromDate->toDateString(),
 
-            'to_date' =>
-                $toDate->toDateString(),
+                    'to_date' =>
+                        $toDate->toDateString(),
 
                     'period_from' =>
                         $parsed[
@@ -220,10 +219,10 @@ $toDate =
                         $import->id,
 
                     'from_date' =>
-                    $fromDate->toDateString(),
+                        $fromDate->toDateString(),
 
-                'to_date' =>
-                    $toDate->toDateString(),
+                    'to_date' =>
+                        $toDate->toDateString(),
 
                     'period_from' =>
                         $parsed[
@@ -236,7 +235,7 @@ $toDate =
                         ],
 
                     'outside_range_rows' =>
-                    $parsed['outside_range_rows'],
+                        $parsed['outside_range_rows'],
 
                     'total_employees' =>
                         count(
@@ -372,20 +371,20 @@ $toDate =
                 );
         }
 
-       $parsed =
-    $parser->parse(
-        Storage::disk('local')->path(
-            $import->stored_path
-        ),
+        $parsed =
+            $parser->parse(
+                Storage::disk('local')->path(
+                    $import->stored_path
+                ),
 
-        Carbon::parse(
-            $import->from_date
-        )->startOfDay(),
+                Carbon::parse(
+                    $import->from_date
+                )->startOfDay(),
 
-        Carbon::parse(
-            $import->to_date
-        )->endOfDay()
-    );
+                Carbon::parse(
+                    $import->to_date
+                )->endOfDay()
+            );
 
         $resolvedMappings =
             $this->resolveMappings(
