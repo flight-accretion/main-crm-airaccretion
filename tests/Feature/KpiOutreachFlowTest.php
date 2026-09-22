@@ -123,6 +123,67 @@ class KpiOutreachFlowTest extends TestCase
         $this->assertSame('6500009001', $rows->first()->normalized_phone);
     }
 
+    public function test_dnp_completion_does_not_require_verified_skyrack_call(): void
+    {
+        $user = $this->user('Dnp Sales');
+
+        $this->pool('6500009010');
+
+        $assignment = $this->assignment(
+            $user,
+            '6500009010',
+            'standard',
+            '2026-09-10 09:00:00'
+        );
+
+        try {
+            app(KpiOutreachService::class)->completeDnp($assignment, $user);
+        } catch (\Illuminate\Validation\ValidationException $exception) {
+            $this->fail('DNP completion should not require a verified SkyRack/VI no-answer call.');
+        }
+
+        $assignment->refresh();
+
+        $this->assertSame('completed', $assignment->status);
+        $this->assertSame('dnp', $assignment->completion_type);
+        $this->assertNull($assignment->active_phone_key);
+        $this->assertNull($assignment->ivr_call_log_id);
+        $this->assertNotNull($assignment->completed_at);
+    }
+
+    public function test_remark_completion_saves_typed_remark_without_verified_skyrack_summary(): void
+    {
+        $user = $this->user('Remark Sales');
+
+        $this->pool('6500009011');
+
+        $assignment = $this->assignment(
+            $user,
+            '6500009011',
+            'standard',
+            '2026-09-10 09:00:00'
+        );
+
+        try {
+            app(KpiOutreachService::class)->completeRemark(
+                $assignment,
+                $user,
+                'Customer asked to call later'
+            );
+        } catch (\Illuminate\Validation\ValidationException $exception) {
+            $this->fail('Remark completion should save the typed remark without a verified SkyRack summary.');
+        }
+
+        $assignment->refresh();
+
+        $this->assertSame('completed', $assignment->status);
+        $this->assertSame('remark', $assignment->completion_type);
+        $this->assertSame('Customer asked to call later', $assignment->remark);
+        $this->assertNull($assignment->active_phone_key);
+        $this->assertNull($assignment->call_summary_integration_id);
+        $this->assertNotNull($assignment->completed_at);
+    }
+
     private function user(string $name): User
     {
         $user = new User([
@@ -150,10 +211,10 @@ class KpiOutreachFlowTest extends TestCase
         string $phone,
         string $type,
         string $assignedAt
-    ): void {
+    ): KpiOutreachAssignment {
         $pool = KpiOutreachPool::where('normalized_phone', $phone)->firstOrFail();
 
-        KpiOutreachAssignment::create([
+        return KpiOutreachAssignment::create([
             'pool_id' => $pool->id,
             'user_id' => $user->id,
             'allocation_type' => $type,
@@ -170,8 +231,51 @@ class KpiOutreachFlowTest extends TestCase
         Schema::dropIfExists('kpi_outreach_batches');
         Schema::dropIfExists('kpi_outreach_cursors');
         Schema::dropIfExists('kpi_outreach_pool');
+        Schema::dropIfExists('call_summary_integrations');
+        Schema::dropIfExists('ivr_call_logs');
+        Schema::dropIfExists('ivr_agents');
+        Schema::dropIfExists('kpi_user_assignments');
 
         $this->ensureActiveLeadServiceTables();
+
+        Schema::create('kpi_user_assignments', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('user_id');
+            $table->boolean('active')->default(true);
+            $table->date('effective_from');
+            $table->date('effective_to')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('ivr_agents', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('vi_agent_name')->nullable();
+            $table->string('vi_agent_number')->nullable();
+            $table->uuid('mapped_user_id')->nullable();
+            $table->boolean('is_active')->default(true);
+            $table->timestamps();
+        });
+
+        Schema::create('ivr_call_logs', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('normalized_phone')->nullable();
+            $table->string('call_type_code')->nullable();
+            $table->string('agent_name')->nullable();
+            $table->string('agent_number')->nullable();
+            $table->string('dial_status')->nullable();
+            $table->timestamp('call_start_at')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('call_summary_integrations', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('agent_user_id')->nullable();
+            $table->string('normalized_phone')->nullable();
+            $table->string('direction')->nullable();
+            $table->timestamp('call_start_at')->nullable();
+            $table->text('summary')->nullable();
+            $table->timestamps();
+        });
 
         Schema::create('kpi_outreach_pool', function (Blueprint $table) {
             $table->bigIncrements('id');

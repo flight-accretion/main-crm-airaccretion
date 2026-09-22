@@ -447,7 +447,7 @@ public function index(
 
     return back()->with(
         'success',
-        'DNP verified and KPI outreach action completed.'
+        'DNP saved and KPI outreach action completed.'
     );
 }
 
@@ -473,7 +473,7 @@ public function index(
 
     return back()->with(
         'success',
-        'Connected call verified and remark recorded.'
+        'Remark saved and KPI outreach action completed.'
     );
 }
 

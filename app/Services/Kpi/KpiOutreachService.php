@@ -22,7 +22,6 @@ class KpiOutreachService
 
     public function __construct(
         private KpiOutreachAllocator $allocator,
-        private KpiOutreachCallVerifier $verifier,
         private ActiveLeadService $activeLeadService
     ) {}
 
@@ -217,15 +216,7 @@ class KpiOutreachService
     ): void {
         $this->assertActionAllowed($assignment, $user);
 
-        $call = $this->verifier->noAnswerCall($assignment, $user);
-
-        if (!$call) {
-            throw ValidationException::withMessages([
-                'dnp' => 'DNP cannot be completed until CRM verifies a matching outbound no-answer call from Skyrec/VI.',
-            ]);
-        }
-
-        $this->complete($assignment, $user, 'dnp', null, null, $call->id);
+        $this->complete($assignment, $user, 'dnp', null, null, null);
     }
 
     public function completeRemark(
@@ -243,15 +234,7 @@ class KpiOutreachService
             ]);
         }
 
-        $call = $this->verifier->connectedCall($assignment, $user);
-
-        if (!$call) {
-            throw ValidationException::withMessages([
-                'remark' => 'Remark cannot be completed until CRM receives a matching connected outbound Skyrec summary.',
-            ]);
-        }
-
-        $this->complete($assignment, $user, 'remark', $remark, $call->id, null);
+        $this->complete($assignment, $user, 'remark', $remark, null, null);
     }
 
     public function completeWithLead(
