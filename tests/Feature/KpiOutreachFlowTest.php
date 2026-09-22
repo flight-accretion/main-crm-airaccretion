@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\CallSummaryIntegration;
 use App\Models\KpiOutreachAssignment;
 use App\Models\KpiOutreachCursor;
 use App\Models\KpiOutreachPool;
@@ -181,6 +182,41 @@ class KpiOutreachFlowTest extends TestCase
         $this->assertSame('Customer asked to call later', $assignment->remark);
         $this->assertNull($assignment->active_phone_key);
         $this->assertNull($assignment->call_summary_integration_id);
+        $this->assertNotNull($assignment->completed_at);
+    }
+
+    public function test_verified_skyrack_summary_automatically_saves_outreach_remark(): void
+    {
+        $user = $this->user('Auto Remark Sales');
+
+        $this->pool('6500009012');
+
+        $assignment = $this->assignment(
+            $user,
+            '6500009012',
+            'standard',
+            '2026-09-10 09:00:00'
+        );
+
+        $summary = CallSummaryIntegration::create([
+            'agent_user_id' => $user->id,
+            'normalized_phone' => '6500009012',
+            'direction' => 'outgoing',
+            'summary' => 'Customer requested tariff details.',
+            'call_start_at' => '2026-09-10 09:30:00',
+        ]);
+
+        $completed = app(KpiOutreachService::class)
+            ->autoCompleteVerifiedRemarks($user);
+
+        $assignment->refresh();
+
+        $this->assertSame(1, $completed);
+        $this->assertSame('completed', $assignment->status);
+        $this->assertSame('remark', $assignment->completion_type);
+        $this->assertSame('Customer requested tariff details.', $assignment->remark);
+        $this->assertSame($summary->id, $assignment->call_summary_integration_id);
+        $this->assertNull($assignment->active_phone_key);
         $this->assertNotNull($assignment->completed_at);
     }
 

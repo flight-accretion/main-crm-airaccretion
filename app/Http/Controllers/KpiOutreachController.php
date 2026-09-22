@@ -72,6 +72,11 @@ public function index(
                 $user
             );
 
+        $service
+            ->autoCompleteVerifiedRemarks(
+                $user
+            );
+
 
         return view(
             'admin.pages.kpi.outreach',

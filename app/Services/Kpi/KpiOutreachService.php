@@ -22,6 +22,7 @@ class KpiOutreachService
 
     public function __construct(
         private KpiOutreachAllocator $allocator,
+        private KpiOutreachCallVerifier $verifier,
         private ActiveLeadService $activeLeadService
     ) {}
 
@@ -175,6 +176,53 @@ class KpiOutreachService
         return $query
             ->orderBy('assigned_at')
             ->get();
+    }
+
+    public function autoCompleteVerifiedRemarks(User $user): int
+    {
+        $completed = 0;
+
+        KpiOutreachAssignment::query()
+            ->where('user_id', $user->id)
+            ->where('status', 'pending')
+            ->orderBy('assigned_at')
+            ->get()
+            ->each(function (KpiOutreachAssignment $assignment) use (
+                $user,
+                &$completed
+            ) {
+                if (
+                    $assignment->allocation_type === 'standard'
+                    && $this->standardActionsLocked($user)
+                ) {
+                    return;
+                }
+
+                $call = $this->verifier->connectedCall($assignment, $user);
+
+                if (!$call) {
+                    return;
+                }
+
+                $summary = trim((string) $call->summary);
+
+                if ($summary === '') {
+                    return;
+                }
+
+                $this->complete(
+                    $assignment,
+                    $user,
+                    'remark',
+                    $summary,
+                    $call->id,
+                    null
+                );
+
+                $completed++;
+            });
+
+        return $completed;
     }
 
     public function requestExtra(User $user): KpiOutreachBatch
