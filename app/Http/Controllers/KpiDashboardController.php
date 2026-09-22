@@ -60,8 +60,8 @@ $asOf = $filter['to'];
    $team = $users
     ->map(function ($user) use (
         $dashboard,
-        $from,
-        $asOf
+        $asOf,
+        $from
     ) {
         return $dashboard->forUser(
             $user,
@@ -71,17 +71,15 @@ $asOf = $filter['to'];
     })
     ->values();
 
-    return view(
-        'admin.pages.kpi.dashboard',
-        [
-           [
-    'team' => $team,
-    'asOf' => $asOf,
-    'department' => $department,
-    'filter' => $filter,
-]
-        ]
-    );
+return view(
+    'admin.pages.kpi.dashboard',
+    [
+        'team' => $team,
+        'asOf' => $asOf,
+        'department' => $department,
+        'filter' => $filter,
+    ]
+);
 }
 
     public function details(
