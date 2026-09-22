@@ -499,6 +499,8 @@ body {
                                 if ($samePlace && $fromDateStr && $toDateStr && $fromDateStr !== $toDateStr) {
                                     $showSingleWithRange = true;
                                 }
+
+                                $rideTime = app(\App\Services\BookingTravelDetailService::class)->rideTime($ride);
                             @endphp
 
                             @if ($showSingleWithRange)
@@ -516,7 +518,10 @@ body {
                                                     $toDateOnly = $ride->to_date ? $ride->to_date->format('Y-m-d') : null;
                                                 @endphp
 
-                                                @if ($fromDateOnly && $toDateOnly && $fromDateOnly === $toDateOnly)
+                                                @if ($rideTime === 'TBA')
+                                                    {{ $ride->from_date ? $ride->from_date->format('jS F, Y') : 'Date' }}
+                                                    | TBA
+                                                @elseif ($fromDateOnly && $toDateOnly && $fromDateOnly === $toDateOnly)
                                                     {{-- Same calendar date but different times: show date once and time range --}}
                                                     {{ $ride->from_date->format('jS F, Y') }}
                                                     @php
@@ -547,8 +552,10 @@ body {
                                             <p style="margin:5px 0 0; color:#303030; font-size:14px;">
                                                 @if ($ride->from_date)
                                                     {{ $ride->from_date->format('jS F, Y') }}
-                                                    @if ($ride->from_date->format('H:i') !== '00:00')
-                                                        | {{ $ride->from_date->format('h:i A') }} IST
+                                                    @if ($rideTime === 'TBA')
+                                                        | TBA
+                                                    @elseif ($rideTime !== '')
+                                                        | {{ $rideTime }} IST
                                                     @endif
                                                 @else
                                                     Date/Time TBA
@@ -573,8 +580,10 @@ body {
                                             <p style="margin:5px 0 0; color:#303030; font-size:14px;">
                                                 @if ($ride->from_date)
                                                     {{ $ride->from_date->format('jS F, Y') }}
-                                                    @if ($ride->from_date->format('H:i') !== '00:00')
-                                                        | {{ $ride->from_date->format('h:i A') }} IST
+                                                    @if ($rideTime === 'TBA')
+                                                        | TBA
+                                                    @elseif ($rideTime !== '')
+                                                        | {{ $rideTime }} IST
                                                     @endif
                                                 @else
                                                     Date/Time TBA
@@ -598,7 +607,9 @@ body {
                                             <p style="margin:5px 0 0; color:#303030; font-size:14px;">
                                                 @if ($ride->to_date)
                                                     {{ $ride->to_date->format('jS F, Y') }}
-                                                    @if ($ride->to_date->format('H:i') !== '00:00')
+                                                    @if ($rideTime === 'TBA')
+                                                        | TBA
+                                                    @elseif ($ride->to_date->format('H:i') !== '00:00')
                                                         | {{ $ride->to_date->format('h:i A') }} IST
                                                     @endif
                                                 @else

@@ -22,6 +22,7 @@ use App\Models\ExtraService;
 use Illuminate\Http\Request;
 use App\Models\LeadPassenger;
 use App\Models\ServiceAddress;
+use App\Services\BookingTravelDetailService;
 use App\Models\LeadPaymentDetail;
 use App\Models\LeadVendorPayment;
 use Illuminate\Support\Facades\DB;
@@ -2254,24 +2255,15 @@ if (!empty($oldVendorRefundsMap)) {
             // storage/app/public/vouchers via the storage:link symlink.
             $filePath = asset('storage/' . $storePath);
 
+            $ride = $voucher->lead->rideSegments->first();
+
             // Data
             $data = [
                 'voucher_id'     => $voucher->id,
                 'client_name'    => $voucher->lead->client->name, // Client Name
                 'service'        => $voucher->vendorPayments->first()->paymentDetails->first()->service->service ?? 'N/A', // Service
-                // Pickup date/time: avoid formatting time when the ride is marked TBA
-                'pickup_date'    => optional($voucher->lead->rideSegments->first())->from_date ? optional($voucher->lead->rideSegments->first()->from_date)->format('jS F, Y') : 'N/A', // Pickup Date
-                'pickup_time'    => (function () use ($voucher) {
-                    $ride = $voucher->lead->rideSegments->first();
-                    if (!$ride || empty($ride->from_date)) return 'N/A';
-                    // If ride is explicitly marked TBA, return 'TBA' (do not show 12:00)
-                    if (!empty($ride->is_tba)) return 'TBA';
-                    try {
-                        return \Carbon\Carbon::parse($ride->from_date)->format('h:i A');
-                    } catch (\Throwable $ex) {
-                        return is_string($ride->from_date) ? date('h:i A', strtotime($ride->from_date)) : 'N/A';
-                    }
-                })(), // Pickup Time
+                'pickup_date'    => $this->pickupDateLabel($ride), // Pickup Date
+                'pickup_time'    => $this->pickupTimeLabel($ride), // Pickup Time
                 'product'        => $voucher->vendorPayments->first()->paymentDetails->first()->service->products->first()->product ?? 'N/A', // Product
                 'location'       =>  $voucher->lead->rideSegments->first()->serviceAddress->address ?? 'N/A', // Amount
                 'contact_person' => $voucher->lead->rideSegments->first()->serviceAddress->contact_person_name ?? 'N/A', // Contact Person Name
@@ -2382,22 +2374,8 @@ if (!empty($oldVendorRefundsMap)) {
 
             // Prepare email data (reuse same structure used elsewhere)
             $ride = $voucher->lead->rideSegments->first();
-            $pickup_date = 'N/A';
-            $pickup_time = 'N/A';
-            if ($ride && !empty($ride->from_date)) {
-                try {
-                    $cd = \Carbon\Carbon::parse($ride->from_date);
-                    $pickup_date = $cd->format('jS F, Y');
-                    if (!empty($ride->is_tba)) {
-                        $pickup_time = 'TBA';
-                    } else {
-                        $pickup_time = $cd->format('h:i A');
-                    }
-                } catch (\Throwable $ex) {
-                    $pickup_date = is_string($ride->from_date) ? date('jS F, Y', strtotime($ride->from_date)) : 'N/A';
-                    $pickup_time = is_string($ride->from_date) ? date('h:i A', strtotime($ride->from_date)) : 'N/A';
-                }
-            }
+            $pickup_date = $this->pickupDateLabel($ride);
+            $pickup_time = $this->pickupTimeLabel($ride);
 
             $data = [
                 'voucher_id'     => $voucher->id,
@@ -2491,25 +2469,8 @@ if (!empty($oldVendorRefundsMap)) {
             $serviceObj = $firstDetail ? ($firstDetail->service ?? null) : null;
 
             $ride = $voucher->lead->rideSegments->first();
-            // pickup date/time safe formatting
-            $pickup_date = 'N/A';
-            $pickup_time = 'N/A';
-            if ($ride && !empty($ride->from_date)) {
-                try {
-                    $cd = \Carbon\Carbon::parse($ride->from_date);
-                    $pickup_date = $cd->format('jS F, Y');
-                    // If the ride is marked as TBA, don't show/format the time (avoid showing 12:00)
-                    if (!empty($ride->is_tba)) {
-                        $pickup_time = 'TBA';
-                    } else {
-                        $pickup_time = $cd->format('h:i A');
-                    }
-                } catch (\Throwable $ex) {
-                    // fallback to raw
-                    $pickup_date = is_string($ride->from_date) ? date('jS F, Y', strtotime($ride->from_date)) : 'N/A';
-                    $pickup_time = is_string($ride->from_date) ? date('h:i A', strtotime($ride->from_date)) : 'N/A';
-                }
-            }
+            $pickup_date = $this->pickupDateLabel($ride);
+            $pickup_time = $this->pickupTimeLabel($ride);
 
             $serviceName = $serviceObj->service ?? ($serviceObj->service_name ?? 'N/A');
             $productName = 'N/A';
@@ -2736,6 +2697,24 @@ if (!empty($oldVendorRefundsMap)) {
         }
     }
 
+    private function pickupDateLabel($ride): string
+    {
+        if (!$ride || empty($ride->from_date)) {
+            return '';
+        }
+
+        try {
+            return Carbon::parse($ride->from_date)->format('jS F, Y');
+        } catch (\Throwable $exception) {
+            return '';
+        }
+    }
+
+    private function pickupTimeLabel($ride): string
+    {
+        return app(BookingTravelDetailService::class)->rideTime($ride);
+    }
+
     /**
      * Update travel information if provided in request
      */
@@ -2755,45 +2734,23 @@ if (!empty($oldVendorRefundsMap)) {
                         $rideSegment->lead_id = $lead->id;
                     }
 
-                    // Handle TBA (To Be Announced) logic
-                    $isTba = isset($rideData['is_tba']) && $rideData['is_tba'] == '1';
+                    $isTba = isset($rideData['is_tba']) &&
+                        ($rideData['is_tba'] == '1' || $rideData['is_tba'] === true);
+
+                    $rideSegment->is_tba = $isTba;
 
                     if ($isTba) {
-                        // If TBA is checked, keep the date part but set time to 00:00:00
-                        // (frontend clears time inputs, backend stores zeroed time)
-                        if (isset($rideData['service_date'])) {
-                            $date = $rideData['service_date'];
-                            $rideSegment->from_date = $date . ' 00:00:00';
-                            $rideSegment->to_date = $date . ' 00:00:00';
-                        } else {
-                            // Multiple day service - preserve date portion if available
-                            if (isset($rideData['from_date'])) {
-                                $rideSegment->from_date = $rideData['from_date'] . ' 00:00:00';
-                            } elseif ($rideSegment->from_date) {
-                                try {
-                                    $d = Carbon::parse($rideSegment->from_date)->format('Y-m-d');
-                                    $rideSegment->from_date = $d . ' 00:00:00';
-                                } catch (\Exception $e) {
-                                    $rideSegment->from_date = null;
-                                }
-                            } else {
-                                $rideSegment->from_date = null;
-                            }
+                        $serviceDate = $rideData['service_date'] ?? null;
+                        $fromDate = $rideData['from_date'] ?? $serviceDate;
+                        $toDate = $rideData['to_date'] ?? $serviceDate ?? $fromDate;
 
-                            if (isset($rideData['to_date'])) {
-                                $rideSegment->to_date = $rideData['to_date'] . ' 00:00:00';
-                            } elseif ($rideSegment->to_date) {
-                                try {
-                                    $d2 = Carbon::parse($rideSegment->to_date)->format('Y-m-d');
-                                    $rideSegment->to_date = $d2 . ' 00:00:00';
-                                } catch (\Exception $e) {
-                                    $rideSegment->to_date = null;
-                                }
-                            } else {
-                                $rideSegment->to_date = null;
-                            }
+                        if (!$rideSegment->from_date && $fromDate) {
+                            $rideSegment->from_date = $fromDate . ' 00:00:00';
                         }
-                        $rideSegment->is_tba = true;
+
+                        if (!$rideSegment->to_date && $toDate) {
+                            $rideSegment->to_date = $toDate . ' 00:00:00';
+                        }
                     } else {
                         // Handle date and time combination
                         $fromDate = null;
@@ -2802,24 +2759,23 @@ if (!empty($oldVendorRefundsMap)) {
                         if (isset($rideData['service_date'])) {
                             // Single service date (same day service)
                             $serviceDate = $rideData['service_date'];
-                            $fromTime = $rideData['time_from'] ?? '00:00';
-                            $toTime = $rideData['time_to'] ?? '00:00';
+                            $fromTime = $rideData['time_from'] ?? null;
+                            $toTime = $rideData['time_to'] ?? null;
 
-                            $fromDate = $serviceDate . ' ' . $fromTime . ':00';
-                            $toDate = $serviceDate . ' ' . $toTime . ':00';
+                            $fromDate = $serviceDate . ' ' . ($fromTime ?: '00:00') . ':00';
+                            $toDate = $serviceDate . ' ' . ($toTime ?: '00:00') . ':00';
                         } else {
                             // Multiple day service
-                            if (isset($rideData['from_date']) && isset($rideData['time_from'])) {
-                                $fromDate = $rideData['from_date'] . ' ' . $rideData['time_from'] . ':00';
+                            if (isset($rideData['from_date'])) {
+                                $fromDate = $rideData['from_date'] . ' ' . (($rideData['time_from'] ?? null) ?: '00:00') . ':00';
                             }
-                            if (isset($rideData['to_date']) && isset($rideData['time_to'])) {
-                                $toDate = $rideData['to_date'] . ' ' . $rideData['time_to'] . ':00';
+                            if (isset($rideData['to_date'])) {
+                                $toDate = $rideData['to_date'] . ' ' . (($rideData['time_to'] ?? null) ?: '00:00') . ':00';
                             }
                         }
 
                         $rideSegment->from_date = $fromDate;
                         $rideSegment->to_date = $toDate;
-                        $rideSegment->is_tba = false;
                     }
 
                     // Update other ride details
@@ -2832,7 +2788,7 @@ if (!empty($oldVendorRefundsMap)) {
                     if (isset($rideData['service_address_id'])) {
                         $rideSegment->service_address_id = $rideData['service_address_id'];
                     }
-                    if (isset($rideData['total_time'])) {
+                    if (array_key_exists('total_time', $rideData)) {
                         $rideSegment->total_time = $rideData['total_time'];
                     }
 

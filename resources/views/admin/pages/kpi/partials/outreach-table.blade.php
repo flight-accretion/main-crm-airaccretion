@@ -22,37 +22,71 @@
                         </td>
                         <td>{{ $row->last_product_display ?: '-' }}</td>
                         <td>
-                            <form method="POST" action="{{ route('admin.kpi.outreach.dnp', $row) }}">
-                                @csrf
-                                <label class="inline-flex items-center gap-2">
-                                    <input
-                                        type="checkbox"
-                                        name="dnp"
-                                        value="1"
-                                        required
-                                        {{ $locked ? 'disabled' : '' }}
-                                    >
-                                    <span>DNP</span>
-                                </label>
-                                <button class="ti-btn ti-btn-warning mt-1" {{ $locked ? 'disabled' : '' }}>
-                                    Save
-                                </button>
-                            </form>
+                        <form
+                        method="POST"
+                        action="{{ route('admin.kpi.outreach.dnp', ['assignment' => $row->id]) }}"
+                    >
+                        @csrf
+
+                        <input
+                            type="hidden"
+                            name="assignment_id"
+                            value="{{ $row->id }}"
+                        >
+
+                        <label class="inline-flex items-center gap-2">
+                            <input
+                                type="checkbox"
+                                id="dnp_{{ $row->id }}"
+                                name="dnp"
+                                value="1"
+                                required
+                                {{ $locked ? 'disabled' : '' }}
+                            >
+
+                            <span>DNP</span>
+                        </label>
+
+                        <button
+                            type="submit"
+                            class="ti-btn ti-btn-warning mt-1"
+                            {{ $locked ? 'disabled' : '' }}
+                        >
+                            Save
+                        </button>
+                    </form>
                         </td>
                         <td style="min-width:360px;">
-                            <form method="POST" action="{{ route('admin.kpi.outreach.remark', $row) }}">
-                                @csrf
-                                <textarea
-                                    name="remark"
-                                    rows="3"
-                                    class="ti-form-input"
-                                    placeholder="Skyrec summary / outcome / next context"
-                                    {{ $locked ? 'disabled' : '' }}
-                                >{{ old('remark', $row->latest_skyrec_summary ?: '') }}</textarea>
-                                <button class="ti-btn ti-btn-info mt-1" {{ $locked ? 'disabled' : '' }}>
-                                    Save Remark
-                                </button>
-                            </form>
+                        <form
+                    method="POST"
+                    action="{{ route('admin.kpi.outreach.remark', ['assignment' => $row->id]) }}"
+                >
+                    @csrf
+
+                    <input
+                        type="hidden"
+                        name="assignment_id"
+                        value="{{ $row->id }}"
+                    >
+
+                    <textarea
+                        id="remark_{{ $row->id }}"
+                        name="remark"
+                        rows="3"
+                        class="ti-form-input"
+                        placeholder="Enter call outcome / remark"
+                        maxlength="1000"
+                        {{ $locked ? 'disabled' : '' }}
+                    >{{ $row->latest_skyrec_summary ?: '' }}</textarea>
+
+                    <button
+                        type="submit"
+                        class="ti-btn ti-btn-info mt-1"
+                        {{ $locked ? 'disabled' : '' }}
+                    >
+                        Save Remark
+                    </button>
+                </form>
                         </td>
                         <td>
                             @if($locked)

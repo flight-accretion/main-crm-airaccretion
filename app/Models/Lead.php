@@ -155,6 +155,13 @@ class Lead extends Model
         return $this->hasOne(LeadFollowup::class, 'lead_id')->latest('created_at');
     }
 
+    public function activeOperationsAssignment()
+    {
+        return $this->hasOne(OperationsLeadAssignment::class, 'lead_id')
+            ->where('is_active', true)
+            ->latest('assigned_at');
+    }
+
     public function latestFollowupByCreation(): ?LeadFollowup
     {
         if ($this->relationLoaded('leadFollowups')) {

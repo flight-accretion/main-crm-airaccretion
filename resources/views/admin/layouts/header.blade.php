@@ -705,6 +705,15 @@
                         @endif
                         <!-- End::slide -->
 
+                        @if ($userType === UserType::SUPER_ADMIN || $canAccess($userType, $operationsRoles))
+                            <li class="slide {{ Route::is('admin.operations.customer-calls.*') ? 'active' : '' }}">
+                                <a href="{{ route('admin.operations.customer-calls.index') }}" class="side-menu__item">
+                                    <i class="bx bx-headphone side-menu__icon"></i>
+                                    <span class="side-menu__label">Operations Calls</span>
+                                </a>
+                            </li>
+                        @endif
+
                            @if ($userType === UserType::SUPER_ADMIN || $canAccess($userType, $adminRoles) || $canAccess($userType, $salesRoles) || $canAccess($userType, $operationsRoles))
                             <li class="slide {{ Route::is('admin.whatsapp.index') ? 'active' : '' }}">
                                 <a href="{{ route('admin.whatsapp.index') }}" class="side-menu__item">

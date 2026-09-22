@@ -426,43 +426,56 @@ public function index(
     );
 }
 
-    public function dnp(
-        Request $request,
-        KpiOutreachAssignment $assignment,
-        KpiOutreachService $service
-    ) {
-        $request->validate([
-            'dnp' => 'accepted',
-        ]);
+  public function dnp(
+    Request $request,
+    KpiOutreachAssignment $assignment,
+    KpiOutreachService $service
+) {
+    $data = $request->validate([
+        'assignment_id' => 'required|uuid',
+        'dnp' => 'accepted',
+    ]);
 
-        $service->completeDnp($assignment, $request->user());
-
-        return back()->with(
-            'success',
-            'DNP verified and KPI outreach action completed.'
-        );
+    if ($data['assignment_id'] !== $assignment->id) {
+        abort(422, 'Invalid outreach assignment.');
     }
 
-    public function remark(
-        Request $request,
-        KpiOutreachAssignment $assignment,
-        KpiOutreachService $service
-    ) {
-        $data = $request->validate([
-            'remark' => 'required|string|max:1000',
-        ]);
+    $service->completeDnp(
+        $assignment,
+        $request->user()
+    );
 
-        $service->completeRemark(
-            $assignment,
-            $request->user(),
-            $data['remark']
-        );
+    return back()->with(
+        'success',
+        'DNP verified and KPI outreach action completed.'
+    );
+}
 
-        return back()->with(
-            'success',
-            'Connected call verified and remark recorded.'
-        );
+  public function remark(
+    Request $request,
+    KpiOutreachAssignment $assignment,
+    KpiOutreachService $service
+) {
+    $data = $request->validate([
+        'assignment_id' => 'required|uuid',
+        'remark' => 'required|string|max:1000',
+    ]);
+
+    if ($data['assignment_id'] !== $assignment->id) {
+        abort(422, 'Invalid outreach assignment.');
     }
+
+    $service->completeRemark(
+        $assignment,
+        $request->user(),
+        $data['remark']
+    );
+
+    return back()->with(
+        'success',
+        'Connected call verified and remark recorded.'
+    );
+}
 
     public function extra(
         Request $request,

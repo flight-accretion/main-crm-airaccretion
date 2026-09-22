@@ -278,39 +278,77 @@ class KpiOutreachService
         $this->finishBatchIfNeeded($assignment);
     }
 
-    private function complete(
-        KpiOutreachAssignment $assignment,
-        User $user,
-        string $type,
-        ?string $remark,
-        ?string $summaryId,
-        ?string $ivrId
-    ): void {
-        DB::transaction(function () use ($assignment, $type, $remark, $summaryId, $ivrId) {
-            $assignment->update([
-                'status' => 'completed',
-                'completion_type' => $type,
-                'remark' => $remark,
-                'remark_expires_at' => now()->addDays(self::COOLING_DAYS),
-                'call_summary_integration_id' => $summaryId,
-                'ivr_call_log_id' => $ivrId,
-                'completed_at' => now(),
-                'active_phone_key' => null,
+ private function complete(
+    KpiOutreachAssignment $assignment,
+    User $user,
+    string $type,
+    ?string $remark,
+    ?string $summaryId,
+    ?string $ivrId
+): void {
+    DB::transaction(function () use (
+        $assignment,
+        $user,
+        $type,
+        $remark,
+        $summaryId,
+        $ivrId
+    ) {
+        $lockedAssignment =
+            KpiOutreachAssignment::query()
+                ->whereKey($assignment->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+        /*
+         * Re-check ownership and status AFTER acquiring
+         * the database row lock.
+         */
+        $this->assertOwnedPending(
+            $lockedAssignment,
+            $user
+        );
+
+        $lockedAssignment->update([
+            'status' => 'completed',
+            'completion_type' => $type,
+            'remark' => $remark,
+
+            'remark_expires_at' =>
+                now()->addDays(self::COOLING_DAYS),
+
+            'call_summary_integration_id' =>
+                $summaryId,
+
+            'ivr_call_log_id' =>
+                $ivrId,
+
+            'completed_at' => now(),
+            'active_phone_key' => null,
+        ]);
+
+        KpiOutreachPool::query()
+            ->where(
+                'id',
+                $lockedAssignment->pool_id
+            )
+            ->update([
+                'cooling_until' =>
+                    now()->addDays(
+                        self::COOLING_DAYS
+                    ),
             ]);
+    });
 
-            KpiOutreachPool::query()
-                ->where('id', $assignment->pool_id)
-                ->update([
-                    'cooling_until' => now()->addDays(self::COOLING_DAYS),
-                ]);
-        });
-
-        if ($assignment->allocation_type === 'standard') {
-            $this->ensureStandardQueue($user);
-        }
-
-        $this->finishBatchIfNeeded($assignment);
+    /*
+     * Preserve existing rolling queue behaviour.
+     */
+    if ($assignment->allocation_type === 'standard') {
+        $this->ensureStandardQueue($user);
     }
+
+    $this->finishBatchIfNeeded($assignment);
+}
 
     private function finishBatchIfNeeded(KpiOutreachAssignment $assignment): void
     {

@@ -8,6 +8,8 @@ use App\Models\IvrCallLog;
 use App\Models\Lead;
 use App\Models\LeadFollowup;
 use App\Models\User;
+use App\Models\UserType;
+use App\Services\Operations\OperationsCallLeadResolver;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -816,6 +818,42 @@ class CallSummaryIntegrationService
 
 
         if ($activeLead) {
+
+            /*
+            |--------------------------------------------------------------------------
+            | Operations phone-match branch
+            |--------------------------------------------------------------------------
+            |
+            | Operations call handling must not change the Sales owner. When the
+            | mapped caller is Operations, only attach if a single eligible booking
+            | can be resolved by phone.
+            |
+            */
+
+            if (
+                $agentUser
+                &&
+                $this->isOperationsUser($agentUser)
+            ) {
+                $operationsLead = app(OperationsCallLeadResolver::class)
+                    ->resolveByPhone((string) $integration->normalized_phone);
+
+                if ($operationsLead) {
+                    $integration->lead_id = $operationsLead->id;
+                    $integration->agent_user_id = $agentUser->id;
+                    $integration->match_score = 85;
+                    $integration->match_method = 'operations_phone';
+                    $integration->status = 'matched';
+                    $integration->last_error = null;
+                    $integration->save();
+
+                    return $this->createOrUpdateFollowup(
+                        $integration,
+                        $operationsLead,
+                        $agentUser
+                    );
+                }
+            }
 
             /*
             |--------------------------------------------------------------------------
@@ -1731,6 +1769,32 @@ if (
         return in_array(
             $phone,
             $crmPhones,
+            true
+        );
+    }
+
+
+    private function isOperationsUser(
+        ?User $user
+    ): bool {
+
+        if (!$user) {
+
+            return false;
+        }
+
+        if (empty($user->user_type_id)) {
+
+            return false;
+        }
+
+        $user->loadMissing(
+            'userType'
+        );
+
+        return in_array(
+            optional($user->userType)->user_type,
+            UserType::OPERATIONS_ROLES,
             true
         );
     }

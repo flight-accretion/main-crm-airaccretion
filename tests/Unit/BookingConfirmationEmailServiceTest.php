@@ -168,10 +168,7 @@ class BookingConfirmationEmailServiceTest extends TestCase
                     'Saturday, 26th September 2026',
                     $mail->body
                 );
-                $this->assertStringContainsString(
-                    "Time: \n1. 26 Sep 2026, 10:00 AM, Mumbai to 26 Sep 2026, 10:30 AM, Mumbai",
-                    $body
-                );
+                $this->assertStringContainsString('Time: 10:00 AM', $body);
                 $this->assertStringContainsString('30 Minutes', $mail->body);
                 $this->assertStringContainsString('₹45,000.00', $mail->body);
                 $this->assertStringContainsString('₹10,000.00', $mail->body);
@@ -239,7 +236,7 @@ class BookingConfirmationEmailServiceTest extends TestCase
         $this->assertSame(0, LeadFollowup::count());
     }
 
-    public function test_preview_formats_duration_over_sixty_minutes_as_hours(): void
+    public function test_preview_uses_total_time_fallback_duration_and_customer_ride_time(): void
     {
         $agent = $this->createUser(
             UserType::SALES_EXECUTIVE,
@@ -276,10 +273,11 @@ class BookingConfirmationEmailServiceTest extends TestCase
         DB::table('lead_rides')->insert([
             'id' => (string) Str::uuid(),
             'lead_id' => $lead->id,
-            'from_date' => '2026-09-03 00:00:00',
-            'to_date' => '2026-09-03 05:00:00',
+            'from_date' => '2026-09-03 10:15:00',
+            'to_date' => '2026-09-03 10:15:00',
             'from_place' => 'Mumbai',
             'to_place' => 'Mumbai',
+            'total_time' => '2.50',
             'created_at' => now(),
             'updated_at' => now(),
         ]);
@@ -301,14 +299,11 @@ class BookingConfirmationEmailServiceTest extends TestCase
         $body = str_replace(["\r\n", "\r"], "\n", $result['body_before_payment']);
 
         $this->assertTrue($result['success']);
-        $this->assertStringContainsString('Duration: 5 Hours', $body);
-        $this->assertStringContainsString(
-            "Time: \n1. 3 Sep 2026, 12:00 AM, Mumbai to 3 Sep 2026, 5:00 AM, Mumbai",
-            $body
-        );
+        $this->assertStringContainsString('Duration: 2 Hours 30 Min', $body);
+        $this->assertStringContainsString('Time: 10:15 AM', $body);
     }
 
-    public function test_preview_lists_each_ride_timing_for_multi_ride_booking(): void
+    public function test_preview_uses_first_ride_customer_time_for_multi_ride_booking(): void
     {
         $agent = $this->createUser(
             UserType::SALES_EXECUTIVE,
@@ -326,7 +321,7 @@ class BookingConfirmationEmailServiceTest extends TestCase
 
         $service = Service::create([
             'id' => (string) Str::uuid(),
-            'service' => 'Helicopter Charter',
+            'service' => 'Helicopter Charter 7 Hours',
             'description' => 'Charter service',
             'service_amount' => 75000,
             'fees_percent' => 0,
@@ -380,18 +375,8 @@ class BookingConfirmationEmailServiceTest extends TestCase
 
         $this->assertTrue($result['success']);
         $this->assertStringContainsString('Duration: 7 Hours', $body);
-        $this->assertStringContainsString(
-            "Time: \n1. 14 Sep 2026, 3:00 PM, Indore to 14 Sep 2026, 5:00 PM, Mumbai",
-            $body
-        );
-        $this->assertStringContainsString(
-            '2. 15 Sep 2026, 2:00 AM, Mumbai to 15 Sep 2026, 5:00 AM, Goa',
-            $body
-        );
-        $this->assertStringContainsString(
-            '3. 16 Sep 2026, 1:00 AM, Goa to 16 Sep 2026, 3:00 AM, Indore',
-            $body
-        );
+        $this->assertStringContainsString('Time: 03:00 PM', $body);
+        $this->assertStringNotContainsString('2. 15 Sep 2026', $body);
     }
 
     public function test_preview_shows_tba_for_multi_ride_segment_without_confirmed_time(): void
@@ -480,13 +465,10 @@ class BookingConfirmationEmailServiceTest extends TestCase
         $body = str_replace(["\r\n", "\r"], "\n", $result['body_before_payment']);
 
         $this->assertStringContainsString(
-            "Time: \n1. TBA",
+            'Time: TBA',
             $body
         );
-        $this->assertStringContainsString(
-            "1. TBA\n2. TBA\n3. TBA",
-            $body
-        );
+        $this->assertStringNotContainsString("2. TBA", $body);
     }
 
     private function createUser(
@@ -590,6 +572,7 @@ class BookingConfirmationEmailServiceTest extends TestCase
             $table->string('from_place')->nullable();
             $table->string('to_place')->nullable();
             $table->boolean('is_tba')->default(false);
+            $table->decimal('total_time', 5, 2)->nullable();
             $table->timestamps();
         });
 

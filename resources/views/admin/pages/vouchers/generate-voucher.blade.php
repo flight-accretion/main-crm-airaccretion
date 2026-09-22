@@ -279,7 +279,7 @@
                                                     {{-- value="{{ old('rides.' . $index . '.time_from', $fromDate ? $fromDate->format('H:i') : '') }}" --}}
                                                     value="{{ old('rides.' . $index . '.time_from') ?? ($fromDate ? $fromDate->format('H:i') : '') }}"
                                                     class="ti-form-input rounded-sm form-control-sm ride-time-from @error('rides.' . $index . '.time_from') border-red-500 @enderror"
-                                                    data-segment="{{ $index }}" required>
+                                                    data-segment="{{ $index }}">
                                                 @error('rides.' . $index . '.time_from')
                                                     <span class="text-red-500 text-sm mt-1 block">{{ $message }}</span>
                                                 @enderror
@@ -293,7 +293,7 @@
                                                 <input type="text" name="rides[{{ $index }}][time_to]"
                                                     value="{{ old('rides.' . $index . '.time_to', $toDate ? $toDate->format('H:i') : '') }}"
                                                     class="ti-form-input rounded-sm form-control-sm ride-time-to @error('rides.' . $index . '.time_to') border-red-500 @enderror"
-                                                    data-segment="{{ $index }}" required>
+                                                    data-segment="{{ $index }}">
                                                 @error('rides.' . $index . '.time_to')
                                                     <span class="text-red-500 text-sm mt-1 block">{{ $message }}</span>
                                                 @enderror
@@ -4768,19 +4768,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 const travelSegment = $(this).closest('.travel-segment');
 
                 if ($(this).is(':checked')) {
-                    // If TBA is checked, only disable and clear ride time fields (keep dates intact)
+                    // If TBA is checked, only disable ride time fields and keep stored values intact.
                     travelSegment.find('.ride-time-from, .ride-time-to')
-                        .prop('disabled', true)
-                        .val('')
-                        .prop('required', false);
-
-                    // Clear any calculated total time
-                    travelSegment.find('.total-time').val('');
+                        .prop('disabled', true);
                 } else {
-                    // If TBA is unchecked, enable ride time fields again and restore 'required'
+                    // If TBA is unchecked, enable ride time fields again.
                     travelSegment.find('.ride-time-from, .ride-time-to')
-                        .prop('disabled', false)
-                        .prop('required', true);
+                        .prop('disabled', false);
                 }
             });
 

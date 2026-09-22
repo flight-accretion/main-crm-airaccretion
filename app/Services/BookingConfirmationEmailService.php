@@ -10,6 +10,7 @@ use App\Models\LeadFollowup;
 use App\Models\Product;
 use App\Models\Service;
 use App\Models\User;
+use App\Services\BookingTravelDetailService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -585,6 +586,12 @@ class BookingConfirmationEmailService
                 $rideSegments
             );
 
+        $duration =
+            $this->duration(
+                $services,
+                $rideSegments
+            );
+
 
         return [
             'total_amount_numeric' =>
@@ -630,10 +637,7 @@ class BookingConfirmationEmailService
                     ),
 
                 'duration' =>
-                    $this->duration(
-                        $services,
-                        $rideSegments
-                    ),
+                    $duration,
 
                 'timing' =>
                     $timing,
@@ -1820,31 +1824,11 @@ private function paymentSectionPositions(
     private function timing(
         Collection $rides
     ): string {
-        if (
-            $rides
-                ->isEmpty()
-        ) {
-            return
-                PHP_EOL
-                . '1. TBA';
-        }
-
-        return
-            PHP_EOL
-            .
-            $rides
-                ->values()
-                ->map(function ($ride, int $index) {
-                    return
-                        ($index + 1)
-                        . '. '
-                        . $this->rideTiming(
-                            $ride
-                        );
-                })
-                ->implode(
-                    PHP_EOL
-                );
+        return app(
+            BookingTravelDetailService::class
+        )->rideTime(
+            $rides->first()
+        );
     }
 
 
@@ -1927,84 +1911,34 @@ private function paymentSectionPositions(
         Collection $services,
         Collection $rides
     ): string {
-        if (
-            $rides
-                ->count()
-            > 1
-        ) {
-            $totalMinutes = 0;
-            $allSegmentsHaveDuration = true;
-
-            foreach (
-                $rides
-                as $ride
-            ) {
-                $minutes =
-                    $this->rideDurationMinutes(
-                        $ride
-                    );
-
-                if (
-                    $minutes === null
-                ) {
-                    $allSegmentsHaveDuration =
-                        false;
-
-                    break;
-                }
-
-                $totalMinutes +=
-                    $minutes;
-            }
-
-            if (
-                $allSegmentsHaveDuration
-                &&
-                $totalMinutes > 0
-            ) {
-                return
-                    $this->formatDurationMinutes(
-                        $totalMinutes
-                    );
-            }
-        }
+        return app(
+            BookingTravelDetailService::class
+        )->duration(
+            $this->serviceDuration(
+                $services
+            ),
+            $rides->first()
+        );
+    }
 
 
-        $serviceDurationMinutes =
+    private function serviceDuration(
+        Collection $services
+    ): string {
+        $minutes =
             $this->serviceDurationMinutes(
                 $services
             );
 
         if (
-            $serviceDurationMinutes !== null
+            $minutes === null
         ) {
-            return
-                $this->formatDurationMinutes(
-                    $serviceDurationMinutes
-                );
+            return '';
         }
 
-
-        $ride =
-            $rides
-                ->first();
-
-        $minutes =
-            $this->rideDurationMinutes(
-                $ride
-            );
-
-        if (
-            $minutes !== null
-        ) {
-            return
-                $this->formatDurationMinutes(
-                    $minutes
-                );
-        }
-
-
-        return 'TBA';
+        return $this->formatDurationMinutes(
+            $minutes
+        );
     }
 
 

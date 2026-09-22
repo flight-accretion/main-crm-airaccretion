@@ -1006,14 +1006,36 @@ try {
                 ? $request->requirement_description
                 : ($request->status == 2 ? 'Lead cancelled during creation' : 'Initial lead created');
 
-            $leadFollowUp = LeadFollowUp::create([
-                'id' => Str::uuid(),
-                'lead_id' => $enquiry->id,
-                'next_followup_date' => $request->next_follow_up,
-                'followup_note' => $followupNote,
-                'followed_by' => auth()->id(),
-                'status' => $request->status,
-            ]);
+        $followupStatus =
+    (int) $request->status;
+
+$nextFollowupDate =
+    LeadFollowup::hiddenFromTodayFollowups(
+        $followupStatus
+    )
+        ? null
+        : $request->next_follow_up;
+
+
+$leadFollowUp = LeadFollowUp::create([
+    'id' =>
+        Str::uuid(),
+
+    'lead_id' =>
+        $enquiry->id,
+
+    'next_followup_date' =>
+        $nextFollowupDate,
+
+    'followup_note' =>
+        $followupNote,
+
+    'followed_by' =>
+        auth()->id(),
+
+    'status' =>
+        $followupStatus,
+]);
 
             if ($request->filled('outreach_assignment')) {
                 $assignment = KpiOutreachAssignment::query()

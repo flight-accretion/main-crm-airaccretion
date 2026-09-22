@@ -158,6 +158,26 @@ class LeadFollowup extends Model
     {
         parent::boot();
 
+        /*
+|--------------------------------------------------------------------------
+| Do not allow closed/hidden lead statuses to retain a follow-up date
+|--------------------------------------------------------------------------
+|
+| Cancelled, Confirmed and Rejected leads must never return to
+| Today's Follow-up because of a stale next_followup_date.
+|
+*/
+static::saving(function (LeadFollowup $followup) {
+
+    if (
+        self::hiddenFromTodayFollowups(
+            $followup->status
+        )
+    ) {
+        $followup->next_followup_date = null;
+    }
+});
+
         static::deleting(function ($followup) {
             try {
                 // Delete child followups first to avoid orphan children

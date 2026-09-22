@@ -52,6 +52,8 @@ use App\Http\Controllers\KpiManagementController;
 use App\Http\Controllers\KpiWorkDoneController;
 use App\Http\Controllers\AttendanceImportController;
 use App\Http\Controllers\AttendanceSettingsController;
+use App\Http\Controllers\OperationsCallDashboardController;
+use App\Http\Controllers\OperationsLeadAssignmentController;
 
 
 /*
@@ -886,6 +888,20 @@ Route::post(
         Route::get('/agents/{agent}/edit', [IvrAgentController::class, 'edit'])->name('agents.edit');
         Route::put('/agents/{agent}', [IvrAgentController::class, 'update'])->name('agents.update');
     });
+
+    Route::prefix('admin/operations')
+        ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES')
+        ->group(function () {
+            Route::get(
+                '/customer-calls',
+                [OperationsCallDashboardController::class, 'index']
+            )->name('admin.operations.customer-calls.index');
+
+            Route::post(
+                '/leads/{lead}/assign',
+                [OperationsLeadAssignmentController::class, 'store']
+            )->name('admin.operations.leads.assign');
+        });
 
     Route::prefix('admin/client')->group(function () {
         Route::get('/', [ClientController::class, 'indexClient'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.client.index');

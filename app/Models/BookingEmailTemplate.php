@@ -60,7 +60,7 @@ class BookingEmailTemplate extends Model
             'Service Name: {{service_name}}',
             'Date of Service: {{service_date}}',
             'Duration: {{duration}}',
-            'Time: {{timing}}',
+            'Time: {{time}}',
             'Passengers: {{passengers}}',
             '',
             'PAYMENT BREAKDOWN',

@@ -78,6 +78,7 @@
             $fromDate = $ride->from_date;
             $toDate = $ride->to_date;
             $isSameDay = $fromDate->format('Y-m-d') === $toDate->format('Y-m-d');
+            $rideTime = app(\App\Services\BookingTravelDetailService::class)->rideTime($ride);
         @endphp
 
         <div class="info-row">
@@ -94,7 +95,13 @@
 
         <div class="info-row">
             <div class="info-label">Time:</div>
-            <div class="info-value">{{ $fromDate->format('H:i') }} - {{ $toDate->format('H:i') }}</div>
+            <div class="info-value">
+                @if($rideTime === 'TBA')
+                    TBA
+                @elseif($rideTime !== '')
+                    {{ $rideTime }}
+                @endif
+            </div>
         </div>
 
         <div class="info-row">

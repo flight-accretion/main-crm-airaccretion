@@ -20,7 +20,7 @@ class IvrAgentController extends Controller
     public function create()
     {
         $this->ensureSuperAdmin();
-        return view('admin.pages.ivr.agents.form', ['item' => new IvrAgent(), 'users' => $this->salesUsers()]);
+        return view('admin.pages.ivr.agents.form', ['item' => new IvrAgent(), 'users' => $this->callableUsers()]);
     }
 
     public function store(Request $request)
@@ -44,7 +44,7 @@ class IvrAgentController extends Controller
     public function edit(IvrAgent $agent)
     {
         $this->ensureSuperAdmin();
-        return view('admin.pages.ivr.agents.form', ['item' => $agent, 'users' => $this->salesUsers()]);
+        return view('admin.pages.ivr.agents.form', ['item' => $agent, 'users' => $this->callableUsers()]);
     }
 
     public function update(Request $request, IvrAgent $agent)
@@ -86,10 +86,15 @@ class IvrAgentController extends Controller
         return strlen($digits) > 10 ? substr($digits, -10) : $digits;
     }
 
-    private function salesUsers()
+    private function callableUsers()
     {
-        return User::whereHas('userType', function ($query) {
-            $query->whereIn('user_type', UserType::SALES_ROLES);
+        $roles = array_values(array_unique(array_merge(
+            UserType::SALES_ROLES,
+            UserType::OPERATIONS_ROLES
+        )));
+
+        return User::whereHas('userType', function ($query) use ($roles) {
+            $query->whereIn('user_type', $roles);
         })->where('status', 1)->orderBy('name')->get();
     }
 
