@@ -170,7 +170,7 @@
             </div>
 
 
-            <div class="mt-6">
+            <div class="mt-6 flex flex-wrap gap-3">
 
                 <button
                     type="button"
@@ -183,6 +183,24 @@
                     Preview Data
 
                 </button>
+
+                <a
+                    href="{{ route('admin.attendance.import.sample') }}"
+                    class="ti-btn ti-btn-success-full ti-btn-wave"
+                >
+                    <i class="ti ti-file-spreadsheet mr-2"></i>
+
+                    Download Excel Format
+                </a>
+
+                <a
+                    href="{{ route('admin.attendance.import.sample', ['format' => 'csv']) }}"
+                    class="ti-btn ti-btn-info-full ti-btn-wave"
+                >
+                    <i class="ti ti-file-type-csv mr-2"></i>
+
+                    Download CSV Format
+                </a>
 
             </div>
 

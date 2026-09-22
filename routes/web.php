@@ -144,6 +144,17 @@ Route::middleware('auth')->group(function () {
             );
 
         Route::get(
+            '/import/sample',
+            [
+                AttendanceImportController::class,
+                'downloadSample',
+            ]
+        )
+            ->name(
+                'admin.attendance.import.sample'
+            );
+
+        Route::get(
             '/settings',
             [
                 AttendanceSettingsController::class,

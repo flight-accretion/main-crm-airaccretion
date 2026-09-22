@@ -14,6 +14,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AttendanceImportController extends Controller
 {
@@ -35,6 +39,23 @@ class AttendanceImportController extends Controller
                     $imports,
             ]
         );
+    }
+
+    public function downloadSample(Request $request)
+    {
+        $format =
+            strtolower(
+                (string) $request->query(
+                    'format',
+                    'xlsx'
+                )
+            );
+
+        if ($format === 'csv') {
+            return $this->downloadSampleCsv();
+        }
+
+        return $this->downloadSampleExcel();
     }
 
     public function preview(
@@ -910,5 +931,147 @@ class AttendanceImportController extends Controller
             )
             ?: ''
         );
+    }
+
+    private function downloadSampleCsv(): StreamedResponse
+    {
+        $filename =
+            'attendance_import_sample_'
+            . now()->format('Y_m_d_H_i_s')
+            . '.csv';
+
+        return new StreamedResponse(
+            function () {
+                $out = fopen('php://output', 'w');
+
+                foreach ($this->sampleRows() as $row) {
+                    fputcsv($out, $row);
+                }
+
+                fclose($out);
+            },
+            200,
+            [
+                'Content-Type' => 'text/csv; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            ]
+        );
+    }
+
+    private function downloadSampleExcel(): StreamedResponse
+    {
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Attendance Data');
+
+        foreach ($this->sampleRows() as $rowIndex => $row) {
+            foreach ($row as $columnIndex => $value) {
+                $sheet->setCellValueByColumnAndRow(
+                    $columnIndex + 1,
+                    $rowIndex + 1,
+                    $value
+                );
+            }
+        }
+
+        foreach (['A2', 'B2', 'C2', 'D2', 'E2'] as $cell) {
+            $sheet->getStyle($cell)->getFont()->setBold(true);
+            $sheet->getStyle($cell)->getFill()
+                ->setFillType(Fill::FILL_SOLID)
+                ->getStartColor()->setRGB('E2E8F0');
+        }
+
+        foreach (range('A', 'G') as $column) {
+            $sheet->getColumnDimension($column)->setAutoSize(true);
+        }
+
+        $instructions = $spreadsheet->createSheet();
+        $instructions->setTitle('Instructions');
+
+        foreach ($this->sampleInstructions() as $row => $instruction) {
+            $instructions->setCellValue(
+                'A' . ($row + 1),
+                $instruction
+            );
+        }
+
+        $instructions->getColumnDimension('A')->setWidth(90);
+        $spreadsheet->setActiveSheetIndex(0);
+
+        $filename =
+            'attendance_import_sample_'
+            . now()->format('Y_m_d_H_i_s')
+            . '.xlsx';
+
+        return new StreamedResponse(
+            function () use ($spreadsheet) {
+                $writer = new Xlsx($spreadsheet);
+                $writer->save('php://output');
+            },
+            200,
+            [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+                'Cache-Control' => 'max-age=0',
+            ]
+        );
+    }
+
+    private function sampleRows(): array
+    {
+        return [
+            [
+                'Paycode:-',
+                '',
+                '',
+                'E001',
+                'Amit Sharma',
+                'Department:-',
+                'Sales',
+            ],
+            [
+                'Date',
+                'Day',
+                'In',
+                'Out',
+                'Status',
+            ],
+            [
+                '2026-09-01',
+                'Tuesday',
+                '10:30',
+                '19:30',
+                'P',
+            ],
+            [
+                '2026-09-02',
+                'Wednesday',
+                '10:42',
+                '19:35',
+                'P',
+            ],
+            [
+                '2026-09-03',
+                'Thursday',
+                '',
+                '',
+                'A',
+            ],
+        ];
+    }
+
+    private function sampleInstructions(): array
+    {
+        return [
+            'ATTENDANCE IMPORT FORMAT',
+            '',
+            '1. Keep one employee block per employee.',
+            '2. Employee block starts with Paycode:-. Put paycode in column D and employee name in column E.',
+            '3. Required attendance headers are Date, Day, In, Out, Status.',
+            '4. Date formats supported: YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY, MM/DD/YYYY.',
+            '5. Time formats supported: HH:MM, HH:MM:SS, h:mm AM/PM.',
+            '6. Status examples: P for present, A for absent, WO for weekly off, HLD for holiday.',
+            '7. Upload screen From Date and To Date decide which rows are imported.',
+        ];
     }
 }
