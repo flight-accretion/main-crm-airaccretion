@@ -13,12 +13,13 @@ class SalesTargetKpiResolver implements KpiMetricResolverInterface
         private TargetResolverService $targets
     ) {}
 
-    public function resolve(
-        User $user,
-        KpiMetric $metric,
-        Carbon $asOf,
-        int $workingDaysPerMonth
-    ): array {
+   public function resolve(
+    User $user,
+    KpiMetric $metric,
+    Carbon $asOf,
+    int $workingDaysPerMonth,
+    ?Carbon $from = null
+): array {
         $target = $this->targets->targetForUser(
             $user->id,
             $asOf->year,

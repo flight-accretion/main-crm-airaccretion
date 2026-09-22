@@ -57,7 +57,8 @@ class CallSummaryController extends Controller
 
                     'summary' =>
                         [
-                            'required',
+                            'required_unless:dnp,true,1',
+                            'nullable',
                             'string',
                             'max:10000',
                         ],
@@ -108,6 +109,12 @@ class CallSummaryController extends Controller
                             'nullable',
                             'integer',
                             'min:0',
+                        ],
+
+                    'dnp' =>
+                        [
+                            'nullable',
+                            'boolean',
                         ],
                 ],
                 [

@@ -4,155 +4,151 @@ namespace App\Services\Kpi;
 
 use App\Models\KpiMetric;
 use App\Models\Lead;
-use App\Models\LeadFollowup;
 use App\Models\User;
 use Carbon\Carbon;
 
 class SalesPaymentCollectionKpiResolver implements KpiMetricResolverInterface
 {
+    private const FULL_PAYMENT = 3;
+    private const PARTIAL_PAYMENT = 4;
+
     public function resolve(
         User $user,
         KpiMetric $metric,
         Carbon $asOf,
-        int $workingDaysPerMonth
+        int $workingDaysPerMonth,
+        ?Carbon $from = null
     ): array {
-        $monthStart = $asOf->copy()->startOfMonth();
+        $from = ($from ?: $asOf->copy()->startOfMonth())
+            ->copy()
+            ->startOfDay();
+
+        $to = $asOf->copy()->endOfDay();
+
+        /*
+         * Payment Collection
+         *
+         * Eligible:
+         * Latest payment-stage status inside selected period
+         * is Partial Payment or Full Payment.
+         *
+         * Compliant:
+         * Latest payment-stage status inside selected period
+         * is Full Payment.
+         *
+         * One lead is counted once.
+         */
 
         $leads = Lead::query()
             ->with([
-                'leadFollowups.paymentAuditTrail',
+                'leadFollowups' => function ($query) use ($from, $to) {
+                    $query
+                        ->whereIn('status', [
+                            self::FULL_PAYMENT,
+                            self::PARTIAL_PAYMENT,
+                        ])
+                        ->whereBetween('created_at', [
+                            $from,
+                            $to,
+                        ])
+                        ->orderByDesc('created_at');
+                },
             ])
             ->where('representative_user_id', $user->id)
-            ->where(function ($query) use ($monthStart, $asOf) {
+            ->whereHas('leadFollowups', function ($query) use ($from, $to) {
                 $query
-                    ->whereHas('leadFollowups', function ($followups) use ($monthStart, $asOf) {
-                        $followups
-                            ->whereIn('status', LeadFollowup::salesAmountStatuses())
-                            ->whereBetween('created_at', [
-                                $monthStart,
-                                $asOf,
-                            ]);
-                    })
-                    ->orWhereHas('leadFollowups.paymentAuditTrail', function ($payments) use ($monthStart, $asOf) {
-                        $payments
-                            ->where('payment_status', 1)
-                            ->whereBetween('paid_date', [
-                                $monthStart,
-                                $asOf,
-                            ]);
-                    });
+                    ->whereIn('status', [
+                        self::FULL_PAYMENT,
+                        self::PARTIAL_PAYMENT,
+                    ])
+                    ->whereBetween('created_at', [
+                        $from,
+                        $to,
+                    ]);
             })
             ->get();
 
         $eligible = 0;
         $full = 0;
         $partial = 0;
-        $partialTracked = 0;
-        $partialUntracked = 0;
-        $unpaid = 0;
-        $approvedTotal = 0.0;
-        $pendingTotal = 0.0;
 
         foreach ($leads as $lead) {
-            $qualifying = $lead->leadFollowups
-                ->filter(fn ($followup) => in_array(
-                    (int) $followup->status,
-                    LeadFollowup::salesAmountStatuses(),
-                    true
-                ))
-                ->sortByDesc('created_at');
+            /*
+             * Relationship is already ordered newest first,
+             * but sorting again keeps the calculation deterministic.
+             */
+            $latestPaymentStatus = $lead->leadFollowups
+                ->sortByDesc('created_at')
+                ->first();
 
-            $latest = $qualifying->first();
-
-            if (!$latest) {
+            if (!$latestPaymentStatus) {
                 continue;
             }
 
-            $bookedTotal = max(0, (float) ($latest->total_amount ?? 0));
+            $status = (int) $latestPaymentStatus->status;
 
-            if ($bookedTotal <= 0) {
+            if (!in_array(
+                $status,
+                [
+                    self::FULL_PAYMENT,
+                    self::PARTIAL_PAYMENT,
+                ],
+                true
+            )) {
                 continue;
             }
 
+            /*
+             * Both Partial and Full are eligible.
+             */
             $eligible++;
 
-            $approvedPayments = $lead->leadFollowups
-                ->flatMap(fn ($followup) => $followup->paymentAuditTrail)
-                ->filter(fn ($payment) => (int) $payment->payment_status === 1);
-
-            $received = (float) $approvedPayments->sum('paid_amount');
-            $approvedTotal += $received;
-
-            $pending = max(0, $bookedTotal - $received);
-            $pendingTotal += $pending;
-
-            if ($received + 0.01 >= $bookedTotal) {
+            if ($status === self::FULL_PAYMENT) {
                 $full++;
-                continue;
-            }
-
-            if ($received > 0) {
+            } else {
                 $partial++;
-
-                $lastPaymentAt = $approvedPayments
-                    ->sortByDesc('paid_date')
-                    ->first()?->paid_date;
-
-                $hasScheduledNext = !empty($latest->next_followup_date)
-                    && (
-                        !$lastPaymentAt
-                        || Carbon::parse($latest->next_followup_date)
-                            ->greaterThanOrEqualTo(Carbon::parse($lastPaymentAt))
-                    );
-
-                $hasLaterFollowup = false;
-
-                if ($lastPaymentAt) {
-                    $hasLaterFollowup = $lead->leadFollowups
-                        ->where('followed_by', $user->id)
-                        ->filter(fn ($followup) => Carbon::parse($followup->created_at)
-                            ->greaterThan(Carbon::parse($lastPaymentAt)))
-                        ->isNotEmpty();
-                }
-
-                if ($hasScheduledNext || $hasLaterFollowup) {
-                    $partialTracked++;
-                } else {
-                    $partialUntracked++;
-                }
-
-                continue;
             }
-
-            $unpaid++;
         }
 
-        $compliant = $full + $partialTracked;
+        /*
+         * Only Full Payment is compliant.
+         */
+        $compliant = $full;
+
         $achievement = $eligible > 0
             ? ($compliant / $eligible) * 100
-            : 100.0;
+            : 0.0;
 
         return [
             'actual_value' => $compliant,
             'target_value' => $eligible,
             'achievement_percent' => $achievement,
+
             'evidence' => [
                 'eligible_payment_customers' => $eligible,
                 'full_payment_count' => $full,
                 'partial_payment_count' => $partial,
-                'partial_with_followup_count' => $partialTracked,
-                'partial_without_followup_count' => $partialUntracked,
-                'unpaid_count' => $unpaid,
-                'approved_received_total' => round($approvedTotal, 2),
-                'pending_balance_total' => round($pendingTotal, 2),
-                'achievement_percent' => round($achievement, 2),
+
+                /*
+                 * Legacy keys retained so existing code
+                 * reading the evidence array does not break.
+                 */
+                'partial_with_followup_count' => 0,
+                'partial_without_followup_count' => $partial,
+                'unpaid_count' => 0,
+                'approved_received_total' => 0,
+                'pending_balance_total' => 0,
+
+                'achievement_percent' => round(
+                    $achievement,
+                    2
+                ),
+
                 'note' => sprintf(
-                    'Payments: Full=%d, Partial=%d (%d tracked / %d untracked), Unpaid=%d.',
+                    'Payment Collection: Full=%d, Partial=%d, Eligible=%d.',
                     $full,
                     $partial,
-                    $partialTracked,
-                    $partialUntracked,
-                    $unpaid
+                    $eligible
                 ),
             ],
         ];

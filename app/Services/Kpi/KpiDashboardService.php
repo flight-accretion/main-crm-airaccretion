@@ -17,7 +17,11 @@ class KpiDashboardService
         private KpiImprovementService $improvements
     ) {}
 
-    public function forUser(User $user, Carbon $asOf): array
+    public function forUser(
+    User $user,
+    Carbon $asOf,
+    ?Carbon $from = null
+): array
     {
         $assignment = KpiUserAssignment::query()
             ->with(['template.metrics'])
@@ -49,12 +53,13 @@ class KpiDashboardService
 
     $resolved = $this->registry
         ->resolver((string) $metric->source_key)
-        ->resolve(
-            $user,
-            $metric,
-            $asOf,
-            (int) $template->working_days_per_month
-        );
+   ->resolve(
+    $user,
+    $metric,
+    $asOf,
+    (int) $template->working_days_per_month,
+    $from
+);
 
     /*
      * No eligible data must never produce a perfect KPI score.
@@ -744,7 +749,7 @@ private function emptyImprovementLine(
             'Complete eligible pending follow-ups within 4 hours to improve this KPI score.',
 
         'payment_collection' =>
-            'Collect full payment or complete timely balance follow-up after partial payment to improve this KPI score.',
+    'Convert eligible partial-payment customers to full payment to improve this KPI score.',
 
         'attendance' =>
             'Maintain punctual attendance on scheduled working days to improve this KPI score.',

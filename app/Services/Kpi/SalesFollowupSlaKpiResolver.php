@@ -21,13 +21,18 @@ class SalesFollowupSlaKpiResolver implements KpiMetricResolverInterface
         private SalesKpiCommunicationService $communications
     ) {}
 
-    public function resolve(
-        User $user,
-        KpiMetric $metric,
-        Carbon $asOf,
-        int $workingDaysPerMonth
-    ): array {
-        $monthStart = $asOf->copy()->startOfMonth();
+public function resolve(
+    User $user,
+    KpiMetric $metric,
+    Carbon $asOf,
+    int $workingDaysPerMonth,
+    ?Carbon $from = null
+): array {
+       $periodStart = ($from ?: $asOf->copy()->startOfMonth())
+    ->copy()
+    ->startOfDay();
+
+$periodEnd = $asOf->copy()->endOfDay();
 
         $due = LeadFollowup::query()
             ->with('enquiry')
@@ -36,10 +41,10 @@ class SalesFollowupSlaKpiResolver implements KpiMetricResolverInterface
             })
             ->whereIn('status', self::PENDING_STATUSES)
             ->whereNotNull('next_followup_date')
-            ->whereBetween('next_followup_date', [
-                $monthStart,
-                $asOf,
-            ])
+          ->whereBetween('next_followup_date', [
+            $periodStart,
+            $periodEnd,
+        ])
             ->orderBy('next_followup_date')
             ->get();
 

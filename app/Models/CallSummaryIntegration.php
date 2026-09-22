@@ -35,6 +35,8 @@ class CallSummaryIntegration extends Model
         'direction',
         'sentiment_score',
 
+        'is_dnp',
+
         'ivr_call_log_id',
         'lead_id',
 
@@ -66,6 +68,8 @@ class CallSummaryIntegration extends Model
         'call_start_at' => 'datetime',
 
         'call_end_at' => 'datetime',
+
+        'is_dnp' => 'boolean',
 
         'processed_at' => 'datetime',
 

@@ -12,6 +12,7 @@ interface KpiMetricResolverInterface
         User $user,
         KpiMetric $metric,
         Carbon $asOf,
-        int $workingDaysPerMonth
+        int $workingDaysPerMonth,
+        ?Carbon $from = null
     ): array;
 }

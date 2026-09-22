@@ -192,15 +192,15 @@ class KpiImprovementService
             'next_score' => $nextScore,
             'next_threshold' => $threshold,
             'gap_value' => $gap,
-            'improvement_line' => $eligible <= 0
-                ? 'There are no eligible payment customers yet for this KPI.'
-                : sprintf(
-                    'Move %d more eligible payment customer%s into a compliant state by collecting full payment or properly following up the balance after partial payment to reach %s%% and move to %d/5.',
-                    $gap,
-                    $gap === 1 ? '' : 's',
-                    $this->number($threshold),
-                    $nextScore
-                ),
+           'improvement_line' => $eligible <= 0
+    ? 'There are no eligible payment customers yet for this KPI.'
+    : sprintf(
+        'Convert %d more eligible partial-payment customer%s to full payment to reach %s%% and move to %d/5.',
+        $gap,
+        $gap === 1 ? '' : 's',
+        $this->number($threshold),
+        $nextScore
+    ),
         ];
     }
 

@@ -13,9 +13,11 @@ class KpiDashboardController extends Controller
 public function index(
     Request $request,
     KpiDashboardService $dashboard,
-    KpiDataScopeService $scope
+    KpiDataScopeService $scope,
+    KpiDashboardFilterService $filters
 ) {
     $current = $request->user()->load('userType');
+    $filter = $filters->fromRequest($request);
 
     /*
      * Super Admin / Admin:
@@ -52,27 +54,32 @@ public function index(
         );
     }
 
-    /*
-     * KPI Dashboard now shows current KPI status only.
-     * There is no date/filter/dashboard-card layer here.
-     */
-    $asOf = now()->endOfDay();
+   $from = $filter['from'];
+$asOf = $filter['to'];
 
-    $team = $users
-        ->map(function ($user) use ($dashboard, $asOf) {
-            return $dashboard->forUser(
-                $user,
-                $asOf
-            );
-        })
-        ->values();
+   $team = $users
+    ->map(function ($user) use (
+        $dashboard,
+        $from,
+        $asOf
+    ) {
+        return $dashboard->forUser(
+            $user,
+            $asOf,
+            $from
+        );
+    })
+    ->values();
 
     return view(
         'admin.pages.kpi.dashboard',
         [
-            'team' => $team,
-            'asOf' => $asOf,
-            'department' => $department,
+           [
+    'team' => $team,
+    'asOf' => $asOf,
+    'department' => $department,
+    'filter' => $filter,
+]
         ]
     );
 }

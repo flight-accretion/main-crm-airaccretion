@@ -233,6 +233,7 @@ class KpiOutreachCallVerifierTest extends TestCase
                 $table->string('normalized_agent_name', 150)->nullable();
                 $table->string('direction', 20);
                 $table->decimal('sentiment_score', 5, 2)->nullable();
+                $table->boolean('is_dnp')->default(false);
                 $table->uuid('ivr_call_log_id')->nullable();
                 $table->uuid('lead_id')->nullable();
                 $table->uuid('agent_user_id')->nullable();

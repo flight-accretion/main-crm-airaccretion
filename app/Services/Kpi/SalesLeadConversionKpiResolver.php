@@ -13,15 +13,20 @@ class SalesLeadConversionKpiResolver implements KpiMetricResolverInterface
         private SalesKpiLeadScopeService $leadScope
     ) {}
 
-    public function resolve(
-        User $user,
-        KpiMetric $metric,
-        Carbon $asOf,
-        int $workingDaysPerMonth
-    ): array {
-        $leadIds = $this->leadScope
-            ->incoming($user, $asOf)
-            ->pluck('id');
+   public function resolve(
+    User $user,
+    KpiMetric $metric,
+    Carbon $asOf,
+    int $workingDaysPerMonth,
+    ?Carbon $from = null
+): array {
+       $leadIds = $this->leadScope
+    ->incoming(
+        $user,
+        $asOf,
+        $from
+    )
+    ->pluck('id');
 
         $totalLeads = $leadIds->count();
 

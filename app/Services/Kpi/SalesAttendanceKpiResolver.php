@@ -15,22 +15,22 @@ class SalesAttendanceKpiResolver implements KpiMetricResolverInterface
         private AttendanceShiftResolver $shiftResolver
     ) {}
 
-    public function resolve(
-        User $user,
-        KpiMetric $metric,
-        Carbon $asOf,
-        int $workingDaysPerMonth
-    ): array {
-        $monthStart =
-            $asOf
-                ->copy()
-                ->startOfMonth()
-                ->startOfDay();
+  public function resolve(
+    User $user,
+    KpiMetric $metric,
+    Carbon $asOf,
+    int $workingDaysPerMonth,
+    ?Carbon $from = null
+): array {
+       $periodStart =
+    ($from ?: $asOf->copy()->startOfMonth())
+        ->copy()
+        ->startOfDay();
 
-        $monthEnd =
-            $asOf
-                ->copy()
-                ->endOfDay();
+$periodEnd =
+    $asOf
+        ->copy()
+        ->endOfDay();
 
 
         /*
@@ -50,11 +50,10 @@ class SalesAttendanceKpiResolver implements KpiMetricResolverInterface
                 ->whereBetween(
                     'attendance_date',
                     [
-                        $monthStart
-                            ->toDateString(),
-
-                        $monthEnd
-                            ->toDateString(),
+                        [
+    $periodStart->toDateString(),
+    $periodEnd->toDateString(),
+]
                     ]
                 )
                 ->orderBy(
@@ -122,24 +121,21 @@ class SalesAttendanceKpiResolver implements KpiMetricResolverInterface
          * Uses your existing KPI working day
          * and employee non-working-day logic.
          */
-        $scheduledDates =
-            $this
-                ->workingDays
-                ->workingDates(
-                    $user,
-                    $asOf->year,
-                    $asOf->month,
-                    $workingDaysPerMonth
-                )
-                ->filter(
-                    fn (
-                        Carbon $date
-                    ) =>
-                        $date->lte(
-                            $coverageDate
-                        )
-                )
-                ->values();
+     $scheduledDates =
+    $this
+        ->workingDays
+        ->workingDates(
+            $user,
+            $asOf->year,
+            $asOf->month,
+            $workingDaysPerMonth
+        )
+        ->filter(
+            fn (Carbon $date) =>
+                $date->gte($periodStart)
+                && $date->lte($coverageDate)
+        )
+        ->values();
 
 
         $nonScheduledStatuses =

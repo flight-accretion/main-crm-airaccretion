@@ -13,12 +13,13 @@ class SalesOutreachKpiResolver implements KpiMetricResolverInterface
         private KpiWorkingDayService $workingDays
     ) {}
 
-    public function resolve(
-        User $user,
-        KpiMetric $metric,
-        Carbon $asOf,
-        int $workingDaysPerMonth
-    ): array {
+  public function resolve(
+    User $user,
+    KpiMetric $metric,
+    Carbon $asOf,
+    int $workingDaysPerMonth,
+    ?Carbon $from = null
+): array {
         $stats = $this->workingDays->stats(
             $user,
             $asOf,
@@ -65,16 +66,35 @@ class SalesOutreachKpiResolver implements KpiMetricResolverInterface
         }
         $expectedToDate = $stats['working_days_elapsed'] * $dailyTarget;
         $monthlyTarget = $stats['working_days_total'] * $dailyTarget;
-        $monthStart = $asOf->copy()->startOfMonth();
+     $periodStart = ($from ?: $asOf->copy()->startOfMonth())
+    ->copy()
+    ->startOfDay();
 
-        $mtd = KpiOutreachAssignment::query()
+        $periodEnd = $asOf->copy()->endOfDay();
+
+        $periodCompleted = KpiOutreachAssignment::query()
             ->where('user_id', $user->id)
             ->where('status', 'completed')
             ->whereBetween('completed_at', [
-                $monthStart,
-                $asOf->copy()->endOfDay(),
+                $periodStart,
+                $periodEnd,
             ])
             ->count();
+
+            $periodWorkingDays = $stats['dates']
+    ->filter(function (Carbon $date) use (
+        $periodStart,
+        $periodEnd
+    ) {
+        return $date->betweenIncluded(
+            $periodStart->copy()->startOfDay(),
+            $periodEnd->copy()->startOfDay()
+        );
+    })
+    ->count();
+
+$expectedForPeriod =
+    $periodWorkingDays * $dailyTarget;
 
         $today = KpiOutreachAssignment::query()
             ->where('user_id', $user->id)
@@ -82,9 +102,9 @@ class SalesOutreachKpiResolver implements KpiMetricResolverInterface
             ->whereDate('completed_at', $asOf->toDateString())
             ->count();
 
-       $achievement = $expectedToDate > 0
-        ? ($mtd / $expectedToDate) * 100
-        : 0.0;
+    $achievement = $expectedForPeriod > 0
+    ? ($periodCompleted / $expectedForPeriod) * 100
+    : 0.0;
 
         $remainingCalls = max(0, $monthlyTarget - $mtd);
         $requiredPerRemainingDay = $stats['working_days_remaining'] > 0
@@ -92,13 +112,16 @@ class SalesOutreachKpiResolver implements KpiMetricResolverInterface
             : $remainingCalls;
 
         return [
-            'actual_value' => $mtd,
-            'target_value' => $expectedToDate,
+            'actual_value' => $periodCompleted,
+'target_value' => $expectedForPeriod,
             'achievement_percent' => $achievement,
             'evidence' => [
                 'today_completed' => $today,
-                'mtd_completed' => $mtd,
-                'expected_to_date' => $expectedToDate,
+                'mtd_completed' => $periodCompleted,
+                'expected_to_date' => $expectedForPeriod,
+                'period_completed' => $periodCompleted,
+                'period_working_days' => $periodWorkingDays,
+                'period_target' => $expectedForPeriod,
                 'monthly_target' => $monthlyTarget,
                 'working_days_elapsed' => $stats['working_days_elapsed'],
                 'working_days_total' => $stats['working_days_total'],

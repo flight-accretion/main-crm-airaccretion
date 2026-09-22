@@ -98,6 +98,12 @@ class CallSummaryIntegrationService
             )
         );
 
+        $isDnp =
+            filter_var(
+                $payload['dnp'] ?? false,
+                FILTER_VALIDATE_BOOLEAN
+            );
+
 
         $attributes = [
 
@@ -113,10 +119,9 @@ class CallSummaryIntegrationService
                 $phone,
 
             'summary' =>
-                trim(
-                    (string)
-                    $payload['summary']
-                ),
+                $isDnp
+                    ? 'Customer did not pick up the call.'
+                    : trim((string) $payload['summary']),
 
             'followup_date' =>
                 !empty(
@@ -160,6 +165,9 @@ class CallSummaryIntegrationService
                         'sentiment_score'
                     ]
                     : null,
+
+            'is_dnp' =>
+                $isDnp,
 
             'payload' =>
                 $payload,
@@ -2403,6 +2411,14 @@ if (
 
                         'status' =>
                             $status,
+
+                        'contact_outcome' =>
+                            $locked->is_dnp
+                                ? LeadFollowup::CONTACT_OUTCOME_NO_ANSWER
+                                : null,
+
+                        'customer_not_picked_up' =>
+                            (bool) $locked->is_dnp,
                     ]);
 
                 Log::info(
@@ -2510,6 +2526,14 @@ if (
 
         $followup->followup_note =
             $integration->summary;
+
+        $followup->contact_outcome =
+            $integration->is_dnp
+                ? LeadFollowup::CONTACT_OUTCOME_NO_ANSWER
+                : null;
+
+        $followup->customer_not_picked_up =
+            (bool) $integration->is_dnp;
 
         $followup->next_followup_date =
             $integration->followup_date;

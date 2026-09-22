@@ -13,15 +13,20 @@ class SalesResponseTimeKpiResolver implements KpiMetricResolverInterface
         private SalesKpiCommunicationService $communications
     ) {}
 
-    public function resolve(
-        User $user,
-        KpiMetric $metric,
-        Carbon $asOf,
-        int $workingDaysPerMonth
-    ): array {
-        $leads = $this->leadScope
-            ->incoming($user, $asOf)
-            ->get();
+  public function resolve(
+    User $user,
+    KpiMetric $metric,
+    Carbon $asOf,
+    int $workingDaysPerMonth,
+    ?Carbon $from = null
+): array {
+       $leads = $this->leadScope
+    ->incoming(
+        $user,
+        $asOf,
+        $from
+    )
+    ->get();
 
         if ($leads->isEmpty()) {
             return [

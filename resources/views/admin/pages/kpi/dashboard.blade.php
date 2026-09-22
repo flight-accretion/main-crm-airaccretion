@@ -44,6 +44,125 @@
 
 </div>
 
+{{-- KPI DATE FILTER --}}
+<div class="box mb-4">
+    <div class="box-body">
+
+        <form
+            method="GET"
+            action="{{ route('admin.kpi.index') }}"
+            class="grid grid-cols-12 gap-4 items-end"
+        >
+
+            <div class="xl:col-span-3 md:col-span-6 col-span-12">
+
+                <label class="ti-form-label">
+                    Date
+                </label>
+
+                <select
+                    name="preset"
+                    id="kpi-date-type"
+                    class="form-control"
+                >
+
+                    <option
+                        value="this_month"
+                        {{ ($filter['preset'] ?? 'this_month') === 'this_month' ? 'selected' : '' }}
+                    >
+                        This Month
+                    </option>
+
+                    <option
+                        value="today"
+                        {{ ($filter['preset'] ?? '') === 'today' ? 'selected' : '' }}
+                    >
+                        Today
+                    </option>
+
+                    <option
+                        value="yesterday"
+                        {{ ($filter['preset'] ?? '') === 'yesterday' ? 'selected' : '' }}
+                    >
+                        Yesterday
+                    </option>
+
+                    <option
+                        value="custom"
+                        {{ ($filter['preset'] ?? '') === 'custom' ? 'selected' : '' }}
+                    >
+                        Custom Date
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div
+                class="xl:col-span-3 md:col-span-6 col-span-12 kpi-custom-date-field"
+                style="{{ ($filter['preset'] ?? 'this_month') === 'custom' ? '' : 'display:none' }}"
+            >
+
+                <label class="ti-form-label">
+                    From Date
+                </label>
+
+                <input
+                    type="date"
+                    name="from_date"
+                    class="form-control"
+                    value="{{ request('from_date', $filter['from']->toDateString()) }}"
+                >
+
+            </div>
+
+
+            <div
+                class="xl:col-span-3 md:col-span-6 col-span-12 kpi-custom-date-field"
+                style="{{ ($filter['preset'] ?? 'this_month') === 'custom' ? '' : 'display:none' }}"
+            >
+
+                <label class="ti-form-label">
+                    To Date
+                </label>
+
+                <input
+                    type="date"
+                    name="to_date"
+                    class="form-control"
+                    value="{{ request('to_date', $filter['to']->toDateString()) }}"
+                >
+
+            </div>
+
+
+            <div class="xl:col-span-3 md:col-span-6 col-span-12">
+
+                <button
+                    type="submit"
+                    class="ti-btn ti-btn-primary w-full"
+                >
+                    Filter
+                </button>
+
+            </div>
+
+        </form>
+
+
+        <div class="mt-3 text-sm text-gray-500">
+            Showing:
+            <strong>
+                {{ $filter['from']->format('d M Y') }}
+                -
+                {{ $filter['to']->format('d M Y') }}
+            </strong>
+        </div>
+
+    </div>
+</div>
+
 
 <div class="box">
     <div class="box-body overflow-x-auto p-0">
@@ -449,5 +568,48 @@
 @include(
     'admin.pages.kpi.partials.metric-score-modal'
 )
+
+
+<script>
+document.addEventListener(
+    'DOMContentLoaded',
+    function () {
+
+        const typeSelect =
+            document.getElementById(
+                'kpi-date-type'
+            );
+
+        const customFields =
+            document.querySelectorAll(
+                '.kpi-custom-date-field'
+            );
+
+        if (!typeSelect) {
+            return;
+        }
+
+        function toggleCustomDates() {
+
+            customFields.forEach(
+                function (field) {
+
+                    field.style.display =
+                        typeSelect.value === 'custom'
+                            ? ''
+                            : 'none';
+                }
+            );
+        }
+
+        typeSelect.addEventListener(
+            'change',
+            toggleCustomDates
+        );
+
+        toggleCustomDates();
+    }
+);
+</script>
 
 @endsection
