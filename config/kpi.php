@@ -31,8 +31,8 @@ return [
                     'source_key' => 'sales_conversion',
                     'target_value' => 30,
                     'direction' => 'higher_better',
-                    'score_rules' => [5 => 40, 4 => 35, 3 => 30, 2 => 25, 1 => 20],
-                    'score_labels' => [5 => '40%', 4 => '35%', 3 => '30%', 2 => '25%', 1 => '<20%'],
+                    'score_rules' => [5 => 30, 4 => 25, 3 => 20, 2 => 15, 1 => 0],
+                    'score_labels' => [5 => '30%', 4 => '25%', 3 => '20%', 2 => '15%', 1 => '<15%'],
                     'sort_order' => 20,
                 ],
                 [

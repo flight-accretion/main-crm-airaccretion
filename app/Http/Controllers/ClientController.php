@@ -128,6 +128,248 @@ class ClientController extends Controller
         }
     }
 
+    private function normalizeIdList($value): array
+    {
+        if ($value instanceof \Illuminate\Support\Collection) {
+            $value = $value->all();
+        }
+
+        if (is_array($value)) {
+            $ids = $value;
+        } elseif (is_string($value) && trim($value) !== '') {
+            $decoded = json_decode($value, true);
+
+            if (is_array($decoded)) {
+                $ids = $decoded;
+            } elseif (is_string($decoded)) {
+                $decodedAgain = json_decode($decoded, true);
+                $ids = is_array($decodedAgain) ? $decodedAgain : [$decoded];
+            } else {
+                $ids = [];
+            }
+        } else {
+            $ids = [];
+        }
+
+        $ids = array_filter($ids, function ($id) {
+            return (is_string($id) || is_numeric($id)) && trim((string) $id) !== '';
+        });
+
+        return array_values(array_unique(array_map('strval', $ids)));
+    }
+
+    private function buildLeadFollowupViewData(Lead $lead): array
+    {
+        $lead->loadMissing(['rideSegments', 'client']);
+
+        $clientInfo = [
+            'name' => $lead->client->name ?? 'N/A',
+            'email' => $lead->client->email ?? 'N/A',
+            'phone' => $lead->client->contact_number ?? 'N/A',
+            'services' => 'N/A',
+            'products' => 'N/A',
+            'trip_from' => 'N/A',
+            'trip_to' => 'N/A',
+            'passengers' => $lead->number_of_passengers ?? 'N/A',
+            'occasion' => $lead->occasion ?? 'N/A',
+        ];
+
+        $services = Service::with(['extraServices' => function ($query) {
+            $query->where('extra_services.status', 1)
+                ->select(
+                    'extra_services.id',
+                    'extra_services.extra_service',
+                    'extra_services.extra_service_amount',
+                    'extra_services.status'
+                );
+        }])->get();
+
+        $allExtraServices = ExtraService::customerVisible()
+            ->select(
+                'id',
+                'extra_service',
+                'description',
+                'extra_service_amount',
+                'status',
+                'usage_scope'
+            )
+            ->get();
+
+        $leadServiceIds = $this->normalizeIdList($lead->service_ids);
+
+        if (!empty($leadServiceIds)) {
+            try {
+                $clientInfo['services'] = Service::whereIn('id', $leadServiceIds)
+                    ->pluck('service')
+                    ->implode(', ');
+            } catch (\Exception $e) {
+                Log::error('Error processing service IDs for lead: ' . $e->getMessage());
+            }
+        }
+
+        try {
+            $productNames = $lead->product_names ?? [];
+            $clientInfo['products'] = is_array($productNames)
+                ? implode(', ', $productNames)
+                : ($productNames ?: 'N/A');
+        } catch (\Exception $e) {
+            Log::error('Error processing product IDs for lead: ' . $e->getMessage());
+            $clientInfo['products'] = 'N/A';
+        }
+
+        if ($lead->rideSegments && $lead->rideSegments->count() > 0) {
+            $firstSegment = $lead->rideSegments->first();
+            $lastSegment = $lead->rideSegments->last();
+
+            $clientInfo['trip_from'] = date('Y-m-d', strtotime($firstSegment->from_date)) . ' - ' . $firstSegment->from_place;
+            $clientInfo['trip_to'] = date('Y-m-d', strtotime($lastSegment->to_date)) . ' - ' . $lastSegment->to_place;
+        }
+
+        $followups = $lead->leadFollowups()
+            ->with(['paymentAuditTrail', 'followedBy'])
+            ->latest()
+            ->get();
+
+        $latestFollowup = $followups->first();
+
+        $lastFollowupWithAmount = $lead->leadFollowups()
+            ->whereNotNull('total_amount')
+            ->latest('created_at')
+            ->first();
+
+        $selectedServices = [];
+        $selectedExtraServices = [];
+        $availableServiceIds = $services->pluck('id')->map(fn ($id) => (string) $id)->toArray();
+        $availableExtraServiceIds = $allExtraServices->pluck('id')->map(fn ($id) => (string) $id)->toArray();
+
+        if ($lastFollowupWithAmount) {
+            $followupServiceIds = $this->normalizeIdList($lastFollowupWithAmount->service_ids);
+            $selectedServices = !empty($followupServiceIds)
+                ? array_values(array_intersect($followupServiceIds, $availableServiceIds))
+                : $leadServiceIds;
+
+            $followupExtraServiceIds = $this->normalizeIdList($lastFollowupWithAmount->extra_service_ids);
+            $selectedExtraServices = array_values(array_intersect($followupExtraServiceIds, $availableExtraServiceIds));
+        } elseif ($latestFollowup) {
+            $followupServiceIds = $this->normalizeIdList($latestFollowup->service_ids);
+            $selectedServices = !empty($followupServiceIds)
+                ? array_values(array_intersect($followupServiceIds, $availableServiceIds))
+                : $leadServiceIds;
+
+            $followupExtraServiceIds = $this->normalizeIdList($latestFollowup->extra_service_ids);
+            $selectedExtraServices = array_values(array_intersect($followupExtraServiceIds, $availableExtraServiceIds));
+        } else {
+            $selectedServices = $leadServiceIds;
+        }
+
+        $selectedServices = array_values(array_filter($selectedServices));
+        $selectedExtraServices = array_values(array_filter($selectedExtraServices));
+
+        $mappedServiceIds = array_values(array_unique(array_merge($leadServiceIds, $selectedServices)));
+        $mappedExtraServiceIds = [];
+
+        if (!empty($mappedServiceIds)) {
+            $mappedExtraServiceIds = Service::whereIn('id', $mappedServiceIds)
+                ->with('extraServices:id')
+                ->get()
+                ->flatMap(function ($service) {
+                    return $service->extraServices->pluck('id');
+                })
+                ->unique()
+                ->values()
+                ->all();
+        }
+
+        $allowedExtraServiceIds = array_unique(array_merge($mappedExtraServiceIds, $selectedExtraServices));
+        if (!empty($allowedExtraServiceIds)) {
+            $allExtraServices = $allExtraServices->whereIn('id', $allowedExtraServiceIds)->values();
+        } else {
+            $allExtraServices = collect();
+        }
+
+        $selectedServiceModels = $services
+            ->whereIn('id', $selectedServices)
+            ->values();
+
+        $selectedExtraServiceModels = $allExtraServices
+            ->whereIn('id', $selectedExtraServices)
+            ->values();
+
+        $servicePrices = [];
+        $serviceFeePercents = [];
+        $extraServicePrices = [];
+
+        foreach ($services as $service) {
+            $servicePrices[$service->id] = $service->service_amount;
+            $serviceFeePercents[$service->id] = (float) ($service->fees_percent ?? 0);
+        }
+
+        foreach ($allExtraServices as $extraService) {
+            $extraServicePrices[$extraService->id] = $extraService->extra_service_amount;
+        }
+
+        $serviceExtraServicesMap = $services->mapWithKeys(function ($service) {
+            return [
+                $service->id => $service->extraServices->pluck('id')->values()->all(),
+            ];
+        })->toArray();
+
+        $lastFollowupTotalAmount = $lastFollowupWithAmount ? $lastFollowupWithAmount->total_amount : null;
+        $lastFollowupServiceAmount = $lastFollowupWithAmount ? $lastFollowupWithAmount->service_amount : null;
+        $lastFollowupDiscountAmount = $lastFollowupWithAmount ? $lastFollowupWithAmount->discount_amount : null;
+        $lastFollowupServiceDetails = $lastFollowupWithAmount && $lastFollowupWithAmount->service_details
+            ? (is_string($lastFollowupWithAmount->service_details)
+                ? json_decode($lastFollowupWithAmount->service_details, true)
+                : $lastFollowupWithAmount->service_details)
+            : [];
+
+        $lastFollowupServiceIds = $lastFollowupWithAmount
+            ? $this->normalizeIdList($lastFollowupWithAmount->service_ids)
+            : [];
+
+        $lastFollowupExtraServiceIds = $lastFollowupWithAmount
+            ? $this->normalizeIdList($lastFollowupWithAmount->extra_service_ids)
+            : [];
+
+        $totalServiceAmount = $selectedServiceModels->sum('service_amount');
+        $totalExtraServiceAmount = $selectedExtraServiceModels->sum('extra_service_amount');
+        $totalAmount = 0;
+        $isStoredAmount = false;
+
+        if ($latestFollowup && $latestFollowup->total_amount && $latestFollowup->total_amount > 0) {
+            $totalAmount = $latestFollowup->total_amount;
+            $isStoredAmount = true;
+        } else {
+            $totalAmount = $totalServiceAmount + $totalExtraServiceAmount;
+        }
+
+        return [
+            'clientInfo' => $clientInfo,
+            'followups' => $followups,
+            'latestFollowup' => $latestFollowup,
+            'services' => $services,
+            'allExtraServices' => $allExtraServices,
+            'selectedServiceIds' => $selectedServices,
+            'selectedExtraServiceIds' => $selectedExtraServices,
+            'selectedServiceModels' => $selectedServiceModels,
+            'selectedExtraServiceModels' => $selectedExtraServiceModels,
+            'servicePrices' => $servicePrices,
+            'serviceFeePercents' => $serviceFeePercents,
+            'lastFollowupTotalAmount' => $lastFollowupTotalAmount,
+            'lastFollowupServiceAmount' => $lastFollowupServiceAmount,
+            'lastFollowupDiscountAmount' => $lastFollowupDiscountAmount,
+            'lastFollowupServiceDetails' => $lastFollowupServiceDetails,
+            'lastFollowupServiceIds' => $lastFollowupServiceIds,
+            'lastFollowupExtraServiceIds' => $lastFollowupExtraServiceIds,
+            'extraServicePrices' => $extraServicePrices,
+            'serviceExtraServicesMap' => $serviceExtraServicesMap,
+            'totalServiceAmount' => $totalServiceAmount,
+            'totalExtraServiceAmount' => $totalExtraServiceAmount,
+            'totalAmount' => $totalAmount,
+            'isStoredAmount' => $isStoredAmount,
+        ];
+    }
+
     /**
      * Export DNP leads to Excel
      */
@@ -1495,7 +1737,7 @@ $leadFollowUp = LeadFollowUp::create([
 
         // Get all leads with their services
         $leads = $client->leads->map(function ($enquiry) {
-            $serviceIds = json_decode($enquiry->service_ids, true) ?? [];
+            $serviceIds = $this->normalizeIdList($enquiry->service_ids);
             $enquiry->services = Service::whereIn('id', $serviceIds)->pluck('service')->toArray();
             return $enquiry;
         });
@@ -1507,58 +1749,40 @@ $leadFollowUp = LeadFollowUp::create([
                 'pendingTransfers.requestedBy',
             ]);
         }
-        $followups = [];
-        if ($latestLead) {
-            $followups = LeadFollowup::with('followedBy')
-                ->where('lead_id', $latestLead->id)
-                ->orderBy('created_at', 'desc')
-                ->get();
-        }
+        $clientInfo = [
+            'name' => $client->name ?? 'N/A',
+            'email' => $client->email ?? 'N/A',
+            'phone' => $client->contact_number ?? 'N/A',
+            'services' => 'N/A',
+            'products' => 'N/A',
+            'trip_from' => 'N/A',
+            'trip_to' => 'N/A',
+            'passengers' => 'N/A',
+            'occasion' => 'N/A',
+        ];
+        $followups = collect();
         $latestFollowup = null;
-        if ($latestLead) {
-            $latestFollowup = LeadFollowup::with('followedBy')
-                ->where('lead_id', $latestLead->id)
-                ->orderByDesc('created_at')
-                ->first();
-        }
-
-        // Get services and extra services with pricing information
         $selectedServices = collect();
         $selectedExtraServices = collect();
         $totalServiceAmount = 0;
         $totalExtraServiceAmount = 0;
         $totalAmount = 0;
-        $isStoredAmount = false; // Flag to indicate if we're using stored amount vs calculated
+        $isStoredAmount = false;
+        $services = Service::all();
 
-        if ($latestFollowup) {
-            // Check if we have a stored total amount from the followup
-            if ($latestFollowup->total_amount && $latestFollowup->total_amount > 0) {
-                $totalAmount = $latestFollowup->total_amount;
-                $isStoredAmount = true;
-            }
+        if ($latestLead) {
+            $leadFollowupData = $this->buildLeadFollowupViewData($latestLead);
 
-            // Get services from the latest followup with names
-            if (!empty($latestFollowup->service_ids)) {
-                $serviceIds = is_string($latestFollowup->service_ids) ? json_decode($latestFollowup->service_ids, true) : $latestFollowup->service_ids;
-                $selectedServices = Service::whereIn('id', $serviceIds)->get();
-
-                // Calculate current service amounts for display (may differ from stored amount)
-                $totalServiceAmount = $selectedServices->sum('service_amount');
-            }
-
-            // Get extra services from the latest followup with names
-            if (!empty($latestFollowup->extra_service_ids)) {
-                $extraServiceIds = is_string($latestFollowup->extra_service_ids) ? json_decode($latestFollowup->extra_service_ids, true) : $latestFollowup->extra_service_ids;
-                $selectedExtraServices = ExtraService::whereIn('id', $extraServiceIds)->get();
-
-                // Calculate current extra service amounts for display (may differ from stored amount)
-                $totalExtraServiceAmount = $selectedExtraServices->sum('extra_service_amount');
-            }
-
-            // If we don't have a stored total amount, calculate it from current amounts
-            if (!$isStoredAmount) {
-                $totalAmount = $totalServiceAmount + $totalExtraServiceAmount;
-            }
+            $clientInfo = $leadFollowupData['clientInfo'];
+            $followups = $leadFollowupData['followups'];
+            $latestFollowup = $leadFollowupData['latestFollowup'];
+            $services = $leadFollowupData['services'];
+            $selectedServices = $leadFollowupData['selectedServiceModels'];
+            $selectedExtraServices = $leadFollowupData['selectedExtraServiceModels'];
+            $totalServiceAmount = $leadFollowupData['totalServiceAmount'];
+            $totalExtraServiceAmount = $leadFollowupData['totalExtraServiceAmount'];
+            $totalAmount = $leadFollowupData['totalAmount'];
+            $isStoredAmount = $leadFollowupData['isStoredAmount'];
         }
 
         $cityName = null;
@@ -1567,8 +1791,6 @@ $leadFollowUp = LeadFollowUp::create([
                 ->where('id', $client->city_id)
                 ->value('name');
         }
-        $services = Service::all();
-
         // Get staff based on logged-in user hierarchy
         $staff = $this->getUsersInHierarchy();
 
@@ -1589,7 +1811,9 @@ $leadFollowUp = LeadFollowUp::create([
             'totalServiceAmount',
             'totalExtraServiceAmount',
             'totalAmount',
-            'isStoredAmount'
+            'isStoredAmount',
+            'followups',
+            'clientInfo'
         ));
     }
     public function toggleStatus(Client $client)
@@ -3206,194 +3430,36 @@ $leadFollowUp = LeadFollowUp::create([
      */
     public function createLeadFollowUp(Lead $lead)
     {
-        // Load the lead with its relationships
-        $lead->load('rideSegments', 'client');
+        $leadFollowupData = $this->buildLeadFollowupViewData($lead);
 
-        // Get basic client info
-        $clientInfo = [
-            'name' => $lead->client->name,
-            'email' => $lead->client->email,
-            'phone' => $lead->client->contact_number,
-            'services' => 'N/A', // Default value
-            'trip_from' => 'N/A',
-            'trip_to' => 'N/A',
-            'passengers' => $lead->number_of_passengers ?? 'N/A',
-            'occasion' => $lead->occasion ?? 'N/A',
-        ];
-
-        // Get ALL available services with active mapped extra services for the follow-up picker
-        $services = Service::with(['extraServices' => function ($query) {
-            $query->where('extra_services.status', 1)
-                ->select('extra_services.id', 'extra_services.extra_service', 'extra_services.extra_service_amount', 'extra_services.status');
-        }])->get();
-
-        // Get distinct extra services with their amounts
-       $allExtraServices =
-    ExtraService::customerVisible()
-        ->select(
-            'id',
-            'extra_service',
-            'extra_service_amount',
-            'status'
-        )
-        ->get();
-
-        // Get service IDs from this specific lead
-        $leadServiceIds = [];
-        if (!empty($lead->service_ids)) {
-            try {
-                $leadServiceIds = is_array($lead->service_ids) ?
-                    $lead->service_ids :
-                    json_decode($lead->service_ids, true) ?? [];
-                $clientInfo['services'] = Service::whereIn('id', $leadServiceIds)
-                    ->pluck('service')
-                    ->implode(', ');
-            } catch (\Exception $e) {
-                Log::error("Error processing service IDs: " . $e->getMessage());
-            }
-        }
-
-        // Get product names from this lead (if any) using Lead model accessor
-        try {
-            $productNames = $lead->product_names ?? [];
-            $clientInfo['products'] = is_array($productNames) ? implode(', ', $productNames) : ($productNames ?: 'N/A');
-        } catch (\Exception $e) {
-            Log::error('Error processing product IDs for lead: ' . $e->getMessage());
-            $clientInfo['products'] = 'N/A';
-        }
-
-        // Get trip details if available
-        if ($lead->rideSegments->count() > 0) {
-            $firstSegment = $lead->rideSegments->first();
-            $lastSegment = $lead->rideSegments->last();
-
-            $clientInfo['trip_from'] = date('Y-m-d', strtotime($firstSegment->from_date)) . ' - ' . $firstSegment->from_place;
-            $clientInfo['trip_to'] = date('Y-m-d', strtotime($lastSegment->to_date)) . ' - ' . $lastSegment->to_place;
-        }
-
-        // Get followups for THIS specific lead only
-        $followups = $lead->leadFollowups()->with('paymentAuditTrail')->latest()->get();
-        $latestFollowup = $followups->first();
-
-        // Get the last followup with total amount first (this will be our reference)
-        $lastFollowupWithAmount = $lead->leadFollowups()
-            ->whereNotNull('total_amount')
-            ->latest('created_at')
-            ->first();
-
-        // Determine which services and extra services to pre-select
-        $selectedServices = [];
-        $selectedExtraServices = [];
-
-        // Priority: 1. Last followup with amount, 2. Latest followup, 3. Lead services
-        if ($lastFollowupWithAmount) {
-            // Use services from the last followup that has a total amount
-            if ($lastFollowupWithAmount->service_ids && !empty(trim($lastFollowupWithAmount->service_ids))) {
-                $decodedServices = json_decode($lastFollowupWithAmount->service_ids, true) ?? [];
-                $selectedServices = array_values(array_intersect($decodedServices, $services->pluck('id')->toArray()));
-            } else {
-                // If followup with amount exists but no services selected, fall back to lead services
-                $selectedServices = $leadServiceIds;
-            }
-
-            if ($lastFollowupWithAmount->extra_service_ids && !empty(trim($lastFollowupWithAmount->extra_service_ids))) {
-                $decodedExtraServices = json_decode($lastFollowupWithAmount->extra_service_ids, true) ?? [];
-                $selectedExtraServices = array_values(array_intersect($decodedExtraServices, $allExtraServices->pluck('id')->toArray()));
-            }
-        } elseif ($latestFollowup) {
-            // If no followup with amount, but there's a latest followup, use its selections
-            if ($latestFollowup->service_ids && !empty(trim($latestFollowup->service_ids))) {
-                $decodedServices = json_decode($latestFollowup->service_ids, true) ?? [];
-                $selectedServices = array_values(array_intersect($decodedServices, $services->pluck('id')->toArray()));
-            } else {
-                // If followup exists but no services selected, fall back to lead services
-                $selectedServices = $leadServiceIds;
-            }
-
-            if ($latestFollowup->extra_service_ids && !empty(trim($latestFollowup->extra_service_ids))) {
-                $decodedExtraServices = json_decode($latestFollowup->extra_service_ids, true) ?? [];
-                $selectedExtraServices = array_values(array_intersect($decodedExtraServices, $allExtraServices->pluck('id')->toArray()));
-            }
-        } else {
-            // If no previous followup at all, use services from the lead
-            $selectedServices = $leadServiceIds;
-        }
-
-        // Ensure selectedServices contains valid service IDs
-        $selectedServices = array_values(array_filter($selectedServices));
-        $selectedExtraServices = array_values(array_filter($selectedExtraServices));
-
-        $mappedExtraServiceIds = [];
-        if (!empty($leadServiceIds)) {
-            $mappedExtraServiceIds = Service::whereIn('id', $leadServiceIds)
-                ->with('extraServices:id')
-                ->get()
-                ->flatMap(function ($service) {
-                    return $service->extraServices->pluck('id');
-                })
-                ->unique()
-                ->values()
-                ->all();
-        }
-
-        $allowedExtraServiceIds = array_unique(array_merge($mappedExtraServiceIds, $selectedExtraServices));
-        if (!empty($allowedExtraServiceIds)) {
-            $allExtraServices = $allExtraServices->whereIn('id', $allowedExtraServiceIds)->values();
-        } else {
-            $allExtraServices = collect();
-        }
+        $clientInfo = $leadFollowupData['clientInfo'];
+        $followups = $leadFollowupData['followups'];
+        $latestFollowup = $leadFollowupData['latestFollowup'];
+        $services = $leadFollowupData['services'];
+        $allExtraServices = $leadFollowupData['allExtraServices'];
+        $selectedServices = $leadFollowupData['selectedServiceIds'];
+        $selectedExtraServices = $leadFollowupData['selectedExtraServiceIds'];
+        $servicePrices = $leadFollowupData['servicePrices'];
+        $serviceFeePercents = $leadFollowupData['serviceFeePercents'];
+        $extraServicePrices = $leadFollowupData['extraServicePrices'];
+        $serviceExtraServicesMap = $leadFollowupData['serviceExtraServicesMap'];
+        $lastFollowupTotalAmount = $leadFollowupData['lastFollowupTotalAmount'];
+        $lastFollowupServiceAmount = $leadFollowupData['lastFollowupServiceAmount'];
+        $lastFollowupDiscountAmount = $leadFollowupData['lastFollowupDiscountAmount'];
+        $lastFollowupServiceDetails = $leadFollowupData['lastFollowupServiceDetails'];
+        $lastFollowupServiceIds = $leadFollowupData['lastFollowupServiceIds'];
+        $lastFollowupExtraServiceIds = $leadFollowupData['lastFollowupExtraServiceIds'];
 
         // Debug log the final selections
         Log::info('Final service selections for lead follow-up:', [
             'lead_id' => $lead->id,
             'client_id' => $lead->client->id,
-            'lead_service_ids' => $leadServiceIds,
+            'lead_service_ids' => $this->normalizeIdList($lead->service_ids),
             'has_latest_followup' => $latestFollowup ? true : false,
-            'has_followup_with_amount' => $lastFollowupWithAmount ? true : false,
+            'has_followup_with_amount' => $lastFollowupTotalAmount !== null,
             'selected_services' => $selectedServices,
             'selected_extra_services' => $selectedExtraServices
         ]);
-
-        // Create service prices and extra service prices
-        $servicePrices = [];
-        $serviceFeePercents = [];
-        $extraServicePrices = [];
-
-        foreach ($services as $service) {
-            $servicePrices[$service->id] = $service->service_amount;
-            $serviceFeePercents[$service->id] = (float) ($service->fees_percent ?? 0);
-        }
-
-        // Add all extra services to the prices array
-        foreach ($allExtraServices as $extraService) {
-            $extraServicePrices[$extraService->id] = $extraService->extra_service_amount;
-        }
-
-        $serviceExtraServicesMap = $services->mapWithKeys(function ($service) {
-            return [
-                $service->id => $service->extraServices->pluck('id')->values()->all(),
-            ];
-        })->toArray();
-
-        // Prepare data for JavaScript to handle amount calculation
-        $lastFollowupTotalAmount = $lastFollowupWithAmount ? $lastFollowupWithAmount->total_amount : null;
-        $lastFollowupServiceAmount = $lastFollowupWithAmount ? $lastFollowupWithAmount->service_amount : null;
-        $lastFollowupDiscountAmount = $lastFollowupWithAmount ? $lastFollowupWithAmount->discount_amount : null;
-        $lastFollowupServiceDetails = $lastFollowupWithAmount && $lastFollowupWithAmount->service_details
-            ? (is_string($lastFollowupWithAmount->service_details) ? json_decode($lastFollowupWithAmount->service_details, true) : $lastFollowupWithAmount->service_details)
-            : [];
-        $lastFollowupServiceIds = [];
-        $lastFollowupExtraServiceIds = [];
-
-        if ($lastFollowupWithAmount) {
-            $lastFollowupServiceIds = !empty($lastFollowupWithAmount->service_ids)
-                ? (is_string($lastFollowupWithAmount->service_ids) ? json_decode($lastFollowupWithAmount->service_ids, true) : $lastFollowupWithAmount->service_ids)
-                : [];
-
-            $lastFollowupExtraServiceIds = !empty($lastFollowupWithAmount->extra_service_ids)
-                ? (is_string($lastFollowupWithAmount->extra_service_ids) ? json_decode($lastFollowupWithAmount->extra_service_ids, true) : $lastFollowupWithAmount->extra_service_ids)
-                : [];
-        }
 
         $latestAiScore =
     LeadAiScore::query()
@@ -5603,7 +5669,7 @@ $leadFollowUp = LeadFollowUp::create([
         $client = $lead->client;
 
         // Get services associated with this lead
-        $serviceIds = json_decode($lead->service_ids, true) ?? [];
+        $serviceIds = $this->normalizeIdList($lead->service_ids);
         $lead->services = Service::whereIn('id', $serviceIds)->pluck('service')->toArray();
 
         // Prepare ride_dates for views that expect a simple from/to map
@@ -5627,56 +5693,18 @@ $leadFollowUp = LeadFollowUp::create([
         $leads = collect([$lead]);
         $latestLead = $lead;
 
-        // Get followups for this specific lead, eager-load payment audit trails so receipts are available
-        $followups = LeadFollowup::with(['followedBy', 'paymentAuditTrail'])
-            ->where('lead_id', $lead->id)
-            ->orderBy('created_at', 'desc')
-            ->get();
+        $leadFollowupData = $this->buildLeadFollowupViewData($lead);
 
-        // Get latest followup for this lead
-        $latestFollowup = LeadFollowup::with('followedBy')
-            ->where('lead_id', $lead->id)
-            ->orderByDesc('created_at')
-            ->first();
-
-        // Get services and extra services with pricing information
-        $selectedServices = collect();
-        $selectedExtraServices = collect();
-        $totalServiceAmount = 0;
-        $totalExtraServiceAmount = 0;
-        $totalAmount = 0;
-        $isStoredAmount = false; // Flag to indicate if we're using stored amount vs calculated
-
-        if ($latestFollowup) {
-            // Check if we have a stored total amount from the followup
-            if ($latestFollowup->total_amount && $latestFollowup->total_amount > 0) {
-                $totalAmount = $latestFollowup->total_amount;
-                $isStoredAmount = true;
-            }
-
-            // Get services from the latest followup with names
-            if (!empty($latestFollowup->service_ids)) {
-                $serviceIds = is_string($latestFollowup->service_ids) ? json_decode($latestFollowup->service_ids, true) : $latestFollowup->service_ids;
-                $selectedServices = Service::whereIn('id', $serviceIds)->get();
-
-                // Calculate current service amounts for display (may differ from stored amount)
-                $totalServiceAmount = $selectedServices->sum('service_amount');
-            }
-
-            // Get extra services from the latest followup with names
-            if (!empty($latestFollowup->extra_service_ids)) {
-                $extraServiceIds = is_string($latestFollowup->extra_service_ids) ? json_decode($latestFollowup->extra_service_ids, true) : $latestFollowup->extra_service_ids;
-                $selectedExtraServices = ExtraService::whereIn('id', $extraServiceIds)->get();
-
-                // Calculate current extra service amounts for display (may differ from stored amount)
-                $totalExtraServiceAmount = $selectedExtraServices->sum('extra_service_amount');
-            }
-
-            // If we don't have a stored total amount, calculate it from current amounts
-            if (!$isStoredAmount) {
-                $totalAmount = $totalServiceAmount + $totalExtraServiceAmount;
-            }
-        }
+        $clientInfo = $leadFollowupData['clientInfo'];
+        $followups = $leadFollowupData['followups'];
+        $latestFollowup = $leadFollowupData['latestFollowup'];
+        $services = $leadFollowupData['services'];
+        $selectedServices = $leadFollowupData['selectedServiceModels'];
+        $selectedExtraServices = $leadFollowupData['selectedExtraServiceModels'];
+        $totalServiceAmount = $leadFollowupData['totalServiceAmount'];
+        $totalExtraServiceAmount = $leadFollowupData['totalExtraServiceAmount'];
+        $totalAmount = $leadFollowupData['totalAmount'];
+        $isStoredAmount = $leadFollowupData['isStoredAmount'];
 
         // Get city name
         $cityName = null;
@@ -5685,9 +5713,6 @@ $leadFollowUp = LeadFollowUp::create([
                 ->where('id', $client->city_id)
                 ->value('name');
         }
-
-        // Get all services for dropdown
-        $services = Service::all();
 
         // Get staff based on logged-in user hierarchy
         $staff = $this->getUsersInHierarchy();
@@ -5769,7 +5794,8 @@ $leadFollowUp = LeadFollowUp::create([
             'totalAmount',
             'isStoredAmount',
             'followups',
-            'clientPaymentHistory'
+            'clientPaymentHistory',
+            'clientInfo'
         ));
     }
 

@@ -198,152 +198,47 @@
                 </div>
             </div>
 
-            <!-- Enquiries Section -->
-        @if($latestLead && $latestFollowup)
-        <div class="box">
-            <div class="box-header flex justify-between items-center">
-                <h5 class="box-title">Latest Follow-up Summary</h5>
-            </div>
-            <div class="box-body">
-                <div class="overflow-auto">
-                    <table class="table display responsive nowrap table-datatable" width="100%">
-                        <thead class="bg-primary text-white">
-                            <tr class="border-b border-defaultborder">
-                                <th data-priority="1">S.No</th>
-                                <th data-priority="2">Date</th>
-                                <th data-priority="3">Services</th>
-                                <th data-priority="4">Passengers</th>
-                                <th data-priority="5">Trip Dates</th>
-                                <th data-priority="6">Representative</th>
-                                <!-- <th data-priority="7">Status</th> -->
-                                <th data-priority="8">Next Follow-up</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr class="border-b border-defaultborder">
-                                <td></td>
-                                <td>
-                                    {{ date('d-m-Y H:i', strtotime($latestFollowup->created_at)) }}
-                                </td>
-                                <td>
-                                    <!-- @php
-                                        $serviceNames = [];
-                                        if (!empty($latestLead->service_ids)) {
-                                            $serviceIds = json_decode($latestLead->service_ids, true);
-                                            // Ensure we only call whereIn when we have a non-empty array to avoid
-                                            // passing null (or invalid bindings) to the query builder.
-                                            if (is_array($serviceIds) && count($serviceIds) > 0) {
-                                                $serviceNames = \App\Models\Service::whereIn('id', $serviceIds)->pluck('service')->toArray();
-                                            }
-                                        }
-                                    @endphp -->
-                                    @php
-                                    $serviceNames = [];
-                                    $serviceIds = [];
+            @php
+                $serviceRows = collect($selectedServices ?? []);
+                $extraServiceRows = collect($selectedExtraServices ?? []);
+                $historyRows = collect($followups ?? []);
+                $serviceLabels = $serviceRows->pluck('service')->filter()->values();
+                $extraServiceLabels = $extraServiceRows->pluck('extra_service')->filter()->values();
+            @endphp
 
-                                    $rawServiceIds = $latestLead->service_ids ?? null;
-
-                                    /*
-                                    |--------------------------------------------------------------------------
-                                    | Accept every historical/current storage format
-                                    |--------------------------------------------------------------------------
-                                    |
-                                    | Possible values:
-                                    |
-                                    | 1. Already cast array
-                                    |    ['uuid']
-                                    |
-                                    | 2. Normal JSON
-                                    |    '["uuid"]'
-                                    |
-                                    | 3. Legacy / double encoded JSON
-                                    |    '"[\"uuid\"]"'
-                                    |
-                                    */
-
-                                    if (is_array($rawServiceIds)) {
-
-                                        $serviceIds = $rawServiceIds;
-
-                                    } elseif (is_string($rawServiceIds) && trim($rawServiceIds) !== '') {
-
-                                        $decoded = json_decode($rawServiceIds, true);
-
-                                        if (is_array($decoded)) {
-
-                                            $serviceIds = $decoded;
-
-                                        } elseif (is_string($decoded)) {
-
-                                            // Handle double-encoded legacy value.
-                                            $decodedAgain = json_decode($decoded, true);
-
-                                            if (is_array($decodedAgain)) {
-                                                $serviceIds = $decodedAgain;
-                                            }
-                                        }
-                                    }
-
-                                    $serviceIds = array_values(
-                                        array_filter(
-                                            $serviceIds,
-                                            function ($id) {
-                                                return is_string($id) && trim($id) !== '';
-                                            }
-                                        )
-                                    );
-
-                                    if (!empty($serviceIds)) {
-
-                                        $serviceNames = \App\Models\Service::query()
-                                            ->whereIn('id', $serviceIds)
-                                            ->pluck('service')
-                                            ->toArray();
-                                    }
-                                @endphp
-                                    {{ $serviceNames ? implode(', ', $serviceNames) : 'N/A' }}
-                                </td>
-                                <td class="text-center">
-                                    {{ $latestLead->number_of_passengers ?? 'N/A' }}
-                                </td>
-                                <td>
-                                    @if(count($latestLead->rideSegments) > 0)
-                                        @php
-                                            $firstSegment = $latestLead->rideSegments->first();
-                                            $lastSegment = $latestLead->rideSegments->last();
-                                        @endphp
-                                        {{ date('d-m-Y', strtotime($firstSegment->from_date)) }} to {{ date('d-m-Y', strtotime($lastSegment->to_date)) }}
-                                    @else
-                                        N/A
-                                    @endif
-                                </td>
-                                <td>
-                                    {{ $latestLead->representative->name ?? 'N/A' }}
-                                </td>
-                                <!-- <td class="text-center">
-                                    @php
-                                        $status = $latestFollowup->status;
-                                    @endphp
-                                    @if($status == 1)
-                                        <span class="badge !rounded-full bg-warning/10 text-warning">Pending</span>
-                                    @elseif($status == 2)
-                                        <span class="badge !rounded-full bg-success/10 text-success">Completed</span>
-                                    @elseif($status == 3)
-                                        <span class="badge !rounded-full bg-danger/10 text-danger">Skipped</span>
-                                    @else
-                                        <span class="badge !rounded-full bg-black/10">N/A</span>
-                                    @endif
-                                </td> -->
-                                <td>
-                                    {{ $latestFollowup->next_followup_date ? date('d-m-Y H:i', strtotime($latestFollowup->next_followup_date)) : 'N/A' }}
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+            <div class="box">
+                <div class="box-header">
+                    <h5 class="box-title">Services and Extra Services</h5>
+                </div>
+                <div class="box-body">
+                    <div class="grid grid-cols-12 gap-6">
+                        <div class="xl:col-span-6 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
+                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Products</label>
+                            <p class="text-gray-800 dark:text-white">{{ $clientInfo['products'] ?? 'N/A' }}</p>
+                        </div>
+                        <div class="xl:col-span-6 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
+                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Number OF Passengers</label>
+                            <p class="text-gray-800 dark:text-white">{{ $clientInfo['passengers'] ?? 'N/A' }}</p>
+                        </div>
+                        <div class="xl:col-span-6 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
+                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Occasion</label>
+                            <p class="text-gray-800 dark:text-white">{{ $clientInfo['occasion'] ?? 'N/A' }}</p>
+                        </div>
+                        <div class="xl:col-span-6 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
+                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Services</label>
+                            <p class="text-gray-800 dark:text-white">
+                                {{ $serviceLabels->isNotEmpty() ? $serviceLabels->implode(', ') : 'N/A' }}
+                            </p>
+                        </div>
+                        <div class="xl:col-span-6 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
+                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Extra Services</label>
+                            <p class="text-gray-800 dark:text-white">
+                                {{ $extraServiceLabels->isNotEmpty() ? $extraServiceLabels->implode(', ') : 'N/A' }}
+                            </p>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
-        @endif
 
             <!-- Call Notes Section -->
             @if(isset($latestLead))
@@ -352,7 +247,106 @@
                         <h5 class="box-title">Call Notes</h5>
                     </div>
                     <div class="box-body">
-                        @if($latestLead->description)
+                        @if($historyRows->count() > 0)
+                            <ul class="list-unstyled mb-0 upcoming-events-list">
+                                @foreach($historyRows as $followup)
+                                    @php
+                                        $statusLabels = [
+                                            0 => 'Initiated',
+                                            1 => 'Active',
+                                            2 => 'Cancelled',
+                                            3 => 'Full payment received',
+                                            4 => 'Partial payment received',
+                                            5 => 'Completed',
+                                            6 => 'Pending',
+                                            7 => 'Rescheduled',
+                                            8 => 'Approved',
+                                            9 => 'Rejected',
+                                        ];
+                                        $statusText = $statusLabels[(int) $followup->status] ?? 'N/A';
+                                    @endphp
+                                    <li>
+                                        <div class="grid grid-cols-12 gap-3">
+                                            <div class="xl:col-span-12 col-span-12">
+                                                <div class="md:flex block items-start justify-between">
+                                                    <p class="mb-0 text-[.875rem]">
+                                                        Note : {{ $followup->followup_note ?? 'N/A' }}
+                                                        @if($followup->customer_not_picked_up)
+                                                            <span class="badge bg-warning/10 text-warning ms-2">No Answer</span>
+                                                        @endif
+                                                    </p>
+                                                    <div>
+                                                        <span class="text-[#8c9097] dark:text-white/50">
+                                                            <i class="ri-time-line align-middle me-1 inline-block"></i>
+                                                            Created At: {{ $followup->created_at ? $followup->created_at->format('Y-m-d H:i:s') : 'N/A' }}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="xl:col-span-12 col-span-12">
+                                                <p class="mb-0 text-[#8c9097] dark:text-white/50">
+                                                    Created By: {{ $followup->followedBy->name ?? 'System' }}
+                                                </p>
+                                            </div>
+                                            @if($followup->file)
+                                                <div class="xl:col-span-12 col-span-12">
+                                                    <a href="{{ route('admin.followups.file', ['filename' => basename($followup->file)]) }}"
+                                                        target="_blank"
+                                                        class="me-2 text-primary">
+                                                        <i class="ri-image-line"></i> View Image
+                                                    </a>
+                                                </div>
+                                            @endif
+                                            @if($followup->total_amount || $followup->received_amount || $followup->service_amount || $followup->discount_amount)
+                                                <div class="xl:col-span-12 col-span-12">
+                                                    <div class="grid grid-cols-12 gap-3">
+                                                        @if($followup->service_amount)
+                                                            <div class="xxl:col-span-3 xl:col-span-3 col-span-12">
+                                                                <span class="text-info">Service Amount: {{ number_format($followup->service_amount, 2) }}</span>
+                                                            </div>
+                                                        @endif
+                                                        @if($followup->discount_amount)
+                                                            <div class="xxl:col-span-3 xl:col-span-3 col-span-12">
+                                                                <span class="text-success">Discount: {{ number_format($followup->discount_amount, 2) }}</span>
+                                                            </div>
+                                                        @endif
+                                                        @if($followup->total_amount)
+                                                            <div class="xxl:col-span-3 xl:col-span-3 col-span-12">
+                                                                <span class="text-primary">Total Amount: {{ number_format($followup->total_amount, 2) }}</span>
+                                                            </div>
+                                                        @endif
+                                                        @if((float) ($followup->received_amount ?? 0) > 0)
+                                                            <div class="xxl:col-span-3 xl:col-span-3 col-span-12">
+                                                                <span class="text-success">Received: {{ number_format($followup->received_amount, 2) }}</span>
+                                                            </div>
+                                                        @endif
+                                                    </div>
+                                                </div>
+                                            @endif
+                                            @if($followup->payment_method || $followup->paid_date)
+                                                <div class="xl:col-span-12 col-span-12">
+                                                    <div class="grid grid-cols-12 gap-3">
+                                                        @if($followup->payment_method)
+                                                            <div class="xl:col-span-3 col-span-12">
+                                                                <span class="text-info">Payment Method: {{ ucfirst($followup->payment_method) }}</span>
+                                                            </div>
+                                                        @endif
+                                                        @if($followup->paid_date)
+                                                            <div class="xl:col-span-3 col-span-12">
+                                                                <span class="text-warning">Paid Date: {{ $followup->paid_date->format('d-m-Y') }}</span>
+                                                            </div>
+                                                        @endif
+                                                    </div>
+                                                </div>
+                                            @endif
+                                            <div class="xl:col-span-12 col-span-12">
+                                                <span class="badge bg-primary/10 text-primary">Status: {{ $statusText }}</span>
+                                            </div>
+                                        </div>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        @elseif($latestLead->description)
                             <p class="text-gray-800 dark:text-white whitespace-pre-line">{{ $latestLead->description }}</p>
                         @else
                             <p class="text-gray-500 dark:text-white/70">No call notes available.</p>
@@ -361,146 +355,6 @@
                 </div>
             @endif
 
-            <!-- Trip Segments Section -->
-            @if(count($leads) > 0 && count($leads[0]->rideSegments) > 0)
-                <div class="box">
-                    <div class="box-header">
-                        <h5 class="box-title">Trip Itinerary</h5>
-                    </div>
-                    <div class="box-body">
-                        <div class="overflow-auto">
-                            <table class="table display responsive nowrap table-datatable" width="100%">
-                                <thead class="bg-primary text-white">
-                                    <tr class="border-b border-defaultborder">
-                                        <th data-priority="1">S.No</th>
-                                        <th data-priority="2">From Date</th>
-                                        <th data-priority="3">To Date</th>
-                                        <th data-priority="4">From Place</th>
-                                        <th data-priority="5">To Place</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach($leads[0]->rideSegments as $index => $segment)
-                                        <tr class="border-b border-defaultborder">
-                                            <td>{{ $index + 1 }}</td>
-                                            <td>
-                                                {{ date('d-m-Y H:i', strtotime($segment->from_date)) }}
-                                            </td>
-                                            <td>
-                                                {{ date('d-m-Y H:i', strtotime($segment->to_date)) }}
-                                            </td>
-                                            <td>
-                                                {{ $segment->from_place }}
-                                            </td>
-                                            <td>
-                                                {{ $segment->to_place }}
-                                            </td>
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            @endif
-            
-            <!-- Services & Costing Section -->
-            <div class="box">
-                <div class="box-header">
-                    <h5 class="box-title">Services & Costing</h5>
-                </div>
-                <div class="box-body">
-                    @if($selectedServices->count() > 0 || $selectedExtraServices->count() > 0)
-                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            <!-- Services Section -->
-                            @if($selectedServices->count() > 0)
-                                <div class="space-y-4">
-                                    <h6 class="text-lg font-semibold text-gray-800 dark:text-white">Selected Services</h6>
-                                    <div class="overflow-auto">
-                                        <table class="min-w-full divide-y divide-gray-200 dark:divide-white/10">
-                                            <thead class="bg-gray-50 dark:bg-black/20">
-                                                <tr>
-                                                    <th class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-white/70 uppercase">Service</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody class="divide-y divide-gray-200 dark:divide-white/10">
-                                                @foreach($selectedServices as $service)
-                                                    <tr>
-                                                        <td class="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                                                            <div class="font-medium">{{ $service->service }}</div>
-                                                            @if($service->description)
-                                                                <div class="text-xs text-gray-500 dark:text-white/70 mt-1">{{ $service->description }}</div>
-                                                            @endif
-                                                        </td>
-                                                    </tr>
-                                                @endforeach
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            @endif
-
-                            <!-- Extra Services Section -->
-                            @if($selectedExtraServices->count() > 0)
-                                <div class="space-y-4">
-                                    <h6 class="text-lg font-semibold text-gray-800 dark:text-white">Extra Services</h6>
-                                    <div class="overflow-auto">
-                                        <table class="min-w-full divide-y divide-gray-200 dark:divide-white/10">
-                                            <thead class="bg-gray-50 dark:bg-black/20">
-                                                <tr>
-                                                    <th class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-white/70 uppercase">Extra Service</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody class="divide-y divide-gray-200 dark:divide-white/10">
-                                                @foreach($selectedExtraServices as $extraService)
-                                                    <tr>
-                                                        <td class="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                                                            <div class="font-medium">{{ $extraService->extra_service }}</div>
-                                                            @if($extraService->description)
-                                                                <div class="text-xs text-gray-500 dark:text-white/70 mt-1">{{ $extraService->description }}</div>
-                                                            @endif
-                                                        </td>
-                                                    </tr>
-                                                @endforeach
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            @endif
-                        </div>
-
-                        <!-- Total Costing Summary -->
-                        <div class="mt-6 bg-gray-50 dark:bg-black/20 rounded-lg p-6">
-                            <h6 class="text-lg font-semibold text-gray-800 dark:text-white mb-4">Cost Summary</h6>
-                            
-
-                            
-                            <div class="space-y-3">
-                                @if($isStoredAmount && $totalAmount > 0)
-                                    <div class="flex justify-between items-center bg-green-50 dark:bg-green-900/20 p-3 rounded-lg">
-                                        <span class="text-lg font-semibold text-green-800 dark:text-green-300">Total Amount:</span>
-                                        <span class="text-lg font-bold text-green-600 dark:text-green-400">₹{{ number_format($totalAmount, 2) }}</span>
-                                    </div>
-                                   
-                                @else
-                                    <div class="flex justify-between items-center">
-                                        <span class="text-lg font-semibold text-gray-900 dark:text-white">Total Amount:</span>
-                                        <span class="text-lg font-bold text-primary">₹{{ number_format($totalAmount, 2) }}</span>
-                                    </div>
-                                @endif
-                            </div>
-                        </div>
-                    @else
-                        <div class="text-center py-8">
-                            <div class="text-gray-500 dark:text-white/70">
-                                <i class="ti ti-receipt text-4xl mb-4"></i>
-                                <p class="text-lg font-medium">No Services Selected</p>
-                                <p class="text-sm">No services or extra services have been selected for this lead yet.</p>
-                            </div>
-                        </div>
-                    @endif
-                </div>
-            </div>
         </div>
     </div>
 
