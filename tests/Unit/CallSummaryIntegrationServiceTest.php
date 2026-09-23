@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Models\Client;
+use App\Models\IvrAgent;
 use App\Models\IvrCallLog;
 use App\Models\Lead;
 use App\Models\LeadFollowup;
@@ -240,6 +241,77 @@ class CallSummaryIntegrationServiceTest extends TestCase
         $this->assertTrue($followup->customer_not_picked_up);
     }
 
+    public function test_agent_phone_is_primary_agent_mapping_key(): void
+    {
+        $actualAgent = User::create([
+            'name' => 'Sourav Namdeo',
+            'email' => 'sourav-agent-phone@example.test',
+            'password' => 'secret',
+            'status' => 1,
+        ]);
+
+        User::create([
+            'name' => 'Wrong Agent',
+            'email' => 'wrong-agent-phone@example.test',
+            'password' => 'secret',
+            'status' => 1,
+        ]);
+
+        IvrAgent::create([
+            'vi_agent_name' => 'Sourav SkyRack',
+            'vi_agent_number' => '9876500000',
+            'mapped_user_id' => $actualAgent->id,
+            'is_active' => true,
+        ]);
+
+        $client = Client::create([
+            'id' => (string) Str::uuid(),
+            'name' => 'Agent Phone Customer',
+            'contact_number' => '9000000199',
+            'alternate_number' => null,
+            'status' => 1,
+        ]);
+
+        $lead = Lead::create([
+            'id' => (string) Str::uuid(),
+            'client_id' => $client->id,
+            'representative_user_id' => $actualAgent->id,
+        ]);
+
+        LeadFollowup::create([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $lead->id,
+            'next_followup_date' => '2026-08-14 10:00:00',
+            'followup_note' => 'Existing active follow-up',
+            'followed_by' => $actualAgent->id,
+            'status' => 1,
+        ]);
+
+        $integration = app(CallSummaryIntegrationService::class)->receive([
+            'phone_number' => '9000000199',
+            'agent_phone' => '+91 98765 00000',
+            'summary' => 'Customer requested pricing from Sourav.',
+            'followup_date' => '2026-08-15 11:30:00',
+            'call_start_at' => '2026-08-14 16:10:00',
+            'call_end_at' => '2026-08-14 16:18:20',
+            'agent_name' => 'Wrong Agent',
+            'direction' => 'outgoing',
+            'sentiment_score' => 82,
+            'followup_recording_id' => 4101,
+        ]);
+
+        $this->assertSame('followup_created', $integration->status);
+        $this->assertSame($actualAgent->id, $integration->agent_user_id);
+        $this->assertSame('+91 98765 00000', $integration->agent_phone);
+        $this->assertSame('9876500000', $integration->normalized_agent_phone);
+        $this->assertDatabaseHas('lead_followups', [
+            'lead_id' => $lead->id,
+            'followed_by' => $actualAgent->id,
+            'followup_recording_id' => 4101,
+            'followup_note' => 'Customer requested pricing from Sourav.',
+        ]);
+    }
+
     public function test_ivr_lead_id_is_not_trusted_when_call_phone_belongs_to_another_customer(): void
     {
         $user = User::create([
@@ -442,6 +514,7 @@ class CallSummaryIntegrationServiceTest extends TestCase
         Schema::create('ivr_agents', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->string('vi_agent_name')->nullable();
+            $table->string('vi_agent_number')->nullable();
             $table->uuid('mapped_user_id')->nullable();
             $table->boolean('is_active')->default(true);
             $table->timestamps();
@@ -473,6 +546,8 @@ class CallSummaryIntegrationServiceTest extends TestCase
             $table->timestamp('call_end_at');
             $table->string('agent_name', 150);
             $table->string('normalized_agent_name', 150)->nullable();
+            $table->string('agent_phone', 50)->nullable();
+            $table->string('normalized_agent_phone', 20)->nullable();
             $table->string('direction', 20);
             $table->decimal('sentiment_score', 5, 2)->nullable();
             $table->boolean('is_dnp')->default(false);

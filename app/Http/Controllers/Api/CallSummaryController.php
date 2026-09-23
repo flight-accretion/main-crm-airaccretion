@@ -89,6 +89,13 @@ class CallSummaryController extends Controller
                             'max:150',
                         ],
 
+                    'agent_phone' =>
+                        [
+                            'nullable',
+                            'string',
+                            'max:50',
+                        ],
+
                     'direction' =>
                         [
                             'required',

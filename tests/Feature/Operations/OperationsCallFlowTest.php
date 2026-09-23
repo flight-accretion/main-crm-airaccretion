@@ -357,6 +357,8 @@ class OperationsCallFlowTest extends TestCase
             $table->timestamp('call_end_at');
             $table->string('agent_name', 150);
             $table->string('normalized_agent_name', 150)->nullable();
+            $table->string('agent_phone', 50)->nullable();
+            $table->string('normalized_agent_phone', 20)->nullable();
             $table->string('direction', 20);
             $table->decimal('sentiment_score', 5, 2)->nullable();
             $table->boolean('is_dnp')->default(false);

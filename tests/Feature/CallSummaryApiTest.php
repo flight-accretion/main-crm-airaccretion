@@ -91,6 +91,7 @@ class CallSummaryApiTest extends TestCase
                     'call_start_at' => '2026-09-03 13:34:37',
                     'call_end_at' => '2026-09-03 13:34:56',
                     'agent_name' => 'Samarpit Sharma',
+                    'agent_phone' => '+91 91091 52175',
                     'direction' => 'unknown',
                     'sentiment_score' => null,
                     'followup_recording_id' => 980,
@@ -112,6 +113,8 @@ class CallSummaryApiTest extends TestCase
                 'phone_number' => '8655388628',
                 'normalized_phone' => '8655388628',
                 'direction' => 'unknown',
+                'agent_phone' => '+91 91091 52175',
+                'normalized_agent_phone' => '9109152175',
                 'lead_id' => $lead->id,
                 'status' => 'followup_created',
                 'followup_recording_id' => 980,
@@ -518,6 +521,7 @@ class CallSummaryApiTest extends TestCase
         Schema::create('ivr_agents', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->string('vi_agent_name')->nullable();
+            $table->string('vi_agent_number')->nullable();
             $table->uuid('mapped_user_id')->nullable();
             $table->boolean('is_active')->default(true);
             $table->timestamps();
@@ -549,6 +553,8 @@ class CallSummaryApiTest extends TestCase
             $table->timestamp('call_end_at');
             $table->string('agent_name', 150);
             $table->string('normalized_agent_name', 150)->nullable();
+            $table->string('agent_phone', 50)->nullable();
+            $table->string('normalized_agent_phone', 20)->nullable();
             $table->string('direction', 20);
             $table->decimal('sentiment_score', 5, 2)->nullable();
             $table->boolean('is_dnp')->default(false);

@@ -31,6 +31,8 @@ class CallSummaryIntegration extends Model
 
         'agent_name',
         'normalized_agent_name',
+        'agent_phone',
+        'normalized_agent_phone',
 
         'direction',
         'sentiment_score',

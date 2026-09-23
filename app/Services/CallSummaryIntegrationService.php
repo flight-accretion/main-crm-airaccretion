@@ -41,6 +41,13 @@ class CallSummaryIntegrationService
             );
 
 
+        $agentPhone =
+            $this->normalizePhone(
+                $payload['agent_phone']
+                ?? ''
+            );
+
+
         $recordingId =
             $this->normalizeRecordingId(
                 $payload['followup_recording_id']
@@ -153,6 +160,16 @@ class CallSummaryIntegrationService
             'normalized_agent_name' =>
                 $agent,
 
+            'agent_phone' =>
+                array_key_exists('agent_phone', $payload)
+                    ? trim((string) $payload['agent_phone'])
+                    : null,
+
+            'normalized_agent_phone' =>
+                $agentPhone !== ''
+                    ? $agentPhone
+                    : null,
+
             'direction' =>
                 $direction,
 
@@ -204,6 +221,9 @@ class CallSummaryIntegrationService
 
                 'normalized_agent_name' =>
                     $agent,
+
+                'normalized_agent_phone' =>
+                    $agentPhone,
 
                 'normalized_recording_id' =>
                     $recordingId,
@@ -1503,6 +1523,25 @@ if (
         CallSummaryIntegration $integration
     ): ?User {
 
+        $normalizedPhone =
+            $integration
+                ->normalized_agent_phone;
+
+
+        if ($normalizedPhone) {
+
+            $mappedByNumber =
+                $this->resolveAgentUserFromIvrNumber(
+                    $normalizedPhone
+                );
+
+            if ($mappedByNumber) {
+
+                return $mappedByNumber;
+            }
+        }
+
+
         $normalized =
             $integration
                 ->normalized_agent_name;
@@ -1595,6 +1634,56 @@ if (
             ) {
 
                 return $user;
+            }
+        }
+
+
+        return null;
+    }
+
+
+    private function resolveAgentUserFromIvrNumber(
+        string $normalizedPhone
+    ): ?User {
+
+        $agents =
+            IvrAgent::query()
+                ->where(
+                    'is_active',
+                    true
+                )
+                ->whereNotNull(
+                    'mapped_user_id'
+                )
+                ->get();
+
+
+        foreach (
+            $agents
+            as
+            $agent
+        ) {
+
+            if (
+                $this->normalizePhone(
+                    $agent->vi_agent_number
+                    ?? ''
+                )
+                ===
+                $normalizedPhone
+            ) {
+
+                return User::query()
+                    ->where(
+                        'id',
+                        $agent
+                            ->mapped_user_id
+                    )
+                    ->where(
+                        'status',
+                        1
+                    )
+                    ->first();
             }
         }
 
