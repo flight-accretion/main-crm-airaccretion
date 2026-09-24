@@ -53,6 +53,33 @@
             action="{{ route('admin.kpi.index') }}"
             class="grid grid-cols-12 gap-4 items-end"
         >
+            @if($canSwitchDepartment ?? false)
+                <div class="xl:col-span-3 md:col-span-6 col-span-12">
+
+                    <label class="ti-form-label">
+                        Department
+                    </label>
+
+                    <select
+                        name="department"
+                        class="form-control"
+                    >
+                        @foreach([
+                            'sales' => 'Retail Sales',
+                            'operations' => 'Operations',
+                            'accounts' => 'Accounts',
+                        ] as $departmentKey => $departmentLabel)
+                            <option
+                                value="{{ $departmentKey }}"
+                                {{ ($department ?? 'sales') === $departmentKey ? 'selected' : '' }}
+                            >
+                                {{ $departmentLabel }}
+                            </option>
+                        @endforeach
+                    </select>
+
+                </div>
+            @endif
 
             <div class="xl:col-span-3 md:col-span-6 col-span-12">
 
@@ -165,10 +192,46 @@
 
 
 <div class="box">
-    <div class="box-body overflow-x-auto p-0">
+    <div class="box-body p-0">
+
+        <div class="grid grid-cols-12 gap-3 items-end p-4 border-b">
+            <div class="xl:col-span-5 md:col-span-6 col-span-12">
+                <label class="ti-form-label" for="kpi-dashboard-search">
+                    Search
+                </label>
+                <input
+                    type="search"
+                    id="kpi-dashboard-search"
+                    class="form-control"
+                    placeholder="Search scope, score, result, employee"
+                >
+            </div>
+
+            <div class="xl:col-span-2 md:col-span-3 col-span-6">
+                <label class="ti-form-label" for="kpi-dashboard-page-size">
+                    Rows
+                </label>
+                <select
+                    id="kpi-dashboard-page-size"
+                    class="form-control"
+                >
+                    <option value="10">10</option>
+                    <option value="25" selected>25</option>
+                    <option value="50">50</option>
+                    <option value="all">All</option>
+                </select>
+            </div>
+
+            <div class="xl:col-span-5 md:col-span-3 col-span-6 text-sm text-gray-500 md:text-right">
+                <span id="kpi-dashboard-count"></span>
+            </div>
+        </div>
+
+        <div class="overflow-x-auto">
 
         <table
             class="table table-bordered whitespace-nowrap min-w-full"
+            data-kpi-dashboard-table
         >
 
             <thead>
@@ -294,7 +357,7 @@
                     as $code => $metricMeta
                 )
 
-                    <tr>
+                    <tr data-kpi-dashboard-row>
 
                         {{-- Scope --}}
                         <td
@@ -478,6 +541,7 @@
                     <tr
                         class="font-semibold"
                         style="background:#f7dea0;"
+                        data-kpi-dashboard-total-row
                     >
 
                         <td>
@@ -546,6 +610,13 @@
 
         </table>
 
+        </div>
+
+        <div
+            id="kpi-dashboard-pagination"
+            class="flex flex-wrap justify-end gap-2 p-4 border-t"
+        ></div>
+
     </div>
 
 </div>
@@ -571,6 +642,195 @@
 
 
 <script>
+function initializeKpiDashboardTable() {
+    const table =
+        document.querySelector(
+            '[data-kpi-dashboard-table]'
+        );
+
+    if (!table) {
+        return;
+    }
+
+    const searchInput =
+        document.getElementById(
+            'kpi-dashboard-search'
+        );
+
+    const pageSizeInput =
+        document.getElementById(
+            'kpi-dashboard-page-size'
+        );
+
+    const countLabel =
+        document.getElementById(
+            'kpi-dashboard-count'
+        );
+
+    const pagination =
+        document.getElementById(
+            'kpi-dashboard-pagination'
+        );
+
+    const rows =
+        Array.from(
+            table.querySelectorAll(
+                '[data-kpi-dashboard-row]'
+            )
+        );
+
+    const totalRow =
+        table.querySelector(
+            '[data-kpi-dashboard-total-row]'
+        );
+
+    let currentPage = 1;
+
+    function currentPageSize() {
+        if (!pageSizeInput || pageSizeInput.value === 'all') {
+            return rows.length || 1;
+        }
+
+        return Number(pageSizeInput.value) || 25;
+    }
+
+    function matchingRows() {
+        const term =
+            (searchInput?.value || '')
+                .trim()
+                .toLowerCase();
+
+        if (!term) {
+            return rows;
+        }
+
+        return rows.filter(function (row) {
+            return row.textContent
+                .toLowerCase()
+                .includes(term);
+        });
+    }
+
+    function renderPagination(totalPages) {
+        if (!pagination) {
+            return;
+        }
+
+        pagination.innerHTML = '';
+
+        if (totalPages <= 1) {
+            return;
+        }
+
+        const previous =
+            document.createElement('button');
+        previous.type = 'button';
+        previous.className = 'ti-btn ti-btn-light';
+        previous.textContent = 'Previous';
+        previous.disabled = currentPage === 1;
+        previous.addEventListener('click', function () {
+            currentPage = Math.max(1, currentPage - 1);
+            render();
+        });
+        pagination.appendChild(previous);
+
+        for (let page = 1; page <= totalPages; page += 1) {
+            const button =
+                document.createElement('button');
+            button.type = 'button';
+            button.className =
+                page === currentPage
+                    ? 'ti-btn ti-btn-primary'
+                    : 'ti-btn ti-btn-light';
+            button.textContent = page;
+            button.addEventListener('click', function () {
+                currentPage = page;
+                render();
+            });
+            pagination.appendChild(button);
+        }
+
+        const next =
+            document.createElement('button');
+        next.type = 'button';
+        next.className = 'ti-btn ti-btn-light';
+        next.textContent = 'Next';
+        next.disabled = currentPage === totalPages;
+        next.addEventListener('click', function () {
+            currentPage = Math.min(totalPages, currentPage + 1);
+            render();
+        });
+        pagination.appendChild(next);
+    }
+
+    function render() {
+        const filtered = matchingRows();
+        const pageSize = currentPageSize();
+        const totalPages =
+            Math.max(
+                1,
+                Math.ceil(filtered.length / pageSize)
+            );
+
+        currentPage =
+            Math.min(currentPage, totalPages);
+
+        const start =
+            (currentPage - 1) * pageSize;
+
+        const end =
+            start + pageSize;
+
+        rows.forEach(function (row) {
+            row.style.display = 'none';
+        });
+
+        filtered
+            .slice(start, end)
+            .forEach(function (row) {
+                row.style.display = '';
+            });
+
+        if (totalRow) {
+            totalRow.style.display =
+                filtered.length ? '' : 'none';
+        }
+
+        if (countLabel) {
+            countLabel.textContent =
+                filtered.length
+                    ? 'Showing '
+                        + (start + 1)
+                        + '-'
+                        + Math.min(end, filtered.length)
+                        + ' of '
+                        + filtered.length
+                        + ' KPI rows'
+                    : 'No KPI rows found';
+        }
+
+        renderPagination(totalPages);
+    }
+
+    searchInput?.addEventListener(
+        'input',
+        function () {
+            currentPage = 1;
+            render();
+        }
+    );
+
+    pageSizeInput?.addEventListener(
+        'change',
+        function () {
+            currentPage = 1;
+            render();
+        }
+    );
+
+    render();
+}
+
 document.addEventListener(
     'DOMContentLoaded',
     function () {
@@ -608,6 +868,8 @@ document.addEventListener(
         );
 
         toggleCustomDates();
+
+        initializeKpiDashboardTable();
     }
 );
 </script>

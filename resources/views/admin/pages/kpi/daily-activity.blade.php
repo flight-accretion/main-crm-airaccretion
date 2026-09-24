@@ -27,7 +27,7 @@
                 ->all();
         @endphp
 
-        <table class="table whitespace-nowrap min-w-full">
+        <table class="table display nowrap kpi-daily-activity-datatable whitespace-nowrap min-w-full" width="100%">
             <thead>
                 <tr>
                     <th>Employee</th>
@@ -67,3 +67,30 @@
     </div>
 </div>
 @endsection
+
+@push('scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            if (!window.jQuery || !$.fn.DataTable) {
+                return;
+            }
+
+            const table = $('.kpi-daily-activity-datatable');
+
+            if (
+                table.length
+                && !$.fn.DataTable.isDataTable(table[0])
+                && !table.find('tbody td[colspan]').length
+            ) {
+                table.DataTable({
+                    pageLength: 10,
+                    lengthMenu: [10, 25, 50, 100],
+                    responsive: false,
+                    scrollX: true,
+                    autoWidth: false,
+                    ordering: true
+                });
+            }
+        });
+    </script>
+@endpush

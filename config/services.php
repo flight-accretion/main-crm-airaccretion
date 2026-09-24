@@ -49,6 +49,14 @@ return [
         'token' => env('META_WHATSAPP_TOKEN'),
         'phone_number_id' => env('META_WHATSAPP_PHONE_NUMBER_ID'),
     ],
+
+    'google_drive_review' => [
+        'enabled' => env('GOOGLE_DRIVE_REVIEW_ENABLED', false),
+        'folder_id' => env('GOOGLE_DRIVE_REVIEW_FOLDER_ID'),
+        'service_account_path' => env('GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH'),
+        'service_account_json_base64' => env('GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_BASE64'),
+    ],
+
     'msg91' => [
         'auth_key'            => env('MSG91_AUTH_KEY'),
         'whatsapp_integrated' => env('MSG91_WHATSAPP_INTEGRATED_NUMBER'),
@@ -157,6 +165,19 @@ return [
                 'WEBSITE_CATALOG_NOTES_SECRET'
             ),
 
+    ],
+
+    'booking_bank' => [
+    'account_name' => env('BOOKING_BANK_ACCOUNT_NAME'),
+    'bank_name' => env('BOOKING_BANK_NAME'),
+    'account_number' => env('BOOKING_BANK_ACCOUNT_NUMBER'),
+    'ifsc' => env('BOOKING_BANK_IFSC'),
+    'branch' => env('BOOKING_BANK_BRANCH'),
+],
+
+    'booking_whatsapp' => [
+        'enabled' => env('BOOKING_CONFIRMATION_WHATSAPP_ENABLED', true),
+        'company_number' => env('BOOKING_CONFIRMATION_WHATSAPP_COMPANY_NUMBER', '+91 95753 40786'),
     ],
 
 ];

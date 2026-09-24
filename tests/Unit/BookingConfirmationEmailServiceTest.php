@@ -15,6 +15,7 @@ use App\Services\BookingConfirmationEmailService;
 use Carbon\Carbon;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -234,6 +235,188 @@ class BookingConfirmationEmailServiceTest extends TestCase
 
         Mail::assertNothingSent();
         $this->assertSame(0, LeadFollowup::count());
+    }
+
+    public function test_send_also_sends_booking_confirmation_whatsapp_message(): void
+    {
+        Mail::fake();
+
+        config()->set(
+            'whatcrm.send_message_url',
+            'https://web.airaccretion.com/api/v1/send-message'
+        );
+        config()->set('whatcrm.send_message_token', 'booking-token');
+        config()->set('whatcrm.default_country_code', '91');
+        config()->set(
+            'services.booking_whatsapp.company_number',
+            '+91 95753 40786'
+        );
+
+        Http::fake([
+            'https://web.airaccretion.com/api/v1/send-message*' =>
+                Http::response(
+                    [
+                        'success' => true,
+                        'metaResponse' => [
+                            'messages' => [
+                                [
+                                    'id' => 'wamid.BOOKING-CONFIRM-1',
+                                    'message_status' => 'accepted',
+                                ],
+                            ],
+                        ],
+                    ],
+                    200
+                ),
+        ]);
+
+        $agent = $this->createUser(
+            UserType::SALES_EXECUTIVE,
+            'Booking Agent',
+            'booking.agent@example.test',
+            '9000000002'
+        );
+
+        $client = Client::create([
+            'id' => (string) Str::uuid(),
+            'name' => 'WhatsApp Customer',
+            'email' => 'whatsapp-customer@example.test',
+            'contact_number' => '9876543210',
+            'alternate_number' => '+91-9123456780',
+            'status' => 1,
+        ]);
+
+        $service = Service::create([
+            'id' => (string) Str::uuid(),
+            'service' => 'Helicopter Joyride 30 Minutes',
+            'description' => 'Joyride service',
+            'service_amount' => 50000,
+            'fees_percent' => 0,
+            'product_ids' => [],
+            'status' => 1,
+        ]);
+
+        $lead = Lead::create([
+            'id' => (string) Str::uuid(),
+            'client_id' => $client->id,
+            'representative_user_id' => $agent->id,
+            'service_ids' => [$service->id],
+            'number_of_passengers' => 2,
+        ]);
+
+        DB::table('lead_rides')->insert([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $lead->id,
+            'from_date' => '2026-09-26 10:00:00',
+            'to_date' => '2026-09-26 10:30:00',
+            'from_place' => 'Mumbai',
+            'to_place' => 'Mumbai',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        BookingEmailTemplate::create([
+            'id' => (string) Str::uuid(),
+            'subject' => 'Booking Confirmation | {{service_name}}',
+            'body' => implode(PHP_EOL, [
+                'Dear {{customer_name}},',
+                'Service Name: {{service_name}}',
+                'Date of Service: {{service_date}}',
+                'Time: {{time}}',
+                'Registration: {{registration_link}}',
+            ]),
+        ]);
+
+        $result = app(BookingConfirmationEmailService::class)
+            ->sendForLead($lead->fresh(), $agent, [
+                'payment_mode' => 'payment_due',
+                'advance_amount' => 10000,
+            ]);
+
+        $this->assertTrue($result['success']);
+        $this->assertTrue($result['whatsapp_sent']);
+
+        Http::assertSent(function ($request) use ($result) {
+            $payload = $request->data();
+            $body = data_get($payload, 'messageObject.text.body');
+
+            return str_contains(
+                    $request->url(),
+                    'https://web.airaccretion.com/api/v1/send-message?token=booking-token'
+                )
+                && data_get($payload, 'messageObject.to') === '919123456780'
+                && data_get($payload, 'messageObject.type') === 'text'
+                && str_contains($body, 'Your booking confirmation has been sent')
+                && str_contains($body, '+91 95753 40786')
+                && str_contains($body, $result['short_link'] ?: $result['registration_link']);
+        });
+
+        $this->assertDatabaseHas('whatsapp_contacts', [
+            'name' => 'WhatsApp Customer',
+            'normalized_phone' => '9123456780',
+        ]);
+
+        $this->assertDatabaseHas('whatsapp_conversations', [
+            'lead_id' => $lead->id,
+            'assigned_user_id' => $agent->id,
+        ]);
+
+        $this->assertDatabaseHas('whatsapp_messages', [
+            'provider_message_id' => 'wamid.BOOKING-CONFIRM-1',
+            'direction' => 'outgoing',
+            'sender_user_id' => $agent->id,
+            'message_type' => 'text',
+        ]);
+    }
+
+    public function test_preview_renders_booking_bank_details_from_config(): void
+    {
+        config()->set('services.booking_bank.account_name', 'Accretion Aviation Pvt Ltd');
+        config()->set('services.booking_bank.bank_name', 'HDFC Bank');
+        config()->set('services.booking_bank.account_number', '50200012345678');
+        config()->set('services.booking_bank.ifsc', 'HDFC0001234');
+        config()->set('services.booking_bank.branch', 'Indore');
+
+        $agent = $this->createUser(
+            UserType::SALES_EXECUTIVE,
+            'Sales Agent',
+            'agent@example.test'
+        );
+
+        $client = Client::create([
+            'id' => (string) Str::uuid(),
+            'name' => 'Bank Detail Customer',
+            'email' => 'bank-detail@example.test',
+            'contact_number' => '9876543210',
+            'status' => 1,
+        ]);
+
+        $lead = Lead::create([
+            'id' => (string) Str::uuid(),
+            'client_id' => $client->id,
+            'representative_user_id' => $agent->id,
+            'number_of_passengers' => 1,
+        ]);
+
+        $result = app(BookingConfirmationEmailService::class)
+            ->previewForLead($lead->fresh(), $agent);
+
+        $body = $result['body_before_payment']
+            . "\n"
+            . $result['body_after_payment'];
+
+        $this->assertTrue($result['success']);
+        $this->assertStringContainsString(
+            'Account Name: Accretion Aviation Pvt Ltd',
+            $body
+        );
+        $this->assertStringContainsString('Bank Name: HDFC Bank', $body);
+        $this->assertStringContainsString(
+            'Account Number: 50200012345678',
+            $body
+        );
+        $this->assertStringContainsString('IFSC Code: HDFC0001234', $body);
+        $this->assertStringContainsString('Branch: Indore', $body);
     }
 
     public function test_preview_uses_total_time_fallback_duration_and_customer_ride_time(): void
@@ -613,6 +796,46 @@ class BookingConfirmationEmailServiceTest extends TestCase
             $table->string('subject');
             $table->text('body');
             $table->uuid('updated_by')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('whatsapp_contacts', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('name')->nullable();
+            $table->string('normalized_phone', 30)->unique();
+            $table->string('raw_phone', 50)->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('whatsapp_conversations', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('contact_id');
+            $table->uuid('lead_id')->nullable();
+            $table->uuid('assigned_user_id')->nullable();
+            $table->string('whatcrm_chat_id')->nullable();
+            $table->string('status', 30)->default('open');
+            $table->text('last_message')->nullable();
+            $table->timestamp('last_message_at')->nullable();
+            $table->unsignedInteger('unread_count')->default(0);
+            $table->timestamps();
+        });
+
+        Schema::create('whatsapp_messages', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('conversation_id');
+            $table->uuid('lead_followup_id')->nullable();
+            $table->uuid('ai_reply_batch_id')->nullable();
+            $table->timestamp('ai_processed_at')->nullable();
+            $table->string('provider_message_id')->nullable()->unique();
+            $table->string('direction', 20);
+            $table->string('sender_type', 30);
+            $table->uuid('sender_user_id')->nullable();
+            $table->string('message_type', 30)->default('text');
+            $table->text('body')->nullable();
+            $table->string('provider_status', 50)->nullable();
+            $table->timestamp('message_at')->nullable();
+            $table->timestamp('crm_read_at')->nullable();
+            $table->json('raw_payload')->nullable();
             $table->timestamps();
         });
     }

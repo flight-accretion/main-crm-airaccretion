@@ -29,6 +29,7 @@ class AiAgentController extends Controller
 
                     Rule::in([
                         'whatsapp',
+                        'review',
                         'lead_scoring',
                         'generic',
                     ]),
@@ -130,6 +131,7 @@ class AiAgentController extends Controller
 
                     Rule::in([
                         'whatsapp',
+                        'review',
                         'lead_scoring',
                         'generic',
                     ]),

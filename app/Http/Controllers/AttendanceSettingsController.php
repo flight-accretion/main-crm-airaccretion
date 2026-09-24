@@ -5,10 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\AttendanceShiftPolicy;
 use App\Models\AttendanceUserShiftAssignment;
 use App\Models\User;
+use App\Services\Attendance\AttendancePolicyAssignmentService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\ValidationException;
 
 class AttendanceSettingsController extends Controller
 {
@@ -17,7 +17,9 @@ class AttendanceSettingsController extends Controller
         $policies =
             AttendanceShiftPolicy::query()
                 ->withCount(
-                    'assignments'
+                    [
+                        'activeAssignments as assignments_count',
+                    ]
                 )
                 ->orderByDesc(
                     'is_default'
@@ -50,9 +52,13 @@ class AttendanceSettingsController extends Controller
                 ->with([
                     'user:id,name',
                     'shiftPolicy:id,name,start_time,end_time,grace_minutes',
+                    'assignedBy:id,name',
                 ])
                 ->orderByDesc(
-                    'effective_from'
+                    'assigned_at'
+                )
+                ->orderByDesc(
+                    'created_at'
                 )
                 ->limit(
                     100
@@ -64,23 +70,9 @@ class AttendanceSettingsController extends Controller
                 ->with(
                     'shiftPolicy:id,name,start_time,end_time,grace_minutes'
                 )
-                ->whereDate(
-                    'effective_from',
-                    '<=',
-                    now()->toDateString()
-                )
                 ->where(
-                    function ($query) {
-                        $query
-                            ->whereNull(
-                                'effective_to'
-                            )
-                            ->orWhereDate(
-                                'effective_to',
-                                '>=',
-                                now()->toDateString()
-                            );
-                    }
+                    'is_active',
+                    true
                 )
                 ->get()
                 ->keyBy(
@@ -214,7 +206,10 @@ class AttendanceSettingsController extends Controller
             );
     }
 
-    public function storeAssignments(Request $request)
+    public function storeAssignments(
+        Request $request,
+        AttendancePolicyAssignmentService $assignmentService
+    )
     {
         $validated =
             $request->validate([
@@ -242,90 +237,39 @@ class AttendanceSettingsController extends Controller
                             true
                         ),
                 ],
-
-                'effective_from' => [
-                    'required',
-                    'date',
-                ],
-
-                'effective_to' => [
-                    'nullable',
-                    'date',
-                    'after_or_equal:effective_from',
-                ],
             ]);
 
-        $from =
-            $validated[
-                'effective_from'
-            ];
-
-        $to =
-            $validated[
-                'effective_to'
-            ]
-            ?? null;
-
-        foreach (
-            $validated[
-                'user_ids'
-            ]
-            as $userId
-        ) {
-            if (
-                $this->hasOverlappingAssignment(
-                    $userId,
-                    $from,
-                    $to
+        $policy =
+            AttendanceShiftPolicy::query()
+                ->where(
+                    'id',
+                    $validated['shift_policy_id']
                 )
-            ) {
-                throw ValidationException::withMessages([
-                    'assignments' =>
-                        'One or more selected employees already has an office time assignment in this date range.',
-                ]);
-            }
-        }
+                ->where(
+                    'is_active',
+                    true
+                )
+                ->firstOrFail();
 
-        DB::transaction(
-            function () use (
-                $validated,
-                $request,
-                $from,
-                $to
-            ) {
-                foreach (
-                    $validated[
-                        'user_ids'
-                    ]
-                    as $userId
-                ) {
-                    AttendanceUserShiftAssignment::create([
-                        'user_id' =>
-                            $userId,
+        $users =
+            User::query()
+                ->whereIn(
+                    'id',
+                    $validated['user_ids']
+                )
+                ->get()
+                ->keyBy('id');
 
-                        'shift_policy_id' =>
-                            $validated[
-                                'shift_policy_id'
-                            ],
-
-                        'effective_from' =>
-                            $from,
-
-                        'effective_to' =>
-                            $to,
-
-                        'created_by' =>
-                            optional(
-                                $request->user()
-                            )->id,
-
-                        'updated_by' =>
-                            optional(
-                                $request->user()
-                            )->id,
-                    ]);
-                }
-            }
+        $assignmentService->assignMany(
+            collect($validated['user_ids'])
+                ->map(
+                    fn (string $userId) =>
+                        $users->get($userId)
+                )
+                ->filter()
+                ->values(),
+            $policy,
+            $request->user()
         );
 
         return redirect()
@@ -393,38 +337,4 @@ class AttendanceSettingsController extends Controller
         return $validated;
     }
 
-    private function hasOverlappingAssignment(
-        string $userId,
-        string $from,
-        ?string $to
-    ): bool {
-        $rangeEnd =
-            $to
-            ?: '9999-12-31';
-
-        return AttendanceUserShiftAssignment::query()
-            ->where(
-                'user_id',
-                $userId
-            )
-            ->whereDate(
-                'effective_from',
-                '<=',
-                $rangeEnd
-            )
-            ->where(
-                function ($query) use ($from) {
-                    $query
-                        ->whereNull(
-                            'effective_to'
-                        )
-                        ->orWhereDate(
-                            'effective_to',
-                            '>=',
-                            $from
-                        );
-                }
-            )
-            ->exists();
-    }
 }

@@ -95,7 +95,7 @@ class AttendanceSettingsControllerTest extends AttendanceFeatureTestCase
         ]);
     }
 
-    public function test_bulk_assignment_rejects_overlapping_employee_range(): void
+    public function test_bulk_assignment_replaces_current_policy_without_manual_dates(): void
     {
         $admin = $this->createUserWithRole(
             'Attendance Admin',
@@ -107,7 +107,7 @@ class AttendanceSettingsControllerTest extends AttendanceFeatureTestCase
             UserType::SALES_EXECUTIVE
         );
 
-        $policy = AttendanceShiftPolicy::create([
+        $oldPolicy = AttendanceShiftPolicy::create([
             'name' => 'Default Office Time',
             'start_time' => '10:30',
             'end_time' => '19:30',
@@ -116,11 +116,22 @@ class AttendanceSettingsControllerTest extends AttendanceFeatureTestCase
             'is_active' => true,
         ]);
 
-        AttendanceUserShiftAssignment::create([
+        $newPolicy = AttendanceShiftPolicy::create([
+            'name' => 'Early Office Time',
+            'start_time' => '09:30',
+            'end_time' => '18:30',
+            'grace_minutes' => 10,
+            'is_default' => false,
+            'is_active' => true,
+        ]);
+
+        $oldAssignment = AttendanceUserShiftAssignment::create([
             'user_id' => $employee->id,
-            'shift_policy_id' => $policy->id,
+            'shift_policy_id' => $oldPolicy->id,
             'effective_from' => '2026-09-01',
-            'effective_to' => '2026-09-30',
+            'effective_to' => null,
+            'is_active' => true,
+            'assigned_at' => '2026-09-01 09:00:00',
         ]);
 
         $this
@@ -128,60 +139,24 @@ class AttendanceSettingsControllerTest extends AttendanceFeatureTestCase
             ->from(route('admin.attendance.settings.index'))
             ->post(route('admin.attendance.settings.assignments.store'), [
                 'user_ids' => [$employee->id],
-                'shift_policy_id' => $policy->id,
-                'effective_from' => '2026-09-15',
-                'effective_to' => '2026-10-15',
-            ])
-            ->assertRedirect(route('admin.attendance.settings.index'))
-            ->assertSessionHasErrors('assignments');
-    }
-
-    public function test_bulk_assignment_allows_next_day_after_existing_range(): void
-    {
-        $admin = $this->createUserWithRole(
-            'Attendance Admin',
-            UserType::SUPER_ADMIN
-        );
-
-        $employee = $this->createUserWithRole(
-            'Sales Employee',
-            UserType::SALES_EXECUTIVE
-        );
-
-        $policy = AttendanceShiftPolicy::create([
-            'name' => 'Default Office Time',
-            'start_time' => '10:30',
-            'end_time' => '19:30',
-            'grace_minutes' => 15,
-            'is_default' => true,
-            'is_active' => true,
-        ]);
-
-        AttendanceUserShiftAssignment::create([
-            'user_id' => $employee->id,
-            'shift_policy_id' => $policy->id,
-            'effective_from' => '2026-09-01',
-            'effective_to' => '2026-09-30',
-        ]);
-
-        $this
-            ->actingAs($admin)
-            ->post(route('admin.attendance.settings.assignments.store'), [
-                'user_ids' => [$employee->id],
-                'shift_policy_id' => $policy->id,
-                'effective_from' => '2026-10-01',
-                'effective_to' => null,
+                'shift_policy_id' => $newPolicy->id,
             ])
             ->assertRedirect(route('admin.attendance.settings.index'))
             ->assertSessionHasNoErrors();
 
-        $this->assertTrue(
+        $this->assertFalse($oldAssignment->fresh()->is_active);
+        $this->assertNotNull($oldAssignment->fresh()->unassigned_at);
+
+        $activeAssignments =
             AttendanceUserShiftAssignment::query()
                 ->where('user_id', $employee->id)
-                ->where('shift_policy_id', $policy->id)
-                ->whereDate('effective_from', '2026-10-01')
-                ->exists()
-        );
+                ->where('is_active', true)
+                ->get();
+
+        $this->assertCount(1, $activeAssignments);
+        $this->assertSame($newPolicy->id, $activeAssignments->first()->shift_policy_id);
+        $this->assertSame($admin->id, $activeAssignments->first()->assigned_by);
+        $this->assertNotNull($activeAssignments->first()->assigned_at);
     }
 
     public function test_bulk_assignment_rejects_inactive_policy(): void
@@ -210,7 +185,6 @@ class AttendanceSettingsControllerTest extends AttendanceFeatureTestCase
             ->post(route('admin.attendance.settings.assignments.store'), [
                 'user_ids' => [$employee->id],
                 'shift_policy_id' => $policy->id,
-                'effective_from' => '2026-10-01',
             ])
             ->assertSessionHasErrors('shift_policy_id');
     }

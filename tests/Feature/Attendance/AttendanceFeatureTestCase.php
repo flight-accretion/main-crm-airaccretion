@@ -115,6 +115,10 @@ abstract class AttendanceFeatureTestCase extends TestCase
                 $table->uuid('shift_policy_id');
                 $table->date('effective_from');
                 $table->date('effective_to')->nullable();
+                $table->boolean('is_active')->default(true);
+                $table->timestamp('assigned_at')->nullable();
+                $table->timestamp('unassigned_at')->nullable();
+                $table->uuid('assigned_by')->nullable();
                 $table->uuid('created_by')->nullable();
                 $table->uuid('updated_by')->nullable();
                 $table->timestamps();

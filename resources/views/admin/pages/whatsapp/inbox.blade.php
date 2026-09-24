@@ -669,9 +669,9 @@
                             <span class="wa-contact-top">
                                 <span class="wa-contact-name-line">
                                     <span class="wa-contact-name">${escapeHtml(conversationLabel(conversation))}</span>
-                                    ${followupBadge} ${viewLeadButton}
+                                    ${followupBadge}
                                 </span>
-                                
+                                ${viewLeadButton}
                                 ${unreadBadge}
                             </span>
                             <span class="wa-contact-number">${escapeHtml(conversation.number || conversation.raw_phone || '-')}</span>
@@ -910,11 +910,26 @@
                         const outgoingClass = message.direction === 'outgoing'
                             ? ' is-outgoing'
                             : '';
+                        const mediaPreview = message.message_type === 'image' && message.media_url
+                            ? `
+                                <div class="mt-2">
+                                    <a href="${escapeHtml(message.media_url)}" target="_blank" rel="noopener noreferrer">
+                                        <img
+                                            src="${escapeHtml(message.media_url)}"
+                                            alt="Customer image"
+                                            class="rounded max-w-xs"
+                                            loading="lazy"
+                                        >
+                                    </a>
+                                </div>
+                            `
+                            : '';
 
                         return `
                             <div class="wa-message-row${outgoingClass}">
                                 <div class="wa-bubble">
                                     <div class="wa-bubble-body">${escapeHtml(message.body || '-')}</div>
+                                    ${mediaPreview}
                                     <div class="wa-bubble-meta">
                                         <span>${escapeHtml(message.sender_name || '')}</span>
                                         <span>${escapeHtml(message.message_at || '')}</span>

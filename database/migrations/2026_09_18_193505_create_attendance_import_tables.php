@@ -95,6 +95,18 @@ class CreateAttendanceImportTables extends Migration
              */
             $table->uuid('source_import_id');
 
+            /*
+             * Snapshot of the office-time policy used when
+             * this row was evaluated. Historical KPI should
+             * not change just because the employee's current
+             * policy changes later.
+             */
+            $table->uuid('resolved_shift_policy_id')->nullable();
+            $table->string('resolved_shift_policy_name', 150)->nullable();
+            $table->time('resolved_shift_start_time')->nullable();
+            $table->time('resolved_shift_end_time')->nullable();
+            $table->unsignedSmallInteger('resolved_shift_grace_minutes')->nullable();
+
             $table->timestamps();
 
             $table->unique(

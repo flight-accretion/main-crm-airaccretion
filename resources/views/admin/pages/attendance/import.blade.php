@@ -1,6 +1,38 @@
 @extends('admin.layouts.header')
 
 @section('content')
+@php
+    $filters = $filters ?? [];
+    $uploadedUsers = $uploadedUsers ?? collect();
+    $perPage = $perPage ?? 25;
+@endphp
+
+<style>
+    .attendance-preview-table-wrap {
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+        max-height: 520px;
+        overflow: auto;
+    }
+
+    .attendance-preview-table-wrap thead th {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        background: #f9fafb;
+    }
+
+    .attendance-preview-stat {
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+        padding: 1rem;
+        background: #fff;
+    }
+
+    .attendance-import-table-wrap .dataTables_scrollBody {
+        border-bottom: 1px solid #e5e7eb;
+    }
+</style>
 
 <div class="block justify-between page-header md:flex">
 
@@ -238,7 +270,7 @@
             class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6"
         >
 
-            <div class="border rounded p-4">
+            <div class="attendance-preview-stat">
 
                 <div class="text-sm text-gray-500">
                     Employees
@@ -254,7 +286,7 @@
             </div>
 
 
-            <div class="border rounded p-4">
+            <div class="attendance-preview-stat">
 
                 <div class="text-sm text-gray-500">
                     Attendance Rows
@@ -270,7 +302,7 @@
             </div>
 
 
-            <div class="border rounded p-4">
+            <div class="attendance-preview-stat">
 
                 <div class="text-sm text-gray-500">
                     Matched
@@ -286,7 +318,7 @@
             </div>
 
 
-            <div class="border rounded p-4">
+            <div class="attendance-preview-stat">
 
                 <div class="text-sm text-gray-500">
                     Need Mapping
@@ -317,10 +349,10 @@
             </h6>
 
 
-            <div class="overflow-x-auto">
+            <div class="attendance-preview-table-wrap">
 
                 <table
-                    class="table whitespace-nowrap min-w-full"
+                    class="table table-bordered whitespace-nowrap min-w-full"
                 >
 
                     <thead>
@@ -356,11 +388,11 @@
 
 
             <div
-                class="overflow-x-auto max-h-[520px]"
+                class="attendance-preview-table-wrap"
             >
 
                 <table
-                    class="table whitespace-nowrap min-w-full"
+                    class="table table-bordered whitespace-nowrap min-w-full"
                 >
 
                     <thead
@@ -439,18 +471,142 @@
     <div class="box-header">
 
         <h5 class="box-title">
+            Attendance Import History
+        </h5>
+
+    </div>
+
+    <div class="box-body">
+
+        <form
+            method="GET"
+            action="{{ route('admin.attendance.import.index') }}"
+            class="grid grid-cols-12 gap-4 items-end"
+        >
+
+            <div class="xl:col-span-2 md:col-span-6 col-span-12">
+                <label class="ti-form-label">From Date</label>
+                <input
+                    type="date"
+                    name="from_date"
+                    class="ti-form-input form-control-sm"
+                    value="{{ $filters['from_date'] ?? '' }}"
+                >
+            </div>
+
+            <div class="xl:col-span-2 md:col-span-6 col-span-12">
+                <label class="ti-form-label">To Date</label>
+                <input
+                    type="date"
+                    name="to_date"
+                    class="ti-form-input form-control-sm"
+                    value="{{ $filters['to_date'] ?? '' }}"
+                >
+            </div>
+
+            <div class="xl:col-span-2 md:col-span-6 col-span-12">
+                <label class="ti-form-label">Status</label>
+                <select
+                    name="status"
+                    class="ti-form-select form-control-sm"
+                >
+                    <option value="">All</option>
+                    @foreach(['previewed' => 'Previewed', 'completed' => 'Completed'] as $statusValue => $statusLabel)
+                        <option
+                            value="{{ $statusValue }}"
+                            {{ ($filters['status'] ?? '') === $statusValue ? 'selected' : '' }}
+                        >
+                            {{ $statusLabel }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+
+            <div class="xl:col-span-2 md:col-span-6 col-span-12">
+                <label class="ti-form-label">Uploaded By</label>
+                <select
+                    name="uploaded_by"
+                    class="ti-form-select form-control-sm"
+                >
+                    <option value="">All</option>
+                    @foreach($uploadedUsers as $uploadedUser)
+                        <option
+                            value="{{ $uploadedUser->id }}"
+                            {{ ($filters['uploaded_by'] ?? '') === $uploadedUser->id ? 'selected' : '' }}
+                        >
+                            {{ $uploadedUser->name }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+
+            <div class="xl:col-span-2 md:col-span-6 col-span-12">
+                <label class="ti-form-label">Search</label>
+                <input
+                    type="text"
+                    name="search"
+                    id="attendance-import-history-search"
+                    class="ti-form-input form-control-sm"
+                    placeholder="File or uploader"
+                    value="{{ $filters['search'] ?? '' }}"
+                >
+            </div>
+
+            <div class="xl:col-span-1 md:col-span-3 col-span-6">
+                <label class="ti-form-label">Show</label>
+                <select
+                    name="per_page"
+                    class="ti-form-select form-control-sm"
+                >
+                    @foreach([10, 25, 50, 100] as $size)
+                        <option
+                            value="{{ $size }}"
+                            {{ (int) $perPage === $size ? 'selected' : '' }}
+                        >
+                            {{ $size }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+
+            <div class="xl:col-span-1 md:col-span-3 col-span-6 flex gap-2">
+                <button class="ti-btn ti-btn-primary w-full">
+                    Filter
+                </button>
+                <a
+                    href="{{ route('admin.attendance.import.index') }}"
+                    class="ti-btn ti-btn-light"
+                    title="Reset"
+                >
+                    <i class="ri-refresh-line"></i>
+                </a>
+            </div>
+
+        </form>
+
+    </div>
+
+</div>
+
+<div class="box mt-6">
+
+    <div class="box-header">
+
+        <h5 class="box-title">
             Recent Attendance Imports
         </h5>
 
     </div>
 
 
-    <div
-        class="box-body overflow-x-auto"
-    >
+    <div class="box-body">
+
+        <div class="table-responsive attendance-import-table-wrap">
 
         <table
-            class="table whitespace-nowrap min-w-full"
+            id="attendance-imports-table"
+            class="table display nowrap attendance-history-datatable whitespace-nowrap min-w-full"
+            width="100%"
         >
 
             <thead>
@@ -632,6 +788,14 @@
             </tbody>
 
         </table>
+
+        </div>
+
+        @if(method_exists($imports, 'links'))
+            <div class="mt-4">
+                {{ $imports->links() }}
+            </div>
+        @endif
 
     </div>
 
@@ -1459,9 +1623,36 @@ if (
                     }
                 }
             );
-    }
-);
+      }
+  );
 
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const table = $('#attendance-imports-table');
+
+    if (
+        $.fn.DataTable
+        && table.length
+        && !$.fn.DataTable.isDataTable(table[0])
+    ) {
+        if (table.find('tbody td[colspan]').length) {
+            return;
+        }
+
+        table.DataTable({
+            paging: false,
+            searching: false,
+            info: false,
+            lengthChange: false,
+            responsive: false,
+            scrollX: true,
+            autoWidth: false,
+            ordering: true
+        });
+    }
+});
 </script>
 
 @endpush

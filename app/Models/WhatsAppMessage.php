@@ -29,6 +29,12 @@ class WhatsAppMessage extends Model
         'message_at',
         'crm_read_at',
         'raw_payload',
+        'media_provider',
+        'media_provider_id',
+        'media_mime_type',
+        'media_file_name',
+        'google_drive_file_id',
+        'google_drive_view_url',
     ];
 
     protected $casts = [

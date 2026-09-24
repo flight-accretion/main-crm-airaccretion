@@ -2,7 +2,7 @@
 
     <div class="table-responsive">
 
-        <table class="table whitespace-nowrap min-w-full">
+        <table class="table display nowrap kpi-detail-datatable whitespace-nowrap min-w-full" width="100%">
 
             <thead>
                 <tr>
@@ -113,7 +113,7 @@
 
     <div class="table-responsive">
 
-        <table class="table whitespace-nowrap min-w-full">
+        <table class="table display nowrap kpi-detail-datatable whitespace-nowrap min-w-full" width="100%">
 
             <thead>
                 <tr>

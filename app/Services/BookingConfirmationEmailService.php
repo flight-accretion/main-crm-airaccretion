@@ -103,6 +103,17 @@ class BookingConfirmationEmailService
             );
 
 
+            $whatsAppResult =
+                $this->sendBookingConfirmationWhatsApp(
+                    $lead,
+                    $actor
+                        ?: $prepared[
+                            'agent'
+                        ],
+                    $prepared
+                );
+
+
             return [
                 'success' =>
                     true,
@@ -123,6 +134,26 @@ class BookingConfirmationEmailService
                     ][
                         'short_link'
                     ],
+
+                'whatsapp_sent' =>
+                    (bool) (
+                        $whatsAppResult[
+                            'sent'
+                        ]
+                        ?? false
+                    ),
+
+                'whatsapp_message' =>
+                    $whatsAppResult[
+                        'message'
+                    ]
+                    ?? null,
+
+                'whatsapp_provider_message_id' =>
+                    $whatsAppResult[
+                        'provider_message_id'
+                    ]
+                    ?? null,
             ];
 
         } catch (\Throwable $exception) {
@@ -149,6 +180,203 @@ class BookingConfirmationEmailService
                     ?: 'Booking confirmation email could not be sent.',
             ];
         }
+    }
+
+
+    private function sendBookingConfirmationWhatsApp(
+        Lead $lead,
+        ?User $actor,
+        array $prepared
+    ): array {
+        if (
+            !config(
+                'services.booking_whatsapp.enabled',
+                true
+            )
+        ) {
+            return [
+                'sent' => false,
+                'message' => 'Booking confirmation WhatsApp is disabled.',
+            ];
+        }
+
+        $lead->loadMissing([
+            'client',
+        ]);
+
+        $customerNumber =
+            $this->customerWhatsAppNumber(
+                $lead
+            );
+
+        if (
+            $customerNumber === ''
+        ) {
+            return [
+                'sent' => false,
+                'message' => 'Customer WhatsApp number is not available.',
+            ];
+        }
+
+        $body =
+            $this->bookingConfirmationWhatsAppBody(
+                $lead,
+                $prepared
+            );
+
+        try {
+            $result =
+                app(
+                    WhatCrmOutboundMessageService::class
+                )->sendText([
+                    'number' =>
+                        $customerNumber,
+
+                    'name' =>
+                        optional(
+                            $lead->client
+                        )->name,
+
+                    'message' =>
+                        $body,
+
+                    'agent_user_id' =>
+                        optional(
+                            $actor
+                        )->id,
+
+                    'lead_id' =>
+                        $lead->id,
+                ]);
+
+            return [
+                'sent' =>
+                    (bool) (
+                        $result[
+                            'success'
+                        ]
+                        ?? false
+                    ),
+
+                'message' =>
+                    (
+                        $result[
+                            'success'
+                        ]
+                        ?? false
+                    )
+                        ? 'Booking confirmation WhatsApp sent successfully.'
+                        : 'WhatCRM did not accept the booking confirmation WhatsApp message.',
+
+                'provider_message_id' =>
+                    $result[
+                        'provider_message_id'
+                    ]
+                    ?? null,
+            ];
+        } catch (\Throwable $exception) {
+            Log::warning(
+                'Booking confirmation WhatsApp failed',
+                [
+                    'lead_id' =>
+                        $lead->id,
+
+                    'error' =>
+                        $exception
+                            ->getMessage(),
+                ]
+            );
+
+            return [
+                'sent' => false,
+                'message' => $exception->getMessage(),
+            ];
+        }
+    }
+
+
+    private function customerWhatsAppNumber(
+        Lead $lead
+    ): string {
+        foreach (
+            [
+                optional(
+                    $lead->client
+                )->alternate_number,
+
+                optional(
+                    $lead->client
+                )->contact_number,
+            ]
+            as $number
+        ) {
+            $number =
+                trim(
+                    (string) $number
+                );
+
+            if (
+                $number !== ''
+            ) {
+                return $number;
+            }
+        }
+
+        return '';
+    }
+
+
+    private function bookingConfirmationWhatsAppBody(
+        Lead $lead,
+        array $prepared
+    ): string {
+        $customerName =
+            $this->value(
+                optional(
+                    $lead->client
+                )->name
+            );
+
+        $registrationLink =
+            $prepared[
+                'registration'
+            ][
+                'short_link'
+            ]
+            ?: $prepared[
+                'registration'
+            ][
+                'long_link'
+            ];
+
+        $companyNumber =
+            trim(
+                (string) config(
+                    'services.booking_whatsapp.company_number',
+                    '+91 95753 40786'
+                )
+            );
+
+        if (
+            $companyNumber === ''
+        ) {
+            $companyNumber =
+                '+91 95753 40786';
+        }
+
+        return implode(
+            PHP_EOL,
+            [
+                'Dear ' . $customerName . ',',
+                '',
+                'Your booking confirmation has been sent to your email.',
+                'Passenger registration link: ' . $registrationLink,
+                'Please complete the payment steps shared in the booking email.',
+                'For any assistance, WhatsApp or call ' . $companyNumber . '.',
+                '',
+                'Accretion Aviation',
+            ]
+        );
     }
 
 
@@ -682,6 +910,12 @@ class BookingConfirmationEmailService
 
                 'payment_link' =>
                     'https://www.accretionaviation.com/pay',
+
+                    'bank_account_name' => config('services.booking_bank.account_name', ''),
+                    'bank_name' => config('services.booking_bank.bank_name', ''),
+                    'bank_account_number' => config('services.booking_bank.account_number', ''),
+                    'bank_ifsc' => config('services.booking_bank.ifsc', ''),
+                    'bank_branch' => config('services.booking_bank.branch', ''),
 
                 'terms_link' =>
                     'https://www.accretionaviation.com/terms&condition.php',

@@ -42,6 +42,12 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping()
             ->appendOutputTo(storage_path('logs/booking-reminders.log'));
 
+        $schedule->command('reviews:send-reminders')
+            ->dailyAt('11:00')
+            ->timezone('Asia/Kolkata')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/review-reminders.log'));
+
         $schedule->command('lead:auto-cancel-expired-active-rides')
             ->dailyAt('00:30')
             ->timezone('Asia/Kolkata')

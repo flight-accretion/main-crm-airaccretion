@@ -10,6 +10,7 @@ use App\Models\WhatsAppAiAgentSetting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -57,14 +58,18 @@ class WhatsAppAiAgentSettingController extends Controller
     ) {
         $this->ensureSuperAdmin();
 
+        $usesLegacyDirectSettings =
+            !$request->has('whatsapp_ai_agent_id')
+            && $request->hasAny([
+                'provider',
+                'model',
+                'prompt',
+                'api_key',
+            ]);
 
         $validated =
-            $request->validate([
-                /*
-                 * =============================================
-                 * WHATSAPP
-                 * =============================================
-                 */
+            $request->validate(array_merge(
+                [
                 'enabled' => [
                     'nullable',
                     'boolean',
@@ -73,20 +78,6 @@ class WhatsAppAiAgentSettingController extends Controller
                 'auto_reply_enabled' => [
                     'nullable',
                     'boolean',
-                ],
-
-                'whatsapp_ai_agent_id' => [
-                    Rule::requiredIf(
-                        fn () =>
-                            $request
-                                ->boolean(
-                                    'enabled'
-                                )
-                    ),
-
-                    'nullable',
-                    'uuid',
-                    'exists:ai_agents,id',
                 ],
 
                 'buffer_seconds' => [
@@ -102,13 +93,49 @@ class WhatsAppAiAgentSettingController extends Controller
                     'min:1',
                     'max:100000',
                 ],
+                ],
+                $usesLegacyDirectSettings
+                    ? [
+                        'provider' => [
+                            'required',
+                            'string',
+                            Rule::in([
+                                'openai',
+                                'gemini',
+                            ]),
+                        ],
 
+                        'model' => [
+                            'required',
+                            'string',
+                            'max:100',
+                        ],
 
-                /*
-                 * =============================================
-                 * LEAD SCORING
-                 * =============================================
-                 */
+                        'prompt' => [
+                            'required',
+                            'string',
+                        ],
+
+                        'api_key' => [
+                            'nullable',
+                            'string',
+                        ],
+                    ]
+                    : [
+                'whatsapp_ai_agent_id' => [
+                    Rule::requiredIf(
+                        fn () =>
+                            $request
+                                ->boolean(
+                                    'enabled'
+                                )
+                    ),
+
+                    'nullable',
+                    'uuid',
+                    'exists:ai_agents,id',
+                ],
+
                 'lead_scoring_enabled' => [
                     'nullable',
                     'boolean',
@@ -147,45 +174,49 @@ class WhatsAppAiAgentSettingController extends Controller
                     'max:99',
                     'gt:cold_max',
                 ],
-            ]);
+                    ]
+            ));
 
 
         /*
          * Make sure feature cannot select
          * wrong agent type.
          */
-        $this->validateAgent(
-            $validated[
+        if (!$usesLegacyDirectSettings) {
+            $this->validateAgent(
+                $validated[
+                    'whatsapp_ai_agent_id'
+                ] ?? null,
+
+                [
+                    'whatsapp',
+                    'generic',
+                ],
+
                 'whatsapp_ai_agent_id'
-            ] ?? null,
-
-            [
-                'whatsapp',
-                'generic',
-            ],
-
-            'whatsapp_ai_agent_id'
-        );
+            );
 
 
-        $this->validateAgent(
-            $validated[
+            $this->validateAgent(
+                $validated[
+                    'lead_scoring_ai_agent_id'
+                ] ?? null,
+
+                [
+                    'lead_scoring',
+                    'generic',
+                ],
+
                 'lead_scoring_ai_agent_id'
-            ] ?? null,
-
-            [
-                'lead_scoring',
-                'generic',
-            ],
-
-            'lead_scoring_ai_agent_id'
-        );
+            );
+        }
 
 
         DB::transaction(
             function () use (
                 $request,
-                $validated
+                $validated,
+                $usesLegacyDirectSettings
             ) {
 
                 /*
@@ -196,7 +227,7 @@ class WhatsAppAiAgentSettingController extends Controller
                 $setting =
                     WhatsAppAiAgentSetting::active();
 
-                $setting->fill([
+                $settingPayload = [
                     'enabled' =>
                         $request->boolean(
                             'enabled'
@@ -207,11 +238,6 @@ class WhatsAppAiAgentSettingController extends Controller
                             'auto_reply_enabled'
                         ),
 
-                    'ai_agent_id' =>
-                        $validated[
-                            'whatsapp_ai_agent_id'
-                        ] ?? null,
-
                     'buffer_seconds' =>
                         (int) $validated[
                             'buffer_seconds'
@@ -221,10 +247,39 @@ class WhatsAppAiAgentSettingController extends Controller
                         (int) $validated[
                             'context_message_limit'
                         ],
-                ]);
+                ];
+
+                if (
+                    Schema::hasColumn(
+                        'whatsapp_ai_agent_settings',
+                        'ai_agent_id'
+                    )
+                ) {
+                    $settingPayload['ai_agent_id'] =
+                        $usesLegacyDirectSettings
+                            ? null
+                            : ($validated['whatsapp_ai_agent_id'] ?? null);
+                }
+
+                $setting->fill($settingPayload);
+
+                if ($usesLegacyDirectSettings) {
+                    $setting->fill([
+                        'provider' => $validated['provider'],
+                        'model' => $validated['model'],
+                        'prompt' => $validated['prompt'],
+                    ]);
+
+                    if (!empty($validated['api_key'])) {
+                        $setting->setApiKey($validated['api_key']);
+                    }
+                }
 
                 $setting->save();
 
+                if ($usesLegacyDirectSettings) {
+                    return;
+                }
 
                 /*
                  * ============================================

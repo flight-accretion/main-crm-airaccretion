@@ -16,8 +16,10 @@ class AttendanceSettingsViewTest extends TestCase
         $this->assertStringContainsString('data-attendance-user-option', $source);
         $this->assertStringContainsString('name="user_ids[]"', $source);
         $this->assertStringContainsString('name="shift_policy_id"', $source);
-        $this->assertStringContainsString('name="effective_from"', $source);
-        $this->assertStringContainsString('name="effective_to"', $source);
+        $this->assertStringNotContainsString('name="effective_from"', $source);
+        $this->assertStringNotContainsString('name="effective_to"', $source);
+        $this->assertStringContainsString('Current Office Time', $source);
+        $this->assertStringContainsString('Assign Selected', $source);
         $this->assertStringContainsString('Grace Minutes', $source);
         $this->assertStringContainsString('Office Time Policies', $source);
         $this->assertStringContainsString("route('admin.attendance.settings.policies.update', \$policy)", $source);

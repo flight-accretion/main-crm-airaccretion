@@ -1,6 +1,6 @@
 <div class="box">
     <div class="box-body overflow-x-auto">
-        <table class="table whitespace-nowrap min-w-full">
+        <table class="table display nowrap kpi-outreach-datatable whitespace-nowrap min-w-full" width="100%">
             <thead>
                 <tr>
                     <th>Customer</th>

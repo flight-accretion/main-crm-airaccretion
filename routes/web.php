@@ -54,6 +54,7 @@ use App\Http\Controllers\AttendanceImportController;
 use App\Http\Controllers\AttendanceSettingsController;
 use App\Http\Controllers\OperationsCallDashboardController;
 use App\Http\Controllers\OperationsLeadAssignmentController;
+use App\Http\Controllers\OperationsDashboardController;
 
 
 /*
@@ -447,6 +448,8 @@ Route::prefix(
                 ->name('conversations');
             Route::get('/conversations/{conversation}/messages', [WhatsAppInboxController::class, 'messages'])
                 ->name('messages');
+            Route::get('/media/{message}', [WhatsAppInboxController::class, 'media'])
+                ->name('media.show');
             Route::post('/conversations/{conversation}/send', [WhatsAppInboxController::class, 'send'])
                 ->name('send');
             Route::post('/conversations/{conversation}/read', [WhatsAppInboxController::class, 'read'])
@@ -892,6 +895,31 @@ Route::post(
     Route::prefix('admin/operations')
         ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES')
         ->group(function () {
+            Route::get(
+                '/',
+                [OperationsDashboardController::class, 'index']
+            )->name('admin.operations.index');
+
+            Route::get(
+                '/queue/{type}',
+                [OperationsDashboardController::class, 'queue']
+            )->name('admin.operations.queue');
+
+            Route::post(
+                '/case/{case}/start',
+                [OperationsDashboardController::class, 'start']
+            )->name('admin.operations.case.start');
+
+            Route::post(
+                '/case/{case}/complete',
+                [OperationsDashboardController::class, 'complete']
+            )->name('admin.operations.case.complete');
+
+            Route::get(
+                '/history',
+                [OperationsDashboardController::class, 'history']
+            )->name('admin.operations.history');
+
             Route::get(
                 '/customer-calls',
                 [OperationsCallDashboardController::class, 'index']

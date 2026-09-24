@@ -319,6 +319,35 @@
 
 
 <script>
+function initializeKpiDetailTable(root) {
+    if (!window.jQuery || !$.fn.DataTable) {
+        return;
+    }
+
+    const scope = root || document;
+
+    $(scope)
+        .find('.kpi-detail-datatable')
+        .each(function () {
+            if ($.fn.DataTable.isDataTable(this)) {
+                return;
+            }
+
+            if ($(this).find('tbody td[colspan]').length) {
+                return;
+            }
+
+            $(this).DataTable({
+                pageLength: 10,
+                lengthMenu: [10, 25, 50, 100],
+                responsive: false,
+                scrollX: true,
+                autoWidth: false,
+                ordering: true
+            });
+        });
+}
+
 document.addEventListener('DOMContentLoaded', function () {
 
     const typeSelect =
@@ -409,6 +438,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
                     body.innerHTML =
                         data.html;
+
+                    initializeKpiDetailTable(body);
 
                     wrapper.scrollIntoView({
                         behavior: 'smooth',

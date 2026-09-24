@@ -22,10 +22,16 @@ class AttendanceRecord extends Model
         'raw_out',
         'raw_status',
         'source_import_id',
+        'resolved_shift_policy_id',
+        'resolved_shift_policy_name',
+        'resolved_shift_start_time',
+        'resolved_shift_end_time',
+        'resolved_shift_grace_minutes',
     ];
 
     protected $casts = [
         'attendance_date' => 'date',
+        'resolved_shift_grace_minutes' => 'integer',
     ];
 
     protected static function booted()

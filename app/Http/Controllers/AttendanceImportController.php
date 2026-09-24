@@ -4,9 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\AttendanceImport;
 use App\Models\AttendanceRecord;
+use App\Models\AttendanceShiftPolicy;
 use App\Models\AttendanceUserMapping;
 use App\Models\User;
 use App\Services\Attendance\AttendanceImportParser;
+use App\Services\Attendance\AttendanceShiftResolver;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -21,22 +23,139 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AttendanceImportController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $imports =
+        $filters =
+            $request->validate([
+                'from_date' => [
+                    'nullable',
+                    'date',
+                ],
+                'to_date' => [
+                    'nullable',
+                    'date',
+                    'after_or_equal:from_date',
+                ],
+                'status' => [
+                    'nullable',
+                    'in:previewed,completed',
+                ],
+                'uploaded_by' => [
+                    'nullable',
+                    'uuid',
+                ],
+                'search' => [
+                    'nullable',
+                    'string',
+                    'max:255',
+                ],
+                'per_page' => [
+                    'nullable',
+                    'integer',
+                    'in:10,25,50,100',
+                ],
+            ]);
+
+        $perPage =
+            (int) (
+                $filters['per_page']
+                ?? 25
+            );
+
+        $query =
             AttendanceImport::query()
                 ->with(
                     'uploadedBy:id,name'
-                )
+                );
+
+        if (!empty($filters['from_date'])) {
+            $query->whereDate(
+                'to_date',
+                '>=',
+                $filters['from_date']
+            );
+        }
+
+        if (!empty($filters['to_date'])) {
+            $query->whereDate(
+                'from_date',
+                '<=',
+                $filters['to_date']
+            );
+        }
+
+        if (!empty($filters['status'])) {
+            $query->where(
+                'status',
+                $filters['status']
+            );
+        }
+
+        if (!empty($filters['uploaded_by'])) {
+            $query->where(
+                'uploaded_by',
+                $filters['uploaded_by']
+            );
+        }
+
+        if (!empty($filters['search'])) {
+            $search =
+                trim(
+                    (string) $filters['search']
+                );
+
+            $query->where(function ($query) use ($search) {
+                $query
+                    ->where(
+                        'original_filename',
+                        'like',
+                        "%{$search}%"
+                    )
+                    ->orWhere(
+                        'stored_path',
+                        'like',
+                        "%{$search}%"
+                    )
+                    ->orWhereHas(
+                        'uploadedBy',
+                        function ($userQuery) use ($search) {
+                            $userQuery->where(
+                                'name',
+                                'like',
+                                "%{$search}%"
+                            );
+                        }
+                    );
+            });
+        }
+
+        $imports =
+            $query
                 ->latest()
-                ->limit(25)
-                ->get();
+                ->paginate($perPage)
+                ->withQueryString();
+
+        $uploadedUsers =
+            User::query()
+                ->whereIn(
+                    'id',
+                    AttendanceImport::query()
+                        ->select('uploaded_by')
+                )
+                ->orderBy('name')
+                ->get(['id', 'name']);
 
         return view(
             'admin.pages.attendance.import',
             [
                 'imports' =>
                     $imports,
+                'filters' =>
+                    $filters,
+                'perPage' =>
+                    $perPage,
+                'uploadedUsers' =>
+                    $uploadedUsers,
             ]
         );
     }
@@ -334,7 +453,8 @@ class AttendanceImportController extends Controller
 
     public function confirm(
         Request $request,
-        AttendanceImportParser $parser
+        AttendanceImportParser $parser,
+        AttendanceShiftResolver $shiftResolver
     ) {
         $validated =
             $request->validate([
@@ -484,6 +604,15 @@ class AttendanceImportController extends Controller
                 );
         }
 
+        $usersById =
+            User::query()
+                ->whereIn(
+                    'id',
+                    $uniqueUserIds
+                )
+                ->get()
+                ->keyBy('id');
+
         $created = 0;
         $updated = 0;
 
@@ -493,6 +622,8 @@ class AttendanceImportController extends Controller
                 $import,
                 $parsed,
                 $resolvedMappings,
+                $usersById,
+                $shiftResolver,
                 &$created,
                 &$updated
             ) {
@@ -510,10 +641,16 @@ class AttendanceImportController extends Controller
                             'paycode'
                         ];
 
-                    $userId =
-                        $resolvedMappings[
-                            $paycode
-                        ];
+                        $userId =
+                            $resolvedMappings[
+                                $paycode
+                            ];
+
+                    $user =
+                        $usersById
+                            ->get(
+                                $userId
+                            );
 
                     /*
                      * Remember Paycode mapping
@@ -571,6 +708,17 @@ class AttendanceImportController extends Controller
                                 )
                                 ->exists();
 
+                        $policy =
+                            $shiftResolver
+                                ->resolveForDate(
+                                    $user,
+                                    Carbon::parse(
+                                        $record[
+                                            'attendance_date'
+                                        ]
+                                    )
+                                );
+
                         AttendanceRecord::
                             updateOrCreate(
                                 [
@@ -582,7 +730,8 @@ class AttendanceImportController extends Controller
                                             'attendance_date'
                                         ],
                                 ],
-                                [
+                                array_merge(
+                                    [
                                     'paycode' =>
                                         $paycode,
 
@@ -619,7 +768,12 @@ class AttendanceImportController extends Controller
                                     'source_import_id' =>
                                         $import
                                             ->id,
-                                ]
+                                    ],
+                                    $this
+                                        ->shiftPolicySnapshot(
+                                            $policy
+                                        )
+                                )
                             );
 
                         if ($existing) {
@@ -931,6 +1085,59 @@ class AttendanceImportController extends Controller
             )
             ?: ''
         );
+    }
+
+    private function shiftPolicySnapshot(
+        AttendanceShiftPolicy $policy
+    ): array {
+        return [
+            'resolved_shift_policy_id' =>
+                $policy->exists
+                    ? $policy->id
+                    : null,
+
+            'resolved_shift_policy_name' =>
+                $policy->name,
+
+            'resolved_shift_start_time' =>
+                $this->normalizePolicyTime(
+                    $policy->start_time
+                ),
+
+            'resolved_shift_end_time' =>
+                $this->normalizePolicyTime(
+                    $policy->end_time
+                ),
+
+            'resolved_shift_grace_minutes' =>
+                (int) $policy->grace_minutes,
+        ];
+    }
+
+    private function normalizePolicyTime(
+        mixed $time
+    ): ?string {
+        $value =
+            trim(
+                (string) $time
+            );
+
+        if ($value === '') {
+            return null;
+        }
+
+        $value =
+            substr(
+                $value,
+                0,
+                8
+            );
+
+        if (strlen($value) === 5) {
+            return $value . ':00';
+        }
+
+        return $value;
     }
 
     private function downloadSampleCsv(): StreamedResponse

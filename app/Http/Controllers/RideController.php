@@ -2365,6 +2365,12 @@ return [
                 }
             }
 
+            $this->mirrorRideStatusToOperations(
+                $ride,
+                (int) $request->status,
+                (string) $rideId
+            );
+
             return response()->json([
                 'success' => true,
                 'message' => 'Status updated successfully',
@@ -2382,6 +2388,70 @@ return [
                 'trace' => $e->getTraceAsString()
             ]);
             return response()->json(['success' => false, 'message' => 'Error updating status'], 500);
+        }
+    }
+
+    private function mirrorRideStatusToOperations(
+        LeadRide $ride,
+        int $status,
+        string $rideId
+    ): void {
+        if ($status === 5) {
+            try {
+                $lead = $ride->enquiry;
+
+                if ($lead) {
+                    app(\App\Services\Review\ReviewWorkflowService::class)
+                        ->startForCompletedRide($lead);
+                }
+            } catch (\Throwable $e) {
+                Log::error('Post-ride review start failed', [
+                    'ride_id' => $rideId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        if ($status === 7) {
+            $this->openRideOperationCase(
+                $ride,
+                'reschedule',
+                $rideId
+            );
+        }
+
+        if ($status === 2) {
+            $this->openRideOperationCase(
+                $ride,
+                'cancelled',
+                $rideId
+            );
+        }
+    }
+
+    private function openRideOperationCase(
+        LeadRide $ride,
+        string $type,
+        string $rideId
+    ): void {
+        try {
+            $lead = $ride->enquiry;
+
+            if (!$lead) {
+                return;
+            }
+
+            app(\App\Services\Operations\OperationCaseService::class)
+                ->open($lead, $type, [
+                    'source' => 'existing_ride_status',
+                    'ride_id' => $rideId,
+                ], auth()->id());
+        } catch (\Throwable $e) {
+            Log::error('Ride Operations mirror failed', [
+                'ride_id' => $rideId,
+                'type' => $type,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 
@@ -3727,6 +3797,12 @@ return [
 
                 Log::info('Refund updated from ride status', ['refund_id' => $existingRefund->id]);
 
+                $this->mirrorRefundToOperations(
+                    $followup,
+                    (string) $rideId,
+                    $existingRefund
+                );
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Refund updated successfully',
@@ -3741,6 +3817,12 @@ return [
                 $refund = \App\Models\LeadRefund::create($createData);
 
                 Log::info('Refund created from ride status', ['refund_id' => $refund->id]);
+
+                $this->mirrorRefundToOperations(
+                    $followup,
+                    (string) $rideId,
+                    $refund
+                );
 
                 return response()->json([
                     'success' => true,
@@ -3758,6 +3840,34 @@ return [
                 'success' => false,
                 'message' => 'Error processing refund: ' . $e->getMessage()
             ], 500);
+        }
+    }
+
+    private function mirrorRefundToOperations(
+        LeadFollowup $followup,
+        string $rideId,
+        LeadRefund $refund
+    ): void {
+        try {
+            $followup->loadMissing('enquiry');
+            $lead = $followup->enquiry;
+
+            if (!$lead) {
+                return;
+            }
+
+            app(\App\Services\Operations\OperationCaseService::class)
+                ->open($lead, 'refund', [
+                    'source' => 'existing_refund_flow',
+                    'ride_id' => $rideId,
+                    'refund_id' => $refund->id,
+                ], auth()->id());
+        } catch (\Throwable $e) {
+            Log::error('Refund Operations mirror failed', [
+                'ride_id' => $rideId,
+                'refund_id' => $refund->id ?? null,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 

@@ -322,6 +322,7 @@ class WhatsAppLeadServiceTest extends TestCase
                 'exampleArr' => [
                     'Samarpit Sharma',
                     '9109152175',
+                    'https://accretionaviation.com/',
                 ],
                 'token' => 'test-token',
                 'mediaUri' => '',
@@ -427,6 +428,7 @@ class WhatsAppLeadServiceTest extends TestCase
                     'exampleArr' => [
                         'Manual Agent',
                         '9000011111',
+                        'https://accretionaviation.com/',
                     ],
                     'token' => 'test-token',
                     'mediaUri' => '',
@@ -544,6 +546,7 @@ class WhatsAppLeadServiceTest extends TestCase
                     'exampleArr' => [
                         'Voucher Agent',
                         '9819515554',
+                        'https://accretionaviation.com/',
                     ],
                     'token' => 'voucher-token',
                     'mediaUri' => '',
@@ -876,6 +879,7 @@ class WhatsAppLeadServiceTest extends TestCase
                     'exampleArr' => [
                         'Updated Lead Agent',
                         '9000012222',
+                        'https://accretionaviation.com/',
                     ],
                     'token' => 'test-token',
                     'mediaUri' => '',
@@ -1340,6 +1344,7 @@ class WhatsAppLeadServiceTest extends TestCase
                     'exampleArr' => [
                         'Later Empty Product User',
                         '9988776655',
+                        'https://accretionaviation.com/',
                     ],
                     'token' => 'test-token',
                     'mediaUri' => '',

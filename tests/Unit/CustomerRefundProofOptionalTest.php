@@ -150,6 +150,7 @@ class CustomerRefundProofOptionalTest extends TestCase
             $table->uuid('id')->primary();
             $table->uuid('lead_id')->nullable();
             $table->integer('status')->default(0);
+            $table->timestamp('next_followup_date')->nullable();
             $table->timestamps();
         });
 

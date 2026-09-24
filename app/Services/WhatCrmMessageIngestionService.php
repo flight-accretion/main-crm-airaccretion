@@ -3,10 +3,12 @@
 namespace App\Services;
 
 use App\Models\WhatsAppContact;
+use App\Models\WhatsAppAiAgentSetting;
 use App\Models\WhatsAppAiReplyBatch;
 use App\Models\WhatsAppConversation;
 use App\Models\WhatsAppMessage;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
 
@@ -179,6 +181,8 @@ class WhatCrmMessageIngestionService
             $aiBatch = null;
 
             if ($data['direction'] === 'incoming') {
+                $this->routeReviewInbound($message);
+
                 $this->markCustomerActivity(
                     $conversation,
                     $message
@@ -217,7 +221,10 @@ class WhatCrmMessageIngestionService
                         );
                     }
 
-                    if ($routerResult['handoff'] ?? false) {
+                    if (
+                        ($routerResult['handoff'] ?? false)
+                        || $this->shouldFallbackToCrmLead($data)
+                    ) {
                         $this->handoffService->handoff(
                             $conversation,
                             $data,
@@ -401,5 +408,76 @@ class WhatCrmMessageIngestionService
             $conversation,
             $message
         );
+    }
+
+    private function routeReviewInbound(WhatsAppMessage $message): void
+    {
+        try {
+            app(\App\Services\Review\ReviewInboundRouter::class)
+                ->handle($message);
+        } catch (\Throwable $e) {
+            Log::error('Review inbound routing failed', [
+                'message_id' => $message->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private function shouldFallbackToCrmLead(array $data): bool
+    {
+        if ($this->whatsappAiReady()) {
+            return false;
+        }
+
+        return $this->hasLeadSourceDetails($data)
+            || $this->hasRetailFallbackMapping();
+    }
+
+    private function whatsappAiReady(): bool
+    {
+        if (!Schema::hasTable('whatsapp_ai_agent_settings')) {
+            return false;
+        }
+
+        try {
+            return WhatsAppAiAgentSetting::active()->isReady();
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    private function hasLeadSourceDetails(array $data): bool
+    {
+        foreach (
+            [
+                'product',
+                'service',
+                'date',
+                'service_date',
+                'city',
+                'guest',
+                'route',
+                'origin',
+                'destination',
+                'occasion',
+            ]
+            as $key
+        ) {
+            if (trim((string) ($data[$key] ?? '')) !== '') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function hasRetailFallbackMapping(): bool
+    {
+        try {
+            return app(WhatsAppProductAllocationService::class)
+                ->hasRetailFallbackMapping();
+        } catch (\Throwable) {
+            return false;
+        }
     }
 }

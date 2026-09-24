@@ -280,6 +280,15 @@ class WhatsAppProductAllocationService
         return null;
     }
 
+    public function hasRetailFallbackMapping(): bool
+    {
+        return $this
+            ->mappedUserIdsForProducts(
+                $this->retailFallbackProductIds()
+            )
+            ->isNotEmpty();
+    }
+
     public function emptyProduct(): ?Product
     {
         return Product::query()

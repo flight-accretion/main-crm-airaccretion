@@ -31,9 +31,21 @@ class CreateAttendanceShiftPolicyTables extends Migration
                 $table->uuid('shift_policy_id');
                 $table->date('effective_from');
                 $table->date('effective_to')->nullable();
+                $table->boolean('is_active')->default(true)->index();
+                $table->timestamp('assigned_at')->nullable()->index();
+                $table->timestamp('unassigned_at')->nullable();
+                $table->uuid('assigned_by')->nullable();
                 $table->uuid('created_by')->nullable();
                 $table->uuid('updated_by')->nullable();
                 $table->timestamps();
+
+                $table->index(
+                    [
+                        'user_id',
+                        'is_active',
+                    ],
+                    'attendance_user_shift_current_index'
+                );
 
                 $table->index(
                     [

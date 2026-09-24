@@ -19,6 +19,7 @@ class AiAgent extends Model
         'agent_type',
         'ai_model_profile_id',
         'prompt',
+        'settings',
         'enabled',
         'created_by',
         'updated_by',
@@ -26,6 +27,7 @@ class AiAgent extends Model
 
     protected $casts = [
         'enabled' => 'boolean',
+        'settings' => 'array',
     ];
 
 

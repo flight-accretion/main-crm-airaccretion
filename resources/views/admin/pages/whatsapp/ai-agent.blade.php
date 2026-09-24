@@ -2024,6 +2024,10 @@
                                 WhatsApp
                             </option>
 
+                            <option value="review">
+                                Post-Ride Review
+                            </option>
+
                             <option value="lead_scoring">
                                 Lead Scoring
                             </option>

@@ -16,6 +16,10 @@ class AttendanceUserShiftAssignment extends Model
         'shift_policy_id',
         'effective_from',
         'effective_to',
+        'is_active',
+        'assigned_at',
+        'unassigned_at',
+        'assigned_by',
         'created_by',
         'updated_by',
     ];
@@ -23,6 +27,9 @@ class AttendanceUserShiftAssignment extends Model
     protected $casts = [
         'effective_from' => 'date',
         'effective_to' => 'date',
+        'is_active' => 'boolean',
+        'assigned_at' => 'datetime',
+        'unassigned_at' => 'datetime',
     ];
 
     protected static function booted()
@@ -45,5 +52,10 @@ class AttendanceUserShiftAssignment extends Model
             AttendanceShiftPolicy::class,
             'shift_policy_id'
         );
+    }
+
+    public function assignedBy()
+    {
+        return $this->belongsTo(User::class, 'assigned_by');
     }
 }

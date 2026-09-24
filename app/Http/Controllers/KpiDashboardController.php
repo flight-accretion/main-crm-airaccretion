@@ -32,8 +32,10 @@ public function index(
      * Accounts / Operations:
      * own configured department scope.
      */
-    $department = $scope->isAdmin($current)
-        ? 'sales'
+    $canSwitchDepartment = $scope->isAdmin($current);
+
+    $department = $canSwitchDepartment
+        ? ($filter['department'] ?: 'sales')
         : $scope->departmentFor($current);
 
     if (!$department) {
@@ -78,6 +80,7 @@ return view(
         'asOf' => $asOf,
         'department' => $department,
         'filter' => $filter,
+        'canSwitchDepartment' => $canSwitchDepartment,
     ]
 );
 }

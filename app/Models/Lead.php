@@ -190,6 +190,16 @@ class Lead extends Model
         return $this->hasOne(LeadAiScore::class, 'lead_id')->latest('created_at');
     }
 
+    public function operationCases()
+    {
+        return $this->hasMany(OperationCase::class, 'lead_id');
+    }
+
+    public function reviewConversations()
+    {
+        return $this->hasMany(ReviewConversation::class, 'lead_id');
+    }
+
     public function getNextFollowupAttribute()
     {
         return $this->leadFollowups()

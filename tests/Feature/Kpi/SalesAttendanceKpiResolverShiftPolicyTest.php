@@ -160,6 +160,66 @@ class SalesAttendanceKpiResolverShiftPolicyTest extends KpiFeatureTestCase
         );
     }
 
+    public function test_attendance_kpi_uses_saved_policy_snapshot_after_current_policy_changes(): void
+    {
+        $user = $this->createUserWithRole(
+            'Snapshot Sales Executive',
+            UserType::SALES_EXECUTIVE
+        );
+
+        $metric = $this->attendanceMetric();
+
+        AttendanceShiftPolicy::create([
+            'name' => 'Default Office Time',
+            'start_time' => '08:00',
+            'end_time' => '17:00',
+            'grace_minutes' => 0,
+            'is_default' => true,
+            'is_active' => true,
+        ]);
+
+        $snapshotPolicy = AttendanceShiftPolicy::create([
+            'name' => 'Snapshot 09:00 Shift',
+            'start_time' => '09:00',
+            'end_time' => '18:00',
+            'grace_minutes' => 5,
+            'is_default' => false,
+            'is_active' => true,
+        ]);
+
+        $this->insertAttendanceRecord(
+            $user->id,
+            'E003',
+            '2026-09-01',
+            'Tuesday',
+            '09:04:00',
+            '18:00:00',
+            [
+                'resolved_shift_policy_id' => $snapshotPolicy->id,
+                'resolved_shift_policy_name' => $snapshotPolicy->name,
+                'resolved_shift_start_time' => '09:00:00',
+                'resolved_shift_end_time' => '18:00:00',
+                'resolved_shift_grace_minutes' => 5,
+            ]
+        );
+
+        $resolved = app(SalesAttendanceKpiResolver::class)->resolve(
+            $user,
+            $metric,
+            Carbon::parse('2026-09-01 23:59:59'),
+            22
+        );
+
+        $this->assertSame(1, $resolved['evidence']['punctual_days']);
+        $this->assertSame(0, $resolved['evidence']['late_days']);
+        $this->assertSame('09:00', $resolved['evidence']['shift_start']);
+        $this->assertSame(5, $resolved['evidence']['grace_minutes']);
+        $this->assertArrayHasKey(
+            'Snapshot 09:00 Shift',
+            $resolved['evidence']['shift_policy_breakdown']
+        );
+    }
+
     private function attendanceMetric(): KpiMetric
     {
         $template = KpiTemplate::create([
@@ -189,9 +249,10 @@ class SalesAttendanceKpiResolverShiftPolicyTest extends KpiFeatureTestCase
         string $date,
         string $day,
         string $inTime,
-        string $outTime
+        string $outTime,
+        array $overrides = []
     ): void {
-        DB::table('attendance_records')->insert([
+        DB::table('attendance_records')->insert(array_merge([
             'id' => (string) Str::uuid(),
             'user_id' => $userId,
             'paycode' => $paycode,
@@ -205,6 +266,6 @@ class SalesAttendanceKpiResolverShiftPolicyTest extends KpiFeatureTestCase
             'source_import_id' => (string) Str::uuid(),
             'created_at' => now(),
             'updated_at' => now(),
-        ]);
+        ], $overrides));
     }
 }

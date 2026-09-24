@@ -129,4 +129,44 @@ class AttendanceShiftResolverTest extends AttendanceFeatureTestCase
         $this->assertSame($default->id, $resolved->get('2026-09-09')->id);
         $this->assertSame($late->id, $resolved->get('2026-09-10')->id);
     }
+
+    public function test_first_current_assignment_is_base_policy_for_prior_unprocessed_dates(): void
+    {
+        $user = $this->createUserWithRole('Base Policy Employee');
+
+        AttendanceShiftPolicy::create([
+            'name' => 'Default Office Time',
+            'start_time' => '10:30',
+            'end_time' => '19:30',
+            'grace_minutes' => 15,
+            'is_default' => true,
+            'is_active' => true,
+        ]);
+
+        $early = AttendanceShiftPolicy::create([
+            'name' => 'Early Shift',
+            'start_time' => '09:00',
+            'end_time' => '18:00',
+            'grace_minutes' => 5,
+            'is_default' => false,
+            'is_active' => true,
+        ]);
+
+        AttendanceUserShiftAssignment::create([
+            'user_id' => $user->id,
+            'shift_policy_id' => $early->id,
+            'effective_from' => '2026-09-19',
+            'effective_to' => null,
+            'is_active' => true,
+            'assigned_at' => '2026-09-19 10:00:00',
+        ]);
+
+        $resolved = app(AttendanceShiftResolver::class)->resolveForDate(
+            $user,
+            Carbon::parse('2026-09-01')
+        );
+
+        $this->assertSame($early->id, $resolved->id);
+        $this->assertSame('Early Shift', $resolved->name);
+    }
 }

@@ -248,32 +248,20 @@ $periodEnd =
                         $dateKey
                     );
 
+            $policyContext =
+                $this->policyContextForRecord(
+                    $record,
+                    $policy
+                );
+
             $shiftStart =
-                substr(
-                    (string)
-                    optional(
-                        $policy
-                    )->start_time,
-                    0,
-                    5
-                )
-                ?: '10:30';
+                $policyContext['start_time'];
 
             $graceMinutes =
-                (int) (
-                    optional(
-                        $policy
-                    )->grace_minutes
-                    ?? 15
-                );
+                $policyContext['grace_minutes'];
 
             $policyName =
-                (string) (
-                    optional(
-                        $policy
-                    )->name
-                    ?: 'Default Office Time'
-                );
+                $policyContext['name'];
 
             if (
                 !isset(
@@ -567,6 +555,73 @@ $periodEnd =
                 'note' =>
                     'No eligible attendance records have been uploaded for this month yet.',
             ],
+        ];
+    }
+
+    private function policyContextForRecord(
+        AttendanceRecord $record,
+        $policy
+    ): array {
+        if (
+            $record->resolved_shift_policy_name
+            ||
+            $record->resolved_shift_start_time
+            ||
+            $record->resolved_shift_grace_minutes !== null
+        ) {
+            return [
+                'name' =>
+                    (string) (
+                        $record
+                            ->resolved_shift_policy_name
+                        ?: optional($policy)->name
+                        ?: 'Default Office Time'
+                    ),
+
+                'start_time' =>
+                    substr(
+                        (string) (
+                            $record
+                                ->resolved_shift_start_time
+                            ?: optional($policy)->start_time
+                            ?: '10:30'
+                        ),
+                        0,
+                        5
+                    ),
+
+                'grace_minutes' =>
+                    (int) (
+                        $record
+                            ->resolved_shift_grace_minutes
+                        ?? optional($policy)->grace_minutes
+                        ?? 15
+                    ),
+            ];
+        }
+
+        return [
+            'name' =>
+                (string) (
+                    optional($policy)->name
+                    ?: 'Default Office Time'
+                ),
+
+            'start_time' =>
+                substr(
+                    (string) (
+                        optional($policy)->start_time
+                        ?: '10:30'
+                    ),
+                    0,
+                    5
+                ),
+
+            'grace_minutes' =>
+                (int) (
+                    optional($policy)->grace_minutes
+                    ?? 15
+                ),
         ];
     }
 }

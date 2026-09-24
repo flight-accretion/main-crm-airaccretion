@@ -109,7 +109,7 @@
         <form method="POST" action="{{ route('admin.attendance.settings.assignments.store') }}">
             @csrf
 
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                 <select class="form-control" name="shift_policy_id" required>
                     <option value="">Select office time</option>
                     @foreach($policies->where('is_active', true) as $policy)
@@ -119,15 +119,12 @@
                     @endforeach
                 </select>
 
-                <input class="form-control" type="date" name="effective_from" required>
-                <input class="form-control" type="date" name="effective_to">
+                <input class="form-control" data-attendance-user-search placeholder="Search employees">
 
                 <button class="ti-btn ti-btn-primary-full ti-btn-wave" type="submit">
                     Assign Selected
                 </button>
             </div>
-
-            <input class="form-control mb-3" data-attendance-user-search placeholder="Search employees">
 
             <div class="overflow-x-auto max-h-[420px]">
                 <table class="table whitespace-nowrap min-w-full">
@@ -168,8 +165,10 @@
                 <tr>
                     <th>Employee</th>
                     <th>Office Time</th>
-                    <th>Effective From</th>
-                    <th>Effective To</th>
+                    <th>Status</th>
+                    <th>Assigned At</th>
+                    <th>Unassigned At</th>
+                    <th>Changed By</th>
                 </tr>
             </thead>
             <tbody>
@@ -177,8 +176,12 @@
                     <tr>
                         <td>{{ optional($assignment->user)->name ?: '-' }}</td>
                         <td>{{ optional($assignment->shiftPolicy)->name ?: '-' }}</td>
-                        <td>{{ optional($assignment->effective_from)->format('d M Y') }}</td>
-                        <td>{{ $assignment->effective_to ? $assignment->effective_to->format('d M Y') : 'Open' }}</td>
+                        <td>
+                            {{ $assignment->is_active ? 'Current' : 'Previous' }}
+                        </td>
+                        <td>{{ optional($assignment->assigned_at ?: $assignment->effective_from)->format('d M Y h:i A') }}</td>
+                        <td>{{ $assignment->unassigned_at ? $assignment->unassigned_at->format('d M Y h:i A') : 'Open' }}</td>
+                        <td>{{ optional($assignment->assignedBy)->name ?: '-' }}</td>
                     </tr>
                 @endforeach
             </tbody>

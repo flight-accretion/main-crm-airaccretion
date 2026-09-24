@@ -44,4 +44,12 @@ class AttendanceShiftPolicy extends Model
             'shift_policy_id'
         );
     }
+
+    public function activeAssignments()
+    {
+        return $this->hasMany(
+            AttendanceUserShiftAssignment::class,
+            'shift_policy_id'
+        )->where('is_active', true);
+    }
 }

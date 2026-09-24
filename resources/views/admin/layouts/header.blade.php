@@ -714,6 +714,36 @@
                             </li>
                         @endif
 
+                        @if ($userType === UserType::SUPER_ADMIN || $canAccess($userType, $adminRoles) || $canAccess($userType, $operationsRoles))
+                            <li class="slide has-sub {{ Route::is('admin.operations.index') || Route::is('admin.operations.queue') || Route::is('admin.operations.history') ? 'active open' : '' }}">
+                                <a href="javascript:void(0);" class="side-menu__item">
+                                    <i class="bx bx-task side-menu__icon"></i>
+                                    <span class="side-menu__label">Operations Dashboard</span>
+                                    <i class="fe fe-chevron-right side-menu__angle"></i>
+                                </a>
+                                <ul class="slide-menu child1">
+                                    <li class="slide">
+                                        <a href="{{ route('admin.operations.index') }}" class="side-menu__item">Overview</a>
+                                    </li>
+                                    <li class="slide">
+                                        <a href="{{ route('admin.operations.queue', 'review') }}" class="side-menu__item">Review</a>
+                                    </li>
+                                    <li class="slide">
+                                        <a href="{{ route('admin.operations.queue', 'reschedule') }}" class="side-menu__item">Reschedule</a>
+                                    </li>
+                                    <li class="slide">
+                                        <a href="{{ route('admin.operations.queue', 'refund') }}" class="side-menu__item">Refund</a>
+                                    </li>
+                                    <li class="slide">
+                                        <a href="{{ route('admin.operations.queue', 'cancelled') }}" class="side-menu__item">Cancelled</a>
+                                    </li>
+                                    <li class="slide">
+                                        <a href="{{ route('admin.operations.history') }}" class="side-menu__item">History</a>
+                                    </li>
+                                </ul>
+                            </li>
+                        @endif
+
                            @if ($userType === UserType::SUPER_ADMIN || $canAccess($userType, $adminRoles) || $canAccess($userType, $salesRoles) || $canAccess($userType, $operationsRoles))
                             <li class="slide {{ Route::is('admin.whatsapp.index') ? 'active' : '' }}">
                                 <a href="{{ route('admin.whatsapp.index') }}" class="side-menu__item">

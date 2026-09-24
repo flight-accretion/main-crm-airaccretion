@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\UserType;
 use App\Models\WhatsAppConversation;
+use App\Models\WhatsAppMessage;
 use App\Services\WhatCrmOutboundMessageService;
 use App\Services\WhatsAppConversationVisibilityService;
 use Illuminate\Http\Request;
@@ -208,6 +209,15 @@ class WhatsAppInboxController extends Controller
                                     ),
                             'body' => $message->body,
                             'message_type' => $message->message_type,
+                            'media_url' =>
+                                $message->google_drive_file_id
+                                    ? route(
+                                        'admin.whatsapp.media.show',
+                                        $message->id
+                                    )
+                                    : null,
+                            'media_mime_type' =>
+                                $message->media_mime_type,
                             'provider_status' =>
                                 $message->provider_status,
                             'message_at' =>
@@ -378,6 +388,49 @@ class WhatsAppInboxController extends Controller
         return response()->json($result);
     }
 
+    public function media(
+        string $message,
+        WhatsAppConversationVisibilityService $visibility
+    ) {
+        $this->ensureInboxUser();
+
+        $messageModel = WhatsAppMessage::query()
+            ->with('conversation')
+            ->findOrFail($message);
+
+        abort_unless(
+            $messageModel->conversation
+            && $visibility->canAccessConversation(
+                Auth::user(),
+                $messageModel->conversation_id
+            ),
+            403
+        );
+
+        abort_unless($messageModel->google_drive_file_id, 404);
+
+        try {
+            $file = app(\App\Services\Review\GoogleDriveReviewMediaService::class)
+                ->download($messageModel->google_drive_file_id);
+        } catch (\Throwable $e) {
+            Log::error('Review WhatsApp media proxy failed', [
+                'message_id' => $messageModel->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            abort(404);
+        }
+
+        return response($file['body'], 200)
+            ->header(
+                'Content-Type',
+                $messageModel->media_mime_type
+                    ?: $file['mime_type']
+                    ?: 'application/octet-stream'
+            )
+            ->header('Cache-Control', 'private, max-age=300');
+    }
+
     private function conversationPayload(
         WhatsAppConversation $conversation
     ): array {
@@ -441,7 +494,17 @@ class WhatsAppInboxController extends Controller
             $role === UserType::SUPER_ADMIN
             || in_array(
                 $role,
+                UserType::ADMIN_ROLES,
+                true
+            )
+            || in_array(
+                $role,
                 UserType::SALES_ROLES,
+                true
+            )
+            || in_array(
+                $role,
+                UserType::OPERATIONS_ROLES,
                 true
             ),
             403
