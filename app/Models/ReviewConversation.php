@@ -73,4 +73,47 @@ class ReviewConversation extends Model
     {
         return $this->belongsTo(WhatsAppConversation::class, 'whatsapp_conversation_id');
     }
+
+    public function getDashboardDotAttribute(): string
+{
+    /*
+    |--------------------------------------------------------------------------
+    | Customer has not replied
+    |--------------------------------------------------------------------------
+    */
+    if (!$this->customer_replied) {
+        return 'yellow';
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Review Agent sentiment
+    |--------------------------------------------------------------------------
+    |
+    | "negative" = angry / unhappy customer
+    | "positive" = good / happy customer
+    |
+    */
+
+    return match ($this->sentiment) {
+        'negative' => 'red',
+        'positive' => 'green',
+        default => 'gray',
+    };
+}
+
+public function getDashboardDotLabelAttribute(): string
+{
+    if (!$this->customer_replied) {
+        return 'No response';
+    }
+
+    return match ($this->sentiment) {
+        'negative' => 'Angry / Negative',
+        'positive' => 'Good / Positive',
+        'neutral' => 'Neutral',
+        'uncertain' => 'Uncertain',
+        default => 'Awaiting AI analysis',
+    };
+}
 }

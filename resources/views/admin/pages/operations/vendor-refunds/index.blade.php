@@ -177,15 +177,17 @@
                 <thead>
                     <tr>
                         <th>S.No</th>
+                        <th>Customer Name</th>
+                        <th>Customer Phone</th>
                         <th>Vendor Name</th>
                         <th>Vendor Phone</th>
                         <th>Service Name</th>
                         <th>Service Date</th>
                         <th>Original Vendor Amount</th>
                         <th>Cancellation Amount</th>
-                        <th>Refund Received</th>
+                        <!-- <th>Refund Received</th> -->
                         <th>Refund Due</th>
-                        <th>Refund Date</th>
+                        <!-- <th>Refund Date</th> -->
                         <th>Action</th>
                     </tr>
                 </thead>
@@ -193,10 +195,16 @@
                 <tbody>
 
                     @forelse ($vendorRefunds as $index => $row)
-
+        <script>
+            console.log("Row [{{ $index }}] Data:", @js($row));
+        </script>
                         <tr data-vendor-payment-id="{{ $row->id }}">
 
                             <td>{{ $vendorRefunds->firstItem() + $index }}</td>
+
+                            <td>{{ $row->customer_name }}</td>
+
+                            <td>{{ $row->customer_phone }}</td>
 
                             <td>{{ $row->vendor_name }}</td>
 
@@ -214,13 +222,13 @@
                                 {{ $row->cancellation_amount !== null ? $money($row->cancellation_amount) : '-' }}
                             </td>
 
-                            <td>{{ $money($row->refund_received) }}</td>
+                            <!-- <td>{{ $money($row->refund_received) }}</td> -->
 
                             <td>{{ $money($row->refund_due) }}</td>
 
-                            <td>
+                            <!-- <td>
                                 {{ $row->refund_date ? \Carbon\Carbon::parse($row->refund_date)->format('d M Y') : '-' }}
-                            </td>
+                            </td> -->
 
                             {{-- Actions --}}
                             <td>
@@ -286,7 +294,7 @@
                     @empty
 
                         <tr>
-                            <td colspan="11" class="text-center py-6 text-gray-500">
+                            <td colspan="13" class="text-center py-6 text-gray-500">
                                 No pending vendor refunds found.
                             </td>
                         </tr>

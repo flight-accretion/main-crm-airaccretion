@@ -82,34 +82,104 @@ class OperationsDashboardController extends Controller
         ]);
     }
 
-    public function queue(Request $request, string $type)
-    {
-        abort_unless(in_array($type, OperationCase::validTypes(), true), 404);
+   public function queue(Request $request, string $type)
+{
+    abort_unless(
+        in_array(
+            $type,
+            OperationCase::validTypes(),
+            true
+        ),
+        404
+    );
 
-        $filters = $this->filters($request);
-        $cases = OperationCase::with(['lead.client', 'lead.representative', 'lead.rideSegments', 'assignee'])
-            ->where('type', $type)
-            ->whereNull('completed_at');
-
-        $this->applyCaseFilters(
-            $cases,
-            $filters,
-            'opened_at'
+    $filters =
+        $this->filters(
+            $request
         );
 
-        $cases = $cases
-            ->latest('opened_at')
-            ->paginate($filters['per_page'])
+    /*
+    |--------------------------------------------------------------------------
+    | Relations
+    |--------------------------------------------------------------------------
+    |
+    | Keep the existing Operations relations unchanged.
+    |
+    | For the Review queue only, also load ReviewConversation.
+    | The Review Agent already stores:
+    |
+    | customer_replied
+    | sentiment = positive / negative / neutral / uncertain
+    |
+    | No additional AI call is required on dashboard load.
+    |
+    */
+
+    $relations = [
+        'lead.client',
+        'lead.representative',
+        'lead.rideSegments',
+        'assignee',
+    ];
+
+    if ($type === 'review') {
+        $relations[] =
+            'reviewConversation';
+    }
+
+    $cases =
+        OperationCase::with(
+            $relations
+        )
+        ->where(
+            'type',
+            $type
+        )
+        ->whereNull(
+            'completed_at'
+        );
+
+    $this->applyCaseFilters(
+        $cases,
+        $filters,
+        'opened_at'
+    );
+
+    $cases =
+        $cases
+            ->latest(
+                'opened_at'
+            )
+            ->paginate(
+                $filters['per_page']
+            )
             ->withQueryString();
 
-        return view('admin.pages.operations.queue', array_merge([
-            'cases' => $cases,
-            'type' => $type,
-            'filters' => $filters,
-            'operationUsers' => $this->operationUsers(),
-            'caseStatuses' => $this->caseStatuses(),
-        ], $this->leadTableData($cases)));
-    }
+    return view(
+        'admin.pages.operations.queue',
+        array_merge(
+            [
+                'cases' =>
+                    $cases,
+
+                'type' =>
+                    $type,
+
+                'filters' =>
+                    $filters,
+
+                'operationUsers' =>
+                    $this->operationUsers(),
+
+                'caseStatuses' =>
+                    $this->caseStatuses(),
+            ],
+            $this->leadTableData(
+                $cases
+            )
+        )
+    );
+}
 
     public function start(OperationCase $case, OperationCaseService $service)
     {

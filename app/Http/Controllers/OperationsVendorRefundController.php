@@ -333,6 +333,7 @@ class OperationsVendorRefundController extends Controller
             'vendor_name' => $this->vendorName($payment),
             'vendor_phone' => $payment->vendor?->contact_number ?: '-',
             'customer_name' => $lead?->client?->name ?: '-',
+            'customer_phone' => $lead?->client?->contact_number ?: '-',
 
             'service_name' => $this->serviceNames($lines) ?: '-',
             'service_date' => $this->serviceDate($lead),

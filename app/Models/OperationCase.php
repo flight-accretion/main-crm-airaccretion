@@ -83,6 +83,14 @@ class OperationCase extends Model
         return $this->belongsTo(User::class, 'assigned_to');
     }
 
+    public function reviewConversation()
+{
+    return $this->hasOne(
+        ReviewConversation::class,
+        'operation_case_id'
+    );
+}
+
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
