@@ -6,6 +6,7 @@ use App\Models\Client;
 use App\Models\Lead;
 use App\Models\LeadAllocationQueue;
 use App\Models\LeadAllocationSetting;
+use App\Models\LeadFollowup;
 use App\Models\SalespersonAvailability;
 use App\Models\User;
 use App\Models\UserType;
@@ -76,6 +77,52 @@ class LeadAllocationRequiresTodayPresenceTest extends TestCase
             'status' => 'queued',
             'attempt_count' => 1,
         ]);
+    }
+
+    public function test_queue_assignment_moves_open_followup_to_assignment_time(): void
+    {
+        $salesperson = $this->createSalesperson('Pallavi Singh');
+
+        SalespersonAvailability::create([
+            'user_id' => $salesperson->id,
+            'state' => 'available',
+            'is_available' => true,
+            'is_opted_in' => true,
+            'last_response_at' => now(),
+        ]);
+
+        $lead = $this->createLead();
+
+        $followup = LeadFollowup::create([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $lead->id,
+            'next_followup_date' => now()->copy()->subDay()->setTime(18, 0),
+            'followup_note' => 'Lead queued for allocation',
+            'followed_by' => null,
+            'status' => 1,
+        ]);
+
+        LeadAllocationQueue::create([
+            'lead_id' => $lead->id,
+            'status' => 'queued',
+            'reason' => 'new_lead',
+            'queued_at' => now(),
+        ]);
+
+        Carbon::setTestNow(Carbon::create(2026, 8, 31, 12, 15, 0));
+
+        $result = app(LeadAllocationService::class)->processPendingLeads();
+
+        $followup->refresh();
+
+        $this->assertSame(1, $result['processed']);
+        $this->assertSame($salesperson->id, $lead->fresh()->representative_user_id);
+        $this->assertSame($salesperson->id, $followup->followed_by);
+        $this->assertSame(
+            '2026-08-31 12:15:00',
+            $followup->next_followup_date->format('Y-m-d H:i:s')
+        );
+        $this->assertDatabaseCount('lead_followups', 1);
     }
 
     private function createSalesperson(string $name): User
@@ -151,6 +198,16 @@ class LeadAllocationRequiresTodayPresenceTest extends TestCase
             $table->json('product_ids')->nullable();
             $table->integer('number_of_passengers')->nullable();
             $table->text('description')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('lead_followups', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('lead_id');
+            $table->timestamp('next_followup_date')->nullable();
+            $table->text('followup_note')->nullable();
+            $table->integer('status')->nullable();
+            $table->uuid('followed_by')->nullable();
             $table->timestamps();
         });
 

@@ -7,6 +7,7 @@ use Illuminate\Support\Str;
 
 class OperationCase extends Model
 {
+    public const TYPE_CUSTOMER_CALL = 'customer_call';
     public const TYPE_REVIEW = 'review';
     public const TYPE_RESCHEDULE = 'reschedule';
     public const TYPE_REFUND = 'refund';
@@ -30,6 +31,7 @@ class OperationCase extends Model
         'completed_by',
         'opened_at',
         'completed_at',
+        'next_followup_at',
         'note',
         'metadata',
     ];
@@ -37,6 +39,7 @@ class OperationCase extends Model
     protected $casts = [
         'opened_at' => 'datetime',
         'completed_at' => 'datetime',
+        'next_followup_at' => 'datetime',
         'metadata' => 'array',
     ];
 
@@ -52,6 +55,7 @@ class OperationCase extends Model
     public static function validTypes(): array
     {
         return [
+            self::TYPE_CUSTOMER_CALL,
             self::TYPE_REVIEW,
             self::TYPE_RESCHEDULE,
             self::TYPE_REFUND,
@@ -67,6 +71,11 @@ class OperationCase extends Model
     public function activities()
     {
         return $this->hasMany(OperationCaseActivity::class, 'operation_case_id');
+    }
+
+    public function leadFollowups()
+    {
+        return $this->hasMany(LeadFollowup::class, 'operation_case_id');
     }
 
     public function assignee()

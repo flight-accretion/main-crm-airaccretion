@@ -1,5 +1,12 @@
 @extends('admin.layouts.header')
 @section('content')
+    @php
+        $operationsMode = (bool) ($operationsMode ?? false);
+        $operationCase = $operationCase ?? null;
+        $followupFormAction = $operationsMode && $operationCase
+            ? route('admin.operations.followups.store', $operationCase)
+            : (isset($lead) ? route('admin.leads.follow-up.store', $lead->id) : route('admin.clients.follow-up.store', $client->id));
+    @endphp
     <!-- Page Header -->
     <div class="block justify-between page-header md:flex">
         <div class="flex items-center gap-3 flex-wrap">
@@ -7,7 +14,7 @@
     <h3
         class="!text-defaulttextcolor dark:!text-defaulttextcolor/70 dark:text-white dark:hover:text-white text-[1.125rem] font-semibold"
     >
-        Add Follow Up
+        {{ $operationsMode ? 'Operations Follow Up' : 'Add Follow Up' }}
     </h3>
 
     @include(
@@ -26,7 +33,7 @@
             </li>
             <li class="text-[0.813rem] text-defaulttextcolor font-semibold hover:text-primary dark:text-[#8c9097] dark:text-white/50 "
                 aria-current="page">
-                Add Follow Up
+                {{ $operationsMode ? 'Operations Follow Up' : 'Add Follow Up' }}
             </li>
         </ol>
     </div>
@@ -171,9 +178,12 @@
                 @endphp
 
                 <form class="ti-custom-validation" method="POST"
-                    action="{{ isset($lead) ? route('admin.leads.follow-up.store', $lead->id) : route('admin.clients.follow-up.store', $client->id) }}"
+                    action="{{ $followupFormAction }}"
                     enctype="multipart/form-data" novalidate>
                     @csrf
+                    @if($operationsMode && $operationCase)
+                        <input type="hidden" name="operation_case_id" value="{{ $operationCase->id }}">
+                    @endif
                     <div class="box-body">
                         <div class="grid grid-cols-12 gap-6">
                             <!-- Services Section -->
@@ -184,7 +194,8 @@
                             <div class="xl:col-span-6 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
                                 <label for="number_of_passengers" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Number OF Passengers</label>
                                 <input type="number" min="1" name="number_of_passengers" id="number_of_passengers"
-                                    class="ti-form-input rounded-sm form-control-sm" value="{{ old('number_of_passengers', $clientInfo['passengers'] === 'N/A' ? '' : $clientInfo['passengers']) }}">
+                                    class="ti-form-input rounded-sm form-control-sm" value="{{ old('number_of_passengers', $clientInfo['passengers'] === 'N/A' ? '' : $clientInfo['passengers']) }}"
+                                    {{ $operationsMode ? 'disabled' : '' }}>
                                 @error('number_of_passengers')
                                     <p class="text-danger mt-1">{{ $message }}</p>
                                 @enderror
@@ -192,7 +203,8 @@
                             <div class="xl:col-span-6 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
                                 <label for="occasion" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Occasion</label>
                                 <input type="text" name="occasion" id="occasion"
-                                    class="ti-form-input rounded-sm form-control-sm" value="{{ old('occasion', $clientInfo['occasion'] === 'N/A' ? '' : $clientInfo['occasion']) }}">
+                                    class="ti-form-input rounded-sm form-control-sm" value="{{ old('occasion', $clientInfo['occasion'] === 'N/A' ? '' : $clientInfo['occasion']) }}"
+                                    {{ $operationsMode ? 'disabled' : '' }}>
                                 @error('occasion')
                                     <p class="text-danger mt-1">{{ $message }}</p>
                                 @enderror
@@ -201,7 +213,7 @@
                                 <label for="services"
                                     class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Services</label>
                                 <select class="ti-form-select rounded-sm !py-2 !px-3" name="services[]" id="services"
-                                    multiple>
+                                    multiple {{ $operationsMode ? 'disabled' : '' }}>
                                     @php
                                         $selectedServicesOld = old('services', $selectedServices);
                                     @endphp
@@ -223,7 +235,7 @@
                                 <label for="extra_services" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Extra
                                     Services</label>
                                 <select class="ti-form-select rounded-sm !py-2 !px-3" name="extra_services[]"
-                                    id="extra_services" multiple>
+                                    id="extra_services" multiple {{ $operationsMode ? 'disabled' : '' }}>
                                     @php
                                         $selectedExtraServicesOld = old('extra_services', $selectedExtraServices);
                                     @endphp
@@ -278,20 +290,40 @@
                             </p>
                         </div>
                         <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                            <label for="status" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Status<span
-                                    class="text-danger">*</span></label>
-                            <select class="ti-form-select rounded-sm form-control-sm" name="status" id="status"
-                                required>
-                                <option value="1" {{ old('status') == '1' ? 'selected' : '' }}>Active</option>
-                                <option value="2" {{ old('status') == '2' ? 'selected' : '' }}>Cancelled</option>
-                                <option value="3" {{ old('status') == '3' ? 'selected' : '' }}>Full payment received
-                                </option>
-                                <option value="4" {{ old('status') == '4' ? 'selected' : '' }}>Partial payment
-                                    received</option>
-                            </select>
-                            @error('status')
-                                <p class="text-danger mt-1">{{ $message }}</p>
-                            @enderror
+                            @if($operationsMode)
+                                <input type="hidden" name="status" id="status" value="{{ optional($followups->first())->status ?? 1 }}">
+                                <label for="operation_status" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Operations Status<span
+                                        class="text-danger">*</span></label>
+                                <select class="ti-form-select rounded-sm form-control-sm" name="operation_status" id="operation_status"
+                                    required>
+                                    @foreach(['pending' => 'Pending', 'in_progress' => 'In Progress', 'completed' => 'Completed'] as $value => $label)
+                                        <option
+                                            value="{{ $value }}"
+                                            {{ old('operation_status', $operationCase?->status ?? 'in_progress') === $value ? 'selected' : '' }}
+                                        >
+                                            {{ $label }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                                @error('operation_status')
+                                    <p class="text-danger mt-1">{{ $message }}</p>
+                                @enderror
+                            @else
+                                <label for="status" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Status<span
+                                        class="text-danger">*</span></label>
+                                <select class="ti-form-select rounded-sm form-control-sm" name="status" id="status"
+                                    required>
+                                    <option value="1" {{ old('status') == '1' ? 'selected' : '' }}>Active</option>
+                                    <option value="2" {{ old('status') == '2' ? 'selected' : '' }}>Cancelled</option>
+                                    <option value="3" {{ old('status') == '3' ? 'selected' : '' }}>Full payment received
+                                    </option>
+                                    <option value="4" {{ old('status') == '4' ? 'selected' : '' }}>Partial payment
+                                        received</option>
+                                </select>
+                                @error('status')
+                                    <p class="text-danger mt-1">{{ $message }}</p>
+                                @enderror
+                            @endif
                         </div>
 
                         <!-- Service Breakdown Table - Shows when payment status selected -->
@@ -456,37 +488,41 @@
 
                         <div id="next_followup_field"
                             class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                            <label for="next_followup_date" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Next
-                                Follow Up</label>
-                            <input type="datetime-local" class="ti-form-input rounded-sm form-control-sm"
-                                id="next_followup_date" name="next_followup_date"
-                                value="{{ old('next_followup_date', now()->format('Y-m-d H:i')) }}" required>
-
-                            @error('next_followup_date')
-                                <p class="text-danger mt-1">{{ $message }}</p>
-                            @enderror
-                        </div>
-                        <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                            <label for="image" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Upload Receipt
+                            <label for="next_followup_date" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">
+                                {{ $operationsMode ? 'Operations Next Follow Up' : 'Next Follow Up' }}
                             </label>
-                            <div>
-                                <input type="file" name="image" id="image" accept=".pdf,.jpg,.jpeg,.png"
-                                    capture="environment"
-                                    class="block w-full border border-gray-200 focus:shadow-sm dark:focus:shadow-white/10 rounded-sm text-sm focus:z-10 focus:outline-0 focus:border-gray-200 dark:focus:border-white/10 dark:border-white/10
-                                                        file:border-0
-                                                        file:bg-gray-200 file:me-4
-                                                        file:py-2 file:px-4
-                                                        dark:file:bg-black/20 dark:file:text-white/50">
-                                <small class="form-text text-muted" id="image-help">
-                                    Only PDF, JPG, or PNG formats are allowed. File size must not exceed 2MB.
-                                </small>
-                                <div id="image-preview" class="mt-2"></div>
-                                <p id="image-error" class="text-danger mt-1"></p>
-                            </div>
-                            @error('image')
+                            <input type="datetime-local" class="ti-form-input rounded-sm form-control-sm"
+                                id="next_followup_date" name="{{ $operationsMode ? 'next_followup_at' : 'next_followup_date' }}"
+                                value="{{ old($operationsMode ? 'next_followup_at' : 'next_followup_date', $operationsMode && $operationCase?->next_followup_at ? $operationCase->next_followup_at->format('Y-m-d\TH:i') : now()->format('Y-m-d\TH:i')) }}"
+                                {{ $operationsMode ? '' : 'required' }}>
+
+                            @error($operationsMode ? 'next_followup_at' : 'next_followup_date')
                                 <p class="text-danger mt-1">{{ $message }}</p>
                             @enderror
                         </div>
+                        @unless($operationsMode)
+                            <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
+                                <label for="image" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Upload Receipt
+                                </label>
+                                <div>
+                                    <input type="file" name="image" id="image" accept=".pdf,.jpg,.jpeg,.png"
+                                        capture="environment"
+                                        class="block w-full border border-gray-200 focus:shadow-sm dark:focus:shadow-white/10 rounded-sm text-sm focus:z-10 focus:outline-0 focus:border-gray-200 dark:focus:border-white/10 dark:border-white/10
+                                                            file:border-0
+                                                            file:bg-gray-200 file:me-4
+                                                            file:py-2 file:px-4
+                                                            dark:file:bg-black/20 dark:file:text-white/50">
+                                    <small class="form-text text-muted" id="image-help">
+                                        Only PDF, JPG, or PNG formats are allowed. File size must not exceed 2MB.
+                                    </small>
+                                    <div id="image-preview" class="mt-2"></div>
+                                    <p id="image-error" class="text-danger mt-1"></p>
+                                </div>
+                                @error('image')
+                                    <p class="text-danger mt-1">{{ $message }}</p>
+                                @enderror
+                            </div>
+                        @endunless
                     </div>
                 </div>
 
@@ -1025,7 +1061,108 @@
                            dark:bg-black/20"
                 ></div>
 
+{{-- BOOKING EMAIL RIDE TIME + DURATION CONTROL (this email only, never saved) --}}
+<div
+    class="my-5 p-4 border rounded-lg
+           dark:border-white/10"
+>
+    <div class="grid grid-cols-12 gap-4">
 
+        {{-- Ride Time --}}
+        <div class="md:col-span-6 col-span-12">
+
+            <div class="flex items-center justify-between gap-2 mb-1">
+                <label
+                    for="booking-email-time"
+                    class="font-semibold"
+                >
+                    Ride Time
+                </label>
+
+                <span class="flex items-center gap-2">
+                    <input
+                        type="checkbox"
+                        id="booking-email-time-tba"
+                        class="form-check-input"
+                    >
+
+                    <label
+                        for="booking-email-time-tba"
+                        class="form-check-label cursor-pointer"
+                    >
+                        To Be Announced
+                    </label>
+                </span>
+            </div>
+
+            <input
+                type="time"
+                id="booking-email-time"
+                class="form-control"
+            >
+
+            <div
+                id="booking-voucher-time"
+                class="text-xs text-gray-500 mt-1"
+            >
+                Voucher Time: -
+            </div>
+
+            <div
+                id="booking-time-note"
+                class="text-xs text-warning mt-1"
+            ></div>
+        </div>
+
+        {{-- Duration --}}
+        <div class="md:col-span-6 col-span-12">
+
+            <div class="flex items-center justify-between gap-2 mb-1">
+                <label
+                    for="booking-email-duration"
+                    class="font-semibold"
+                >
+                    Duration
+                </label>
+
+                <span class="flex items-center gap-2">
+                    <input
+                        type="checkbox"
+                        id="booking-email-duration-tba"
+                        class="form-check-input"
+                    >
+
+                    <label
+                        for="booking-email-duration-tba"
+                        class="form-check-label cursor-pointer"
+                    >
+                        To Be Announced
+                    </label>
+                </span>
+            </div>
+
+            <input
+                type="text"
+                id="booking-email-duration"
+                class="form-control"
+                maxlength="50"
+                placeholder="e.g. 30 Minutes"
+            >
+
+            <div
+                id="booking-duration-source"
+                class="text-xs text-gray-500 mt-1"
+            >
+                Duration: -
+            </div>
+        </div>
+
+    </div>
+
+    <div class="text-xs text-gray-500 mt-3">
+        These two values only change this email. They are not saved to the lead or voucher.
+    </div>
+</div>
                 {{-- ==================================================
                      EDITABLE PAYMENT BREAKDOWN
                      ================================================== --}}
@@ -2074,7 +2211,9 @@
                     redeemPointsInput.required = true;
 
                     // Hide and make optional: receipt upload (for acepoint) and paid date
-                    imageInput.required = false;
+                    if (imageInput) {
+                        imageInput.required = false;
+                    }
                     paidDateInput.required = false;
 
                     // Fetch available points from Airpoints API
@@ -2105,7 +2244,9 @@
                     const s = statusSelect.value;
                     if (s === '3' || s === '4') {
                         // If Paid Directly to Vendor is selected, receipt is NOT mandatory
-                        imageInput.required = !isVendorPaid;
+                        if (imageInput) {
+                            imageInput.required = !isVendorPaid;
+                        }
                         paidDateInput.required = true;
                     }
 
@@ -2728,6 +2869,41 @@ const bookingEmailBeforePayment =
 const bookingEmailAfterPayment =
     document.getElementById(
         'booking-email-after-payment'
+    );
+
+    const bookingEmailTimeTba =
+    document.getElementById(
+        'booking-email-time-tba'
+    );
+
+const bookingVoucherTime =
+    document.getElementById(
+        'booking-voucher-time'
+    );
+
+const bookingEmailTime =
+    document.getElementById(
+        'booking-email-time'
+    );
+
+const bookingTimeNote =
+    document.getElementById(
+        'booking-time-note'
+    );
+
+const bookingEmailDuration =
+    document.getElementById(
+        'booking-email-duration'
+    );
+
+const bookingEmailDurationTba =
+    document.getElementById(
+        'booking-email-duration-tba'
+    );
+
+const bookingDurationSource =
+    document.getElementById(
+        'booking-duration-source'
     );
 
 const totalServiceCostInput =
@@ -3708,6 +3884,10 @@ bookingEmailButton
                     data.body_after_payment
                     || '';
 
+                applyBookingTravelControls(
+                    data
+                );
+
 
                 /*
                  * IMPORTANT:
@@ -3823,6 +4003,229 @@ document
         }
     );
 
+/*
+ * =============================================================
+ * RIDE TIME + DURATION (this email only, never saved)
+ * =============================================================
+ */
+function bookingTravelOverrides() {
+    return {
+        email_time_tba:
+            bookingEmailTimeTba
+                ? bookingEmailTimeTba.checked
+                : false,
+
+        email_time:
+            bookingEmailTime
+                ? bookingEmailTime.value
+                : '',
+
+        email_duration_tba:
+            bookingEmailDurationTba
+                ? bookingEmailDurationTba.checked
+                : false,
+
+        email_duration:
+            bookingEmailDuration
+                ? bookingEmailDuration.value.trim()
+                : ''
+    };
+}
+
+function syncBookingTravelInputs() {
+    if (bookingEmailTime && bookingEmailTimeTba) {
+        bookingEmailTime.disabled =
+            bookingEmailTimeTba.checked;
+    }
+
+    if (bookingEmailDuration && bookingEmailDurationTba) {
+        bookingEmailDuration.disabled =
+            bookingEmailDurationTba.checked;
+    }
+}
+
+function applyBookingTravelControls(data) {
+    if (bookingEmailTimeTba) {
+        bookingEmailTimeTba.checked =
+            Boolean(data.time_is_tba);
+    }
+
+    if (bookingEmailTime) {
+        bookingEmailTime.value =
+            data.email_time || '';
+    }
+
+    if (bookingVoucherTime) {
+        bookingVoucherTime.textContent =
+            data.voucher_time
+                ? 'Voucher Time: ' + data.voucher_time
+                : 'Voucher Time: Not set';
+    }
+
+    if (bookingTimeNote) {
+        bookingTimeNote.textContent =
+            data.time_note || '';
+    }
+
+    if (bookingEmailDurationTba) {
+        bookingEmailDurationTba.checked =
+            Boolean(data.duration_is_tba);
+    }
+
+    if (bookingEmailDuration) {
+        bookingEmailDuration.value =
+            data.duration || '';
+    }
+
+    if (bookingDurationSource) {
+        bookingDurationSource.textContent =
+            data.duration
+                ? 'Suggested from ' + data.duration_source
+                    + (data.duration_note ? '. ' + data.duration_note : '')
+                : 'No duration found. Enter one or tick To Be Announced.';
+    }
+
+    syncBookingTravelInputs();
+}
+
+let bookingTravelRefreshTimer = null;
+let bookingTravelRefreshSequence = 0;
+
+function scheduleBookingTravelRefresh(delay) {
+    clearTimeout(
+        bookingTravelRefreshTimer
+    );
+
+    bookingTravelRefreshTimer =
+        setTimeout(
+            refreshBookingEmailPreview,
+            delay || 0
+        );
+}
+
+/*
+ * Re-renders the email text with the sender's time / duration
+ * choices. Only the subject and body change; the controls keep
+ * whatever the sender typed.
+ */
+async function refreshBookingEmailPreview() {
+
+    if (!bookingCurrentLeadId) {
+        return;
+    }
+
+    const sequence =
+        ++bookingTravelRefreshSequence;
+
+    clearBookingEmailError();
+
+    try {
+
+        const response =
+            await fetch(
+                bookingEmailUrl(
+                    bookingCurrentLeadId
+                ),
+                {
+                    method: 'POST',
+
+                    headers: {
+                        'Content-Type':
+                            'application/json',
+
+                        'Accept':
+                            'application/json',
+
+                        'X-CSRF-TOKEN':
+                            '{{ csrf_token() }}',
+
+                        'X-Requested-With':
+                            'XMLHttpRequest'
+                    },
+
+                    credentials:
+                        'same-origin',
+
+                    body:
+                        JSON.stringify(
+                            Object.assign(
+                                { preview_only: true },
+                                bookingTravelOverrides()
+                            )
+                        )
+                }
+            );
+
+        const data =
+            await response.json();
+
+        if (
+            !response.ok
+            || !data.success
+        ) {
+            throw new Error(
+                data.message
+                || 'Unable to refresh email preview.'
+            );
+        }
+
+        // A newer change has already been requested.
+        if (
+            sequence !== bookingTravelRefreshSequence
+        ) {
+            return;
+        }
+
+        bookingEmailSubject.value =
+            data.subject || '';
+
+        bookingEmailBeforePayment.textContent =
+            data.body_before_payment || '';
+
+        bookingEmailAfterPayment.textContent =
+            data.body_after_payment || '';
+
+    } catch (error) {
+
+        console.error(
+            'Booking email time preview error:',
+            error
+        );
+
+        showBookingEmailError(
+            error.message
+            || 'Unable to refresh email preview.'
+        );
+    }
+}
+
+[bookingEmailTimeTba, bookingEmailDurationTba].forEach(
+    function (checkbox) {
+        checkbox?.addEventListener(
+            'change',
+            function () {
+                syncBookingTravelInputs();
+                scheduleBookingTravelRefresh(0);
+            }
+        );
+    }
+);
+
+bookingEmailTime
+    ?.addEventListener(
+        'change',
+        function () {
+            scheduleBookingTravelRefresh(0);
+        }
+    );
+
+bookingEmailDuration
+    ?.addEventListener(
+        'input',
+        function () {
+            scheduleBookingTravelRefresh(600);
+        }
+    );
 
 /*
  * =============================================================
@@ -3856,13 +4259,41 @@ confirmSendButton
              *
              * It is only used to render this email.
              */
-            const payload = {
-                payment_mode:
-                    bookingPaymentMode,
+       const travelChoices =
+    bookingTravelOverrides();
 
-                total_amount:
-                    currentBookingTotalAmount()
-            };
+if (
+    !travelChoices.email_time_tba
+    && !travelChoices.email_time
+) {
+    showBookingEmailError(
+        'Please enter a Ride Time or tick To Be Announced.'
+    );
+
+    return;
+}
+
+if (
+    !travelChoices.email_duration_tba
+    && !travelChoices.email_duration
+) {
+    showBookingEmailError(
+        'Please enter a Duration or tick To Be Announced.'
+    );
+
+    return;
+}
+
+const payload = Object.assign(
+    {
+        payment_mode:
+            bookingPaymentMode,
+
+        total_amount:
+            currentBookingTotalAmount()
+    },
+    travelChoices
+);
 
 
             if (

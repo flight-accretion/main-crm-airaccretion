@@ -11,8 +11,11 @@ use App\Models\Service;
 use App\Models\ExtraService;
 use App\Models\Voucher;
 use App\Models\Invoice;
+use App\Models\OperationCase;
+use App\Services\Operations\OperationCaseService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
 use Illuminate\Validation\ValidationException;
@@ -759,6 +762,9 @@ class RefundController extends Controller
                 'status' => 2,
                 'updated_at' => now()
             ]);
+
+            $this->closeOperationsRefundCase($refund);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Refund marked as done successfully',
@@ -778,6 +784,44 @@ class RefundController extends Controller
                 'success' => false,
                 'message' => 'Error marking refund as done: ' . $e->getMessage()
             ], 500);
+        }
+    }
+
+    private function closeOperationsRefundCase(LeadRefund $refund): void
+    {
+        try {
+            if (!Schema::hasTable('operation_cases')) {
+                return;
+            }
+
+            $refund->loadMissing('leadFollowup');
+            $leadId = optional($refund->leadFollowup)->lead_id;
+
+            if (!$leadId || !auth()->user()) {
+                return;
+            }
+
+            $case = OperationCase::query()
+                ->where('lead_id', $leadId)
+                ->where('type', OperationCase::TYPE_REFUND)
+                ->whereNull('completed_at')
+                ->latest('opened_at')
+                ->first();
+
+            if (!$case) {
+                return;
+            }
+
+            app(OperationCaseService::class)->complete(
+                $case,
+                auth()->user(),
+                'Customer refund completed.'
+            );
+        } catch (\Throwable $e) {
+            Log::warning('Unable to close Operations refund case.', [
+                'refund_id' => $refund->id,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 

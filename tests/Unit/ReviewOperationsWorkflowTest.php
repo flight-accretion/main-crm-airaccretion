@@ -5,7 +5,9 @@ namespace Tests\Unit;
 use App\Models\Client;
 use App\Models\Lead;
 use App\Models\LeadFollowup;
+use App\Models\Service;
 use App\Models\User;
+use App\Services\Operations\OperationsActivityService;
 use App\Services\Operations\OperationCaseService;
 use App\Services\Review\ReviewInboundRouter;
 use App\Services\Review\ReviewWorkflowService;
@@ -112,6 +114,135 @@ class ReviewOperationsWorkflowTest extends TestCase
             'id' => $followup->id,
             'status' => 5,
         ]);
+    }
+
+    public function test_customer_call_is_a_valid_operation_case_type(): void
+    {
+        [$lead] = $this->createLeadScenario();
+
+        $case = app(OperationCaseService::class)->open(
+            $lead,
+            'customer_call',
+            ['source' => 'operations_dashboard']
+        );
+
+        $this->assertSame('customer_call', $case->type);
+        $this->assertDatabaseHas('operation_cases', [
+            'id' => $case->id,
+            'lead_id' => $lead->id,
+            'type' => 'customer_call',
+            'status' => 'pending',
+        ]);
+    }
+
+    public function test_operations_followup_links_history_and_keeps_sales_due_date_empty(): void
+    {
+        [$lead, $salesFollowup, $salesUser, $operationsUser] = $this->createLeadScenario();
+
+        $case = app(OperationCaseService::class)->open(
+            $lead,
+            'review',
+            ['source' => 'manual_operations'],
+            $operationsUser->id
+        );
+
+        $followup = app(OperationsActivityService::class)->recordFollowup(
+            $case,
+            $operationsUser,
+            [
+                'note' => 'Confirmed pickup time with customer.',
+                'next_followup_at' => '2026-09-25 10:30:00',
+                'status' => 'in_progress',
+            ]
+        );
+
+        $this->assertSame($case->id, $followup->operation_case_id);
+        $this->assertNull($followup->next_followup_date);
+        $this->assertSame(5, (int) $followup->status);
+        $this->assertSame($salesUser->id, $lead->fresh()->representative_user_id);
+
+        $this->assertDatabaseHas('lead_followups', [
+            'id' => $followup->id,
+            'lead_id' => $lead->id,
+            'operation_case_id' => $case->id,
+            'parent_followup_id' => $salesFollowup->id,
+            'followup_note' => 'Confirmed pickup time with customer.',
+            'followed_by' => $operationsUser->id,
+            'next_followup_date' => null,
+        ]);
+
+        $this->assertDatabaseHas('operation_cases', [
+            'id' => $case->id,
+            'status' => 'in_progress',
+            'assigned_to' => $operationsUser->id,
+            'next_followup_at' => '2026-09-25 10:30:00',
+            'completed_at' => null,
+        ]);
+
+        $this->assertDatabaseHas('operation_case_activities', [
+            'operation_case_id' => $case->id,
+            'lead_id' => $lead->id,
+            'user_id' => $operationsUser->id,
+            'action' => 'followup_saved',
+            'to_status' => 'in_progress',
+            'note' => 'Confirmed pickup time with customer.',
+        ]);
+    }
+
+    public function test_initial_review_template_uses_feedback_template_and_service_variable(): void
+    {
+        [$lead] = $this->createLeadScenario();
+
+        $service = Service::create([
+            'id' => (string) Str::uuid(),
+            'service' => 'Joyride',
+            'status' => 1,
+        ]);
+
+        $lead->service_ids = [$service->id];
+        $lead->save();
+
+        $review = \App\Models\ReviewConversation::create([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $lead->id,
+            'customer_phone' => '9876543210',
+            'status' => 'waiting_for_reply',
+            'customer_replied' => false,
+            'needs_human' => false,
+            'reminder_count' => 0,
+        ]);
+
+        $outbound = new class extends \App\Services\WhatCrmOutboundMessageService {
+            public array $templates = [];
+
+            public function __construct()
+            {
+            }
+
+            public function sendTemplate(array $data): array
+            {
+                $this->templates[] = $data;
+
+                return [
+                    'success' => true,
+                    'conversation_id' => (string) Str::uuid(),
+                ];
+            }
+        };
+
+        $sent = (new \App\Services\Review\ReviewWhatsAppService($outbound))
+            ->sendInitialTemplate($review);
+
+        $this->assertTrue($sent);
+        $this->assertCount(1, $outbound->templates);
+        $this->assertSame(
+            'feedback_template_1',
+            $outbound->templates[0]['template_name']
+        );
+        $this->assertSame(
+            ['Joyride'],
+            $outbound->templates[0]['body_values']
+        );
     }
 
     public function test_review_inbound_router_accepts_existing_incoming_direction(): void
@@ -313,6 +444,70 @@ class ReviewOperationsWorkflowTest extends TestCase
         ]);
     }
 
+    public function test_review_link_uses_city_specific_url_from_completed_ride(): void
+    {
+        [$lead] = $this->createLeadScenario();
+
+        DB::table('lead_rides')->insert([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $lead->id,
+            'from_place' => 'Goa',
+            'to_place' => 'Goa',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        config()->set(
+            'review.default_public_url',
+            'https://g.page/accretionaviation/review'
+        );
+        config()->set('review.public_urls', [
+            'indore' => 'https://g.page/accretion-aviation-indore/review?gm',
+            'mumbai' => 'https://g.page/accretionaviation/review',
+            'goa' => 'https://g.page/r/CRZjZGGykWKrEB0/review',
+            'bengaluru' => 'https://g.page/r/CQOLMfOkuEJNEAg/review',
+            'chennai' => 'https://g.page/r/CTqqJOau77tzEB0/review',
+        ]);
+
+        $review = \App\Models\ReviewConversation::create([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $lead->id,
+            'customer_phone' => '9876543210',
+            'status' => 'waiting_for_reply',
+            'customer_replied' => true,
+            'needs_human' => false,
+            'reminder_count' => 0,
+        ]);
+
+        $outbound = new class extends \App\Services\WhatCrmOutboundMessageService {
+            public array $texts = [];
+
+            public function __construct()
+            {
+            }
+
+            public function sendText(array $data): array
+            {
+                $this->texts[] = $data;
+
+                return [
+                    'success' => true,
+                    'conversation_id' => (string) Str::uuid(),
+                ];
+            }
+        };
+
+        $sent = (new \App\Services\Review\ReviewWhatsAppService($outbound))
+            ->sendReviewLink($review);
+
+        $this->assertTrue($sent);
+        $this->assertCount(1, $outbound->texts);
+        $this->assertSame(
+            'https://g.page/r/CRZjZGGykWKrEB0/review',
+            $outbound->texts[0]['message']
+        );
+    }
+
     private function createLeadScenario(): array
     {
         $salesUser = User::create([
@@ -389,13 +584,47 @@ class ReviewOperationsWorkflowTest extends TestCase
 
         Schema::create('lead_followups', function (Blueprint $table) {
             $table->uuid('id')->primary();
+            $table->uuid('parent_followup_id')->nullable();
+            $table->uuid('operation_case_id')->nullable();
             $table->uuid('lead_id')->nullable();
             $table->timestamp('next_followup_date')->nullable();
             $table->text('followup_note')->nullable();
             $table->integer('status')->nullable();
             $table->uuid('followed_by')->nullable();
+            $table->string('contact_outcome')->nullable();
+            $table->boolean('customer_not_picked_up')->default(false);
             $table->decimal('total_amount', 15, 2)->nullable();
             $table->decimal('received_amount', 15, 2)->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('services', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('service');
+            $table->integer('status')->default(1);
+            $table->timestamps();
+        });
+
+        Schema::create('lead_rides', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('lead_id')->nullable();
+            $table->timestamp('from_date')->nullable();
+            $table->timestamp('to_date')->nullable();
+            $table->string('from_place')->nullable();
+            $table->string('to_place')->nullable();
+            $table->uuid('service_address_id')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('cities', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('name', 150);
+            $table->timestamps();
+        });
+
+        Schema::create('service_addresses', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('city_id')->nullable();
             $table->timestamps();
         });
 
@@ -420,6 +649,7 @@ class ReviewOperationsWorkflowTest extends TestCase
             $table->uuid('completed_by')->nullable();
             $table->timestamp('opened_at')->nullable();
             $table->timestamp('completed_at')->nullable();
+            $table->timestamp('next_followup_at')->nullable();
             $table->text('note')->nullable();
             $table->json('metadata')->nullable();
             $table->timestamps();

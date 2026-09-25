@@ -33,6 +33,7 @@ use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use App\Services\AirpointsIntegrationService;
 use App\Services\LeadAllocationService;
+use App\Services\LeadAssignmentFollowupService;
 use App\Services\LeadAiCurrentFactsService;
 use App\Services\LeadSourceFollowupService;
 use App\Services\SalesAmountCalculator;
@@ -158,7 +159,7 @@ class ClientController extends Controller
         return array_values(array_unique(array_map('strval', $ids)));
     }
 
-    private function buildLeadFollowupViewData(Lead $lead): array
+    public function buildLeadFollowupViewData(Lead $lead): array
     {
         $lead->loadMissing(['rideSegments', 'client']);
 
@@ -1257,6 +1258,14 @@ $nextFollowupDate =
     )
         ? null
         : $request->next_follow_up;
+
+if (
+    !LeadFollowup::hiddenFromTodayFollowups($followupStatus)
+    && empty($nextFollowupDate)
+    && !empty($manualRepresentativeId)
+) {
+    $nextFollowupDate = now();
+}
 
 
 $leadFollowUp = LeadFollowUp::create([
@@ -5525,6 +5534,18 @@ $leadFollowUp = LeadFollowUp::create([
                                 : null,
                         ]
                     );
+
+                $assignedUser = User::query()
+                    ->find($lead->representative_user_id);
+
+                if ($assignedUser) {
+                    app(LeadAssignmentFollowupService::class)
+                        ->syncForAssignment(
+                            $lead->fresh(),
+                            $assignedUser,
+                            now()
+                        );
+                }
             }
 
             // Sync requirement description to first followup

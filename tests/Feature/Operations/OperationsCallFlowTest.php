@@ -121,6 +121,28 @@ class OperationsCallFlowTest extends TestCase
             'followed_by' => $operationsUser->id,
             'followup_recording_id' => 5001,
             'status' => LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
+            'next_followup_date' => null,
+        ]);
+
+        $createdFollowup = LeadFollowup::query()
+            ->where('lead_id', $lead->id)
+            ->where('followup_recording_id', 5001)
+            ->first();
+
+        $this->assertNotNull($createdFollowup->operation_case_id);
+        $this->assertDatabaseHas('operation_cases', [
+            'id' => $createdFollowup->operation_case_id,
+            'lead_id' => $lead->id,
+            'type' => 'customer_call',
+            'status' => 'in_progress',
+            'assigned_to' => $operationsUser->id,
+            'next_followup_at' => '2026-09-22 17:00:00',
+        ]);
+        $this->assertDatabaseHas('operation_case_activities', [
+            'operation_case_id' => $createdFollowup->operation_case_id,
+            'lead_id' => $lead->id,
+            'user_id' => $operationsUser->id,
+            'action' => 'call_summary_attached',
         ]);
     }
 
@@ -237,6 +259,37 @@ class OperationsCallFlowTest extends TestCase
         $this->assertTrue($rows->firstWhere('lead.id', $lead->id)['called_today']);
     }
 
+    public function test_customer_call_dashboard_rows_have_open_operation_case(): void
+    {
+        $salesUser = $this->user('Richa Sales', 'richa-customer-case@example.test', $this->salesType);
+        $operationsUser = $this->user('Deepak Ops', 'deepak-customer-case@example.test', $this->operationsType);
+        $manager = $this->user('Ops Manager', 'ops-manager-customer-case@example.test', $this->operationsManagerType);
+        $lead = $this->leadWithLatestStatus('9000000007', $salesUser, LeadFollowup::STATUS_CONFIRMED);
+
+        DB::table('operations_lead_assignments')->insert([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $lead->id,
+            'operations_user_id' => $operationsUser->id,
+            'assigned_by' => $manager->id,
+            'assigned_at' => now()->subDay(),
+            'unassigned_at' => null,
+            'is_active' => true,
+            'created_at' => now()->subDay(),
+            'updated_at' => now()->subDay(),
+        ]);
+
+        $rows = app(OperationsCallDashboardService::class)->rows($manager);
+        $row = $rows->firstWhere('lead.id', $lead->id);
+
+        $this->assertNotNull($row['operation_case']);
+        $this->assertSame('customer_call', $row['operation_case']->type);
+        $this->assertSame($lead->id, $row['operation_case']->lead_id);
+        $this->assertDatabaseCount('operation_cases', 1);
+
+        app(OperationsCallDashboardService::class)->rows($manager);
+        $this->assertDatabaseCount('operation_cases', 1);
+    }
+
     public function test_ivr_agent_mapping_lists_sales_and_operations_users(): void
     {
         $superAdmin = $this->user('Super Admin', 'super-admin@example.test', $this->superAdminType);
@@ -294,6 +347,7 @@ class OperationsCallFlowTest extends TestCase
         Schema::create('lead_followups', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('parent_followup_id')->nullable();
+            $table->uuid('operation_case_id')->nullable();
             $table->unsignedBigInteger('followup_recording_id')->nullable();
             $table->uuid('lead_id');
             $table->timestamp('next_followup_date')->nullable();
@@ -316,6 +370,35 @@ class OperationsCallFlowTest extends TestCase
             $table->timestamp('assigned_at');
             $table->timestamp('unassigned_at')->nullable();
             $table->boolean('is_active')->default(true);
+            $table->timestamps();
+        });
+
+        Schema::create('operation_cases', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('lead_id');
+            $table->string('type', 30);
+            $table->string('status', 30)->default('pending');
+            $table->uuid('assigned_to')->nullable();
+            $table->uuid('created_by')->nullable();
+            $table->uuid('completed_by')->nullable();
+            $table->timestamp('opened_at')->nullable();
+            $table->timestamp('completed_at')->nullable();
+            $table->timestamp('next_followup_at')->nullable();
+            $table->text('note')->nullable();
+            $table->json('metadata')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('operation_case_activities', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('operation_case_id');
+            $table->uuid('lead_id');
+            $table->uuid('user_id')->nullable();
+            $table->string('action', 60);
+            $table->string('from_status', 30)->nullable();
+            $table->string('to_status', 30)->nullable();
+            $table->text('note')->nullable();
+            $table->json('metadata')->nullable();
             $table->timestamps();
         });
 

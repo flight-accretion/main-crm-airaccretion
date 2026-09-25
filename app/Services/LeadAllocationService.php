@@ -339,6 +339,13 @@ if ($emailLeadLog) {
     );
 }
 
+        app(LeadAssignmentFollowupService::class)
+            ->syncForAssignment(
+                $lead->fresh(),
+                $salesperson,
+                now()
+            );
+
             $processed++;
         }
 

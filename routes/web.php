@@ -55,6 +55,9 @@ use App\Http\Controllers\AttendanceSettingsController;
 use App\Http\Controllers\OperationsCallDashboardController;
 use App\Http\Controllers\OperationsLeadAssignmentController;
 use App\Http\Controllers\OperationsDashboardController;
+use App\Http\Controllers\OperationsFollowupController;
+use App\Http\Controllers\OperationsRescheduleController;
+use App\Http\Controllers\OperationsVendorRefundController;
 
 
 /*
@@ -509,6 +512,76 @@ Route::prefix(
         ->name('admin.booking-email-template.update');
 
 
+
+        Route::prefix('admin/operations/vendor-refunds')
+    ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
+    ->name('admin.operations.vendor-refunds.')
+    ->group(function () {
+
+        // Vendor Refund pending list
+        Route::get(
+            '/',
+            [
+                OperationsVendorRefundController::class,
+                'index'
+            ]
+        )->name('index');
+
+        // Right-side details drawer
+        Route::get(
+            '/{vendorPayment}/details',
+            [
+                OperationsVendorRefundController::class,
+                'show'
+            ]
+        )->name('show');
+
+        // Save refund information / proof / remarks
+        Route::post(
+            '/{vendorPayment}/update',
+            [
+                OperationsVendorRefundController::class,
+                'update'
+            ]
+        )->name('update');
+
+        // Download uploaded vendor refund proof (single VendorRefund row)
+        Route::get(
+            '/proof/{vendorRefund}',
+            [
+                OperationsVendorRefundController::class,
+                'downloadProof'
+            ]
+        )->name('proof.download');
+
+        // Download Vendor Refund PDF (same layout as preview)
+        Route::get(
+            '/{vendorPayment}/download',
+            [
+                OperationsVendorRefundController::class,
+                'download'
+            ]
+        )->name('download');
+
+        // Preview Vendor Refund (same Blade as download)
+        Route::get(
+            '/{vendorPayment}/preview',
+            [
+                OperationsVendorRefundController::class,
+                'preview'
+            ]
+        )->name('preview');
+
+        // Mark Vendor Refund completed
+        Route::post(
+            '/{vendorPayment}/mark-done',
+            [
+                OperationsVendorRefundController::class,
+                'markDone'
+            ]
+        )->name('mark-done');
+    });
+
     Route::prefix('admin/lead')->group(function () {
         Route::get('/', [ClientController::class, 'index'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.clients.index');
         Route::get('/create', [ClientController::class, 'create'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.clients.create');
@@ -905,6 +978,26 @@ Route::post(
                 [OperationsDashboardController::class, 'queue']
             )->name('admin.operations.queue');
 
+            Route::get(
+                '/reschedules',
+                [OperationsRescheduleController::class, 'index']
+            )->name('admin.operations.reschedules.index');
+
+            Route::get(
+                '/reschedules/{ride}/edit',
+                [OperationsRescheduleController::class, 'edit']
+            )->name('admin.operations.reschedules.edit');
+
+            Route::post(
+                '/reschedules/{ride}',
+                [OperationsRescheduleController::class, 'update']
+            )->name('admin.operations.reschedules.update');
+
+            Route::post(
+                '/reschedules/{ride}/cancel',
+                [OperationsRescheduleController::class, 'cancel']
+            )->name('admin.operations.reschedules.cancel');
+
             Route::post(
                 '/case/{case}/start',
                 [OperationsDashboardController::class, 'start']
@@ -914,6 +1007,16 @@ Route::post(
                 '/case/{case}/complete',
                 [OperationsDashboardController::class, 'complete']
             )->name('admin.operations.case.complete');
+
+            Route::get(
+                '/case/{case}/follow-up/create',
+                [OperationsFollowupController::class, 'create']
+            )->name('admin.operations.followups.create');
+
+            Route::post(
+                '/case/{case}/follow-up',
+                [OperationsFollowupController::class, 'store']
+            )->name('admin.operations.followups.store');
 
             Route::get(
                 '/history',

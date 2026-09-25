@@ -5,6 +5,7 @@ namespace App\Services\Operations;
 use App\Models\CallSummaryIntegration;
 use App\Models\Lead;
 use App\Models\LeadFollowup;
+use App\Models\OperationCase;
 use App\Models\User;
 use App\Models\UserType;
 use Illuminate\Support\Collection;
@@ -12,7 +13,8 @@ use Illuminate\Support\Collection;
 class OperationsCallDashboardService
 {
     public function __construct(
-        private OperationsLeadEligibilityService $eligibility
+        private OperationsLeadEligibilityService $eligibility,
+        private OperationCaseService $operationCases
     ) {
     }
 
@@ -85,13 +87,30 @@ class OperationsCallDashboardService
                 ->get()
                 ->keyBy('followup_id');
 
-        return $leads->map(function (Lead $lead) use ($opsFollowups, $integrationsByFollowup) {
+        $customerCallCases = OperationCase::query()
+            ->whereIn('lead_id', $leadIds)
+            ->where('type', OperationCase::TYPE_CUSTOMER_CALL)
+            ->whereNull('completed_at')
+            ->get()
+            ->keyBy('lead_id');
+
+        return $leads->map(function (Lead $lead) use ($opsFollowups, $integrationsByFollowup, $customerCallCases) {
             $leadOpsFollowups = $opsFollowups->get($lead->id, collect());
             $lastOpsFollowup = $leadOpsFollowups->first();
             $latestFollowup = $this->eligibility->latestFollowup($lead);
             $lastIntegration = $lastOpsFollowup
                 ? $integrationsByFollowup->get($lastOpsFollowup->id)
                 : null;
+            $operationCase = $customerCallCases->get($lead->id);
+
+            if (!$operationCase) {
+                $operationCase = $this->operationCases->open(
+                    $lead,
+                    OperationCase::TYPE_CUSTOMER_CALL,
+                    ['source' => 'customer_calls_dashboard']
+                );
+                $customerCallCases->put($lead->id, $operationCase);
+            }
 
             $calledToday = $leadOpsFollowups->contains(function (LeadFollowup $followup) use ($integrationsByFollowup) {
                 return $followup->created_at
@@ -115,7 +134,9 @@ class OperationsCallDashboardService
                 'last_direction' => $lastIntegration?->direction,
                 'call_verified' => (bool) $lastIntegration,
                 'called_today' => $calledToday,
-                'next_followup_date' => $lastOpsFollowup?->next_followup_date,
+                'next_followup_date' => $operationCase->next_followup_at
+                    ?: $lastOpsFollowup?->next_followup_date,
+                'operation_case' => $operationCase,
             ];
         });
     }

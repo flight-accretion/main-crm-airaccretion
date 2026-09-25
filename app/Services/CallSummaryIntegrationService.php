@@ -7,9 +7,12 @@ use App\Models\IvrAgent;
 use App\Models\IvrCallLog;
 use App\Models\Lead;
 use App\Models\LeadFollowup;
+use App\Models\OperationCase;
+use App\Models\OperationCaseActivity;
 use App\Models\User;
 use App\Models\UserType;
 use App\Services\Operations\OperationsCallLeadResolver;
+use App\Services\Operations\OperationCaseService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -2710,6 +2713,13 @@ if (
 
         $integration->save();
 
+        $this->syncOperationsCustomerCallCase(
+            $integration,
+            $lead,
+            $followup,
+            $followedBy
+        );
+
         Log::info(
             'Call Summary integration completed with follow-up.',
             [
@@ -2746,6 +2756,58 @@ if (
                     ),
             ]
         );
+    }
+
+    private function syncOperationsCustomerCallCase(
+        CallSummaryIntegration $integration,
+        Lead $lead,
+        LeadFollowup $followup,
+        ?string $followedBy
+    ): void {
+        if ($integration->match_method !== 'operations_phone') {
+            return;
+        }
+
+        $case = app(OperationCaseService::class)->open(
+            $lead,
+            OperationCase::TYPE_CUSTOMER_CALL,
+            [
+                'source' => 'skyrack_operations_call',
+                'call_summary_integration_id' => $integration->id,
+            ],
+            $followedBy
+        );
+
+        $oldStatus = $case->status;
+
+        $case->update([
+            'status' => OperationCase::STATUS_IN_PROGRESS,
+            'assigned_to' => $case->assigned_to ?: $followedBy,
+            'next_followup_at' => $integration->followup_date,
+            'note' => $integration->summary,
+            'completed_by' => null,
+            'completed_at' => null,
+        ]);
+
+        $followup->operation_case_id = $case->id;
+        $followup->next_followup_date = null;
+        $followup->save();
+
+        OperationCaseActivity::create([
+            'operation_case_id' => $case->id,
+            'lead_id' => $lead->id,
+            'user_id' => $followedBy,
+            'action' => 'call_summary_attached',
+            'from_status' => $oldStatus,
+            'to_status' => OperationCase::STATUS_IN_PROGRESS,
+            'note' => $integration->summary,
+            'metadata' => [
+                'call_summary_integration_id' => $integration->id,
+                'lead_followup_id' => $followup->id,
+                'followup_recording_id' => $integration->followup_recording_id,
+                'next_followup_at' => $integration->followup_date?->toDateTimeString(),
+            ],
+        ]);
     }
 
     private function payloadDebugContext(

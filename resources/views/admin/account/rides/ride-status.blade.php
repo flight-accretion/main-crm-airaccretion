@@ -1,5 +1,14 @@
 @extends('admin.layouts.header')
 @section('content')
+@php
+    $operationsRescheduleMode = $operationsRescheduleMode ?? false;
+    $pageTitle = $pageTitle ?? 'Ride Status';
+    $tableTitle = $tableTitle ?? 'All Rides';
+    $filterActionRoute = $filterActionRoute ?? route('admin.rides.ride-status');
+    $controlsActionRoute = $controlsActionRoute ?? route('admin.rides.ride-status');
+    $resetRoute = $resetRoute ?? route('admin.rides.ride-status');
+    $exportRoute = $exportRoute ?? ($operationsRescheduleMode ? null : route('admin.rides.ride-status.export'));
+@endphp
 <!-- Page Header -->
 <div class="block justify-between page-header md:flex">
 
@@ -19,7 +28,7 @@
                             </div>
                             <div class="flex-grow">
                                 <div class="flex items-center justify-between">
-                                    <h5 class="font-semibold mb-0 leading-none text-[1.25rem]">Ride Status</h5>
+                                    <h5 class="font-semibold mb-0 leading-none text-[1.25rem]">{{ $pageTitle }}</h5>
                                 </div>
                             </div>
                         </div>
@@ -42,7 +51,7 @@
             </div>
             <div class="box-body" id="filter-section">
                 <form class="ti-custom-validation view-client-filters" method="GET"
-                    action="{{ route('admin.rides.ride-status') }}" id="filter-form" novalidate>
+                    action="{{ $filterActionRoute }}" id="filter-form" novalidate>
                     <div class="grid grid-cols-12 gap-6 items-end">
                         {{-- Row 1: existing date + status + apply --}}
                         <div class="xl:col-span-2 lg:col-span-4 md:col-span-6 sm:col-span-12 col-span-12">
@@ -122,8 +131,8 @@
     <div class="xl:col-span-12 col-span-12">
         <div class="box custom-box">
             <div class="box-header justify-between flex flex-wrap gap-3">
-                <div class="box-title">All Rides</div>
-                <form id="ride-status-controls-form" method="GET" action="{{ route('admin.rides.ride-status') }}" class="flex flex-wrap items-center gap-3">
+                <div class="box-title">{{ $tableTitle }}</div>
+                <form id="ride-status-controls-form" method="GET" action="{{ $controlsActionRoute }}" class="flex flex-wrap items-center gap-3">
                     <div class="flex items-center gap-2">
                         <label for="per-page-select" class="text-sm whitespace-nowrap">Show</label>
                         <select id="per-page-select" name="per_page" class="ti-form-select rounded-sm form-control-sm" style="width: 80px;">
@@ -152,7 +161,8 @@
             <div class="box-body">
 
                 <div class="table-responsive">
-                    <table class="table display responsive nowrap table-datatable server-paginated" width="100%"
+                    <table id="{{ $operationsRescheduleMode ? 'operations-reschedule-table' : 'ride-status-table' }}"
+                        class="table display responsive nowrap table-datatable server-paginated" width="100%"
                         data-empty-msg="No rides found with the specified status criteria.">
                         <thead class="bg-primary text-white">
                             <tr class="border-b border-defaultborder">
@@ -160,10 +170,12 @@
                                 <th data-priority="1">S.No</th>
 
                                 <th data-priority="6">Name</th>
-                                <th data-priority="7">Company Name</th>
-                                <th data-priority="8">GST Number</th>
+                                @unless($operationsRescheduleMode)
+                                    <th data-priority="7">Company Name</th>
+                                    <th data-priority="8">GST Number</th>
+                                @endunless
                                 <th data-priority="7">Phone</th>
-                                <th data-priority="8">Service Date</th>
+                                <th data-priority="8">{{ $operationsRescheduleMode ? 'Original Service Date' : 'Service Date' }}</th>
                                 <th data-priority="9">Service</th>
                                 {{-- <th data-priority="2">Invoice ID</th> --}}
                                 {{-- <th data-priority="3">Vendor Name</th> --}}
@@ -181,8 +193,10 @@
                                 <td class="text-center">{{ (isset($rideStatusPaginator) && $rideStatusPaginator->firstItem() ? $rideStatusPaginator->firstItem() : 1) + $index }}</td>
 
                                 <td>{{ $ride['client_name'] }}</td>
-                                <td>{{ $ride['company_name'] }}</td>
-                                <td>{{ $ride['gst_number'] }}</td>
+                                @unless($operationsRescheduleMode)
+                                    <td>{{ $ride['company_name'] }}</td>
+                                    <td>{{ $ride['gst_number'] }}</td>
+                                @endunless
                                 <td class="text-center">{{ $ride['contact_number'] }}</td>
                                 <td class="text-center"
                                     data-order="{{ isset($ride['service_date_sortable']) ? $ride['service_date_sortable'] : '0000-00-00' }}">
@@ -240,12 +254,42 @@
                                         }}</span>
                                 </td>
                                 <td>
-                                    <button type="button"
-                                        class="ti-btn ti-btn-icon ti-btn-sm ti-btn-primary-full view-ride-btn"
-                                        data-ride-id="{{ $ride['id'] }}" data-hs-overlay="#ride-details-modal"
-                                        onclick="resetRefundSection()">
-                                        <i class="ri-eye-line"></i>
-                                    </button>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <button type="button"
+                                            class="ti-btn {{ $operationsRescheduleMode ? 'ti-btn-sm' : 'ti-btn-icon ti-btn-sm' }} ti-btn-primary-full view-ride-btn"
+                                            data-ride-id="{{ $ride['id'] }}" data-hs-overlay="#ride-details-modal"
+                                            onclick="resetRefundSection()" title="View">
+                                            <i class="ri-eye-line"></i>
+                                            <!-- @if($operationsRescheduleMode)
+                                                <span class="ms-1">View</span>
+                                            @endif -->
+                                        </button>
+
+                                        @if($operationsRescheduleMode)
+                                            <a
+                                                href="{{ route('admin.operations.reschedules.edit', $ride['id']) }}"
+                                                class="ti-btn ti-btn-sm ti-btn-info"
+                                            >
+                                                <i class="ri-edit-line me-1"></i>
+                                                
+                                            </a>
+
+                                            <form
+                                                method="POST"
+                                                action="{{ route('admin.operations.reschedules.cancel', $ride['id']) }}"
+                                                class="inline-block"
+                                                onsubmit="return confirm('Cancel this ride and complete the pending reschedule task?')"
+                                                style="margin-bottom: 0px;width:auto;"
+                                            >
+                                                @csrf
+                                                <input type="hidden" name="total_amount" value="{{ $ride['total_amount'] }}">
+                                                <button type="submit" class="ti-btn ti-btn-sm ti-btn-danger" style="width:auto;">
+                                                    <i class="ri-close-circle-line me-1"></i>
+                                                    Cancel
+                                                </button>
+                                            </form>
+                                        @endif
+                                    </div>
                                 </td>
                             </tr>
                             @empty
@@ -1392,10 +1436,14 @@
         $('#ride-vendor-refund-date')
             .val(
                 today
-            );
+        );
     }
 }
 );
+
+        const rideStatusListUrl = @json($controlsActionRoute);
+        const rideStatusResetUrl = @json($resetRoute);
+        const rideStatusExportUrl = @json($exportRoute);
 
 
 $(document).on(
@@ -1408,7 +1456,7 @@ $(document).on(
 );
     // Toggle filter section and clear filters helper
         function clearRideFilters() {
-            window.location.href = '{{ route("admin.rides.ride-status") }}';
+            window.location.href = rideStatusResetUrl;
         }
 
         $(document).on('click', '#toggle-filters', function() {
@@ -1460,7 +1508,7 @@ $(document).on(
 
             function navigateRideStatus() {
                 const params = getFilterParams();
-                const url = '{{ route("admin.rides.ride-status") }}';
+                const url = rideStatusListUrl;
                 const query = params.toString();
                 window.location.href = query ? url + '?' + query : url;
             }
@@ -1488,15 +1536,23 @@ $(document).on(
 
             // Export handlers - export using current filter form values
             $('.export-excel-btn').on('click', function() {
+                if (!rideStatusExportUrl) {
+                    return;
+                }
+
                 var params = getFilterParams();
                 params.set('format', 'xlsx');
-                window.location.href = '{{ route("admin.rides.ride-status.export") }}?' + params.toString();
+                window.location.href = rideStatusExportUrl + '?' + params.toString();
             });
 
             $('.export-csv-btn').on('click', function() {
+                if (!rideStatusExportUrl) {
+                    return;
+                }
+
                 var params = getFilterParams();
                 params.set('format', 'csv');
-                window.location.href = '{{ route("admin.rides.ride-status.export") }}?' + params.toString();
+                window.location.href = rideStatusExportUrl + '?' + params.toString();
             });
 
             // View ride details

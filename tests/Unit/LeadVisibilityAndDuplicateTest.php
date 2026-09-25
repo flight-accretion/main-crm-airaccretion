@@ -448,9 +448,73 @@ class LeadVisibilityAndDuplicateTest extends TestCase
             ->where('lead_id', $lead->id)
             ->firstOrFail();
 
+        $this->assertNotNull($followup->next_followup_date);
         $this->assertSame(
-            '2026-08-31',
-            $followup->next_followup_date->toDateString()
+            '2026-08-31 12:00:00',
+            $followup->next_followup_date->format('Y-m-d H:i:s')
+        );
+    }
+
+    public function test_assigned_lead_creation_without_followup_input_uses_current_time(): void
+    {
+        $this->withoutMiddleware(\App\Http\Middleware\VerifyCsrfToken::class);
+
+        Carbon::setTestNow(Carbon::create(2026, 8, 31, 12, 0, 0));
+
+        $superAdmin = $this->createUser(UserType::SUPER_ADMIN, 'Super Admin');
+        $salesperson = $this->createUser(UserType::SALES_EXECUTIVE, 'Akshita Borakar');
+
+        $product = Product::create([
+            'id' => (string) Str::uuid(),
+            'product' => 'Private Jet',
+            'status' => 1,
+        ]);
+
+        $service = Service::create([
+            'id' => (string) Str::uuid(),
+            'service' => 'Charter',
+            'status' => 1,
+        ]);
+
+        $response = $this
+            ->actingAs($superAdmin)
+            ->post(route('admin.clients.store'), [
+                'name' => 'Assigned Creation Customer',
+                'email' => null,
+                'contact_country_code' => '+91',
+                'contact_number' => '9437938766',
+                'alternate_number' => null,
+                'whatsapp_country_code' => '+91',
+                'product_ids' => [$product->id],
+                'service_ids' => [$service->id],
+                'number_of_passengers' => 1,
+                'trips' => [
+                    [
+                        'from_date' => '2026-09-01 10:00',
+                        'to_date' => '2026-09-01 11:00',
+                        'from_place' => 'Indore',
+                        'to_place' => 'Delhi',
+                    ],
+                ],
+                'representative_user_id' => $salesperson->id,
+                'status' => LeadFollowup::STATUS_INITIATED,
+            ]);
+
+        $response->assertRedirect(route('admin.clients.create'));
+
+        $lead = Lead::query()
+            ->where('representative_user_id', $salesperson->id)
+            ->latest('created_at')
+            ->firstOrFail();
+
+        $followup = LeadFollowup::query()
+            ->where('lead_id', $lead->id)
+            ->firstOrFail();
+
+        $this->assertNotNull($followup->next_followup_date);
+        $this->assertSame(
+            '2026-08-31 12:00:00',
+            $followup->next_followup_date->format('Y-m-d H:i:s')
         );
     }
 

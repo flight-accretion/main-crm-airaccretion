@@ -7,6 +7,10 @@ use Illuminate\Support\Str;
 
 class VendorRefund extends Model
 {
+    public const STATUS_PENDING = 1;
+
+    public const STATUS_COMPLETED = 2;
+
     public $incrementing = false;
 
     protected $keyType = 'string';
@@ -27,6 +31,10 @@ class VendorRefund extends Model
 
         'no_refund_required',
 
+        'status',
+        'completed_at',
+        'completed_by',
+
         'created_by',
     ];
 
@@ -36,6 +44,8 @@ class VendorRefund extends Model
         'refund_amount' => 'decimal:2',
         'refund_date' => 'datetime',
         'no_refund_required' => 'boolean',
+        'status' => 'integer',
+        'completed_at' => 'datetime',
     ];
 
 

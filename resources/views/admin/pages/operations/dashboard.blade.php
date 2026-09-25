@@ -10,7 +10,7 @@
 
     <div class="container-fluid">
         <div class="mb-6">
-            <h4 class="font-semibold text-lg">Operations Dashboard</h4>
+            <h4 class="font-semibold text-lg">Operations Overview</h4>
             <p class="text-sm text-gray-500">
                 Operations work status only. CRM lead, payment and ride status remain unchanged.
             </p>
@@ -18,13 +18,18 @@
 
         <div class="grid grid-cols-12 gap-4 mb-6">
             @foreach([
+                ['customer_call', 'Customer Calls', $customerCallCount],
                 ['review', 'Review', $reviewCount],
                 ['reschedule', 'Reschedule', $rescheduleCount],
                 ['refund', 'Refund', $refundCount],
-                ['cancelled', 'Cancelled', $cancelledCount],
             ] as [$type, $label, $count])
                 <div class="xl:col-span-3 md:col-span-6 col-span-12">
-                    <a href="{{ route('admin.operations.queue', $type) }}" class="box block">
+                    <a
+                        href="{{ route('admin.operations.queue', $type) }}"
+                        class="box block"
+                        data-overview-count-type="{{ $type }}"
+                        data-overview-count-value="{{ $count }}"
+                    >
                         <div class="box-body">
                             <div class="text-sm text-gray-500">{{ $label }}</div>
                             <div class="text-3xl font-semibold">{{ $count }}</div>
@@ -42,6 +47,26 @@
                     action="{{ route('admin.operations.index') }}"
                     class="grid grid-cols-12 gap-3 items-end"
                 >
+                    <div class="xl:col-span-2 md:col-span-4 col-span-12">
+                        <label class="ti-form-label">Date Filter</label>
+                        <select name="date_filter" class="form-control">
+                            <option value="">All Dates</option>
+                            @foreach([
+                                'today' => 'Today',
+                                'yesterday' => 'Yesterday',
+                                'monthly' => 'This Month',
+                                'custom' => 'Custom Date',
+                            ] as $value => $label)
+                                <option
+                                    value="{{ $value }}"
+                                    {{ ($filters['date_filter'] ?? '') === $value ? 'selected' : '' }}
+                                >
+                                    {{ $label }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
                     <div class="xl:col-span-2 md:col-span-4 col-span-12">
                         <label class="ti-form-label">From Date</label>
                         <input
@@ -133,7 +158,7 @@
                     </div>
 
                     <div class="xl:col-span-1 md:col-span-2 col-span-6 flex gap-2">
-                        <button class="ti-btn ti-btn-primary w-full">Filter</button>
+                        <button class="ti-btn ti-btn-primary w-full" style="width: auto;">Filter</button>
                         <a
                             href="{{ route('admin.operations.index') }}"
                             class="ti-btn ti-btn-light"
@@ -170,12 +195,12 @@
                             @forelse($recentActivity as $activity)
                                 <tr>
                                     <td>{{ optional($activity->created_at)->format('d M Y h:i A') }}</td>
-                                    <td>{{ ucfirst(optional($activity->operationCase)->type ?? '-') }}</td>
-                                    <td>{{ ucfirst(str_replace('_', ' ', $activity->action)) }}</td>
+                                    <td>{{ ucwords(str_replace('_', ' ', optional($activity->operationCase)->type ?? '-')) }}</td>
+                                    <td>{{ ucwords(str_replace('_', ' ', $activity->action)) }}</td>
                                     <td>{{ optional($activity->user)->name ?? 'System' }}</td>
                                     <td>
-                                        {{ $activity->from_status ? ucfirst(str_replace('_', ' ', $activity->from_status)) . ' -> ' : '' }}
-                                        {{ ucfirst(str_replace('_', ' ', $activity->to_status ?? '-')) }}
+                                        {{ $activity->from_status ? ucwords(str_replace('_', ' ', $activity->from_status)) . ' -> ' : '' }}
+                                        {{ ucwords(str_replace('_', ' ', $activity->to_status ?? '-')) }}
                                     </td>
                                 </tr>
                             @empty

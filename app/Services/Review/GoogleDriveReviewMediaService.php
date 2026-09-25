@@ -2,79 +2,404 @@
 
 namespace App\Services\Review;
 
+use Google\Client;
+use Google\Service\Drive;
+use Google\Service\Drive\DriveFile;
+use RuntimeException;
+
 class GoogleDriveReviewMediaService
 {
-    private function drive()
+    /**
+     * Build authenticated Google client.
+     *
+     * No service-account JSON is used.
+     * Authentication is OAuth 2.0 using:
+     *
+     * - Client ID
+     * - Client Secret
+     * - Refresh Token
+     *
+     * All credentials come from config/.env.
+     */
+    private function client(): Client
     {
-        if (!class_exists(\Google\Client::class)) {
-            throw new \RuntimeException('Google API client is not installed.');
+        if (
+            !config(
+                'services.google_drive_review.enabled',
+                false
+            )
+        ) {
+            throw new RuntimeException(
+                'Google Drive review media is disabled.'
+            );
         }
 
-        $client = new \Google\Client();
-        $client->setApplicationName('Accretion CRM Review Media');
-        $client->setScopes([\Google\Service\Drive::DRIVE_FILE]);
+        $clientId =
+            trim(
+                (string) config(
+                    'services.google_drive_review.client_id'
+                )
+            );
 
-        $path = config('services.google_drive_review.service_account_path');
-        $base64 = config('services.google_drive_review.service_account_json_base64');
+        $clientSecret =
+            trim(
+                (string) config(
+                    'services.google_drive_review.client_secret'
+                )
+            );
 
-        if ($path) {
-            $client->setAuthConfig($path);
-        } elseif ($base64) {
-            $json = base64_decode($base64, true);
+        $refreshToken =
+            trim(
+                (string) config(
+                    'services.google_drive_review.refresh_token'
+                )
+            );
 
-            if ($json === false) {
-                throw new \RuntimeException('Invalid Google Drive credential.');
-            }
+        $apiKey =
+            trim(
+                (string) config(
+                    'services.google_drive_review.api_key'
+                )
+            );
 
-            $client->setAuthConfig(json_decode($json, true, 512, JSON_THROW_ON_ERROR));
-        } else {
-            throw new \RuntimeException('Google Drive credentials missing.');
+        if ($clientId === '') {
+            throw new RuntimeException(
+                'Google Drive client ID is missing.'
+            );
         }
 
-        return new \Google\Service\Drive($client);
+        if ($clientSecret === '') {
+            throw new RuntimeException(
+                'Google Drive client secret is missing.'
+            );
+        }
+
+        if ($refreshToken === '') {
+            throw new RuntimeException(
+                'Google Drive refresh token is missing.'
+            );
+        }
+
+        $client =
+            new Client();
+
+        $client->setApplicationName(
+            'Accretion CRM Review Media'
+        );
+
+        $client->setClientId(
+            $clientId
+        );
+
+        $client->setClientSecret(
+            $clientSecret
+        );
+
+        /*
+         * Needed so Google provides a refresh token
+         * during the initial OAuth authorization.
+         */
+        $client->setAccessType(
+            'offline'
+        );
+
+        /*
+         * We need private Drive access.
+         *
+         * If you reuse an existing manually-created
+         * Drive folder, DRIVE scope is the safest.
+         */
+        $client->setScopes([
+            Drive::DRIVE,
+        ]);
+
+        /*
+         * Optional API key.
+         *
+         * It may be used for project identification/quota,
+         * but it is NOT the authorization credential.
+         */
+        if ($apiKey !== '') {
+            $client->setDeveloperKey(
+                $apiKey
+            );
+        }
+
+        /*
+         * Exchange refresh token for a fresh access token.
+         *
+         * Google Client automatically uses the returned
+         * access token for subsequent Drive API calls.
+         */
+        $token =
+            $client
+                ->fetchAccessTokenWithRefreshToken(
+                    $refreshToken
+                );
+
+        if (
+            isset(
+                $token['error']
+            )
+        ) {
+            throw new RuntimeException(
+                'Google Drive OAuth token refresh failed: '
+                . (
+                    $token['error_description']
+                    ?? $token['error']
+                )
+            );
+        }
+
+        return $client;
     }
 
-    public function upload(string $binary, string $name, string $mime): array
+    /**
+     * Google Drive API instance.
+     */
+    private function drive(): Drive
     {
-        if (!config('services.google_drive_review.enabled')) {
-            throw new \RuntimeException('Google Drive review upload is disabled.');
+        return new Drive(
+            $this->client()
+        );
+    }
+
+    /**
+     * Upload customer media into the configured
+     * private Google Drive folder.
+     */
+    public function upload(
+        string $binary,
+        string $name,
+        string $mimeType
+    ): array {
+        $folderId =
+            trim(
+                (string) config(
+                    'services.google_drive_review.folder_id'
+                )
+            );
+
+        if ($folderId === '') {
+            throw new RuntimeException(
+                'Google Drive review folder ID is missing.'
+            );
         }
 
-        $folder = config('services.google_drive_review.folder_id');
-
-        if (!$folder) {
-            throw new \RuntimeException('Google Drive review folder missing.');
+        if ($binary === '') {
+            throw new RuntimeException(
+                'Cannot upload empty media to Google Drive.'
+            );
         }
 
-        $metadata = new \Google\Service\Drive\DriveFile([
-            'name' => $name,
-            'parents' => [$folder],
-        ]);
+        $name =
+            trim(
+                $name
+            );
 
-        $file = $this->drive()->files->create($metadata, [
-            'data' => $binary,
-            'mimeType' => $mime,
-            'uploadType' => 'multipart',
-            'fields' => 'id,name,mimeType,webViewLink',
-        ]);
+        if ($name === '') {
+            $name =
+                'review-media-'
+                . now()->format(
+                    'Ymd-His'
+                );
+        }
+
+        $mimeType =
+            trim(
+                $mimeType
+            );
+
+        if ($mimeType === '') {
+            $mimeType =
+                'application/octet-stream';
+        }
+
+        $metadata =
+            new DriveFile([
+                'name' =>
+                    $name,
+
+                'parents' => [
+                    $folderId,
+                ],
+            ]);
+
+        $file =
+            $this->drive()
+                ->files
+                ->create(
+                    $metadata,
+                    [
+                        'data' =>
+                            $binary,
+
+                        'mimeType' =>
+                            $mimeType,
+
+                        'uploadType' =>
+                            'multipart',
+
+                        'fields' =>
+                            'id,name,mimeType,size,webViewLink,createdTime',
+                    ]
+                );
+
+        if (
+            !$file
+            || empty(
+                $file->id
+            )
+        ) {
+            throw new RuntimeException(
+                'Google Drive did not return an uploaded file ID.'
+            );
+        }
 
         return [
-            'id' => $file->id,
-            'name' => $file->name,
-            'mime_type' => $file->mimeType,
-            'view_url' => $file->webViewLink,
+            'id' =>
+                $file->id,
+
+            'name' =>
+                $file->name
+                ?: $name,
+
+            'mime_type' =>
+                $file->mimeType
+                ?: $mimeType,
+
+            'size' =>
+                $file->size,
+
+            'view_url' =>
+                $file->webViewLink,
+
+            'created_time' =>
+                $file->createdTime,
         ];
     }
 
-    public function download(string $fileId): array
-    {
-        $response = $this->drive()->files->get($fileId, [
-            'alt' => 'media',
-        ]);
+    /**
+     * Download/stream private Drive file.
+     *
+     * Useful for your authenticated CRM media proxy.
+     */
+    public function download(
+        string $fileId
+    ): array {
+        $fileId =
+            trim(
+                $fileId
+            );
+
+        if ($fileId === '') {
+            throw new RuntimeException(
+                'Google Drive file ID is required.'
+            );
+        }
+
+        $drive =
+            $this->drive();
+
+        $metadata =
+            $drive
+                ->files
+                ->get(
+                    $fileId,
+                    [
+                        'fields' =>
+                            'id,name,mimeType,size',
+                    ]
+                );
+
+        $response =
+            $drive
+                ->files
+                ->get(
+                    $fileId,
+                    [
+                        'alt' =>
+                            'media',
+                    ]
+                );
 
         return [
-            'body' => (string) $response->getBody(),
-            'mime_type' => $response->getHeaderLine('Content-Type') ?: 'application/octet-stream',
+            'binary' =>
+                (string)
+                $response
+                    ->getBody(),
+
+            'name' =>
+                $metadata->name
+                ?: 'media',
+
+            'mime_type' =>
+                $metadata->mimeType
+                ?: 'application/octet-stream',
+
+            'size' =>
+                $metadata->size,
         ];
+    }
+
+    /**
+     * Delete media from Google Drive.
+     *
+     * Useful for your 18-month retention process.
+     */
+    public function delete(
+        string $fileId
+    ): bool {
+        $fileId =
+            trim(
+                $fileId
+            );
+
+        if ($fileId === '') {
+            return false;
+        }
+
+        $this->drive()
+            ->files
+            ->delete(
+                $fileId
+            );
+
+        return true;
+    }
+
+    /**
+     * Check whether a Drive file exists.
+     */
+    public function exists(
+        string $fileId
+    ): bool {
+        $fileId =
+            trim(
+                $fileId
+            );
+
+        if ($fileId === '') {
+            return false;
+        }
+
+        try {
+
+            $this->drive()
+                ->files
+                ->get(
+                    $fileId,
+                    [
+                        'fields' =>
+                            'id',
+                    ]
+                );
+
+            return true;
+
+        } catch (\Throwable $e) {
+
+            return false;
+        }
     }
 }

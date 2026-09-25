@@ -705,17 +705,8 @@
                         @endif
                         <!-- End::slide -->
 
-                        @if ($userType === UserType::SUPER_ADMIN || $canAccess($userType, $operationsRoles))
-                            <li class="slide {{ Route::is('admin.operations.customer-calls.*') ? 'active' : '' }}">
-                                <a href="{{ route('admin.operations.customer-calls.index') }}" class="side-menu__item">
-                                    <i class="bx bx-headphone side-menu__icon"></i>
-                                    <span class="side-menu__label">Operations Calls</span>
-                                </a>
-                            </li>
-                        @endif
-
                         @if ($userType === UserType::SUPER_ADMIN || $canAccess($userType, $adminRoles) || $canAccess($userType, $operationsRoles))
-                            <li class="slide has-sub {{ Route::is('admin.operations.index') || Route::is('admin.operations.queue') || Route::is('admin.operations.history') ? 'active open' : '' }}">
+                            <li class="slide has-sub {{ Route::is('admin.operations.*') || Route::is('admin.refunds.*') || Route::is('admin.operations.vendor-refunds.*') ? 'active open' : '' }}">
                                 <a href="javascript:void(0);" class="side-menu__item">
                                     <i class="bx bx-task side-menu__icon"></i>
                                     <span class="side-menu__label">Operations Dashboard</span>
@@ -723,22 +714,44 @@
                                 </a>
                                 <ul class="slide-menu child1">
                                     <li class="slide">
-                                        <a href="{{ route('admin.operations.index') }}" class="side-menu__item">Overview</a>
+                                        <a
+                                            href="{{ route('admin.operations.index') }}"
+                                            class="side-menu__item {{ Route::is('admin.operations.index') ? 'active' : '' }}"
+                                        >
+                                            Work Done
+                                        </a>
                                     </li>
+                                    <!-- <li class="slide">
+                                        <a href="{{ route('admin.operations.history') }}" class="side-menu__item">Work Done</a>
+                                    </li>
+                                    <li class="slide">
+                                        <a href="{{ route('admin.operations.customer-calls.index') }}" class="side-menu__item">Customer Calls</a>
+                                    </li> -->
                                     <li class="slide">
                                         <a href="{{ route('admin.operations.queue', 'review') }}" class="side-menu__item">Review</a>
                                     </li>
                                     <li class="slide">
-                                        <a href="{{ route('admin.operations.queue', 'reschedule') }}" class="side-menu__item">Reschedule</a>
+                                        <a
+                                            href="{{ route('admin.operations.reschedules.index') }}"
+                                            class="side-menu__item {{ Route::is('admin.operations.reschedules.*') ? 'active' : '' }}"
+                                        >
+                                            Reschedule
+                                        </a>
                                     </li>
                                     <li class="slide">
-                                        <a href="{{ route('admin.operations.queue', 'refund') }}" class="side-menu__item">Refund</a>
+                                        <a href="{{ route('admin.refunds.index') }}" class="side-menu__item">Customer Refund</a>
                                     </li>
                                     <li class="slide">
-                                        <a href="{{ route('admin.operations.queue', 'cancelled') }}" class="side-menu__item">Cancelled</a>
-                                    </li>
-                                    <li class="slide">
-                                        <a href="{{ route('admin.operations.history') }}" class="side-menu__item">History</a>
+                                        <a
+                                        href="{{ route('admin.operations.vendor-refunds.index') }}"
+                                        class="side-menu__item {{
+                                            Route::is('admin.operations.vendor-refunds.*')
+                                                ? 'active'
+                                                : ''
+                                        }}"
+                                    >
+                                        Vendor Refund
+                                    </a>
                                     </li>
                                 </ul>
                             </li>

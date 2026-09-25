@@ -25,7 +25,11 @@
         </div>
 
         <div class="box-body overflow-x-auto">
-            <table class="table whitespace-nowrap min-w-full">
+            <table
+                id="operations-customer-calls-table"
+                class="table display nowrap whitespace-nowrap min-w-full"
+                width="100%"
+            >
                 <thead>
                     <tr>
                         <th>Customer</th>
@@ -69,10 +73,15 @@
                                 {{ $row['next_followup_date'] ? $row['next_followup_date']->format('d M Y, h:i A') : '-' }}
                             </td>
                             <td>
-                                @if ($row['lead']->client_id)
-                                    <a href="{{ route('admin.clients.view', $row['lead']->client_id) }}"
+                                @if (!empty($row['operation_case']))
+                                    <a href="{{ route('admin.operations.followups.create', $row['operation_case']) }}"
                                         class="ti-btn ti-btn-info !py-1 !px-2">
-                                        Open
+                                        Add Follow-up
+                                    </a>
+                                @elseif ($row['lead']->client_id)
+                                    <a href="{{ route('admin.leads.view', $row['lead']->id) }}"
+                                        class="ti-btn ti-btn-info !py-1 !px-2">
+                                        View Lead
                                     </a>
                                 @endif
 
@@ -123,3 +132,32 @@
         </div>
     </div>
 @endsection
+
+@push('scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const table = $('#operations-customer-calls-table');
+
+            if ($.fn.DataTable && table.length && !$.fn.DataTable.isDataTable(table[0])) {
+                if (table.find('tbody td[colspan]').length) {
+                    return;
+                }
+
+                table.DataTable({
+                    paging: true,
+                    searching: true,
+                    info: true,
+                    lengthChange: true,
+                    responsive: false,
+                    scrollX: true,
+                    autoWidth: false,
+                    ordering: true,
+                    pageLength: 25,
+                    columnDefs: [
+                        { orderable: false, targets: -1 }
+                    ]
+                });
+            }
+        });
+    </script>
+@endpush

@@ -654,6 +654,372 @@ class BookingConfirmationEmailServiceTest extends TestCase
         $this->assertStringNotContainsString("2. TBA", $body);
     }
 
+    public function test_preview_defaults_to_tba_when_ride_has_only_the_default_noon_time(): void
+    {
+        [$lead, $agent] = $this->leadWithRide([
+            'from_date' => '2026-10-04 12:00:00',
+            'to_date' => '2026-10-04 12:00:00',
+        ]);
+
+        $result = app(BookingConfirmationEmailService::class)
+            ->previewForLead($lead, $agent);
+
+        $body = str_replace(["\r\n", "\r"], "\n", $result['body_before_payment']);
+
+        $this->assertTrue($result['success']);
+        $this->assertStringContainsString('Time: TBA', $body);
+        $this->assertStringContainsString('Duration: TBA', $body);
+
+        $this->assertTrue($result['time_is_tba']);
+        $this->assertSame('12:00 PM', $result['voucher_time']);
+        $this->assertSame('12:00', $result['email_time']);
+        $this->assertStringContainsString('default 12:00', $result['time_note']);
+        $this->assertTrue($result['duration_is_tba']);
+        $this->assertSame('', $result['duration']);
+        $this->assertSame('none', $result['duration_source']);
+    }
+
+    public function test_preview_defaults_to_tba_when_voucher_has_no_time(): void
+    {
+        [$lead, $agent] = $this->leadWithRide([
+            'from_date' => '2026-10-04 00:00:00',
+            'to_date' => '2026-10-04 00:00:00',
+        ]);
+
+        $result = app(BookingConfirmationEmailService::class)
+            ->previewForLead($lead, $agent);
+
+        $this->assertStringContainsString('Time: TBA', $result['body_before_payment']);
+        $this->assertTrue($result['time_is_tba']);
+        $this->assertSame('', $result['voucher_time']);
+        $this->assertSame('', $result['email_time']);
+    }
+
+    public function test_preview_uses_voucher_time_and_ride_date_duration_when_real(): void
+    {
+        [$lead, $agent] = $this->leadWithRide([
+            'from_date' => '2026-10-04 17:00:00',
+            'to_date' => '2026-10-04 18:30:00',
+        ]);
+
+        $result = app(BookingConfirmationEmailService::class)
+            ->previewForLead($lead, $agent);
+
+        $this->assertStringContainsString('Time: 05:00 PM', $result['body_before_payment']);
+        $this->assertStringContainsString('Duration: 1 Hour 30 Min', $result['body_before_payment']);
+        $this->assertFalse($result['time_is_tba']);
+        $this->assertSame('17:00', $result['email_time']);
+        $this->assertSame('1 Hour 30 Min', $result['duration']);
+        $this->assertSame('ride dates', $result['duration_source']);
+        $this->assertFalse($result['duration_is_tba']);
+    }
+
+    public function test_multi_day_ride_dates_are_suggested_but_stay_tba_until_sender_confirms(): void
+    {
+        [$lead, $agent] = $this->leadWithRide([
+            'from_date' => '2026-07-22 12:00:00',
+            'to_date' => '2026-09-22 12:00:00',
+        ]);
+
+        $service = app(BookingConfirmationEmailService::class);
+
+        $default = $service->previewForLead($lead, $agent);
+
+        // A 63 day travel window must not be sent as the service duration.
+        $this->assertStringContainsString('Duration: TBA', $default['body_before_payment']);
+        $this->assertTrue($default['duration_is_tba']);
+        $this->assertSame('63 Days', $default['duration']);
+        $this->assertSame('ride dates', $default['duration_source']);
+        $this->assertNotSame('', $default['duration_note']);
+
+        $confirmed = $service->previewForLead($lead, $agent, [
+            'email_duration_tba' => false,
+            'email_duration' => '63 Days',
+        ]);
+
+        $this->assertStringContainsString('Duration: 63 Days', $confirmed['body_before_payment']);
+        $this->assertFalse($confirmed['duration_is_tba']);
+    }
+
+    public function test_sender_can_untick_tba_type_a_time_and_type_a_duration(): void
+    {
+        [$lead, $agent] = $this->leadWithRide([
+            'from_date' => '2026-10-04 12:00:00',
+            'to_date' => '2026-10-04 12:00:00',
+        ]);
+
+        $result = app(BookingConfirmationEmailService::class)
+            ->previewForLead($lead, $agent, [
+                'email_time_tba' => false,
+                'email_time' => '15:30',
+                'email_duration_tba' => false,
+                'email_duration' => '45 Minutes',
+            ]);
+
+        $body = $result['body_before_payment'];
+
+        $this->assertStringContainsString('Time: 03:30 PM', $body);
+        $this->assertStringContainsString('Duration: 45 Minutes', $body);
+        $this->assertFalse($result['time_is_tba']);
+        $this->assertSame('15:30', $result['email_time']);
+        $this->assertSame('45 Minutes', $result['duration']);
+        $this->assertSame('entered by you', $result['duration_source']);
+    }
+
+    public function test_sender_can_tick_tba_over_a_real_time_and_duration(): void
+    {
+        [$lead, $agent] = $this->leadWithRide([
+            'from_date' => '2026-10-04 17:00:00',
+            'to_date' => '2026-10-04 18:30:00',
+        ]);
+
+        $result = app(BookingConfirmationEmailService::class)
+            ->previewForLead($lead, $agent, [
+                'email_time_tba' => true,
+                'email_duration_tba' => true,
+            ]);
+
+        $this->assertStringContainsString('Time: TBA', $result['body_before_payment']);
+        $this->assertStringContainsString('Duration: TBA', $result['body_before_payment']);
+        $this->assertTrue($result['time_is_tba']);
+        $this->assertTrue($result['duration_is_tba']);
+    }
+
+    public function test_unticked_tba_without_any_time_never_prints_a_blank(): void
+    {
+        [$lead, $agent] = $this->leadWithRide([
+            'from_date' => '2026-10-04 00:00:00',
+            'to_date' => '2026-10-04 00:00:00',
+        ]);
+
+        $result = app(BookingConfirmationEmailService::class)
+            ->previewForLead($lead, $agent, [
+                'email_time_tba' => false,
+                'email_duration_tba' => false,
+            ]);
+
+        $this->assertStringContainsString('Time: TBA', $result['body_before_payment']);
+        $this->assertStringContainsString('Duration: TBA', $result['body_before_payment']);
+    }
+
+    public function test_service_name_duration_is_read_correctly(): void
+    {
+        foreach (
+            [
+                'Private Plane Ride In Mumbai 30 Minutes' => '30 Minutes',
+                'Private Plane Ride In Mumbai 60 minutes' => '1 Hour',
+                'Helicopter Ride In Mumbai - 15 minutes each ride' => '15 Minutes',
+                'Boat Cruise 1.5 hours' => '1 Hour 30 Min',
+                'Vaishnodevi Yatra By Helicopter 2 Night and 3 days' => '2 Nights 3 Days',
+            ]
+            as $serviceName => $expected
+        ) {
+            [$lead, $agent] = $this->leadWithRide([
+                'from_date' => '2026-10-04 12:00:00',
+                'to_date' => '2026-10-04 12:00:00',
+            ], $serviceName);
+
+            $result = app(BookingConfirmationEmailService::class)
+                ->previewForLead($lead, $agent);
+
+            $this->assertStringContainsString(
+                'Duration: ' . $expected,
+                $result['body_before_payment'],
+                $serviceName
+            );
+            $this->assertSame('service name', $result['duration_source'], $serviceName);
+        }
+    }
+
+    public function test_final_send_uses_the_senders_time_and_duration_choices(): void
+    {
+        Mail::fake();
+
+        [$lead, $agent] = $this->leadWithRide([
+            'from_date' => '2026-10-04 12:00:00',
+            'to_date' => '2026-10-04 12:00:00',
+        ]);
+
+        $result = app(BookingConfirmationEmailService::class)
+            ->sendForLead($lead, $agent, [
+                'payment_mode' => 'payment_due',
+                'total_amount' => 10000,
+                'advance_amount' => 5000,
+                'email_time_tba' => false,
+                'email_time' => '09:15',
+                'email_duration_tba' => false,
+                'email_duration' => '2 Hours',
+            ]);
+
+        $this->assertTrue($result['success']);
+
+        Mail::assertSent(
+            BookingConfirmationMail::class,
+            function (BookingConfirmationMail $mail) {
+                $body = str_replace(["\r\n", "\r"], "\n", $mail->body);
+
+                $this->assertStringContainsString('Time: 09:15 AM', $body);
+                $this->assertStringContainsString('Duration: 2 Hours', $body);
+
+                return true;
+            }
+        );
+    }
+
+    public function test_send_endpoint_blocks_unticked_tba_without_time_or_duration(): void
+    {
+        Mail::fake();
+
+        [$lead, $agent] = $this->leadWithRide([
+            'from_date' => '2026-10-04 00:00:00',
+            'to_date' => '2026-10-04 00:00:00',
+        ]);
+
+        $base = [
+            'payment_mode' => 'payment_due',
+            'total_amount' => 10000,
+            'advance_amount' => 5000,
+        ];
+
+        $url = route('admin.leads.booking-confirmation-email.send', $lead);
+
+        $this->actingAs($agent)
+            ->postJson($url, $base + [
+                'email_time_tba' => false,
+                'email_time' => '',
+                'email_duration_tba' => true,
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['email_time']);
+
+        $this->actingAs($agent)
+            ->postJson($url, $base + [
+                'email_time_tba' => true,
+                'email_duration_tba' => false,
+                'email_duration' => '',
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['email_duration']);
+
+        Mail::assertNothingSent();
+
+        $this->actingAs($agent)
+            ->postJson($url, $base + [
+                'email_time_tba' => true,
+                'email_duration_tba' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true);
+
+        Mail::assertSent(
+            BookingConfirmationMail::class,
+            function (BookingConfirmationMail $mail) {
+                $this->assertStringContainsString('Time: TBA', $mail->body);
+                $this->assertStringContainsString('Duration: TBA', $mail->body);
+
+                return true;
+            }
+        );
+    }
+
+    public function test_preview_endpoint_passes_the_senders_choices_through(): void
+    {
+        [$lead, $agent] = $this->leadWithRide([
+            'from_date' => '2026-10-04 12:00:00',
+            'to_date' => '2026-10-04 12:00:00',
+        ]);
+
+        $url = route('admin.leads.booking-confirmation-email.send', $lead);
+
+        $this->actingAs($agent)
+            ->postJson($url, ['preview_only' => true])
+            ->assertOk()
+            ->assertJsonPath('time_is_tba', true)
+            ->assertJsonPath('voucher_time', '12:00 PM');
+
+        $response = $this->actingAs($agent)
+            ->postJson($url, [
+                'preview_only' => true,
+                'email_time_tba' => false,
+                'email_time' => '10:45',
+                'email_duration_tba' => false,
+                'email_duration' => '30 Minutes',
+            ])
+            ->assertOk()
+            ->assertJsonPath('time_is_tba', false);
+
+        $this->assertStringContainsString('Time: 10:45 AM', $response->json('body_before_payment'));
+        $this->assertStringContainsString('Duration: 30 Minutes', $response->json('body_before_payment'));
+    }
+
+    /**
+     * Lead with one ride and a booking template that prints time and duration.
+     *
+     * @return array{0: Lead, 1: User}
+     */
+    private function leadWithRide(
+        array $ride,
+        string $serviceName = 'Helicopter Charter'
+    ): array {
+        $agent = $this->createUser(
+            UserType::SALES_EXECUTIVE,
+            'Sales Agent ' . Str::random(4),
+            'agent' . Str::random(6) . '@example.test'
+        );
+
+        $client = Client::create([
+            'id' => (string) Str::uuid(),
+            'name' => 'Ride Customer',
+            'email' => 'ride@example.test',
+            'contact_number' => '9876543210',
+            'status' => 1,
+        ]);
+
+        $service = Service::create([
+            'id' => (string) Str::uuid(),
+            'service' => $serviceName,
+            'description' => 'Service',
+            'service_amount' => 10000,
+            'fees_percent' => 0,
+            'product_ids' => [],
+            'status' => 1,
+        ]);
+
+        $lead = Lead::create([
+            'id' => (string) Str::uuid(),
+            'client_id' => $client->id,
+            'representative_user_id' => $agent->id,
+            'service_ids' => [$service->id],
+            'number_of_passengers' => 2,
+        ]);
+
+        DB::table('lead_rides')->insert([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $lead->id,
+            'from_date' => $ride['from_date'],
+            'to_date' => $ride['to_date'],
+            'from_place' => 'Mumbai',
+            'to_place' => 'Mumbai',
+            'is_tba' => $ride['is_tba'] ?? false,
+            'total_time' => $ride['total_time'] ?? null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        BookingEmailTemplate::query()->delete();
+
+        BookingEmailTemplate::create([
+            'id' => (string) Str::uuid(),
+            'subject' => 'Booking Confirmation | {{service_name}}',
+            'body' => implode(PHP_EOL, [
+                'Timing: {{timing}}',
+                'Duration: {{duration}}',
+            ]),
+        ]);
+
+        return [$lead->fresh(), $agent];
+    }
+
     private function createUser(
         string $role,
         string $name,

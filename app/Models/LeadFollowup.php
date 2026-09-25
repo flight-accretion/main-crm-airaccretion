@@ -38,6 +38,7 @@ class LeadFollowup extends Model
     public const MANUAL_REPEAT_LEAD_SOURCE_STATUSES = [
         self::STATUS_FULL_PAYMENT_RECEIVED,
         self::STATUS_PARTIAL_PAYMENT_RECEIVED,
+        self::STATUS_APPROVED,
     ];
 
     public const CONTACT_OUTCOME_NO_ANSWER = 'no_answer';
@@ -63,6 +64,7 @@ class LeadFollowup extends Model
     protected $fillable = [
         'id',
         'parent_followup_id',
+        'operation_case_id',
         'followup_recording_id',
         'lead_id',
         'next_followup_date',
@@ -127,6 +129,11 @@ class LeadFollowup extends Model
     public function childFollowups()
     {
         return $this->hasMany(LeadFollowup::class, 'parent_followup_id');
+    }
+
+    public function operationCase()
+    {
+        return $this->belongsTo(OperationCase::class, 'operation_case_id');
     }
 
     public function enquiry()

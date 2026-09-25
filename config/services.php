@@ -50,12 +50,45 @@ return [
         'phone_number_id' => env('META_WHATSAPP_PHONE_NUMBER_ID'),
     ],
 
-    'google_drive_review' => [
-        'enabled' => env('GOOGLE_DRIVE_REVIEW_ENABLED', false),
-        'folder_id' => env('GOOGLE_DRIVE_REVIEW_FOLDER_ID'),
-        'service_account_path' => env('GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH'),
-        'service_account_json_base64' => env('GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_BASE64'),
-    ],
+  'google_drive_review' => [
+
+    'enabled' =>
+        env(
+            'GOOGLE_DRIVE_REVIEW_ENABLED',
+            false
+        ),
+
+    'client_id' =>
+        env(
+            'GOOGLE_DRIVE_CLIENT_ID'
+        ),
+
+    'client_secret' =>
+        env(
+            'GOOGLE_DRIVE_CLIENT_SECRET'
+        ),
+
+    'refresh_token' =>
+        env(
+            'GOOGLE_DRIVE_REFRESH_TOKEN'
+        ),
+
+    /*
+     * Optional.
+     *
+     * This does NOT authorize private Drive access.
+     * OAuth credentials above do that.
+     */
+    'api_key' =>
+        env(
+            'GOOGLE_DRIVE_API_KEY'
+        ),
+
+    'folder_id' =>
+        env(
+            'GOOGLE_DRIVE_REVIEW_FOLDER_ID'
+        ),
+],
 
     'msg91' => [
         'auth_key'            => env('MSG91_AUTH_KEY'),

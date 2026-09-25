@@ -60,7 +60,7 @@ class ReviewWhatsAppService
 
     public function sendReviewLink(ReviewConversation $review): bool
     {
-        $url = trim((string) $this->setting($review, 'review_url'));
+        $url = $this->reviewUrl($review);
 
         if ($url === '') {
             Log::warning('Review URL not configured', ['review_id' => $review->id]);
@@ -69,6 +69,138 @@ class ReviewWhatsAppService
         }
 
         return $this->sendText($review, $url);
+    }
+
+    private function reviewUrl(ReviewConversation $review): string
+    {
+        $settings = optional($review->aiAgent)->settings ?: [];
+        $agentUrl = $this->cleanUrl($settings['review_url'] ?? null);
+
+        if ($agentUrl !== '') {
+            return $agentUrl;
+        }
+
+        $cityUrl = $this->cityReviewUrl($review);
+
+        if ($cityUrl !== '') {
+            return $cityUrl;
+        }
+
+        return $this->cleanUrl(
+            config('review.default_public_url')
+            ?: config('review.review_url')
+        );
+    }
+
+    private function cityReviewUrl(ReviewConversation $review): string
+    {
+        $urls = collect((array) config('review.public_urls', []))
+            ->mapWithKeys(fn ($url, $city) => [
+                $this->cityKey($city) => $this->cleanUrl($url),
+            ])
+            ->filter()
+            ->all();
+
+        if (empty($urls)) {
+            return '';
+        }
+
+        $review->loadMissing([
+            'lead.client.city',
+            'lead.rideSegments.serviceAddress.city',
+        ]);
+
+        $candidates = $this->cityCandidates($review);
+
+        foreach ($candidates as $candidate) {
+            $matchedCity = $this->matchedCityKey($candidate, array_keys($urls));
+
+            if ($matchedCity && isset($urls[$matchedCity])) {
+                return $urls[$matchedCity];
+            }
+        }
+
+        return '';
+    }
+
+    private function cityCandidates(ReviewConversation $review): array
+    {
+        $lead = $review->lead;
+
+        if (!$lead) {
+            return [];
+        }
+
+        $candidates = [];
+
+        foreach ($lead->rideSegments as $ride) {
+            $candidates[] = optional(optional($ride->serviceAddress)->city)->name;
+            $candidates[] = $ride->from_place;
+            $candidates[] = $ride->to_place;
+        }
+
+        $candidates[] = optional(optional($lead->client)->city)->name;
+
+        return collect($candidates)
+            ->map(fn ($value) => trim((string) $value))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function matchedCityKey(string $candidate, array $cityKeys): ?string
+    {
+        $haystack = $this->cityKey($candidate);
+
+        foreach ($cityKeys as $cityKey) {
+            foreach ($this->cityAliases($cityKey) as $alias) {
+                if ($alias !== '' && str_contains($haystack, $alias)) {
+                    return $cityKey;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function cityAliases(string $cityKey): array
+    {
+        $aliases = [
+            $cityKey,
+        ];
+
+        if ($cityKey === 'bengaluru') {
+            $aliases[] = 'bangalore';
+        }
+
+        return array_values(array_unique(array_filter($aliases)));
+    }
+
+    private function cityKey($value): string
+    {
+        return preg_replace(
+            '/[^a-z0-9]+/',
+            '',
+            strtolower((string) $value)
+        );
+    }
+
+    private function cleanUrl($url): string
+    {
+        $url = trim((string) $url);
+
+        if (
+            preg_match(
+                '/\]\((https?:\/\/[^)]+)\)$/',
+                $url,
+                $matches
+            )
+        ) {
+            return trim($matches[1]);
+        }
+
+        return $url;
     }
 
     public function notifyOperations(
@@ -178,11 +310,18 @@ class ReviewWhatsAppService
 
     private function bodyValues(ReviewConversation $review): array
     {
-        $review->loadMissing('lead.client');
-
         return [
-            optional(optional($review->lead)->client)->name ?: 'Customer',
+            $this->reviewExperienceLabel($review),
         ];
+    }
+
+    private function reviewExperienceLabel(ReviewConversation $review): string
+    {
+        $label = $this->serviceLabel($review);
+
+        return $label === 'N/A'
+            ? 'your service'
+            : $label;
     }
 
     private function operationsBodyValues(

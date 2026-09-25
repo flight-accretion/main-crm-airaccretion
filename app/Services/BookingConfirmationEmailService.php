@@ -385,10 +385,11 @@ class BookingConfirmationEmailService
      * PREVIEW
      * =========================================================
      */
-    public function previewForLead(
-        Lead $lead,
-        ?User $actor = null
-    ): array {
+public function previewForLead(
+    Lead $lead,
+    ?User $actor = null,
+    array $options = []
+): array {
         try {
             /*
              * Preview defaults to Payment Due.
@@ -399,14 +400,16 @@ class BookingConfirmationEmailService
              * Advance Payment Due Now
              */
             $prepared =
-                $this->prepareEmail(
-                    $lead,
-                    $actor,
+            $this->prepareEmail(
+                $lead,
+                $actor,
+                array_merge(
                     [
-                        'payment_mode' =>
-                            'payment_due',
-                    ]
-                );
+                        'payment_mode' => 'payment_due',
+                    ],
+                    $options
+                )
+            );
 
 
             $parts =
@@ -468,6 +471,65 @@ class BookingConfirmationEmailService
                         'registration'
                     ][
                         'short_link'
+                    ],
+
+                /*
+                 * Ride time / duration controls in the popup.
+                 */
+                'voucher_time' =>
+                    $prepared[
+                        'travel'
+                    ][
+                        'voucher_time'
+                    ],
+
+                'time_is_tba' =>
+                    $prepared[
+                        'travel'
+                    ][
+                        'time_is_tba'
+                    ],
+
+                'email_time' =>
+                    $prepared[
+                        'travel'
+                    ][
+                        'email_time'
+                    ],
+
+                'time_note' =>
+                    $prepared[
+                        'travel'
+                    ][
+                        'time_note'
+                    ],
+
+                'duration' =>
+                    $prepared[
+                        'travel'
+                    ][
+                        'duration_suggestion'
+                    ],
+
+                'duration_is_tba' =>
+                    $prepared[
+                        'travel'
+                    ][
+                        'duration_is_tba'
+                    ],
+
+                'duration_source' =>
+                    $prepared[
+                        'travel'
+                    ][
+                        'duration_source'
+                    ],
+
+                'duration_note' =>
+                    $prepared[
+                        'travel'
+                    ][
+                        'duration_note'
                     ],
             ];
 
@@ -561,13 +623,20 @@ class BookingConfirmationEmailService
             ]);
 
 
+        /*
+         * Email-only overrides chosen by the sender in the popup.
+         * Nothing here is saved to the CRM.
+         */
         $context =
             $this->emailContext(
                 $freshLead,
                 $agent,
                 $registration[
                     'display_link'
-                ]
+                ],
+                $this->travelOverrides(
+                    $paymentData
+                )
             );
 
 
@@ -666,6 +735,11 @@ class BookingConfirmationEmailService
 
             'total_amount_numeric' =>
                 $totalAmountForEmail,
+
+            'travel' =>
+                $context[
+                    'travel'
+                ],
         ];
     }
 
@@ -743,11 +817,12 @@ class BookingConfirmationEmailService
      * CURRENT CRM EMAIL CONTEXT
      * =========================================================
      */
-    private function emailContext(
-        Lead $lead,
-        ?User $agent,
-        string $registrationLink
-    ): array {
+private function emailContext(
+    Lead $lead,
+    ?User $agent,
+    string $registrationLink,
+    array $travelOverrides = []
+): array {
         $amountFollowup =
             $this->amountFollowup(
                 $lead
@@ -809,21 +884,30 @@ class BookingConfirmationEmailService
                 $extraServices
             );
 
-        $timing =
-            $this->timing(
-                $rideSegments
+        $travel =
+            $this->travelDetails(
+                $services,
+                $firstRide,
+                $travelOverrides
             );
 
+        $timing =
+            $travel[
+                'timing'
+            ];
+
         $duration =
-            $this->duration(
-                $services,
-                $rideSegments
-            );
+            $travel[
+                'duration'
+            ];
 
 
         return [
             'total_amount_numeric' =>
                 $totalAmount,
+
+            'travel' =>
+                $travel,
 
             'variables' => [
                 'customer_name' =>
@@ -2055,14 +2139,269 @@ private function paymentSectionPositions(
     }
 
 
-    private function timing(
-        Collection $rides
-    ): string {
-        return app(
-            BookingTravelDetailService::class
-        )->rideTime(
-            $rides->first()
-        );
+    /**
+     * Email-only ride time / duration choices sent by the popup.
+     * A key is present only when the sender's choice was actually sent.
+     */
+    private function travelOverrides(
+        array $paymentData
+    ): array {
+        $overrides = [];
+
+        foreach (
+            [
+                'email_time_tba',
+                'email_duration_tba',
+            ]
+            as $key
+        ) {
+            if (
+                array_key_exists(
+                    $key,
+                    $paymentData
+                )
+                && $paymentData[$key] !== null
+            ) {
+                $overrides[$key] =
+                    (bool) $paymentData[$key];
+            }
+        }
+
+        $time =
+            trim(
+                (string) (
+                    $paymentData['email_time']
+                    ?? ''
+                )
+            );
+
+        if (
+            preg_match(
+                '/^([01]\d|2[0-3]):[0-5]\d$/',
+                $time
+            )
+        ) {
+            $overrides['email_time'] =
+                Carbon::createFromFormat(
+                    'H:i',
+                    $time
+                )->format(
+                    'h:i A'
+                );
+
+            $overrides['email_time_input'] =
+                $time;
+        }
+
+        $duration =
+            trim(
+                (string) (
+                    $paymentData['email_duration']
+                    ?? ''
+                )
+            );
+
+        if ($duration !== '') {
+            $overrides['email_duration'] =
+                Str::limit(
+                    $duration,
+                    50,
+                    ''
+                );
+        }
+
+        return $overrides;
+    }
+
+
+    /**
+     * Ride time and duration printed in the email, plus what the popup
+     * needs to pre-fill its controls. Never returns a blank value:
+     * whatever cannot be worked out is printed as TBA.
+     *
+     * Time:     TBA ticked -> TBA, otherwise sender's time, otherwise the
+     *           voucher's stored start time, otherwise TBA.
+     *           With no sender choice: TBA when the voucher says TBA, has no
+     *           time, or only has the default 12:00.
+     * Duration: TBA ticked -> TBA, otherwise sender's text, otherwise
+     *           service name -> voucher Total Time -> ride dates -> TBA.
+     */
+    private function travelDetails(
+        Collection $services,
+        $firstRide,
+        array $overrides
+    ): array {
+        $travel =
+            app(
+                BookingTravelDetailService::class
+            );
+
+        /*
+         * ---------------- Time ----------------
+         */
+        $state =
+            $travel->timeState(
+                $firstRide
+            );
+
+        $stored =
+            $state[
+                'voucher_time'
+            ];
+
+        if (
+            array_key_exists(
+                'email_time_tba',
+                $overrides
+            )
+        ) {
+            $timeIsTba =
+                $overrides[
+                    'email_time_tba'
+                ];
+        } else {
+            $timeIsTba =
+                $state[
+                    'default_tba'
+                ];
+        }
+
+        if ($timeIsTba) {
+            $timing = 'TBA';
+        } else {
+            $timing =
+                $overrides[
+                    'email_time'
+                ]
+                ?? $stored;
+
+            if ($timing === '') {
+                $timing = 'TBA';
+            }
+        }
+
+        $emailTimeInput =
+            $overrides[
+                'email_time_input'
+            ]
+            ?? (
+                $stored !== ''
+                    ? Carbon::createFromFormat(
+                        'h:i A',
+                        $stored
+                    )->format(
+                        'H:i'
+                    )
+                    : ''
+            );
+
+        /*
+         * ---------------- Duration ----------------
+         */
+        $resolved =
+            $travel->resolveDuration(
+                $this->serviceDuration(
+                    $services
+                ),
+                $firstRide
+            );
+
+        if (
+            array_key_exists(
+                'email_duration_tba',
+                $overrides
+            )
+        ) {
+            $durationIsTba =
+                $overrides[
+                    'email_duration_tba'
+                ];
+        } else {
+            // A multi-day date range may only be the travel window,
+            // so it stays TBA until the sender confirms it.
+            $durationIsTba =
+                $resolved[
+                    'value'
+                ] === ''
+                || $resolved[
+                    'needs_confirm'
+                ];
+        }
+
+        if ($durationIsTba) {
+            $duration = 'TBA';
+        } else {
+            $duration =
+                $overrides[
+                    'email_duration'
+                ]
+                ?? $resolved[
+                    'value'
+                ];
+
+            if ($duration === '') {
+                $duration = 'TBA';
+            }
+        }
+
+        return [
+            'timing' =>
+                $timing,
+
+            'duration' =>
+                $duration,
+
+            'voucher_time' =>
+                $stored,
+
+            'time_is_tba' =>
+                $timeIsTba,
+
+            'email_time' =>
+                $emailTimeInput,
+
+            'time_note' =>
+                $state[
+                    'note'
+                ],
+
+            'duration_is_tba' =>
+                $durationIsTba,
+
+            /*
+             * Value the Duration textbox is pre-filled with.
+             */
+            'duration_suggestion' =>
+                $overrides[
+                    'email_duration'
+                ]
+                ?? $resolved[
+                    'value'
+                ],
+
+            'duration_source' =>
+                array_key_exists(
+                    'email_duration',
+                    $overrides
+                )
+                    ? 'entered by you'
+                    : $resolved[
+                        'source'
+                    ],
+
+            'duration_note' =>
+                (
+                    $resolved[
+                        'needs_confirm'
+                    ]
+                    && !array_key_exists(
+                        'email_duration',
+                        $overrides
+                    )
+                )
+                    ? 'This is the number of days in the ride dates, which may only be the travel window. Untick To Be Announced only if it is the service duration.'
+                    : '',
+        ];
     }
 
 
@@ -2141,21 +2480,12 @@ private function paymentSectionPositions(
     }
 
 
-    private function duration(
-        Collection $services,
-        Collection $rides
-    ): string {
-        return app(
-            BookingTravelDetailService::class
-        )->duration(
-            $this->serviceDuration(
-                $services
-            ),
-            $rides->first()
-        );
-    }
-
-
+    /**
+     * Duration written in the service name, for example
+     * "Private Plane Ride In Mumbai 30 Minutes" -> "30 Minutes",
+     * "Yatra 2 Night and 3 days" -> "2 Nights 3 Days".
+     * Blank when no selected service states one.
+     */
     private function serviceDuration(
         Collection $services
     ): string {
@@ -2165,14 +2495,74 @@ private function paymentSectionPositions(
             );
 
         if (
-            $minutes === null
+            $minutes !== null
         ) {
-            return '';
+            return $this->formatDurationMinutes(
+                $minutes
+            );
         }
 
-        return $this->formatDurationMinutes(
-            $minutes
-        );
+        foreach (
+            $services
+            as $service
+        ) {
+            $name =
+                (string)
+                $service->service;
+
+            $nights =
+                preg_match(
+                    '/(?<![\d.])(\d+)\s*nights?\b/i',
+                    $name,
+                    $nightMatch
+                )
+                    ? (int)
+                        $nightMatch[1]
+                    : 0;
+
+            $days =
+                preg_match(
+                    '/(?<![\d.])(\d+)\s*days?\b/i',
+                    $name,
+                    $dayMatch
+                )
+                    ? (int)
+                        $dayMatch[1]
+                    : 0;
+
+            $parts = [];
+
+            if ($nights > 0) {
+                $parts[] =
+                    $nights
+                    . ' '
+                    . (
+                        $nights === 1
+                            ? 'Night'
+                            : 'Nights'
+                    );
+            }
+
+            if ($days > 0) {
+                $parts[] =
+                    $days
+                    . ' '
+                    . (
+                        $days === 1
+                            ? 'Day'
+                            : 'Days'
+                    );
+            }
+
+            if ($parts !== []) {
+                return implode(
+                    ' ',
+                    $parts
+                );
+            }
+        }
+
+        return '';
     }
 
 
@@ -2185,14 +2575,14 @@ private function paymentSectionPositions(
         ) {
             if (
                 preg_match(
-                    '/\b(\d+)\s*(minutes?|mins?|min|hours?|hrs?|hr)\b/i',
+                    '/(?<![\d.])(\d+(?:\.\d+)?)\s*(minutes?|mins?|min|hours?|hrs?|hr)\b/i',
                     (string)
                     $service->service,
                     $match
                 )
             ) {
                 $quantity =
-                    (int)
+                    (float)
                     $match[1];
 
                 $unit =
@@ -2201,12 +2591,15 @@ private function paymentSectionPositions(
                     );
 
                 return
-                    Str::startsWith(
-                        $unit,
-                        'h'
-                    )
-                        ? $quantity * 60
-                        : $quantity;
+                    (int)
+                    round(
+                        Str::startsWith(
+                            $unit,
+                            'h'
+                        )
+                            ? $quantity * 60
+                            : $quantity
+                    );
             }
         }
 

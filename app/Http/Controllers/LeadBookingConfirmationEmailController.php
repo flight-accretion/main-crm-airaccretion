@@ -30,7 +30,10 @@ class LeadBookingConfirmationEmailController extends Controller
             $result =
                 $service->previewForLead(
                     $lead,
-                    Auth::user()
+                    Auth::user(),
+                    $this->travelInput(
+                        $request
+                    )
                 );
 
             return response()->json(
@@ -95,6 +98,32 @@ class LeadBookingConfirmationEmailController extends Controller
                         'min:0.01',
                         'required_if:payment_mode,installment',
                     ],
+
+                    /*
+                     * Ride time / duration for THIS email only.
+                     */
+                    'email_time_tba' => [
+                        'nullable',
+                        'boolean',
+                    ],
+
+                    'email_time' => [
+                        'nullable',
+                        'date_format:H:i',
+                        'required_if:email_time_tba,0,false',
+                    ],
+
+                    'email_duration_tba' => [
+                        'nullable',
+                        'boolean',
+                    ],
+
+                    'email_duration' => [
+                        'nullable',
+                        'string',
+                        'max:50',
+                        'required_if:email_duration_tba,0,false',
+                    ],
                 ],
                 [
                     'total_amount.required' =>
@@ -117,6 +146,15 @@ class LeadBookingConfirmationEmailController extends Controller
 
                     'installments.*.amount.required_if' =>
                         'Please enter an Amount for every installment.',
+
+                    'email_time.required_if' =>
+                        'Please enter a Ride Time or tick To Be Announced.',
+
+                    'email_time.date_format' =>
+                        'Ride Time must be a valid time.',
+
+                    'email_duration.required_if' =>
+                        'Please enter a Duration or tick To Be Announced.',
                 ]
             );
 
@@ -138,6 +176,14 @@ class LeadBookingConfirmationEmailController extends Controller
                     'total_amount'
                 ],
         ];
+
+
+        $paymentData = array_merge(
+            $paymentData,
+            $this->travelInput(
+                $request
+            )
+        );
 
 
         if (
@@ -201,5 +247,63 @@ class LeadBookingConfirmationEmailController extends Controller
                 ? 200
                 : 422
         );
+    }
+
+
+    /**
+     * Ride time / duration choices from the popup.
+     *
+     * A key is included only when the popup actually sent it, so callers
+     * that send nothing keep the automatic behaviour.
+     */
+    private function travelInput(
+        Request $request
+    ): array {
+        $input = [];
+
+        foreach (
+            [
+                'email_time_tba',
+                'email_duration_tba',
+            ]
+            as $key
+        ) {
+            if (
+                $request->has(
+                    $key
+                )
+                && $request->input(
+                    $key
+                ) !== null
+            ) {
+                $input[$key] =
+                    $request->boolean(
+                        $key
+                    );
+            }
+        }
+
+        foreach (
+            [
+                'email_time',
+                'email_duration',
+            ]
+            as $key
+        ) {
+            if (
+                is_string(
+                    $request->input(
+                        $key
+                    )
+                )
+            ) {
+                $input[$key] =
+                    $request->input(
+                        $key
+                    );
+            }
+        }
+
+        return $input;
     }
 }
