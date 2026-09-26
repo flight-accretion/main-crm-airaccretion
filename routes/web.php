@@ -58,6 +58,7 @@ use App\Http\Controllers\OperationsDashboardController;
 use App\Http\Controllers\OperationsFollowupController;
 use App\Http\Controllers\OperationsRescheduleController;
 use App\Http\Controllers\OperationsVendorRefundController;
+use App\Http\Controllers\Auth\GoogleLoginController;
 
 
 /*
@@ -77,6 +78,33 @@ use App\Http\Controllers\OperationsVendorRefundController;
 Route::get('/', function () {
     return view('admin.auth.login');
 })->name('login');
+
+/*
+|--------------------------------------------------------------------------
+| GOOGLE LOGIN
+|--------------------------------------------------------------------------
+*/
+
+Route::get(
+    '/auth/google',
+    [
+        GoogleLoginController::class,
+        'redirect',
+    ]
+)->name(
+    'google.login'
+);
+
+
+Route::get(
+    '/auth/google/callback',
+    [
+        GoogleLoginController::class,
+        'callback',
+    ]
+)->name(
+    'google.callback'
+);
 
 // HELPER FUNCTION ROUTES
 // State/City routes (web-accessible)

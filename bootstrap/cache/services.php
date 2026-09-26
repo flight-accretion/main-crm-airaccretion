@@ -28,17 +28,18 @@
     24 => 'Fruitcake\\Cors\\CorsServiceProvider',
     25 => 'Laravel\\Sail\\SailServiceProvider',
     26 => 'Laravel\\Sanctum\\SanctumServiceProvider',
-    27 => 'Laravel\\Tinker\\TinkerServiceProvider',
-    28 => 'Laravel\\Ui\\UiServiceProvider',
-    29 => 'Livewire\\LivewireServiceProvider',
-    30 => 'Maatwebsite\\Excel\\ExcelServiceProvider',
-    31 => 'Carbon\\Laravel\\ServiceProvider',
-    32 => 'NunoMaduro\\Collision\\Adapters\\Laravel\\CollisionServiceProvider',
-    33 => 'Propaganistas\\LaravelPhone\\PhoneServiceProvider',
-    34 => 'App\\Providers\\AppServiceProvider',
-    35 => 'App\\Providers\\AuthServiceProvider',
-    36 => 'App\\Providers\\EventServiceProvider',
-    37 => 'App\\Providers\\RouteServiceProvider',
+    27 => 'Laravel\\Socialite\\SocialiteServiceProvider',
+    28 => 'Laravel\\Tinker\\TinkerServiceProvider',
+    29 => 'Laravel\\Ui\\UiServiceProvider',
+    30 => 'Livewire\\LivewireServiceProvider',
+    31 => 'Maatwebsite\\Excel\\ExcelServiceProvider',
+    32 => 'Carbon\\Laravel\\ServiceProvider',
+    33 => 'NunoMaduro\\Collision\\Adapters\\Laravel\\CollisionServiceProvider',
+    34 => 'Propaganistas\\LaravelPhone\\PhoneServiceProvider',
+    35 => 'App\\Providers\\AppServiceProvider',
+    36 => 'App\\Providers\\AuthServiceProvider',
+    37 => 'App\\Providers\\EventServiceProvider',
+    38 => 'App\\Providers\\RouteServiceProvider',
   ),
   'eager' => 
   array (
@@ -191,6 +192,7 @@
     'validation.presence' => 'Illuminate\\Validation\\ValidationServiceProvider',
     'Laravel\\Sail\\Console\\InstallCommand' => 'Laravel\\Sail\\SailServiceProvider',
     'Laravel\\Sail\\Console\\PublishCommand' => 'Laravel\\Sail\\SailServiceProvider',
+    'Laravel\\Socialite\\Contracts\\Factory' => 'Laravel\\Socialite\\SocialiteServiceProvider',
     'command.tinker' => 'Laravel\\Tinker\\TinkerServiceProvider',
   ),
   'when' => 
@@ -232,6 +234,9 @@
     array (
     ),
     'Laravel\\Sail\\SailServiceProvider' => 
+    array (
+    ),
+    'Laravel\\Socialite\\SocialiteServiceProvider' => 
     array (
     ),
     'Laravel\\Tinker\\TinkerServiceProvider' => 

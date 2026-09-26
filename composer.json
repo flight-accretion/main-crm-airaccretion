@@ -13,6 +13,7 @@
         "guzzlehttp/guzzle": "^7.0.1",
         "laravel/framework": "^8.75",
         "laravel/sanctum": "^2.15",
+        "laravel/socialite": "^5.31",
         "laravel/tinker": "^2.5",
         "laravel/ui": "^3.4",
         "league/fractal": "^0.20.2",

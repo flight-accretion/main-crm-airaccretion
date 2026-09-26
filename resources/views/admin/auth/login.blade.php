@@ -88,7 +88,86 @@
                                     </div>
                                 </div>
                             </form>
+
                             <div class="text-center my-4 authentication-barrier">
+    <span>OR</span>
+</div>
+
+<div class="grid mb-4">
+
+    <a
+        href="{{ route('google.login') }}"
+        class="ti-btn ti-btn-light !border !border-defaultborder
+               !font-medium flex items-center justify-center gap-2"
+        style="width: 100%;"
+    >
+
+        <i
+            class="ri-google-fill text-danger
+                   text-[1.125rem]"
+        ></i>
+
+        <span>
+            Continue with Google
+        </span>
+
+    </a>
+
+</div>
+
+
+<div class="text-center my-4 authentication-barrier">
+
+    <span>
+        Quick Links
+    </span>
+
+</div>
+
+
+<div class="btn-list text-center">
+
+    <button
+        aria-label="button"
+        type="button"
+        class="ti-btn ti-btn-primary
+               me-[0.365rem]
+               !py-1
+               !px-2
+               !text-[0.75rem]"
+    >
+
+        <a
+            href="https://flying.airaccretion.com/"
+            target="_blank"
+        >
+            Flying Calculation
+        </a>
+
+    </button>
+
+
+    <button
+        aria-label="button"
+        type="button"
+        class="ti-btn ti-btn-primary
+               me-[0.365rem]
+               !py-1
+               !px-2
+               !text-[0.75rem]"
+    >
+
+        <a
+            href="http://airpoints.airaccretion.com/"
+            target="_blank"
+        >
+            Airpoints
+        </a>
+
+    </button>
+
+</div>
+                            <!-- <div class="text-center my-4 authentication-barrier">
                                 <span>OR</span>
                             </div>
                             <div class="btn-list text-center">
@@ -98,7 +177,7 @@
                                 <button aria-label="button" type="button" class="ti-btn ti-btn-primary me-[0.365rem] !py-1 !px-2 !text-[0.75rem]">
                                     <a href="http://airpoints.airaccretion.com/" target="_blank"> Airpoints </a>
                                 </button>                             
-                            </div>
+                            </div> -->
                         </div>
                     </div>
                 </div>
