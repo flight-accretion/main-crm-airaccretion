@@ -8,6 +8,7 @@ use App\Services\Skyrack\ExistingCrmLeadCancellation;
 use App\Services\Skyrack\SkyrackLeadCancellationService;
 use Illuminate\Http\JsonResponse;
 use RuntimeException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 class SkyrackLeadCancellationController extends Controller
 {
@@ -39,6 +40,11 @@ class SkyrackLeadCancellationController extends Controller
         $actor
     );
             return response()->json($body, $code);
+        } catch (HttpExceptionInterface $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], $e->getStatusCode());
         } catch (RuntimeException $e) {
             // Deployment safety: do not allow the API to alter leads until adapter is mapped.
             if ($e->getMessage() === 'CRM_CANCEL_INTEGRATION_NOT_CONFIGURED') {

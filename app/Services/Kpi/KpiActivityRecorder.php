@@ -14,7 +14,8 @@ class KpiActivityRecorder
     public function recordSalesFollowup(
         LeadFollowup $followup,
         $previousStatus,
-        User $actor
+        User $actor,
+        string $source = 'human_ui'
     ): void {
         $occurredAt = $followup->created_at ?: now();
         $note = trim((string) $followup->followup_note);
@@ -34,7 +35,7 @@ class KpiActivityRecorder
                     'entity_id' => (string) $followup->lead_id,
                     'event_type' => self::EVENT_NOTE_ADDED,
                     'source_record_id' => (string) $followup->id,
-                    'source' => 'human_ui',
+                    'source' => $source,
                     'old_value' => null,
                     'new_value' => $note,
                     'metadata' => [
@@ -64,7 +65,7 @@ class KpiActivityRecorder
                     'entity_id' => (string) $followup->lead_id,
                     'event_type' => self::EVENT_STATUS_CHANGED,
                     'source_record_id' => (string) $followup->id,
-                    'source' => 'human_ui',
+                    'source' => $source,
                     'old_value' => (string) $previousStatus,
                     'new_value' => (string) $followup->status,
                     'metadata' => [

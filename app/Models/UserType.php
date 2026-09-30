@@ -50,7 +50,12 @@ class UserType extends Model
     const ADMIN_ROLES = [
         self::SUPER_ADMIN,
         self::ADMIN,
-        self::HR
+    ];
+
+    const KPI_OVERSIGHT_ROLES = [
+        self::SUPER_ADMIN,
+        self::ADMIN,
+        self::HR,
     ];
 
     protected $fillable = [

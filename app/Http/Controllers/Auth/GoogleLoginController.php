@@ -310,6 +310,12 @@ class GoogleLoginController extends Controller
                 ->userType
                 ?->user_type;
 
+        if ($userType === UserType::HR) {
+
+            return 'admin/hr';
+
+        }
+
         if (
             in_array(
                 $userType,

@@ -3,61 +3,51 @@
 namespace App\Services\Skyrack;
 
 use App\Models\Lead;
-use Illuminate\Contracts\Auth\Authenticatable;
-use RuntimeException;
+use App\Models\LeadFollowup;
+use App\Models\PaymentAuditTrail;
 use App\Models\User;
+use App\Models\UserType;
+use App\Services\Kpi\KpiActivityRecorder;
+use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Support\Str;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
-/**
- * INTEGRATION BOUNDARY: Wire this to the CRM's ACTUAL existing cancel action.
- * It intentionally fails closed rather than guessing status IDs, payment rules or
- * creating a parallel cancellation flow. The caller holds the lead row lock.
- * All writes must use the same DB connection/transaction; defer external effects
- * until commit through the existing CRM mechanism.
- */
 class ExistingCrmLeadCancellation
 {
-   public function actor($request): ?Authenticatable
-{
-    // Existing Skyrack middleware must authenticate
-    // the integration token before this method executes.
+    public function actor($request): ?Authenticatable
+    {
+        $agentNumber = preg_replace(
+            '/\D+/',
+            '',
+            (string) $request->input('agent_number', '')
+        );
 
-    $agentNumber = preg_replace(
-        '/\D+/',
-        '',
-        (string) $request->input('agent_number', '')
-    );
+        if (strlen($agentNumber) < 10) {
+            return null;
+        }
 
-    if (strlen($agentNumber) < 10) {
-        return null;
+        $agentNumber = substr($agentNumber, -10);
+
+        $matches = User::query()
+            ->whereNotNull('contact_number')
+            ->get()
+            ->filter(function ($user) use ($agentNumber) {
+                $storedNumber = preg_replace(
+                    '/\D+/',
+                    '',
+                    (string) $user->contact_number
+                );
+
+                return strlen($storedNumber) >= 10
+                    && substr($storedNumber, -10) === $agentNumber;
+            });
+
+        if ($matches->count() !== 1) {
+            return null;
+        }
+
+        return $matches->first();
     }
-
-    // Compare Indian numbers using the last 10 digits.
-    $agentNumber = substr($agentNumber, -10);
-
-    // User.contact_number is the CRM agent mobile field.
-    // Normalize existing stored numbers before comparison.
-    $matches = User::query()
-        ->whereNotNull('contact_number')
-        ->get()
-        ->filter(function ($user) use ($agentNumber) {
-
-            $storedNumber = preg_replace(
-                '/\D+/',
-                '',
-                (string) $user->contact_number
-            );
-
-            return strlen($storedNumber) >= 10
-                && substr($storedNumber, -10) === $agentNumber;
-        });
-
-    // Reject missing or ambiguous agent mappings.
-    if ($matches->count() !== 1) {
-        return null;
-    }
-
-    return $matches->first();
-}
 
     public function actorKey(Authenticatable $actor): string
     {
@@ -66,29 +56,99 @@ class ExistingCrmLeadCancellation
 
     public function assertMayCancel(Authenticatable $actor, Lead $lead): void
     {
-        // REQUIRED: invoke the exact existing CRM ownership/role authorization.
-        // Example only: Gate::forUser($actor)->authorize('cancel', $lead);
-        throw new RuntimeException('CRM_CANCEL_INTEGRATION_NOT_CONFIGURED');
+        $role = $actor->userType->user_type ?? null;
+
+        if (in_array($role, UserType::ADMIN_ROLES, true)) {
+            return;
+        }
+
+        if ((string) $lead->representative_user_id === (string) $actor->getAuthIdentifier()) {
+            return;
+        }
+
+        throw new HttpException(403, 'Agent is not allowed to cancel this lead.');
     }
 
     public function isAlreadyCancelled(Lead $lead): bool
     {
-        // REQUIRED: use current CRM's actual cancellation predicate.
-        throw new RuntimeException('CRM_CANCEL_INTEGRATION_NOT_CONFIGURED');
+        $latest = $this->latestFollowup($lead);
+
+        return $latest
+            && (int) $latest->status === LeadFollowup::STATUS_CANCELLED;
     }
 
     public function hasAnyPayment(Lead $lead): bool
     {
-        // REQUIRED: reuse actual payment/receipt relationships and partial/full rules.
-        // Do not equate pending amount=0 to paid without checking existing rules.
-        throw new RuntimeException('CRM_CANCEL_INTEGRATION_NOT_CONFIGURED');
+        $followupIds = $lead->leadFollowups()->pluck('id');
+
+        if ($followupIds->isEmpty()) {
+            return false;
+        }
+
+        if (PaymentAuditTrail::query()
+            ->whereIn('lead_followup_id', $followupIds)
+            ->where('payment_status', 1)
+            ->where('paid_amount', '>', 0)
+            ->exists()) {
+            return true;
+        }
+
+        return $lead->leadFollowups()
+            ->whereIn('status', [
+                LeadFollowup::STATUS_FULL_PAYMENT_RECEIVED,
+                LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
+                LeadFollowup::STATUS_CONFIRMED,
+                LeadFollowup::STATUS_APPROVED,
+            ])
+            ->exists();
     }
 
     public function cancel(Lead $lead, Authenticatable $actor, string $reason, ?string $remark): void
     {
-        // REQUIRED: delegate to existing CRM cancel action/service with same validation,
-        // status transition, Follow-up/history and KPI/Operations side effects.
-        // Must NOT merely $lead->update(['status' => 'cancelled']).
-        throw new RuntimeException('CRM_CANCEL_INTEGRATION_NOT_CONFIGURED');
+        $latest = $this->latestFollowup($lead);
+        $previousStatus = $latest?->status;
+
+        $note = trim(implode(' ', array_filter([
+            'Lead cancelled from Skyrack.',
+            'Reason: ' . $reason,
+            $remark ? 'Remark: ' . $remark : null,
+        ])));
+
+        $followup = LeadFollowup::create([
+            'id' => (string) Str::uuid(),
+            'parent_followup_id' => $latest?->id,
+            'lead_id' => $lead->id,
+            'next_followup_date' => null,
+            'followup_note' => $note,
+            'status' => LeadFollowup::STATUS_CANCELLED,
+            'followed_by' => (string) $actor->getAuthIdentifier(),
+            'file' => $latest?->file,
+            'service_ids' => $latest?->service_ids,
+            'extra_service_ids' => $latest?->extra_service_ids,
+            'service_amount' => $latest?->service_amount,
+            'discount_amount' => $latest?->discount_amount,
+            'service_details' => $latest?->service_details,
+            'total_amount' => $latest?->total_amount,
+            'received_amount' => $latest?->received_amount,
+            'payment_method' => $latest?->payment_method,
+            'paid_date' => $latest?->paid_date,
+        ]);
+
+        if ($actor instanceof User) {
+            app(KpiActivityRecorder::class)->recordSalesFollowup(
+                $followup,
+                $previousStatus,
+                $actor,
+                'skyrack'
+            );
+        }
+    }
+
+    private function latestFollowup(Lead $lead): ?LeadFollowup
+    {
+        return $lead->leadFollowups()
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->first();
     }
 }

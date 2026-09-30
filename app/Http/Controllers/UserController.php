@@ -53,7 +53,9 @@ class UserController extends Controller
         $user = Auth::user();
         $userType = $user?->userType?->user_type;
 
-        if (in_array($userType, UserType::ADMIN_ROLES)) {
+        if ($userType === UserType::HR) {
+            $path = 'admin/hr';
+        } elseif (in_array($userType, UserType::ADMIN_ROLES)) {
             $path = 'admin/rides/upcoming-ride';
         } elseif (in_array($userType, UserType::OPERATIONS_ROLES)) {
             $path = 'admin/rides/upcoming-ride';

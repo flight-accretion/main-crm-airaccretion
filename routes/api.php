@@ -118,9 +118,6 @@ Route::post(
     'api.call-summaries.store'
 );
 
-Route::post('skyrack/leads/cancel', [SkyrackLeadCancellationController::class, 'store'])
-    ->name('api.skyrack.leads.cancel');
-
 Route::post(
     '/website-catalog/products',
     [
@@ -150,4 +147,9 @@ Route::prefix('skyrack')
             '/daily-kpi-outreach',
             [SkyrackDashboardController::class, 'dailyKpiOutreach']
         );
+
+        Route::post(
+            '/leads/cancel',
+            [SkyrackLeadCancellationController::class, 'store']
+        )->name('api.skyrack.leads.cancel');
     });

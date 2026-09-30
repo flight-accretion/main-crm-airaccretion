@@ -671,6 +671,7 @@
 
                 $salesRoles = UserType::SALES_ROLES;
                 $adminRoles = UserType::ADMIN_ROLES;
+                $attendanceImportRoles = UserType::ATTENDANCE_IMPORT_ROLES;
 
                 /*
                 |--------------------------------------------------------------------------
@@ -1044,17 +1045,17 @@
                             </li>
                         @endif
 
+                        @if (in_array($userType, [\App\Models\UserType::HR, \App\Models\UserType::SUPER_ADMIN], true))
+                            <li class="slide {{ Route::is('admin.hr.*') ? 'active' : '' }}">
+                                <a href="{{ route('admin.hr.dashboard') }}" class="side-menu__item">
+                                    <i class="bx bx-home-heart side-menu__icon"></i>
+                                    <span class="side-menu__label">HR Dashboard</span>
+                                </a>
+                            </li>
+                        @endif
+
                         {{-- Attendance Import - HR + Super Admin only --}}
-@if (
-    in_array(
-        $userType,
-        [
-            \App\Models\UserType::SUPER_ADMIN,
-            \App\Models\UserType::HR,
-        ],
-        true
-    )
-)
+@if ($canAccess($userType, $attendanceImportRoles))
 
     <li class="slide {{
         Route::is(

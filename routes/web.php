@@ -63,6 +63,7 @@ use App\Http\Controllers\Auth\GoogleLoginController;
 use App\Http\Controllers\LeadChatController;
 use App\Http\Controllers\LeadChatNotificationController;
 use App\Http\Controllers\GoogleChatOAuthController;
+use App\Http\Controllers\Hr\HrDashboardController;
 
 
 /*
@@ -138,6 +139,10 @@ Route::get('/forgot-password', [UserController::class, 'showForgotPasswordForm']
 
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [UserController::class, 'logout'])->name('logout');
+    Route::get('/admin/hr', [HrDashboardController::class, 'index'])
+        ->middleware('role:HR,SUPER_ADMIN')
+        ->name('admin.hr.dashboard');
+
     Route::get('/download-log', [UserController::class, 'downloadLog'])
         ->middleware('role:ADMIN_ROLES')
         ->name('log.download');
