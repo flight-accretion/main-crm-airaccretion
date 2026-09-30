@@ -5,6 +5,7 @@ namespace App\Services\Skyrack;
 use App\Models\Lead;
 use Illuminate\Contracts\Auth\Authenticatable;
 use RuntimeException;
+use App\Models\User;
 
 /**
  * INTEGRATION BOUNDARY: Wire this to the CRM's ACTUAL existing cancel action.
@@ -15,12 +16,48 @@ use RuntimeException;
  */
 class ExistingCrmLeadCancellation
 {
-    public function actor($request): ?Authenticatable
-    {
-        // Map using the SAME principal exposed by existing Skyrack token middleware.
-        // A shared service token alone is NOT evidence of a particular salesperson.
-        return $request->user();
+   public function actor($request): ?Authenticatable
+{
+    // Existing Skyrack middleware must authenticate
+    // the integration token before this method executes.
+
+    $agentNumber = preg_replace(
+        '/\D+/',
+        '',
+        (string) $request->input('agent_number', '')
+    );
+
+    if (strlen($agentNumber) < 10) {
+        return null;
     }
+
+    // Compare Indian numbers using the last 10 digits.
+    $agentNumber = substr($agentNumber, -10);
+
+    // User.contact_number is the CRM agent mobile field.
+    // Normalize existing stored numbers before comparison.
+    $matches = User::query()
+        ->whereNotNull('contact_number')
+        ->get()
+        ->filter(function ($user) use ($agentNumber) {
+
+            $storedNumber = preg_replace(
+                '/\D+/',
+                '',
+                (string) $user->contact_number
+            );
+
+            return strlen($storedNumber) >= 10
+                && substr($storedNumber, -10) === $agentNumber;
+        });
+
+    // Reject missing or ambiguous agent mappings.
+    if ($matches->count() !== 1) {
+        return null;
+    }
+
+    return $matches->first();
+}
 
     public function actorKey(Authenticatable $actor): string
     {

@@ -16,16 +16,28 @@ class SkyrackLeadCancellationController extends Controller
         ExistingCrmLeadCancellation $crm,
         SkyrackLeadCancellationService $service
     ): JsonResponse {
+       // Validate request before resolving agent identity.
+        $data = $request->validated();
+
+        // Resolve CRM user using agent_number.
+        // Existing Skyrack authentication middleware must
+        // already have authenticated the API token.
         $actor = $crm->actor($request);
+
         if (!$actor) {
+
             return response()->json([
                 'success' => false,
-                'message' => 'Authenticated Skyrack actor could not be resolved.',
+                'message' => 'Agent not found or agent number is ambiguous.',
             ], 403);
+
         }
 
         try {
-            [$body, $code] = $service->execute($request->validated(), $actor);
+           [$body, $code] = $service->execute(
+        $data,
+        $actor
+    );
             return response()->json($body, $code);
         } catch (RuntimeException $e) {
             // Deployment safety: do not allow the API to alter leads until adapter is mapped.

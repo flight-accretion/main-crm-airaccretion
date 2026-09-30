@@ -17,6 +17,7 @@ class CancelSkyrackLeadRequest extends FormRequest
     {
         return [
             'lead_id' => ['required', 'uuid'],
+            'agent_number' => ['required', 'string', 'regex:/^\+?[0-9\s-]{10,18}$/'],
             'request_id' => ['required', 'uuid'],
             'reason' => ['required', 'string', 'max:255'],
             'remark' => ['nullable', 'string', 'max:5000'],
