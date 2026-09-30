@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\WebsiteCatalogProductController;
 use App\Http\Controllers\Api\SkyrackDashboardController;
 use App\Http\Middleware\VerifySkyrackToken;
 use App\Http\Controllers\Api\GoogleChatPubSubController;
+use App\Http\Controllers\Api\SkyrackLeadCancellationController;
 
 
 /*
@@ -116,6 +117,9 @@ Route::post(
 ->name(
     'api.call-summaries.store'
 );
+
+Route::post('skyrack/leads/cancel', [SkyrackLeadCancellationController::class, 'store'])
+    ->name('api.skyrack.leads.cancel');
 
 Route::post(
     '/website-catalog/products',
