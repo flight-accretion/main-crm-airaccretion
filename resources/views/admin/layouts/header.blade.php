@@ -565,7 +565,9 @@
                                 <i class="bx bx-sun header-link-icon"></i>
                             </a>
                         </div>
-                      
+                      @include(
+    'admin.layouts.partials.lead-chat-notifications'
+)
 
                         @php
                             $user = Auth::user();
@@ -719,6 +721,14 @@
                                             class="side-menu__item {{ Route::is('admin.operations.index') ? 'active' : '' }}"
                                         >
                                             Work Done
+                                        </a>
+                                    </li>
+                                    <li class="slide">
+                                        <a
+                                            href="{{ route('admin.operations.kpi') }}"
+                                            class="side-menu__item {{ Route::is('admin.operations.kpi') ? 'active' : '' }}"
+                                        >
+                                            Operations KPI
                                         </a>
                                     </li>
                                     <!-- <li class="slide">

@@ -11,6 +11,8 @@ use App\Observers\LeadFollowupObserver;
 use App\Observers\LeadObserver;
 use App\Observers\LeadRideObserver;
 use Illuminate\Support\ServiceProvider;
+use App\Models\LeadChatMessage;
+use App\Observers\LeadChatMessageObserver;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -35,5 +37,8 @@ class AppServiceProvider extends ServiceProvider
         Client::observe(ClientObserver::class);
         LeadFollowup::observe(LeadFollowupObserver::class);
         LeadRide::observe(LeadRideObserver::class);
+        LeadChatMessage::observe(
+        LeadChatMessageObserver::class
+        );
     }
 }

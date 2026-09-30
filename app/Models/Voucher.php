@@ -16,11 +16,18 @@ class Voucher extends Model
         'id',
         'lead_id',
         'operation_team_user_id',
+        'customer_sent_at',
+        'customer_sent_by',
+        'customer_sent_via',
         'extra_upload',
         'naration',
         'status',
         'created_by',
         'registration_token'
+    ];
+
+    protected $casts = [
+        'customer_sent_at' => 'datetime',
     ];
 
 

@@ -165,6 +165,11 @@ class Kernel extends ConsoleKernel
                 'logs/skyrack-lead-sync.log'
             )
         );
+
+        $schedule->command('google-chat:ensure-subscription')->hourly()->withoutOverlapping();
+        $schedule->command('google-chat:retry-pending')->everyMinute()->withoutOverlapping();
+        $schedule->command('google-chat:reconcile')->hourly()->withoutOverlapping();
+
     }
 
     /**

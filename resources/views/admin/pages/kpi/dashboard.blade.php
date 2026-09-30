@@ -33,14 +33,28 @@
 
 <div class="flex justify-betwwen mb-3">
 <h3 class="text-[1.125rem] font-semibold p-5">KPI Dashboad</h3>
-    <button
-        type="button"
-        id="kpiImproveAllButton"
-        class="ti-btn ti-btn-primary"
-    >
-        <i class="bx bx-trending-up me-1"></i>
-        How to Improve Score
-    </button>
+
+    <div class="flex items-center gap-2">
+        @if($showOperationsManualEntry ?? false)
+            <button
+                type="button"
+                id="operationsKpiManualEntryButton"
+                class="ti-btn ti-btn-light"
+            >
+                <i class="bx bx-edit me-1"></i>
+                Enter Manual KPI
+            </button>
+        @endif
+
+        <button
+            type="button"
+            id="kpiImproveAllButton"
+            class="ti-btn ti-btn-primary"
+        >
+            <i class="bx bx-trending-up me-1"></i>
+            How to Improve Score
+        </button>
+    </div>
 
 </div>
 
@@ -50,7 +64,7 @@
 
         <form
             method="GET"
-            action="{{ route('admin.kpi.index') }}"
+            action="{{ $filterAction ?? route('admin.kpi.index') }}"
             class="grid grid-cols-12 gap-4 items-end"
         >
             @if($canSwitchDepartment ?? false)
@@ -639,6 +653,11 @@
 @include(
     'admin.pages.kpi.partials.metric-score-modal'
 )
+
+
+@if($showOperationsManualEntry ?? false)
+    @include('admin.pages.kpi.partials.operations-manual-entry-modal')
+@endif
 
 
 <script>

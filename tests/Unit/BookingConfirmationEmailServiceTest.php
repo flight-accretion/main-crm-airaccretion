@@ -53,6 +53,12 @@ class BookingConfirmationEmailServiceTest extends TestCase
     {
         Mail::fake();
 
+        config()->set('services.booking_bank.account_name', 'Accretion Aviation Pvt Ltd');
+        config()->set('services.booking_bank.bank_name', 'HDFC Bank');
+        config()->set('services.booking_bank.account_number', '50200012345678');
+        config()->set('services.booking_bank.ifsc', 'HDFC0001234');
+        config()->set('services.booking_bank.branch', 'Indore');
+
         $agent = $this->createUser(
             UserType::SALES_EXECUTIVE,
             'Sourav Namdeo',
@@ -150,7 +156,7 @@ class BookingConfirmationEmailServiceTest extends TestCase
 
         Mail::assertSent(
             BookingConfirmationMail::class,
-            function (BookingConfirmationMail $mail) use ($agent) {
+            function (BookingConfirmationMail $mail) use ($agent, $result) {
                 $body = str_replace(["\r\n", "\r"], "\n", $mail->body);
 
                 $this->assertSame(
@@ -173,6 +179,25 @@ class BookingConfirmationEmailServiceTest extends TestCase
                 $this->assertStringContainsString('30 Minutes', $mail->body);
                 $this->assertStringContainsString('₹45,000.00', $mail->body);
                 $this->assertStringContainsString('₹10,000.00', $mail->body);
+                $this->assertStringContainsString(
+                    'https://www.accretionaviation.com/pay',
+                    $mail->body
+                );
+                $this->assertStringContainsString(
+                    'Account Name: Accretion Aviation Pvt Ltd',
+                    $mail->body
+                );
+                $this->assertStringContainsString('Bank Name: HDFC Bank', $mail->body);
+                $this->assertStringContainsString(
+                    'Account Number: 50200012345678',
+                    $mail->body
+                );
+                $this->assertStringContainsString('IFSC Code: HDFC0001234', $mail->body);
+                $this->assertStringContainsString('Branch: Indore', $mail->body);
+                $this->assertStringContainsString(
+                    $result['short_link'] ?: $result['registration_link'],
+                    $mail->body
+                );
                 $this->assertStringContainsString(
                     'Product note: Please reach 30 minutes before departure.',
                     $mail->body

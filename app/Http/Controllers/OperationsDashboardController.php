@@ -202,6 +202,48 @@ class OperationsDashboardController extends Controller
         return back()->with('success', 'Operations case completed.');
     }
 
+    public function completeReview(
+    Request $request,
+    OperationCase $case,
+    OperationCaseService $service
+) {
+    $data = $request->validate([
+        'note' => 'nullable|string|max:5000',
+    ]);
+
+    $service->completeReview(
+        $case,
+        $request->user(),
+        $data['note'] ?? null
+    );
+
+    return back()->with(
+        'success',
+        'Review completed. Image Collection is now pending.'
+    );
+}
+
+public function completeImageCollection(
+    Request $request,
+    OperationCase $case,
+    OperationCaseService $service
+) {
+    $data = $request->validate([
+        'note' => 'nullable|string|max:5000',
+    ]);
+
+    $service->completeImageCollection(
+        $case,
+        $request->user(),
+        $data['note'] ?? null
+    );
+
+    return back()->with(
+        'success',
+        'Image Collection completed. Review case closed.'
+    );
+}
+
     public function history(Request $request)
     {
         $filters = $this->filters($request);
@@ -227,6 +269,49 @@ class OperationsDashboardController extends Controller
             'caseStatuses' => $this->caseStatuses(),
         ], $this->leadTableData($cases)));
     }
+
+    public function cancelReview(
+    Request $request,
+    OperationCase $case,
+    OperationCaseService $service
+) {
+    $data = $request->validate([
+        'reason' => 'required|string|max:5000',
+    ]);
+
+    $service->cancelReview(
+        $case,
+        $request->user(),
+        $data['reason']
+    );
+
+    return back()->with(
+        'success',
+        'Review cancelled because the review was not received. Image Collection is now pending.'
+    );
+}
+
+
+public function cancelImageCollection(
+    Request $request,
+    OperationCase $case,
+    OperationCaseService $service
+) {
+    $data = $request->validate([
+        'reason' => 'required|string|max:5000',
+    ]);
+
+    $service->cancelImageCollection(
+        $case,
+        $request->user(),
+        $data['reason']
+    );
+
+    return back()->with(
+        'success',
+        'Image Collection cancelled. Review workflow closed.'
+    );
+}
 
     private function filters(Request $request): array
     {

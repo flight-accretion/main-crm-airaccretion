@@ -29,6 +29,13 @@ return [
     */
 
     'connections' => [
+        'google_chat' => [
+            'driver' => 'database',
+            'table' => 'jobs',
+            'queue' => 'google-chat',
+            'retry_after' => 240,
+            'after_commit' => false,
+        ],
 
         'sync' => [
             'driver' => 'sync',

@@ -50,6 +50,26 @@ class VoucherController extends Controller
     }
 
     /**
+     * Store the first successful customer voucher delivery timestamp.
+     *
+     * This is intentionally write-once so repeated email / WhatsApp resends do
+     * not change the original Operations KPI response time.
+     */
+    private function markVoucherCustomerSent(Voucher $voucher, string $via): void
+    {
+        Voucher::query()
+            ->where('id', $voucher->id)
+            ->whereNull('customer_sent_at')
+            ->update([
+                'customer_sent_at' => now(),
+                'customer_sent_by' => $voucher->operation_team_user_id
+                    ?: $voucher->created_by,
+                'customer_sent_via' => $via,
+                'updated_at' => now(),
+            ]);
+    }
+
+    /**
      * Display a listing of leads with approved payments for voucher generation
      */
     public function index(Request $request)
@@ -2307,9 +2327,10 @@ if (!empty($oldVendorRefundsMap)) {
                 return redirect()->back()->with('error', 'Client email is not available or invalid. Cannot send voucher email.');
             }
             // Defer mail and WhatsApp sends to after the response is sent
-            app()->terminating(function () use ($recipientEmail, $emailTemplate, $subject, $data, $filePath, $type, $whatsAppTemplate, $whatsAppdata, $whatsAppNumber) {
+            app()->terminating(function () use ($recipientEmail, $emailTemplate, $subject, $data, $filePath, $type, $whatsAppTemplate, $whatsAppdata, $whatsAppNumber, $voucher) {
                 try {
                     Mail::to($recipientEmail)->send(new VoucherMail($emailTemplate, $subject, $data, $filePath));
+                    $this->markVoucherCustomerSent($voucher, 'email');
                 } catch (\Throwable $e) {
                     Log::error('Deferred voucher email failed: ' . $e->getMessage());
                 }
@@ -2318,6 +2339,8 @@ if (!empty($oldVendorRefundsMap)) {
                     $message = $this->sendMessageController->sendWhatsAppMessage($type, $whatsAppTemplate, $whatsAppdata, $whatsAppNumber, $filePath);
                     if (isset($message['result']) && $message['result'] == false) {
                         Log::warning('Deferred WhatsApp failed for voucher: ' . ($message['message'] ?? 'unknown'));
+                    } else {
+                        $this->markVoucherCustomerSent($voucher, 'whatsapp');
                     }
                 } catch (\Throwable $e) {
                     Log::error('Deferred WhatsApp failed: ' . $e->getMessage());
@@ -2409,6 +2432,7 @@ if (!empty($oldVendorRefundsMap)) {
             app()->terminating(function () use ($recipientEmail, $emailTemplate, $subject, $data, $fileUrl, $voucher) {
                 try {
                     Mail::to($recipientEmail)->send(new VoucherMail($emailTemplate, $subject, $data, $fileUrl));
+                    $this->markVoucherCustomerSent($voucher, 'email');
                     Log::info('Deferred voucher email sent', ['voucher' => $voucher->id, 'to' => $recipientEmail]);
                 } catch (\Throwable $e) {
                     Log::error('Deferred voucher email failed: ' . $e->getMessage(), ['voucher' => $voucher->id]);
@@ -2535,6 +2559,11 @@ if (!empty($oldVendorRefundsMap)) {
                         $filename,
                         'customer_whatsapp_msg_ke'
                     );
+
+                    if (($message['success'] ?? false) === true) {
+                        $this->markVoucherCustomerSent($voucher, 'whatsapp');
+                    }
+
                     Log::info('Deferred WhatsCRM Vouchers API response', ['voucher' => $voucher->id, 'response' => $message]);
                 } catch (\Throwable $e) {
                     Log::error('Deferred WhatsApp send failed: ' . $e->getMessage(), ['voucher' => $voucher->id]);

@@ -215,6 +215,37 @@ private function hasNoEligibleData(
         ?? 0
     ) === 0,
 
+        'operations_service_timeliness' =>
+            (int) (
+                $evidence['eligible_queries']
+                ?? 0
+            ) === 0,
+
+        'operations_positive_review',
+        'operations_customer_media' =>
+            (int) (
+                $evidence['eligible_review_cases']
+                ?? 0
+            ) === 0,
+
+        'operations_payment_compliance' =>
+            (int) (
+                $evidence['eligible_vouchers']
+                ?? 0
+            ) === 0,
+
+        'operations_voucher_timeliness' =>
+            (int) (
+                $evidence['eligible_vouchers']
+                ?? 0
+            ) === 0,
+
+        'operations_attendance' =>
+            (int) (
+                $evidence['eligible_scheduled_days']
+                ?? 0
+            ) === 0,
+
         default =>
             false,
     };
@@ -754,6 +785,24 @@ private function emptyImprovementLine(
         'attendance' =>
             'Maintain punctual attendance on scheduled working days to improve this KPI score.',
 
+        'operations_service_timeliness' =>
+            'Reply to each assigned Sales query within 10 minutes.',
+
+        'operations_positive_review' =>
+            'Complete eligible positive review tasks using Mark Review as Done.',
+
+        'operations_customer_media' =>
+            'Complete Image Collection after the review is done; the Review case closes only after this step.',
+
+        'operations_payment_compliance' =>
+            'Ensure confirmed customer payment exists before generating the voucher.',
+
+        'operations_voucher_timeliness' =>
+            'Send the customer voucher within 15 minutes of confirmed payment.',
+
+        'operations_attendance' =>
+            'Maintain punctual attendance on scheduled working days.',
+
         default =>
             'Improve the current KPI result to reach the next score.',
     };
@@ -854,6 +903,107 @@ private function emptyImprovementLine(
             'attendance' => sprintf(
                 '%.2f%% punctuality',
                 (float) ($resolved['achievement_percent'] ?? $resolved['actual_value'] ?? 0)
+            ),
+            'operations_service_timeliness' => sprintf(
+                '%d / %d within %d min = %.2f%%',
+                (int) ($evidence['within_sla'] ?? 0),
+                (int) ($evidence['eligible_queries'] ?? 0),
+                (int) ($evidence['sla_minutes'] ?? 10),
+                (float) ($resolved['achievement_percent'] ?? 0)
+            ),
+           'operations_positive_review' => sprintf(
+            'Done %d | Cancel %d | Pending %d = %.2f%%',
+
+            (int)
+            (
+                $evidence[
+                    'review_completed_cases'
+                ]
+                ?? 0
+            ),
+
+            (int)
+            (
+                $evidence[
+                    'review_cancelled_cases'
+                ]
+                ?? 0
+            ),
+
+            (int)
+            (
+                $evidence[
+                    'review_pending_cases'
+                ]
+                ?? 0
+            ),
+
+            (float)
+            (
+                $resolved[
+                    'achievement_percent'
+                ]
+                ?? 0
+            )
+        ),
+           'operations_customer_media' => sprintf(
+            'Done %d | Cancel %d | Pending %d = %.2f%%',
+
+            (int)
+            (
+                $evidence[
+                    'image_collection_completed_cases'
+                ]
+                ?? 0
+            ),
+
+            (int)
+            (
+                $evidence[
+                    'image_collection_cancelled_cases'
+                ]
+                ?? 0
+            ),
+
+            (int)
+            (
+                $evidence[
+                    'image_collection_pending_cases'
+                ]
+                ?? 0
+            ),
+
+            (float)
+            (
+                $resolved[
+                    'achievement_percent'
+                ]
+                ?? 0
+            )
+        ),
+            'operations_payment_compliance' => sprintf(
+                '%d / %d payment-before-voucher compliant = %.2f%%',
+                (int) ($evidence['payment_before_voucher_compliant'] ?? 0),
+                (int) ($evidence['eligible_vouchers'] ?? 0),
+                (float) ($resolved['achievement_percent'] ?? 0)
+            ),
+            'operations_voucher_timeliness' => sprintf(
+                'Average %.2f min; %d / %d within %d min',
+                (float) ($evidence['average_minutes'] ?? 0),
+                (int) ($evidence['within_target_minutes'] ?? 0),
+                (int) ($evidence['eligible_vouchers'] ?? 0),
+                (int) ($evidence['target_minutes'] ?? 15)
+            ),
+            'operations_attendance' => sprintf(
+                '%.2f%% punctuality',
+                (float) ($resolved['achievement_percent'] ?? $resolved['actual_value'] ?? 0)
+            ),
+            'operations_alternate_options',
+            'operations_ivr_software',
+            'operations_training',
+            'operations_task_completion' => sprintf(
+                '%.2f%%',
+                (float) ($resolved['actual_value'] ?? 0)
             ),
             default => is_numeric($resolved['actual_value'] ?? null)
                 ? (string) $resolved['actual_value']

@@ -337,7 +337,7 @@
 
                                         <td class="text-center">
 
-                                            {{
+                                            <!-- {{
                                                 ucfirst(
                                                     str_replace(
                                                         '_',
@@ -345,7 +345,34 @@
                                                         $case->type
                                                     )
                                                 )
-                                            }}
+                                            }} -->
+
+                                            @php
+                                        $meta = is_array($case->metadata)
+                                            ? $case->metadata
+                                            : [];
+
+                                        if (
+                                            $case->type === 'review'
+                                            && !empty($meta['review_completed'])
+                                            && empty($meta['image_collection_completed'])
+                                        ) {
+                                            $displayStatus = 'Image Collection Pending';
+                                        } elseif ($case->status === 'completed') {
+                                            $displayStatus = 'Completed';
+                                        } else {
+                                            $displayStatus =
+                                                ucfirst(
+                                                    str_replace(
+                                                        '_',
+                                                        ' ',
+                                                        $case->status
+                                                    )
+                                                );
+                                        }
+                                    @endphp
+
+                                    {{ $displayStatus }}
 
                                         </td>
 
@@ -448,147 +475,665 @@
                                         )
 
                                     </td>
+@php
+    /*
+    |--------------------------------------------------------------------------
+    | REVIEW / IMAGE COLLECTION WORKFLOW STATUS
+    |--------------------------------------------------------------------------
+    |
+    | New values:
+    |
+    | review_status:
+    |   pending
+    |   completed
+    |   cancelled
+    |
+    | image_collection_status:
+    |   pending
+    |   completed
+    |   cancelled
+    |
+    | Old boolean fields are still supported for backward compatibility.
+    |
+    */
+
+    $reviewStatus = 'pending';
+
+    $imageCollectionStatus = 'pending';
 
 
-                                    <td class="text-center">
+    if (
+        $case->type
+        ===
+        \App\Models\OperationCase::TYPE_REVIEW
+    ) {
 
-                                        @include(
-                                            'admin.pages.operations.partials.lead-status-badge',
-                                            [
-                                                'status' =>
-                                                    $leadStatus,
-                                            ]
-                                        )
-
-                                    </td>
-
-
-                                    <td>
-
-                                        <div
-                                            class="hstack flex gap-3 text-[.9375rem]"
-                                            style="align-items:center;"
-                                        >
-
-                                            {{--
-                                                REVIEW SENTIMENT DOT
-                                            --}}
-
-                                            @if (
-                                                $isQueue
-                                                && $case->type === 'review'
-                                                && $reviewDotColor
-                                            )
-
-                                                <span
-                                                    title="{{ $reviewDotLabel }}"
-                                                    aria-label="{{ $reviewDotLabel }}"
-                                                    style="
-                                                        display:inline-block;
-                                                        width:13px;
-                                                        height:13px;
-                                                        min-width:13px;
-                                                        border-radius:50%;
-                                                        background-color:{{ $reviewDotColor }};
-                                                        border:2px solid rgba(255,255,255,.95);
-                                                        box-shadow:
-                                                            0 0 0 1px rgba(0,0,0,.12);
-                                                    "
-                                                ></span>
-
-                                            @endif
+        /*
+        |--------------------------------------------------------------------------
+        | Review status
+        |--------------------------------------------------------------------------
+        */
+        $reviewStatus =
+            data_get(
+                $case->metadata,
+                'review_status'
+            );
 
 
-                                            {{--
-                                                EXISTING ADD FOLLOW-UP
-                                            --}}
+        if (!$reviewStatus) {
 
-                                            @if ($isQueue)
+            if (
+                (bool) data_get(
+                    $case->metadata,
+                    'review_completed',
+                    false
+                )
+            ) {
 
-                                                <a
-                                                    aria-label="Add Follow-up"
-                                                    href="{{
-                                                        route(
-                                                            'admin.operations.followups.create',
-                                                            $case
-                                                        )
-                                                    }}"
-                                                    class="ti-btn ti-btn-icon ti-btn-sm ti-btn-info-full"
-                                                    title="Add Follow-up"
-                                                >
+                $reviewStatus =
+                    'completed';
 
-                                                    <i
-                                                        class="ri-add-line"
-                                                    ></i>
+            } elseif (
+                (bool) data_get(
+                    $case->metadata,
+                    'review_cancelled',
+                    false
+                )
+            ) {
 
-                                                </a>
+                $reviewStatus =
+                    'cancelled';
 
-                                            @endif
+            } else {
 
-
-                                            {{--
-                                                EXISTING VIEW LEAD
-                                            --}}
-
-                                            @if ($case->lead_id)
-
-                                                <a
-                                                    aria-label="View Lead"
-                                                    href="{{
-                                                        route(
-                                                            'admin.leads.view',
-                                                            $case->lead_id
-                                                        )
-                                                    }}"
-                                                    class="ti-btn ti-btn-icon ti-btn-sm ti-btn-primary-full"
-                                                    target="_blank"
-                                                    title="View Lead"
-                                                >
-
-                                                    <i
-                                                        class="ri-eye-line"
-                                                    ></i>
-
-                                                </a>
-
-                                            @endif
+                $reviewStatus =
+                    'pending';
+            }
+        }
 
 
-                                            {{--
-                                                EXISTING COMPLETE ACTION
-                                            --}}
+        /*
+        |--------------------------------------------------------------------------
+        | Image Collection status
+        |--------------------------------------------------------------------------
+        */
+        $imageCollectionStatus =
+            data_get(
+                $case->metadata,
+                'image_collection_status'
+            );
 
-                                            @if ($isQueue)
 
-                                                <button
-                                                    type="button"
-                                                    class="ti-btn ti-btn-icon ti-btn-sm ti-btn-success-full complete-case-btn"
-                                                    data-complete-url="{{
-                                                        route(
-                                                            'admin.operations.case.complete',
-                                                            $case
-                                                        )
-                                                    }}"
-                                                    data-client-name="{{
-                                                        optional(
-                                                            $client
-                                                        )->name
-                                                        ?? 'this lead'
-                                                    }}"
-                                                    title="Complete"
-                                                >
+        if (!$imageCollectionStatus) {
 
-                                                    <i
-                                                        class="ri-check-line"
-                                                    ></i>
+            if (
+                (bool) data_get(
+                    $case->metadata,
+                    'image_collection_completed',
+                    false
+                )
+            ) {
 
-                                                </button>
+                $imageCollectionStatus =
+                    'completed';
 
-                                            @endif
+            } elseif (
+                (bool) data_get(
+                    $case->metadata,
+                    'image_collection_cancelled',
+                    false
+                )
+            ) {
 
-                                        </div>
+                $imageCollectionStatus =
+                    'cancelled';
 
-                                    </td>
+            } else {
+
+                $imageCollectionStatus =
+                    'pending';
+            }
+        }
+    }
+
+
+    $reviewResolved =
+        in_array(
+            $reviewStatus,
+            [
+                'completed',
+                'cancelled',
+            ],
+            true
+        );
+
+
+    $imageCollectionResolved =
+        in_array(
+            $imageCollectionStatus,
+            [
+                'completed',
+                'cancelled',
+            ],
+            true
+        );
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | HUMAN-READABLE OPERATIONS STATUS
+            |--------------------------------------------------------------------------
+            */
+            if (
+                $case->type
+                ===
+                \App\Models\OperationCase::TYPE_REVIEW
+            ) {
+
+                if (!$reviewResolved) {
+
+                    $operationsDisplayStatus =
+                        'Review Pending';
+
+                } elseif (!$imageCollectionResolved) {
+
+                    $operationsDisplayStatus =
+                        'Image Collection Pending';
+
+                } else {
+
+                    $operationsDisplayStatus =
+                        'Completed';
+                }
+
+            } else {
+
+                $operationsDisplayStatus =
+                    ucfirst(
+                        str_replace(
+                            '_',
+                            ' ',
+                            $case->status
+                        )
+                    );
+            }
+        @endphp
+
+                                   <td>
+    <div>
+        {{ $operationsDisplayStatus }}
+    </div>
+
+
+    @if(
+        $case->type
+        ===
+        \App\Models\OperationCase::TYPE_REVIEW
+    )
+
+        <div class="mt-2 flex flex-wrap gap-1">
+
+            {{-- REVIEW RESULT --}}
+            @if($reviewStatus === 'completed')
+
+                <span
+                    class="
+                        badge
+                        bg-success/10
+                        text-success
+                    "
+                >
+                    Review Done
+                </span>
+
+            @elseif($reviewStatus === 'cancelled')
+
+                <span
+                    class="
+                        badge
+                        bg-danger/10
+                        text-danger
+                    "
+                >
+                    Review Cancelled
+                </span>
+
+            @else
+
+                <span
+                    class="
+                        badge
+                        bg-warning/10
+                        text-warning
+                    "
+                >
+                    Review Pending
+                </span>
+
+            @endif
+
+
+            {{-- IMAGE RESULT --}}
+            @if($reviewResolved)
+
+                @if(
+                    $imageCollectionStatus
+                    ===
+                    'completed'
+                )
+
+                    <span
+                        class="
+                            badge
+                            bg-success/10
+                            text-success
+                        "
+                    >
+                        Image Done
+                    </span>
+
+                @elseif(
+                    $imageCollectionStatus
+                    ===
+                    'cancelled'
+                )
+
+                    <span
+                        class="
+                            badge
+                            bg-danger/10
+                            text-danger
+                        "
+                    >
+                        Image Cancelled
+                    </span>
+
+                @else
+
+                    <span
+                        class="
+                            badge
+                            bg-warning/10
+                            text-warning
+                        "
+                    >
+                        Image Pending
+                    </span>
+
+                @endif
+
+            @endif
+
+        </div>
+
+    @endif
+</td>
+
+
+                                   <td>
+
+    @if(
+        $case->type
+        ===
+        \App\Models\OperationCase::TYPE_REVIEW
+    )
+
+        {{--
+        |--------------------------------------------------------------------------
+        | STAGE 1 - REVIEW
+        |--------------------------------------------------------------------------
+        --}}
+        @if(!$reviewResolved)
+
+            <div class="space-y-3">
+
+                {{-- MARK REVIEW DONE --}}
+                <form
+                    method="POST"
+                    action="{{
+                        route(
+                            'admin.operations.case.review-complete',
+                            $case
+                        )
+                    }}"
+                >
+                    @csrf
+
+                    <div class="flex gap-2 items-center">
+
+                        <input
+                            type="text"
+                            name="note"
+                            class="form-control"
+                            placeholder="Review completion note"
+                        >
+
+                        <button
+                            type="submit"
+                            class="
+                                ti-btn
+                                ti-btn-success
+                                whitespace-nowrap
+                            "
+                        >
+                            Mark Review as Done
+                        </button>
+
+                    </div>
+                </form>
+
+
+                {{-- CANCEL REVIEW --}}
+                <form
+                    method="POST"
+                    action="{{
+                        route(
+                            'admin.operations.case.review-cancel',
+                            $case
+                        )
+                    }}"
+                    onsubmit="
+                        return confirm(
+                            'Customer review was not received. Are you sure you want to cancel Review?'
+                        );
+                    "
+                >
+                    @csrf
+
+                    <div class="flex gap-2 items-center">
+
+                        <input
+                            type="text"
+                            name="reason"
+                            class="form-control"
+                            placeholder="Reason review not received"
+                            required
+                        >
+
+                        <button
+                            type="submit"
+                            class="
+                                ti-btn
+                                ti-btn-danger
+                                whitespace-nowrap
+                            "
+                        >
+                            Cancel Review
+                        </button>
+
+                    </div>
+                </form>
+
+            </div>
+
+
+        {{--
+        |--------------------------------------------------------------------------
+        | STAGE 2 - IMAGE COLLECTION
+        |--------------------------------------------------------------------------
+        --}}
+        @elseif(!$imageCollectionResolved)
+
+            <div class="mb-3 flex flex-wrap gap-2">
+
+                @if(
+                    $reviewStatus
+                    ===
+                    'completed'
+                )
+
+                    <span
+                        class="
+                            badge
+                            bg-success/10
+                            text-success
+                        "
+                    >
+                        Review Done
+                    </span>
+
+                @elseif(
+                    $reviewStatus
+                    ===
+                    'cancelled'
+                )
+
+                    <span
+                        class="
+                            badge
+                            bg-danger/10
+                            text-danger
+                        "
+                    >
+                        Review Cancelled
+                    </span>
+
+                @endif
+
+
+                <span
+                    class="
+                        badge
+                        bg-warning/10
+                        text-warning
+                    "
+                >
+                    Image Collection Pending
+                </span>
+
+            </div>
+
+
+            <div class="space-y-3">
+
+                {{-- MARK IMAGE COLLECTION DONE --}}
+                <form
+                    method="POST"
+                    action="{{
+                        route(
+                            'admin.operations.case.image-collection-complete',
+                            $case
+                        )
+                    }}"
+                >
+                    @csrf
+
+                    <div class="flex gap-2 items-center">
+
+                        <input
+                            type="text"
+                            name="note"
+                            class="form-control"
+                            placeholder="Image collection note"
+                        >
+
+                        <button
+                            type="submit"
+                            class="
+                                ti-btn
+                                ti-btn-success
+                                whitespace-nowrap
+                            "
+                        >
+                            Mark Image Collection as Done
+                        </button>
+
+                    </div>
+                </form>
+
+
+                {{-- CANCEL IMAGE COLLECTION --}}
+                <form
+                    method="POST"
+                    action="{{
+                        route(
+                            'admin.operations.case.image-collection-cancel',
+                            $case
+                        )
+                    }}"
+                    onsubmit="
+                        return confirm(
+                            'Customer image/video was not received. Are you sure you want to cancel Image Collection?'
+                        );
+                    "
+                >
+                    @csrf
+
+                    <div class="flex gap-2 items-center">
+
+                        <input
+                            type="text"
+                            name="reason"
+                            class="form-control"
+                            placeholder="Reason image/video not received"
+                            required
+                        >
+
+                        <button
+                            type="submit"
+                            class="
+                                ti-btn
+                                ti-btn-danger
+                                whitespace-nowrap
+                            "
+                        >
+                            Cancel Image Collection
+                        </button>
+
+                    </div>
+                </form>
+
+            </div>
+
+
+        {{--
+        |--------------------------------------------------------------------------
+        | ALREADY RESOLVED
+        |--------------------------------------------------------------------------
+        |
+        | Normally completed Review cases should no longer be present in the
+        | active Review queue, but keep this fallback safe.
+        |
+        --}}
+        @else
+
+            <div class="flex flex-wrap gap-2">
+
+                @if(
+                    $reviewStatus
+                    ===
+                    'completed'
+                )
+
+                    <span
+                        class="
+                            badge
+                            bg-success/10
+                            text-success
+                        "
+                    >
+                        Review Done
+                    </span>
+
+                @else
+
+                    <span
+                        class="
+                            badge
+                            bg-danger/10
+                            text-danger
+                        "
+                    >
+                        Review Cancelled
+                    </span>
+
+                @endif
+
+
+                @if(
+                    $imageCollectionStatus
+                    ===
+                    'completed'
+                )
+
+                    <span
+                        class="
+                            badge
+                            bg-success/10
+                            text-success
+                        "
+                    >
+                        Image Done
+                    </span>
+
+                @else
+
+                    <span
+                        class="
+                            badge
+                            bg-danger/10
+                            text-danger
+                        "
+                    >
+                        Image Cancelled
+                    </span>
+
+                @endif
+
+            </div>
+
+        @endif
+
+
+    @else
+
+        {{--
+        |--------------------------------------------------------------------------
+        | EXISTING NON-REVIEW OPERATIONS FLOW
+        |--------------------------------------------------------------------------
+        |
+        | Keep this unchanged for:
+        | Reschedule
+        | Refund
+        | Cancelled
+        | etc.
+        |
+        --}}
+        <form
+            method="POST"
+            action="{{
+                route(
+                    'admin.operations.case.complete',
+                    $case
+                )
+            }}"
+            class="flex gap-2 items-center"
+        >
+            @csrf
+
+            <input
+                type="text"
+                name="note"
+                class="form-control"
+                placeholder="Completion note"
+            >
+
+            <button
+                type="submit"
+                class="
+                    ti-btn
+                    ti-btn-success
+                    whitespace-nowrap
+                "
+            >
+                Complete
+            </button>
+
+        </form>
+
+    @endif
+
+</td>
 
                                 </tr>
 

@@ -488,4 +488,31 @@ class Lead extends Model
             Log::info('Lead deleting finished', ['lead_id' => $lead->id]);
         });
     }
+
+    public function chatConversation()
+{
+    return $this->hasOne(
+        \App\Models\LeadChatConversation::class,
+        'lead_id'
+    );
+}
+
+
+public function chatMessages()
+{
+    return $this->hasMany(
+        \App\Models\LeadChatMessage::class,
+        'lead_id'
+    );
+}
+
+
+public function chatTasks()
+{
+    return $this->hasMany(
+        \App\Models\LeadChatTask::class,
+        'lead_id'
+    );
+}
+
 }

@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\LeadApiController;
 use App\Http\Controllers\Api\WebsiteCatalogProductController;
 use App\Http\Controllers\Api\SkyrackDashboardController;
 use App\Http\Middleware\VerifySkyrackToken;
+use App\Http\Controllers\Api\GoogleChatPubSubController;
 
 
 /*
@@ -34,6 +35,18 @@ Route::middleware(['verify.lead.key', 'throttle:60,1'])->group(function () {
     Route::get('/leads', [LeadApiController::class, 'index']);
     Route::post('/leads', [LeadApiController::class, 'store']);
 });
+
+
+Route::post(
+    '/google-chat/pubsub',
+    [
+        GoogleChatPubSubController::class,
+        'handle'
+    ]
+)
+    ->name(
+        'api.google-chat.pubsub'
+    );
 
 Route::post(
     '/website-leads',

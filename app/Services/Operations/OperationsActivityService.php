@@ -9,6 +9,7 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class OperationsActivityService
 {
@@ -70,6 +71,68 @@ class OperationsActivityService
             ]);
 
             $nextStatus = $this->statusFromData($data);
+
+           if (
+            $case->type
+                ===
+                OperationCase::TYPE_REVIEW
+
+            &&
+
+            $nextStatus
+                ===
+                OperationCase::STATUS_COMPLETED
+        ) {
+
+            $reviewStatus =
+                data_get(
+                    $case->metadata,
+                    'review_status',
+                    data_get(
+                        $case->metadata,
+                        'review_completed',
+                        false
+                    )
+                        ? 'done'
+                        : 'pending'
+                );
+
+
+            $imageStatus =
+                data_get(
+                    $case->metadata,
+                    'image_collection_status',
+                    data_get(
+                        $case->metadata,
+                        'image_collection_completed',
+                        false
+                    )
+                        ? 'done'
+                        : 'pending'
+                );
+
+
+            if (
+                !in_array(
+                    $reviewStatus,
+                    ['done', 'cancelled'],
+                    true
+                )
+                ||
+                !in_array(
+                    $imageStatus,
+                    ['done', 'cancelled'],
+                    true
+                )
+            ) {
+
+                throw ValidationException::withMessages([
+                    'operation_status' =>
+                        'Review cases close only after both Review and Image Collection are resolved using Done or Cancel.',
+                ]);
+            }
+        }
+
             $oldStatus = $case->status;
             $nextFollowupAt = $nextStatus === OperationCase::STATUS_COMPLETED
                 ? null

@@ -294,9 +294,22 @@
                                 <input type="hidden" name="status" id="status" value="{{ optional($followups->first())->status ?? 1 }}">
                                 <label for="operation_status" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Operations Status<span
                                         class="text-danger">*</span></label>
+                                @php
+                                    $operationStatusOptions =
+                                        $operationCase?->type === \App\Models\OperationCase::TYPE_REVIEW
+                                            ? [
+                                                'pending' => 'Pending',
+                                                'in_progress' => 'In Progress',
+                                            ]
+                                            : [
+                                                'pending' => 'Pending',
+                                                'in_progress' => 'In Progress',
+                                                'completed' => 'Completed',
+                                            ];
+                                @endphp
                                 <select class="ti-form-select rounded-sm form-control-sm" name="operation_status" id="operation_status"
                                     required>
-                                    @foreach(['pending' => 'Pending', 'in_progress' => 'In Progress', 'completed' => 'Completed'] as $value => $label)
+                                    @foreach($operationStatusOptions as $value => $label)
                                         <option
                                             value="{{ $value }}"
                                             {{ old('operation_status', $operationCase?->status ?? 'in_progress') === $value ? 'selected' : '' }}
@@ -534,372 +547,1364 @@
                 </form>
             </div>
         </div>
-        <div class="xl:col-span-12 col-span-12">
-            <div class="box custom-box">
-                <div class="box-header justify-between">
-                    <div class="box-title">
-                        Follow-up History
-                    </div>
-                </div>
-                <div class="box-body">
+      <div class="xl:col-span-12 col-span-12">
+
+    <div class="box custom-box">
+
+        {{-- =========================================================
+             ONE HEADER ONLY
+             ========================================================= --}}
+        <div class="box-header justify-between">
+
+            <div class="box-title">
+                Follow-up History
+            </div>
+
+        </div>
+
+
+        <div class="box-body">
+
+            {{-- =========================================================
+                 CHAT ACCESS
+                 ========================================================= --}}
+       @php
+
+    $splitUser = auth()->user();
+
+    $splitRole = $splitUser
+        ?->userType
+        ?->user_type;
+
+
+    $showLeadChat =
+
+        /*
+         * Super Admin can also access Chat.
+         * Useful for management + testing.
+         */
+        (
+            $splitUser
+            &&
+            $splitUser->isSuperAdmin()
+        )
+
+        ||
+
+        /*
+         * Sales Executive can access only own Lead.
+         */
+        (
+            $splitRole
+            ===
+            \App\Models\UserType::SALES_EXECUTIVE
+
+            &&
+
+            (string) $lead->representative_user_id
+            ===
+            (string) $splitUser?->id
+        )
+
+        ||
+
+        /*
+         * Operations roles can access Chat.
+         */
+        in_array(
+            $splitRole,
+            \App\Models\UserType::OPERATIONS_ROLES,
+            true
+        );
+
+@endphp
+
+
+            {{--
+            |--------------------------------------------------------------------------
+            | IMPORTANT
+            |--------------------------------------------------------------------------
+            |
+            | If Chat is available:
+            |
+            |   Follow-up History = 50%
+            |   Chat              = 50%
+            |
+            | If Chat is NOT available:
+            |
+            |   Follow-up History = 100%
+            |
+            | The History code exists only ONCE below.
+            |
+            --}}
+
+            <div
+                class="{{
+                    $showLeadChat
+                        ? 'grid grid-cols-12 gap-4 items-start'
+                        : ''
+                }}"
+            >
+
+
+                {{-- =====================================================
+                     LEFT — EXISTING FOLLOW-UP HISTORY
+                     ===================================================== --}}
+                <div
+                    class="{{
+                        $showLeadChat
+                            ? 'xl:col-span-6 lg:col-span-6 col-span-12'
+                            : 'w-full'
+                    }}"
+                >
+
                     <div class="tab-content">
-                        <div id="mon-1" role="tabpanel" aria-labelledby="mon-1">
+
+                        <div
+                            id="mon-1"
+                            role="tabpanel"
+                            aria-labelledby="mon-1"
+                        >
+
                             <ul class="list-unstyled mb-0 upcoming-events-list">
+
                                 @forelse($followups as $followup)
+
                                     <li>
+
                                         @php
-                                            // Determine latest audit entry for this followup (use loaded relation if available)
+
+                                            /*
+                                            |--------------------------------------------------------------------------
+                                            | Latest Payment Audit
+                                            |--------------------------------------------------------------------------
+                                            */
+
                                             $latestAudit = null;
+
+
                                             if (
-                                                isset($followup->paymentAuditTrail) &&
-                                                $followup->paymentAuditTrail instanceof \Illuminate\Support\Collection
+                                                isset($followup->paymentAuditTrail)
+                                                &&
+                                                $followup->paymentAuditTrail
+                                                    instanceof \Illuminate\Support\Collection
                                             ) {
-                                                $latestAudit = $followup->paymentAuditTrail
-                                                    ->sortByDesc('created_at')
-                                                    ->first();
+
+                                                $latestAudit =
+                                                    $followup
+                                                        ->paymentAuditTrail
+                                                        ->sortByDesc('created_at')
+                                                        ->first();
+
                                             } else {
+
                                                 try {
-                                                    $latestAudit = $followup->paymentAuditTrail()->latest()->first();
+
+                                                    $latestAudit =
+                                                        $followup
+                                                            ->paymentAuditTrail()
+                                                            ->latest()
+                                                            ->first();
+
                                                 } catch (\Throwable $e) {
+
                                                     $latestAudit = null;
                                                 }
                                             }
 
-                                            // Detect if any rejected audit exists (2 == rejected)
+
+                                            /*
+                                            |--------------------------------------------------------------------------
+                                            | Check Rejected Audit
+                                            |--------------------------------------------------------------------------
+                                            */
+
                                             $hasRejectedAudit = false;
+
+
                                             if (
-                                                isset($followup->paymentAuditTrail) &&
-                                                $followup->paymentAuditTrail instanceof \Illuminate\Support\Collection
+                                                isset($followup->paymentAuditTrail)
+                                                &&
+                                                $followup->paymentAuditTrail
+                                                    instanceof \Illuminate\Support\Collection
                                             ) {
-                                                $hasRejectedAudit = $followup->paymentAuditTrail->contains(function (
-                                                    $a,
-                                                ) {
-                                                    return isset($a->payment_status) && $a->payment_status == 2;
-                                                });
+
+                                                $hasRejectedAudit =
+                                                    $followup
+                                                        ->paymentAuditTrail
+                                                        ->contains(
+                                                            function ($a) {
+
+                                                                return isset(
+                                                                    $a->payment_status
+                                                                )
+                                                                &&
+                                                                $a->payment_status == 2;
+                                                            }
+                                                        );
+
                                             } else {
+
                                                 try {
-                                                    $hasRejectedAudit = (bool) $followup
-                                                        ->paymentAuditTrail()
-                                                        ->where('payment_status', 2)
-                                                        ->exists();
+
+                                                    $hasRejectedAudit =
+                                                        (bool)
+                                                        $followup
+                                                            ->paymentAuditTrail()
+                                                            ->where(
+                                                                'payment_status',
+                                                                2
+                                                            )
+                                                            ->exists();
+
                                                 } catch (\Throwable $e) {
+
                                                     $hasRejectedAudit = false;
                                                 }
                                             }
 
-                                            // Lock by audit when latest audit is approved(1) or rejected(2), or any rejected audit exists
+
+                                            /*
+                                            |--------------------------------------------------------------------------
+                                            | Payment Audit Lock
+                                            |--------------------------------------------------------------------------
+                                            */
+
                                             $isLockedByAudit =
-                                                ($latestAudit && in_array($latestAudit->payment_status, [1, 2])) ||
+                                                (
+                                                    $latestAudit
+                                                    &&
+                                                    in_array(
+                                                        $latestAudit->payment_status,
+                                                        [1, 2]
+                                                    )
+                                                )
+                                                ||
                                                 $hasRejectedAudit;
+
                                         @endphp
+
+
                                         <div class="grid grid-cols-12 gap-3">
+
+
+                                            {{-- =============================
+                                                 NOTE + CREATED DATE
+                                                 ============================= --}}
                                             <div class="xl:col-span-12 col-span-12">
-                                                <div class="md:flex block items-start justify-between">
-                                                    <p class="mb-0 text-[.875rem]">Note : {{ $followup->followup_note }}
+
+                                                <div
+                                                    class="
+                                                        md:flex
+                                                        block
+                                                        items-start
+                                                        justify-between
+                                                    "
+                                                >
+
+                                                    <p class="mb-0 text-[.875rem]">
+
+                                                        Note :
+                                                        {{ $followup->followup_note }}
+
+
                                                         @if ($followup->customer_not_picked_up)
-                                                            <span class="badge bg-warning/10 text-warning ms-2">
+
+                                                            <span
+                                                                class="
+                                                                    badge
+                                                                    bg-warning/10
+                                                                    text-warning
+                                                                    ms-2
+                                                                "
+                                                            >
                                                                 No Answer
                                                             </span>
+
                                                         @endif
+
                                                     </p>
+
+
                                                     <div>
-                                                        <span class="text-[#8c9097] dark:text-white/50">
-                                                            <i class="ri-time-line align-middle me-1 inline-block"></i>
-                                                            Created At: {{ $followup->created_at->format('Y-m-d H:i:s') }}
-                                                            @if ($followup->file && $followup->updated_at->gt($followup->created_at))
+
+                                                        <span
+                                                            class="
+                                                                text-[#8c9097]
+                                                                dark:text-white/50
+                                                            "
+                                                        >
+
+                                                            <i
+                                                                class="
+                                                                    ri-time-line
+                                                                    align-middle
+                                                                    me-1
+                                                                    inline-block
+                                                                "
+                                                            ></i>
+
+                                                            Created At:
+                                                            {{
+                                                                $followup
+                                                                    ->created_at
+                                                                    ->format(
+                                                                        'Y-m-d H:i:s'
+                                                                    )
+                                                            }}
+
+
+                                                            @if (
+                                                                $followup->file
+                                                                &&
+                                                                $followup
+                                                                    ->updated_at
+                                                                    ->gt(
+                                                                        $followup->created_at
+                                                                    )
+                                                            )
+
                                                                 <br>
-                                                                <i class="ri-time-line align-middle me-1 inline-block"></i>
+
+                                                                <i
+                                                                    class="
+                                                                        ri-time-line
+                                                                        align-middle
+                                                                        me-1
+                                                                        inline-block
+                                                                    "
+                                                                ></i>
+
                                                                 Updated At:
-                                                                {{ $followup->updated_at->format('Y-m-d H:i:s') }}
+
+                                                                {{
+                                                                    $followup
+                                                                        ->updated_at
+                                                                        ->format(
+                                                                            'Y-m-d H:i:s'
+                                                                        )
+                                                                }}
+
                                                             @endif
+
                                                         </span>
+
                                                     </div>
+
                                                 </div>
+
                                             </div>
+
+
+                                            {{-- =============================
+                                                 CREATED BY
+                                                 ============================= --}}
                                             <div class="xl:col-span-12 col-span-12">
-                                                <p class="mb-0 text-[#8c9097] dark:text-white/50">
-                                                    Created By: {{ $followup->followedBy->name ?? 'System' }}</p>
+
+                                                <p
+                                                    class="
+                                                        mb-0
+                                                        text-[#8c9097]
+                                                        dark:text-white/50
+                                                    "
+                                                >
+
+                                                    Created By:
+
+                                                    {{
+                                                        $followup
+                                                            ->followedBy
+                                                            ->name
+                                                        ??
+                                                        'System'
+                                                    }}
+
+                                                </p>
+
                                             </div>
+
+
+                                            {{-- =============================
+                                                 RECEIPT / FILE
+                                                 ============================= --}}
                                             @if ($followup->file)
+
                                                 <div class="xl:col-span-12 col-span-12">
+
                                                     <div class="grid grid-cols-12 gap-3">
+
                                                         <div class="xl:col-span-2 col-span-12">
-                                                            <a href="{{ route('admin.followups.file', ['filename' => basename($followup->file)]) }}" target="_blank"
-                                                                class="me-2 text-primary">
-                                                                <i class="ri-image-line"></i> View Image
+
+                                                            <a
+                                                                href="{{
+                                                                    route(
+                                                                        'admin.followups.file',
+                                                                        [
+                                                                            'filename' =>
+                                                                                basename(
+                                                                                    $followup->file
+                                                                                )
+                                                                        ]
+                                                                    )
+                                                                }}"
+                                                                target="_blank"
+                                                                class="me-2 text-primary"
+                                                            >
+
+                                                                <i class="ri-image-line"></i>
+
+                                                                View Image
+
                                                             </a>
+
                                                         </div>
+
+
                                                         @php
-                                                            // Determine latest audit entry for this followup (use loaded relation if available)
+
+                                                            /*
+                                                            |--------------------------------------------------------------------------
+                                                            | Re-check audit lock for image
+                                                            |--------------------------------------------------------------------------
+                                                            */
+
                                                             $latestAudit = null;
+
+
                                                             if (
-                                                                isset($followup->paymentAuditTrail) &&
-                                                                $followup->paymentAuditTrail instanceof
+                                                                isset(
+                                                                    $followup
+                                                                        ->paymentAuditTrail
+                                                                )
+                                                                &&
+                                                                $followup
+                                                                    ->paymentAuditTrail
+                                                                    instanceof
                                                                     \Illuminate\Support\Collection
                                                             ) {
-                                                                $latestAudit = $followup->paymentAuditTrail
-                                                                    ->sortByDesc('created_at')
-                                                                    ->first();
+
+                                                                $latestAudit =
+                                                                    $followup
+                                                                        ->paymentAuditTrail
+                                                                        ->sortByDesc(
+                                                                            'created_at'
+                                                                        )
+                                                                        ->first();
+
                                                             } else {
-                                                                $latestAudit = $followup
-                                                                    ->paymentAuditTrail()
-                                                                    ->latest()
-                                                                    ->first();
+
+                                                                $latestAudit =
+                                                                    $followup
+                                                                        ->paymentAuditTrail()
+                                                                        ->latest()
+                                                                        ->first();
                                                             }
 
-                                                            // Detect if any rejected audit exists (2 == rejected)
+
                                                             $hasRejectedAudit = false;
+
+
                                                             if (
-                                                                isset($followup->paymentAuditTrail) &&
-                                                                $followup->paymentAuditTrail instanceof
+                                                                isset(
+                                                                    $followup
+                                                                        ->paymentAuditTrail
+                                                                )
+                                                                &&
+                                                                $followup
+                                                                    ->paymentAuditTrail
+                                                                    instanceof
                                                                     \Illuminate\Support\Collection
                                                             ) {
-                                                                $hasRejectedAudit = $followup->paymentAuditTrail->contains(
-                                                                    function ($a) {
-                                                                        return isset($a->payment_status) &&
-                                                                            $a->payment_status == 2;
-                                                                    },
-                                                                );
+
+                                                                $hasRejectedAudit =
+                                                                    $followup
+                                                                        ->paymentAuditTrail
+                                                                        ->contains(
+                                                                            function ($a) {
+
+                                                                                return isset(
+                                                                                    $a->payment_status
+                                                                                )
+                                                                                &&
+                                                                                $a->payment_status == 2;
+                                                                            }
+                                                                        );
+
                                                             } else {
+
                                                                 try {
-                                                                    $hasRejectedAudit = (bool) $followup
-                                                                        ->paymentAuditTrail()
-                                                                        ->where('payment_status', 2)
-                                                                        ->exists();
+
+                                                                    $hasRejectedAudit =
+                                                                        (bool)
+                                                                        $followup
+                                                                            ->paymentAuditTrail()
+                                                                            ->where(
+                                                                                'payment_status',
+                                                                                2
+                                                                            )
+                                                                            ->exists();
+
                                                                 } catch (\Throwable $e) {
+
                                                                     $hasRejectedAudit = false;
                                                                 }
                                                             }
 
-                                                            // Lock by audit when latest audit is approved(1) or rejected(2), or any rejected audit exists
+
                                                             $isLockedByAudit =
-                                                                ($latestAudit &&
-                                                                    in_array($latestAudit->payment_status, [1, 2])) ||
+                                                                (
+                                                                    $latestAudit
+                                                                    &&
+                                                                    in_array(
+                                                                        $latestAudit
+                                                                            ->payment_status,
+                                                                        [1, 2]
+                                                                    )
+                                                                )
+                                                                ||
                                                                 $hasRejectedAudit;
+
                                                         @endphp
 
-                                                        {{-- Show Edit button only when followup is not locked by audit and status is not approved/rejected --}}
-                                                        @if (!$isLockedByAudit && !in_array($followup->status, [8, 9]))
+
+                                                        {{-- Edit Image --}}
+                                                        @if (
+                                                            !$isLockedByAudit
+                                                            &&
+                                                            !in_array(
+                                                                $followup->status,
+                                                                [8, 9]
+                                                            )
+                                                        )
+
                                                             <div class="xl:col-span-2 col-span-12">
-                                                                <button type="button"
-                                                                    class="text-sm text-warning edit-image-btn"
+
+                                                                <button
+                                                                    type="button"
+                                                                    class="
+                                                                        text-sm
+                                                                        text-warning
+                                                                        edit-image-btn
+                                                                    "
                                                                     data-followup-id="{{ $followup->id }}"
-                                                                    data-current-image="{{ $followup->file }}">
-                                                                    <i class="ri-edit-line"></i> Edit Image
+                                                                    data-current-image="{{ $followup->file }}"
+                                                                >
+
+                                                                    <i class="ri-edit-line"></i>
+
+                                                                    Edit Image
+
                                                                 </button>
+
                                                             </div>
+
                                                         @else
+
                                                             <div class="xl:col-span-4 col-span-12">
-                                                                <span class="text-sm text-muted"><i
-                                                                        class="ri-lock-2-line"></i> Image locked after
-                                                                    approval/rejection</span>
+
+                                                                <span class="text-sm text-muted">
+
+                                                                    <i class="ri-lock-2-line"></i>
+
+                                                                    Image locked after
+                                                                    approval/rejection
+
+                                                                </span>
+
                                                             </div>
+
                                                         @endif
-                                                        @if (auth()->user() && auth()->user()->isSuperAdmin() && in_array($followup->status, [3, 4]))
+
+
+                                                        {{-- Delete Payment Follow-up --}}
+                                                        @if (
+                                                            auth()->user()
+                                                            &&
+                                                            auth()->user()->isSuperAdmin()
+                                                            &&
+                                                            in_array(
+                                                                $followup->status,
+                                                                [3, 4]
+                                                            )
+                                                        )
+
                                                             <div class="xl:col-span-2 col-span-12">
-                                                                <button type="button"
-                                                                    class="text-sm text-danger delete-followup-btn"
-                                                                    data-delete-url="{{ route('admin.followups.destroy', $followup->id) }}">
-                                                                    <i class="ri-delete-bin-5-line"></i> Delete Followup
+
+                                                                <button
+                                                                    type="button"
+                                                                    class="
+                                                                        text-sm
+                                                                        text-danger
+                                                                        delete-followup-btn
+                                                                    "
+                                                                    data-delete-url="{{
+                                                                        route(
+                                                                            'admin.followups.destroy',
+                                                                            $followup->id
+                                                                        )
+                                                                    }}"
+                                                                >
+
+                                                                    <i class="ri-delete-bin-5-line"></i>
+
+                                                                    Delete Followup
+
                                                                 </button>
+
                                                             </div>
+
                                                         @endif
+
                                                     </div>
+
                                                 </div>
+
                                             @endif
 
 
-                                            @if ($followup->total_amount || $followup->received_amount || $followup->service_amount || $followup->discount_amount)
+                                            {{-- =============================
+                                                 PAYMENT VALUES
+                                                 ============================= --}}
+                                            @if (
+                                                $followup->total_amount
+                                                ||
+                                                $followup->received_amount
+                                                ||
+                                                $followup->service_amount
+                                                ||
+                                                $followup->discount_amount
+                                            )
+
                                                 <div class="xl:col-span-12 col-span-12">
+
                                                     <div class="grid grid-cols-12 gap-3">
+
+
                                                         @if ($followup->service_amount)
-                                                            <div class="xxl:col-span-3 xl:col-span-3  col-span-12">
-                                                                <span class="text-info">Service Amount:
-                                                                    ₹{{ number_format($followup->service_amount, 2) }}</span>
+
+                                                            <div
+                                                                class="
+                                                                    xxl:col-span-3
+                                                                    xl:col-span-3
+                                                                    col-span-12
+                                                                "
+                                                            >
+
+                                                                <span class="text-info">
+
+                                                                    Service Amount:
+
+                                                                    ₹{{
+                                                                        number_format(
+                                                                            $followup->service_amount,
+                                                                            2
+                                                                        )
+                                                                    }}
+
+                                                                </span>
+
                                                             </div>
+
                                                         @endif
+
 
                                                         @if ($followup->discount_amount)
-                                                            <div class="xxl:col-span-3 xl:col-span-3  col-span-12">
-                                                                <span class="text-success">Discount:
-                                                                    ₹{{ number_format($followup->discount_amount, 2) }}</span>
+
+                                                            <div
+                                                                class="
+                                                                    xxl:col-span-3
+                                                                    xl:col-span-3
+                                                                    col-span-12
+                                                                "
+                                                            >
+
+                                                                <span class="text-success">
+
+                                                                    Discount:
+
+                                                                    ₹{{
+                                                                        number_format(
+                                                                            $followup->discount_amount,
+                                                                            2
+                                                                        )
+                                                                    }}
+
+                                                                </span>
+
                                                             </div>
+
                                                         @endif
+
+
                                                         @if ($followup->total_amount)
-                                                            <div class="xxl:col-span-3 xl:col-span-3  col-span-12">
-                                                                <span class="text-primary">Total Amount:
-                                                                    ₹{{ number_format($followup->total_amount, 2) }}</span>
+
+                                                            <div
+                                                                class="
+                                                                    xxl:col-span-3
+                                                                    xl:col-span-3
+                                                                    col-span-12
+                                                                "
+                                                            >
+
+                                                                <span class="text-primary">
+
+                                                                    Total Amount:
+
+                                                                    ₹{{
+                                                                        number_format(
+                                                                            $followup->total_amount,
+                                                                            2
+                                                                        )
+                                                                    }}
+
+                                                                </span>
+
                                                             </div>
+
                                                         @endif
+
+
                                                         @php
-                                                            // New status-only followups (e.g. completed/cancelled)
-                                                            // may store received_amount as 0, while actual paid amount
-                                                            // lives in approved payment audit trail entries.
-                                                            $displayReceivedAmount = (float) ($followup->received_amount ?? 0);
-                                                            if ($loop->first && $displayReceivedAmount <= 0 && (float) ($approvedPaidSum ?? 0) > 0) {
-                                                                $displayReceivedAmount = (float) $approvedPaidSum;
+
+                                                            /*
+                                                             * New status-only followups
+                                                             * may store received_amount as 0.
+                                                             */
+
+                                                            $displayReceivedAmount =
+                                                                (float)
+                                                                (
+                                                                    $followup
+                                                                        ->received_amount
+                                                                    ??
+                                                                    0
+                                                                );
+
+
+                                                            if (
+                                                                $loop->first
+                                                                &&
+                                                                $displayReceivedAmount <= 0
+                                                                &&
+                                                                (float)
+                                                                (
+                                                                    $approvedPaidSum
+                                                                    ??
+                                                                    0
+                                                                ) > 0
+                                                            ) {
+
+                                                                $displayReceivedAmount =
+                                                                    (float)
+                                                                    $approvedPaidSum;
                                                             }
+
                                                         @endphp
+
+
                                                         @if ($displayReceivedAmount > 0)
-                                                            <div class="xxl:col-span-3 xl:col-span-3  col-span-12">
-                                                                <span class="text-success">Received:
-                                                                    ₹{{ number_format($displayReceivedAmount, 2) }}</span>
+
+                                                            <div
+                                                                class="
+                                                                    xxl:col-span-3
+                                                                    xl:col-span-3
+                                                                    col-span-12
+                                                                "
+                                                            >
+
+                                                                <span class="text-success">
+
+                                                                    Received:
+
+                                                                    ₹{{
+                                                                        number_format(
+                                                                            $displayReceivedAmount,
+                                                                            2
+                                                                        )
+                                                                    }}
+
+                                                                </span>
+
                                                             </div>
+
                                                         @endif
 
 
-                                                        {{-- Show pending amount for the latest followup --}}
+                                                        {{-- Pending only for latest Follow-up --}}
                                                         @if ($loop->first)
-                                                            <div class="xxl:col-span-3 xl:col-span-3  col-span-12">
-                                                                <span class="text-danger">Pending:
-                                                                    ₹{{ number_format($pendingAmount, 2) }}</span>
+
+                                                            <div
+                                                                class="
+                                                                    xxl:col-span-3
+                                                                    xl:col-span-3
+                                                                    col-span-12
+                                                                "
+                                                            >
+
+                                                                <span class="text-danger">
+
+                                                                    Pending:
+
+                                                                    ₹{{
+                                                                        number_format(
+                                                                            $pendingAmount,
+                                                                            2
+                                                                        )
+                                                                    }}
+
+                                                                </span>
+
                                                             </div>
+
                                                         @endif
+
                                                     </div>
+
                                                 </div>
+
+
+                                                {{-- =============================
+                                                     SERVICE BREAKDOWN
+                                                     ============================= --}}
                                                 @if ($followup->service_details)
+
                                                     @php
-                                                        $serviceDetails = is_string($followup->service_details)
-                                                            ? json_decode($followup->service_details, true)
-                                                            : $followup->service_details;
+
+                                                        $serviceDetails =
+                                                            is_string(
+                                                                $followup
+                                                                    ->service_details
+                                                            )
+
+                                                            ? json_decode(
+                                                                $followup
+                                                                    ->service_details,
+                                                                true
+                                                            )
+
+                                                            : $followup
+                                                                ->service_details;
+
                                                     @endphp
-                                                    @if (is_array($serviceDetails) && count($serviceDetails) > 0)
+
+
+                                                    @if (
+                                                        is_array($serviceDetails)
+                                                        &&
+                                                        count($serviceDetails) > 0
+                                                    )
+
                                                         <div class="xl:col-span-12 col-span-12">
+
                                                             <small class="text-muted d-block mb-1">
-                                                                <i class="ri-list-check text-primary"></i> Service
-                                                                Breakdown:
+
+                                                                <i class="ri-list-check text-primary"></i>
+
+                                                                Service Breakdown:
+
                                                             </small>
+
+
                                                             <div class="ms-3">
-                                                                @foreach ($serviceDetails as $detail)
+
+                                                                @foreach (
+                                                                    $serviceDetails
+                                                                    as
+                                                                    $detail
+                                                                )
+
                                                                     <small class="d-block text-[.8rem]">
-                                                                        • {{ $detail['name'] ?? 'N/A' }}:
-                                                                        ₹{{ number_format($detail['original_amount'] ?? 0, 2) }}
-                                                                        @if (isset($detail['discount_amount']) && $detail['discount_amount'] > 0)
+
+                                                                        •
+                                                                        {{
+                                                                            $detail['name']
+                                                                            ??
+                                                                            'N/A'
+                                                                        }}:
+
+                                                                        ₹{{
+                                                                            number_format(
+                                                                                $detail[
+                                                                                    'original_amount'
+                                                                                ]
+                                                                                ??
+                                                                                0,
+                                                                                2
+                                                                            )
+                                                                        }}
+
+
+                                                                        @if (
+                                                                            isset(
+                                                                                $detail[
+                                                                                    'discount_amount'
+                                                                                ]
+                                                                            )
+                                                                            &&
+                                                                            $detail[
+                                                                                'discount_amount'
+                                                                            ] > 0
+                                                                        )
+
                                                                             <span class="text-success">
+
                                                                                 -
-                                                                                ₹{{ number_format($detail['discount_amount'], 2) }}
+
+                                                                                ₹{{
+                                                                                    number_format(
+                                                                                        $detail[
+                                                                                            'discount_amount'
+                                                                                        ],
+                                                                                        2
+                                                                                    )
+                                                                                }}
+
                                                                             </span>
+
                                                                         @endif
+
+
                                                                         =
-                                                                        <strong>₹{{ number_format(($detail['original_amount'] ?? 0) - ($detail['discount_amount'] ?? 0), 2) }}</strong>
+
+                                                                        <strong>
+
+                                                                            ₹{{
+                                                                                number_format(
+                                                                                    (
+                                                                                        $detail[
+                                                                                            'original_amount'
+                                                                                        ]
+                                                                                        ??
+                                                                                        0
+                                                                                    )
+                                                                                    -
+                                                                                    (
+                                                                                        $detail[
+                                                                                            'discount_amount'
+                                                                                        ]
+                                                                                        ??
+                                                                                        0
+                                                                                    ),
+                                                                                    2
+                                                                                )
+                                                                            }}
+
+                                                                        </strong>
+
                                                                     </small>
+
                                                                 @endforeach
+
                                                             </div>
+
                                                         </div>
+
                                                     @endif
+
                                                 @endif
+
                                             @endif
-                                            @if ($followup->payment_method || $followup->paid_date)
+
+
+                                            {{-- =============================
+                                                 PAYMENT METHOD / DATE
+                                                 ============================= --}}
+                                            @if (
+                                                $followup->payment_method
+                                                ||
+                                                $followup->paid_date
+                                            )
+
                                                 <div class="xl:col-span-12 col-span-12">
+
                                                     <div class="grid grid-cols-12 gap-3">
+
                                                         @if ($followup->payment_method)
+
                                                             <div class="xl:col-span-3 col-span-12">
-                                                                <span class="text-info">Payment Method:
-                                                                    {{ ucfirst($followup->payment_method) }}</span>
+
+                                                                <span class="text-info">
+
+                                                                    Payment Method:
+
+                                                                    {{
+                                                                        ucfirst(
+                                                                            $followup
+                                                                                ->payment_method
+                                                                        )
+                                                                    }}
+
+                                                                </span>
+
                                                             </div>
+
                                                         @endif
+
+
                                                         @if ($followup->paid_date)
+
                                                             <div class="xl:col-span-3 col-span-12">
-                                                                <span class="text-warning">Paid Date:
-                                                                    {{ $followup->paid_date->format('d-m-Y') }}</span>
+
+                                                                <span class="text-warning">
+
+                                                                    Paid Date:
+
+                                                                    {{
+                                                                        $followup
+                                                                            ->paid_date
+                                                                            ->format(
+                                                                                'd-m-Y'
+                                                                            )
+                                                                    }}
+
+                                                                </span>
+
                                                             </div>
+
                                                         @endif
+
                                                     </div>
+
                                                 </div>
+
                                             @endif
+
+
+                                            {{-- =============================
+                                                 FOLLOW-UP STATUS
+                                                 ============================= --}}
                                             <div class="xl:col-span-12 col-span-12">
-                                                <span class="badge bg-primary/10 text-primary">
+
+                                                <span
+                                                    class="
+                                                        badge
+                                                        bg-primary/10
+                                                        text-primary
+                                                    "
+                                                >
+
                                                     Status:
+
+
                                                     @if ($followup->status === 0)
+
                                                         Initiated
+
                                                     @elseif($followup->status === 1)
+
                                                         Active
+
                                                     @elseif($followup->status === 2)
+
                                                         Cancelled
+
                                                     @elseif($followup->status === 3)
+
                                                         Full payment received
+
                                                     @elseif($followup->status === 4)
+
                                                         Partial payment received
+
                                                     @elseif($followup->status === 5)
+
                                                         Completed
+
                                                     @elseif($followup->status === 6)
+
                                                         Pending
+
                                                     @elseif($followup->status === 7)
+
                                                         Rescheduled
+
                                                     @elseif($followup->status === 8)
+
                                                         Approved
+
                                                     @elseif($followup->status === 9)
+
                                                         Rejected
+
                                                     @else
+
                                                         N/A
+
                                                     @endif
+
                                                 </span>
+
                                             </div>
+
                                         </div>
-                                        <!-- Edit Image Modal (Hidden by default) -->
-                                        @if (!$isLockedByAudit && !in_array($followup->status, [8, 9]))
-                                            <div id="edit-image-form-{{ $followup->id }}"
-                                                class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+
+
+                                        {{-- =================================================
+                                             EDIT IMAGE MODAL
+                                             ================================================= --}}
+                                        @if (
+                                            !$isLockedByAudit
+                                            &&
+                                            !in_array(
+                                                $followup->status,
+                                                [8, 9]
+                                            )
+                                        )
+
+                                            <div
+                                                id="edit-image-form-{{ $followup->id }}"
+                                                class="
+                                                    hidden
+                                                    fixed
+                                                    inset-0
+                                                    z-50
+                                                    flex
+                                                    items-center
+                                                    justify-center
+                                                    bg-black
+                                                    bg-opacity-40
+                                                "
+                                            >
+
                                                 <div
-                                                    class="bg-white dark:bg-black/90 rounded-lg shadow-lg p-6 w-full max-w-md relative">
-                                                    <button type="button"
-                                                        class="absolute top-2 right-2 text-gray-400 hover:text-gray-700 dark:text-white/50 dark:hover:text-white/80 cancel-edit-image"
-                                                        data-followup-id="{{ $followup->id }}" title="Close">
+                                                    class="
+                                                        bg-white
+                                                        dark:bg-black/90
+                                                        rounded-lg
+                                                        shadow-lg
+                                                        p-6
+                                                        w-full
+                                                        max-w-md
+                                                        relative
+                                                    "
+                                                >
+
+                                                    <button
+                                                        type="button"
+                                                        class="
+                                                            absolute
+                                                            top-2
+                                                            right-2
+                                                            text-gray-400
+                                                            hover:text-gray-700
+                                                            dark:text-white/50
+                                                            dark:hover:text-white/80
+                                                            cancel-edit-image
+                                                        "
+                                                        data-followup-id="{{ $followup->id }}"
+                                                        title="Close"
+                                                    >
+
                                                         <i class="bi bi-x-lg text-xl"></i>
+
                                                     </button>
-                                                    <h4 class="text-lg font-semibold mb-4 text-center text-theme">Edit
-                                                        Payment
-                                                        Image</h4>
+
+
+                                                    <h4
+                                                        class="
+                                                            text-lg
+                                                            font-semibold
+                                                            mb-4
+                                                            text-center
+                                                            text-theme
+                                                        "
+                                                    >
+                                                        Edit Payment Image
+                                                    </h4>
+
+
                                                     @if ($followup->file)
+
                                                         <div class="mb-4 text-center">
-                                                            <img src="{{ route('admin.followups.file', ['filename' => basename($followup->file)]) }}"
+
+                                                            <img
+                                                                src="{{
+                                                                    route(
+                                                                        'admin.followups.file',
+                                                                        [
+                                                                            'filename' =>
+                                                                                basename(
+                                                                                    $followup->file
+                                                                                )
+                                                                        ]
+                                                                    )
+                                                                }}"
                                                                 alt="Current Image"
-                                                                class="h-24 w-auto rounded border mx-auto shadow">
-                                                            <div class="text-xs text-gray-500 mt-1">Current Image</div>
+                                                                class="
+                                                                    h-24
+                                                                    w-auto
+                                                                    rounded
+                                                                    border
+                                                                    mx-auto
+                                                                    shadow
+                                                                "
+                                                            >
+
+                                                            <div class="text-xs text-gray-500 mt-1">
+                                                                Current Image
+                                                            </div>
+
                                                         </div>
+
                                                     @endif
-                                                    <form class="update-image-form" method="POST"
-                                                        action="{{ route('admin.followups.update-image', $followup->id) }}"
-                                                        enctype="multipart/form-data">
+
+
+                                                    <form
+                                                        class="update-image-form"
+                                                        method="POST"
+                                                        action="{{
+                                                            route(
+                                                                'admin.followups.update-image',
+                                                                $followup->id
+                                                            )
+                                                        }}"
+                                                        enctype="multipart/form-data"
+                                                    >
+
                                                         @csrf
                                                         @method('PUT')
+
+
                                                         <div class="mb-4">
+
                                                             <label
-                                                                class="block text-sm font-medium mb-2 text-gray-700 dark:text-white">Choose
-                                                                new image</label>
-                                                            <input type="file" name="image"
-                                                                class="block w-full border border-gray-300 focus:shadow-sm rounded text-sm file:border-0 file:bg-gray-200 file:py-2 file:px-4 dark:file:bg-black/20 dark:file:text-white/50"
-                                                                required>
+                                                                class="
+                                                                    block
+                                                                    text-sm
+                                                                    font-medium
+                                                                    mb-2
+                                                                    text-gray-700
+                                                                    dark:text-white
+                                                                "
+                                                            >
+                                                                Choose new image
+                                                            </label>
+
+
+                                                            <input
+                                                                type="file"
+                                                                name="image"
+                                                                class="
+                                                                    block
+                                                                    w-full
+                                                                    border
+                                                                    border-gray-300
+                                                                    focus:shadow-sm
+                                                                    rounded
+                                                                    text-sm
+                                                                    file:border-0
+                                                                    file:bg-gray-200
+                                                                    file:py-2
+                                                                    file:px-4
+                                                                    dark:file:bg-black/20
+                                                                    dark:file:text-white/50
+                                                                "
+                                                                required
+                                                            >
+
+
                                                             <small class="form-text text-muted">
-                                                                Allowed formats: JPG, PNG, PDF. Max size: 2MB
+
+                                                                Allowed formats:
+                                                                JPG, PNG, PDF.
+                                                                Max size: 2MB
+
                                                             </small>
 
                                                         </div>
+
+
                                                         <div class="flex justify-end gap-4 mt-2">
-                                                            <button type="submit"
-                                                                class="ti-btn ti-btn-primary-full ti-custom-validate-btn">Update</button>
-                                                            <button type="button"
-                                                                class="ti-btn ti-btn-secondary-full ti-custom-validate-btn cancel-edit-image"
-                                                                data-followup-id="{{ $followup->id }}">Cancel</button>
+
+                                                            <button
+                                                                type="submit"
+                                                                class="
+                                                                    ti-btn
+                                                                    ti-btn-primary-full
+                                                                    ti-custom-validate-btn
+                                                                "
+                                                            >
+                                                                Update
+                                                            </button>
+
+
+                                                            <button
+                                                                type="button"
+                                                                class="
+                                                                    ti-btn
+                                                                    ti-btn-secondary-full
+                                                                    ti-custom-validate-btn
+                                                                    cancel-edit-image
+                                                                "
+                                                                data-followup-id="{{ $followup->id }}"
+                                                            >
+                                                                Cancel
+                                                            </button>
+
                                                         </div>
+
                                                     </form>
+
                                                 </div>
+
                                             </div>
+
                                         @endif
+
                                     </li>
+
+
                                 @empty
+
                                     <li>
+
                                         <div class="text-center text-gray-500 py-4">
+
                                             No follow-up history found
+
                                         </div>
+
                                     </li>
+
                                 @endforelse
+
                             </ul>
+
                         </div>
+
                     </div>
+
                 </div>
+
+
+                {{-- =====================================================
+                     RIGHT — SALES ↔ OPERATIONS CHAT
+                     ===================================================== --}}
+                @if($showLeadChat)
+
+                    <div
+                        class="
+                            xl:col-span-6
+                            lg:col-span-6
+                            col-span-12
+                        "
+                    >
+
+                        @include(
+                            'admin.pages.follow-ups.partials.lead-chat'
+                        )
+
+                    </div>
+
+                @endif
+
             </div>
+
         </div>
+
+    </div>
+
+</div>
     </div>
 
 

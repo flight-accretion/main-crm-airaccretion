@@ -1138,6 +1138,9 @@ private function emailContext(
                     $advanceAmount
                 );
 
+            $this->appendPaymentInstructions(
+                $lines
+            );
 
             return implode(
                 PHP_EOL,
@@ -1198,11 +1201,82 @@ private function emailContext(
                 );
         }
 
+        $this->appendPaymentInstructions(
+            $lines
+        );
+
 
         return implode(
             PHP_EOL,
             $lines
         );
+    }
+
+
+    private function appendPaymentInstructions(
+        array &$lines
+    ): void {
+        $paymentLink =
+            trim(
+                (string) config(
+                    'services.booking_payment.link',
+                    'https://www.accretionaviation.com/pay'
+                )
+            );
+
+        if (
+            $paymentLink === ''
+        ) {
+            $paymentLink =
+                'https://www.accretionaviation.com/pay';
+        }
+
+        $lines[] =
+            '';
+
+        $lines[] =
+            'Complete your payment securely via the link below:';
+
+        $lines[] =
+            $paymentLink;
+
+        $bankLines =
+            array_filter(
+                [
+                    'Account Name: ' . trim((string) config('services.booking_bank.account_name', '')),
+                    'Bank Name: ' . trim((string) config('services.booking_bank.bank_name', '')),
+                    'Account Number: ' . trim((string) config('services.booking_bank.account_number', '')),
+                    'IFSC Code: ' . trim((string) config('services.booking_bank.ifsc', '')),
+                    'Branch: ' . trim((string) config('services.booking_bank.branch', '')),
+                ],
+                fn (string $line): bool =>
+                    !str_ends_with(
+                        $line,
+                        ': '
+                    )
+            );
+
+        if (
+            empty(
+                $bankLines
+            )
+        ) {
+            return;
+        }
+
+        $lines[] =
+            '';
+
+        $lines[] =
+            'Alternatively, you may make the payment by bank transfer:';
+
+        foreach (
+            $bankLines
+            as $bankLine
+        ) {
+            $lines[] =
+                $bankLine;
+        }
     }
 
 

@@ -58,7 +58,11 @@ use App\Http\Controllers\OperationsDashboardController;
 use App\Http\Controllers\OperationsFollowupController;
 use App\Http\Controllers\OperationsRescheduleController;
 use App\Http\Controllers\OperationsVendorRefundController;
+use App\Http\Controllers\OperationsKpiDashboardController;
 use App\Http\Controllers\Auth\GoogleLoginController;
+use App\Http\Controllers\LeadChatController;
+use App\Http\Controllers\LeadChatNotificationController;
+use App\Http\Controllers\GoogleChatOAuthController;
 
 
 /*
@@ -140,6 +144,230 @@ Route::middleware('auth')->group(function () {
     Route::get('/storage/followups/{filename}', [FollowupFileController::class, 'show'])
         ->where('filename', '[^/]+')
         ->name('admin.followups.storage-fallback');
+
+
+        Route::get(
+    '/admin/google-chat/oauth',
+    [
+        GoogleChatOAuthController::class,
+        'redirect'
+    ]
+)
+    ->name(
+        'admin.google-chat.oauth'
+    );
+
+
+Route::get(
+    '/admin/google-chat/oauth/callback',
+    [
+        GoogleChatOAuthController::class,
+        'callback'
+    ]
+)
+    ->name(
+        'admin.google-chat.oauth.callback'
+    );
+
+        /*
+|--------------------------------------------------------------------------
+| LEAD-WISE SALES ↔ OPERATIONS CHAT
+|--------------------------------------------------------------------------
+*/
+
+Route::prefix('admin/lead-chat')
+    ->name('admin.lead-chat.')
+    ->group(function () {
+        Route::get('/lead/{lead}/google/options', [\App\Http\Controllers\LeadGoogleChatConnectionController::class, 'options'])
+            ->whereUuid('lead')->name('google.options');
+        Route::post('/lead/{lead}/google/connect', [\App\Http\Controllers\LeadGoogleChatConnectionController::class, 'connect'])
+            ->whereUuid('lead')->middleware('throttle:30,1')->name('google.connect');
+        Route::post('/lead/{lead}/google/retry/{message}', [\App\Http\Controllers\LeadGoogleChatConnectionController::class, 'retry'])
+            ->whereUuid('lead')->whereUuid('message')->middleware('throttle:30,1')->name('google.retry');
+
+        Route::get(
+            '/lead/{lead}',
+            [
+                LeadChatController::class,
+                'index'
+            ]
+        )
+            ->whereUuid('lead')
+            ->name('index');
+
+
+        Route::post(
+            '/lead/{lead}/messages',
+            [
+                LeadChatController::class,
+                'store'
+            ]
+        )
+            ->whereUuid('lead')
+            ->name('store');
+
+
+        Route::patch(
+            '/messages/{message}',
+            [
+                LeadChatController::class,
+                'update'
+            ]
+        )
+            ->whereUuid('message')
+            ->name('update');
+
+
+        Route::delete(
+            '/messages/{message}',
+            [
+                LeadChatController::class,
+                'destroy'
+            ]
+        )
+            ->whereUuid('message')
+            ->name('destroy');
+
+
+        Route::post(
+            '/messages/{message}/pin',
+            [
+                LeadChatController::class,
+                'togglePin'
+            ]
+        )
+            ->whereUuid('message')
+            ->name('pin');
+
+
+        Route::post(
+            '/messages/{message}/react',
+            [
+                LeadChatController::class,
+                'react'
+            ]
+        )
+            ->whereUuid('message')
+            ->name('react');
+
+
+        Route::post(
+            '/lead/{lead}/tasks',
+            [
+                LeadChatController::class,
+                'createTask'
+            ]
+        )
+            ->whereUuid('lead')
+            ->name('task.store');
+
+
+        Route::post(
+            '/tasks/{task}/complete',
+            [
+                LeadChatController::class,
+                'completeTask'
+            ]
+        )
+            ->whereUuid('task')
+            ->name('task.complete');
+
+
+        Route::post(
+            '/tasks/{task}/reopen',
+            [
+                LeadChatController::class,
+                'reopenTask'
+            ]
+        )
+            ->whereUuid('task')
+            ->name('task.reopen');
+
+
+        Route::get(
+            '/attachments/{attachment}',
+            [
+                LeadChatController::class,
+                'attachment'
+            ]
+        )
+            ->whereUuid('attachment')
+            ->name('attachment');
+    });
+
+
+/*
+|--------------------------------------------------------------------------
+| HEADER CHAT NOTIFICATIONS
+|--------------------------------------------------------------------------
+*/
+
+Route::prefix('admin/chat-notifications')
+    ->name('admin.chat-notifications.')
+    ->group(function () {
+
+        Route::get(
+            '/',
+            [
+                LeadChatNotificationController::class,
+                'index'
+            ]
+        )
+            ->name('index');
+
+
+        Route::get(
+            '/{notification}/open',
+            [
+                LeadChatNotificationController::class,
+                'open'
+            ]
+        )
+            ->whereUuid('notification')
+            ->name('open');
+
+
+        Route::post(
+            '/{notification}/read',
+            [
+                LeadChatNotificationController::class,
+                'markRead'
+            ]
+        )
+            ->whereUuid('notification')
+            ->name('read');
+
+
+        Route::post(
+            '/mark-all-read',
+            [
+                LeadChatNotificationController::class,
+                'markAllRead'
+            ]
+        )
+            ->name('mark-all-read');
+
+
+        Route::post(
+            '/{notification}/clear',
+            [
+                LeadChatNotificationController::class,
+                'clear'
+            ]
+        )
+            ->whereUuid('notification')
+            ->name('clear');
+
+
+        Route::post(
+            '/clear-all',
+            [
+                LeadChatNotificationController::class,
+                'clearAll'
+            ]
+        )
+            ->name('clear-all');
+    });
 
     // Sales Dashboard
     Route::get('/sales-dashboard', [DashboardController::class, 'getSalesDashboard'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard');
@@ -916,6 +1144,7 @@ Route::post(
         Route::post('/payment-history/{id}/reject', [PaymentReviewController::class, 'rejectHistory'])->name('admin.account.payment-history.reject');
         Route::get('/payment-review-export', [PaymentReviewController::class, 'export'])->name('admin.account.payment-review.export');
 
+
        //vendor refund
 
         // Route::post(
@@ -1036,6 +1265,37 @@ Route::post(
                 [OperationsDashboardController::class, 'complete']
             )->name('admin.operations.case.complete');
 
+            Route::post(
+                '/case/{case}/review-complete',
+                [OperationsDashboardController::class, 'completeReview']
+            )->name('admin.operations.case.review-complete');
+
+            Route::post(
+                '/case/{case}/image-collection-complete',
+                [OperationsDashboardController::class, 'completeImageCollection']
+            )->name('admin.operations.case.image-collection-complete');
+
+            Route::post(
+    '/case/{case}/review-cancel',
+    [
+        OperationsDashboardController::class,
+        'cancelReview'
+    ]
+)->name(
+    'admin.operations.case.review-cancel'
+);
+
+
+Route::post(
+    '/case/{case}/image-collection-cancel',
+    [
+        OperationsDashboardController::class,
+        'cancelImageCollection'
+    ]
+)->name(
+    'admin.operations.case.image-collection-cancel'
+);
+
             Route::get(
                 '/case/{case}/follow-up/create',
                 [OperationsFollowupController::class, 'create']
@@ -1060,6 +1320,16 @@ Route::post(
                 '/leads/{lead}/assign',
                 [OperationsLeadAssignmentController::class, 'store']
             )->name('admin.operations.leads.assign');
+
+            Route::get(
+                '/kpi',
+                [OperationsKpiDashboardController::class, 'index']
+            )->name('admin.operations.kpi');
+
+            Route::post(
+                '/kpi/manual-value',
+                [OperationsKpiDashboardController::class, 'saveManualValue']
+            )->name('admin.operations.kpi.manual-value');
         });
 
     Route::prefix('admin/client')->group(function () {

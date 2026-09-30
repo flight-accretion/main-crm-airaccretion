@@ -208,6 +208,10 @@ return [
     'branch' => env('BOOKING_BANK_BRANCH'),
 ],
 
+    'booking_payment' => [
+        'link' => env('BOOKING_PAYMENT_LINK', 'https://www.accretionaviation.com/pay'),
+    ],
+
     'booking_whatsapp' => [
         'enabled' => env('BOOKING_CONFIRMATION_WHATSAPP_ENABLED', true),
         'company_number' => env('BOOKING_CONFIRMATION_WHATSAPP_COMPANY_NUMBER', '+91 95753 40786'),
@@ -228,6 +232,62 @@ return [
     'redirect' =>
         env(
             'GOOGLE_LOGIN_REDIRECT_URI'
+        ),
+],
+
+'google_chat' => [
+    'space_labels' => json_decode((string) env('GOOGLE_CHAT_SPACE_LABELS', '{}'), true) ?: [],
+    'queue_connection' => env('GOOGLE_CHAT_QUEUE_CONNECTION', 'google_chat'),
+    'allowed_spaces' => array_values(array_filter(array_map('trim', explode(',', (string) env('GOOGLE_CHAT_ALLOWED_SPACES', ''))))),
+    'integration_user' => env('GOOGLE_CHAT_INTEGRATION_USER'),
+    'pubsub_audience' => env('GOOGLE_CHAT_PUBSUB_AUDIENCE'),
+    'pubsub_service_account' => env('GOOGLE_CHAT_PUBSUB_SERVICE_ACCOUNT'),
+
+    'enabled' =>
+        env(
+            'GOOGLE_CHAT_ENABLED',
+            false
+        ),
+
+    'client_id' =>
+        env(
+            'GOOGLE_CHAT_CLIENT_ID'
+        ),
+
+    'client_secret' =>
+        env(
+            'GOOGLE_CHAT_CLIENT_SECRET'
+        ),
+
+    'refresh_token' =>
+        env(
+            'GOOGLE_CHAT_REFRESH_TOKEN'
+        ),
+
+    'redirect_uri' =>
+        env(
+            'GOOGLE_CHAT_REDIRECT_URI'
+        ),
+
+    'space_name' =>
+        env(
+            'GOOGLE_CHAT_SPACE_NAME'
+        ),
+
+    'pubsub_topic' =>
+        env(
+            'GOOGLE_CHAT_PUBSUB_TOPIC'
+        ),
+
+    'pubsub_webhook_secret' =>
+        env(
+            'GOOGLE_CHAT_PUBSUB_WEBHOOK_SECRET'
+        ),
+
+    'queue' =>
+        env(
+            'GOOGLE_CHAT_SYNC_QUEUE',
+            'google-chat'
         ),
 ],
 
