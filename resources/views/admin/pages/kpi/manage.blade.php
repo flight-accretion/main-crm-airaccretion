@@ -18,7 +18,14 @@
 @php
     $defaultKpiDefinitions = $defaultKpiDefinitions ?? [];
     $defaultKpiCoverage = $defaultKpiCoverage ?? [];
+    $isHrKpiViewer = optional(auth()->user()->userType)->user_type === \App\Models\UserType::HR;
 @endphp
+
+@if($isHrKpiViewer)
+    <div class="alert alert-info">
+        HR can review KPI configuration here. Template, assignment, calendar and manual KPI edits remain Super Admin actions.
+    </div>
+@endif
 
 @if(!empty($defaultKpiDefinitions))
     <div class="box mb-6">
@@ -47,13 +54,15 @@
                                 {{ $coverage['assigned_users'] ?? 0 }} / {{ $coverage['eligible_users'] ?? 0 }} eligible users assigned.
                             </div>
                         </div>
-                        <form method="POST" action="{{ route('admin.kpi.automation.sync') }}">
-                            @csrf
-                            <input type="hidden" name="department" value="{{ $departmentKey }}">
-                            <button class="ti-btn ti-btn-primary">
-                                Sync {{ ucfirst($departmentKey) }} KPI
-                            </button>
-                        </form>
+                        @unless($isHrKpiViewer)
+                            <form method="POST" action="{{ route('admin.kpi.automation.sync') }}">
+                                @csrf
+                                <input type="hidden" name="department" value="{{ $departmentKey }}">
+                                <button class="ti-btn ti-btn-primary">
+                                    Sync {{ ucfirst($departmentKey) }} KPI
+                                </button>
+                            </form>
+                        @endunless
                     </div>
 
                     <div class="overflow-x-auto">
@@ -104,6 +113,7 @@
     </div>
 @endif
 
+@unless($isHrKpiViewer)
 <div class="grid grid-cols-12 gap-6">
     <div class="xl:col-span-6 col-span-12">
         <div class="box">
@@ -411,6 +421,7 @@
         </div>
     </div>
 </div>
+@endunless
 
 <div class="box mt-6">
     <div class="box-header"><h5 class="box-title">Active Templates</h5></div>

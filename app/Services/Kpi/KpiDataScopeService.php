@@ -38,6 +38,11 @@ class KpiDataScopeService
         );
     }
 
+    public function isHrOversight(User $user): bool
+    {
+        return ($user->userType->user_type ?? '') === UserType::HR;
+    }
+
     public function allowedUsers(
         User $current,
         ?string $requestedDepartment = null
@@ -45,16 +50,23 @@ class KpiDataScopeService
         $current->loadMissing('userType');
         $role = $current->userType->user_type ?? '';
 
-        if ($this->isAdmin($current)) {
+        if ($this->isAdmin($current) || $this->isHrOversight($current)) {
             $roles = match ($requestedDepartment) {
                 'sales' => UserType::SALES_ROLES,
-                'accounts' => UserType::ACCOUNTS_ROLES,
                 'operations' => UserType::OPERATIONS_ROLES,
-                default => array_merge(
-                    UserType::SALES_ROLES,
-                    UserType::ACCOUNTS_ROLES,
-                    UserType::OPERATIONS_ROLES
-                ),
+                'accounts' => $this->isHrOversight($current)
+                    ? []
+                    : UserType::ACCOUNTS_ROLES,
+                default => $this->isHrOversight($current)
+                    ? array_merge(
+                        UserType::SALES_ROLES,
+                        UserType::OPERATIONS_ROLES
+                    )
+                    : array_merge(
+                        UserType::SALES_ROLES,
+                        UserType::ACCOUNTS_ROLES,
+                        UserType::OPERATIONS_ROLES
+                    ),
             };
 
             return User::with('userType')

@@ -375,7 +375,7 @@ class KpiWorkDoneService
          * Super Admin / Admin:
          * all active Sales users.
          */
-        if (in_array($role, UserType::ADMIN_ROLES, true)) {
+        if (in_array($role, UserType::ADMIN_ROLES, true) || $role === UserType::HR) {
             return User::query()
                 ->with('userType')
                 ->where('status', 1)

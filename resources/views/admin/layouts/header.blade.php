@@ -672,6 +672,7 @@
                 $salesRoles = UserType::SALES_ROLES;
                 $adminRoles = UserType::ADMIN_ROLES;
                 $attendanceImportRoles = UserType::ATTENDANCE_IMPORT_ROLES;
+                $isHr = $userType === UserType::HR;
 
                 /*
                 |--------------------------------------------------------------------------
@@ -708,7 +709,7 @@
                         @endif
                         <!-- End::slide -->
 
-                        @if ($userType === UserType::SUPER_ADMIN || $canAccess($userType, $adminRoles) || $canAccess($userType, $operationsRoles))
+                        @if (!$isHr && ($userType === UserType::SUPER_ADMIN || $canAccess($userType, $adminRoles) || $canAccess($userType, $operationsRoles)))
                             <li class="slide has-sub {{ Route::is('admin.operations.*') || Route::is('admin.refunds.*') || Route::is('admin.operations.vendor-refunds.*') ? 'active open' : '' }}">
                                 <a href="javascript:void(0);" class="side-menu__item">
                                     <i class="bx bx-task side-menu__icon"></i>
@@ -796,7 +797,7 @@
                         @endif
 
                         <!-- Upcoming Rides Section -->
-                        @if ($canAccess($userType, $adminRoles) || $canAccess($userType, $operationsRoles) || $canAccess($userType, $salesRoles))
+                        @if (!$isHr && ($canAccess($userType, $adminRoles) || $canAccess($userType, $operationsRoles) || $canAccess($userType, $salesRoles)))
                             <li class="slide {{ Route::is('admin.rides.upcoming') ? 'active' : '' }}">
                                 <a href="{{ route('admin.rides.upcoming') }}" class="side-menu__item">
                                     <i class="bx bx-calendar side-menu__icon"></i>
@@ -849,7 +850,7 @@
                         @endif
 
                         <!-- Leads Section -->
-                        @if ($canAccess($userType, $adminRoles) || $canAccess($userType, $operationsRoles) || $canAccess($userType, $salesRoles))
+                        @if ($canAccess($userType, $adminRoles) || $canAccess($userType, $operationsRoles) || $canAccess($userType, $salesRoles) || $isHr)
                             <!-- <li class="slide has-sub {{ Route::is('admin.clients.*') ? 'active open' : '' }}"> -->
                                 <li class="slide has-sub {{
                                     Route::is('admin.clients.*')
@@ -865,12 +866,14 @@
                                 </a>
                                 <ul class="slide-menu child1">
                                     <li class="slide side-menu__label1"><a href="javascript:void(0)">Pages</a></li>
+                                    @if(!$isHr)
                                     <li class="slide">
                                         <a href="{{ route('admin.clients.create') }}"
                                             class="side-menu__item {{ Route::is('admin.clients.create') ? 'active' : '' }}">
                                             Add Lead
                                         </a>
                                     </li>
+                                    @endif
                                     <li class="slide">
                                         <a href="{{ route('admin.clients.index') }}" class="side-menu__item">View
                                             Leads</a>
@@ -1119,7 +1122,8 @@
 
                         <!-- Target Master Section -->
                         @if ($canAccess($userType, $adminRoles) ||
-                                in_array($userType, [\App\Models\UserType::SENIOR_SALES_MANAGER, \App\Models\UserType::SALES_MANAGER]))
+                                in_array($userType, [\App\Models\UserType::SENIOR_SALES_MANAGER, \App\Models\UserType::SALES_MANAGER]) ||
+                                $isHr)
                             <li class="slide has-sub {{ Route::is('admin.targets.*') ? 'active open' : '' }}">
                                 <a href="javascript:void(0);" class="side-menu__item">
                                     <i class="bx bx-target-lock side-menu__icon"></i>
@@ -1336,7 +1340,7 @@
                     @endif
 
                         <!-- Follow Up Status Direct Link -->
-                        @if ($canAccess($userType, $adminRoles) || $canAccess($userType, $salesRoles))
+                        @if ($canAccess($userType, $adminRoles) || $canAccess($userType, $salesRoles) || $isHr)
                             <li class="slide {{ Route::is('admin.upcoming-follow-up.*') ? 'active' : '' }}">
                                 <a href="{{ route('admin.upcoming-follow-up.index') }}" class="side-menu__item">
                                     <i class="bx bx-task side-menu__icon"></i>
@@ -1377,6 +1381,7 @@
     || $canAccess($userType, $salesRoles)
     || $canAccess($userType, $operationsRoles)
     || $canAccess($userType, $accountRoles)
+    || $isHr
 )
     <li class="slide has-sub {{ Route::is('admin.kpi.*') ? 'active open' : '' }}">
 
@@ -1400,18 +1405,30 @@
                     : ''
             }}">
                 <a
-                    href="{{ route('admin.kpi.index') }}"
+                    href="{{ route('admin.kpi.index', $isHr ? ['department' => 'sales'] : []) }}"
                     class="side-menu__item"
                 >
-                    KPI Dashboard
+                    {{ $isHr ? 'Sales KPI' : 'KPI Dashboard' }}
                 </a>
             </li>
+
+            @if($isHr)
+                <li class="slide {{ request('department') === 'operations' && Route::is('admin.kpi.index') ? 'active' : '' }}">
+                    <a
+                        href="{{ route('admin.kpi.index', ['department' => 'operations']) }}"
+                        class="side-menu__item"
+                    >
+                        Operations KPI
+                    </a>
+                </li>
+            @endif
 
 
             <!-- Daily Outreach / Daily Activity - Sales, Admin, Accounts, Operations -->
        @if (
     $canAccess($userType, $salesRoles)
     || $canAccess($userType, $adminRoles)
+    || $isHr
 )
                 <li class="slide {{
                     Route::is('admin.kpi.outreach.*')
@@ -1419,10 +1436,10 @@
                         : ''
                 }}">
                     <a
-                        href="{{ route('admin.kpi.outreach.index') }}"
-                        class="side-menu__item"
-                    >
-                        Daily Outreach
+                    href="{{ route('admin.kpi.outreach.index') }}"
+                    class="side-menu__item"
+                >
+                        Sales Daily Outreach
                     </a>
                 </li>
             @endif
@@ -1432,6 +1449,7 @@
             @if (
                 $canAccess($userType, $salesRoles)
                 || $canAccess($userType, $adminRoles)
+                || $isHr
             )
                 <li class="slide {{
                     Route::is('admin.kpi.work-done.*')
@@ -1442,14 +1460,14 @@
                         href="{{ route('admin.kpi.work-done.index') }}"
                         class="side-menu__item"
                     >
-                        Work Done
+                        Sales Work Done
                     </a>
                 </li>
             @endif
 
 
             <!-- KPI Management - Super Admin only -->
-            @if ($userType === \App\Models\UserType::SUPER_ADMIN)
+            @if ($userType === \App\Models\UserType::SUPER_ADMIN || $isHr)
                 <li class="slide {{
                     Route::is('admin.kpi.manage')
                     || Route::is('admin.kpi.templates.*')
@@ -1467,6 +1485,17 @@
                         class="side-menu__item"
                     >
                         KPI Management
+                    </a>
+                </li>
+            @endif
+
+            @if ($userType === \App\Models\UserType::SUPER_ADMIN || $isHr)
+                <li class="slide {{ Route::is('admin.hr.operations-manual-kpi.*') ? 'active' : '' }}">
+                    <a
+                        href="{{ route('admin.hr.operations-manual-kpi.index') }}"
+                        class="side-menu__item"
+                    >
+                        Operations Manual KPI
                     </a>
                 </li>
             @endif

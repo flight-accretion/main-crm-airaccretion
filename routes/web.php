@@ -64,6 +64,7 @@ use App\Http\Controllers\LeadChatController;
 use App\Http\Controllers\LeadChatNotificationController;
 use App\Http\Controllers\GoogleChatOAuthController;
 use App\Http\Controllers\Hr\HrDashboardController;
+use App\Http\Controllers\Hr\OperationsManualKpiController;
 
 
 /*
@@ -142,6 +143,18 @@ Route::middleware('auth')->group(function () {
     Route::get('/admin/hr', [HrDashboardController::class, 'index'])
         ->middleware('role:HR,SUPER_ADMIN')
         ->name('admin.hr.dashboard');
+    Route::prefix('/admin/hr/operations-manual-kpi')
+        ->middleware('role:HR,SUPER_ADMIN')
+        ->group(function () {
+            Route::get('/', [OperationsManualKpiController::class, 'index'])
+                ->name('admin.hr.operations-manual-kpi.index');
+            Route::post('/', [OperationsManualKpiController::class, 'store'])
+                ->name('admin.hr.operations-manual-kpi.store');
+            Route::post('/{submission}/approve', [OperationsManualKpiController::class, 'approve'])
+                ->name('admin.hr.operations-manual-kpi.approve');
+            Route::post('/{submission}/reject', [OperationsManualKpiController::class, 'reject'])
+                ->name('admin.hr.operations-manual-kpi.reject');
+        });
 
     Route::get('/download-log', [UserController::class, 'downloadLog'])
         ->middleware('role:ADMIN_ROLES')
@@ -385,11 +398,11 @@ Route::prefix('admin/chat-notifications')
     Route::post('/sales-dashboard/daily-update', [DashboardController::class, 'storeDailyUpdate'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard.daily-update.store');
 
     Route::get('/admin/kpi', [KpiDashboardController::class, 'index'])
-        ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES')
+        ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES,HR')
         ->name('admin.kpi.index');
 
     Route::get('/admin/kpi/details/{metric}', [KpiDashboardController::class, 'details'])
-        ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES')
+        ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES,HR')
         ->name('admin.kpi.details');
 
 
@@ -509,7 +522,7 @@ Route::get(
     ]
 )
     ->middleware(
-        'role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES'
+        'role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES,HR'
     )
     ->name(
         'admin.kpi.outreach.index'
@@ -576,7 +589,7 @@ Route::prefix(
     });
 
     Route::prefix('admin/kpi/work-done')
-        ->middleware('role:SALES_ROLES,ADMIN_ROLES')
+        ->middleware('role:SALES_ROLES,ADMIN_ROLES,HR')
         ->group(function () {
             Route::get('/', [KpiWorkDoneController::class, 'index'])
                 ->name('admin.kpi.work-done.index');
@@ -584,11 +597,13 @@ Route::prefix(
                 ->name('admin.kpi.work-done.details');
         });
 
+    Route::get('admin/kpi-management', [KpiManagementController::class, 'index'])
+        ->middleware('role:SUPER_ADMIN,HR')
+        ->name('admin.kpi.manage');
+
     Route::prefix('admin/kpi-management')
         ->middleware('role:SUPER_ADMIN')
         ->group(function () {
-            Route::get('/', [KpiManagementController::class, 'index'])
-                ->name('admin.kpi.manage');
             Route::post('/templates', [KpiManagementController::class, 'storeTemplate'])
                 ->name('admin.kpi.templates.store');
             Route::put('/templates/{template}', [KpiManagementController::class, 'updateTemplate'])
@@ -844,19 +859,19 @@ Route::prefix(
     });
 
     Route::prefix('admin/lead')->group(function () {
-        Route::get('/', [ClientController::class, 'index'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.clients.index');
+        Route::get('/', [ClientController::class, 'index'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,HR')->name('admin.clients.index');
         Route::get('/create', [ClientController::class, 'create'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.clients.create');
 
-        Route::post('/', [ClientController::class, 'store'])->name('admin.clients.store');
-        Route::get('/{client}/edit', [ClientController::class, 'edit'])->name('admin.clients.edit');
-        Route::put('/{client}', [ClientController::class, 'update'])->name('admin.clients.update');
-        Route::get('/{client}', [ClientController::class, 'view'])->name('admin.clients.view');
-        Route::delete('/{client}', [ClientController::class, 'destroy'])->name('admin.clients.destroy');
-        Route::patch('/toggle-status/{client}', [ClientController::class, 'toggleStatus'])->name('admin.clients.toggle-status');
-        Route::get('/{client}/follow-up/create', [ClientController::class, 'createFollowUp'])->name('admin.clients.follow-up.create');
-        Route::post('/{client}/follow-up', [ClientController::class, 'storeFollowUp'])->name('admin.clients.follow-up.store');
-        Route::post('/{client}/generate-passenger-registration-link', [ClientController::class, 'generatePassengerRegistrationLink'])->name('admin.clients.generate-passenger-registration-link');
-        Route::get('/{client}/get-passenger-registration-link', [ClientController::class, 'getPassengerRegistrationLink'])->name('admin.clients.get-passenger-registration-link');
+        Route::post('/', [ClientController::class, 'store'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.clients.store');
+        Route::get('/{client}/edit', [ClientController::class, 'edit'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.clients.edit');
+        Route::put('/{client}', [ClientController::class, 'update'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.clients.update');
+        Route::get('/{client}', [ClientController::class, 'view'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,HR')->name('admin.clients.view');
+        Route::delete('/{client}', [ClientController::class, 'destroy'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.clients.destroy');
+        Route::patch('/toggle-status/{client}', [ClientController::class, 'toggleStatus'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.clients.toggle-status');
+        Route::get('/{client}/follow-up/create', [ClientController::class, 'createFollowUp'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.clients.follow-up.create');
+        Route::post('/{client}/follow-up', [ClientController::class, 'storeFollowUp'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.clients.follow-up.store');
+        Route::post('/{client}/generate-passenger-registration-link', [ClientController::class, 'generatePassengerRegistrationLink'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.clients.generate-passenger-registration-link');
+        Route::get('/{client}/get-passenger-registration-link', [ClientController::class, 'getPassengerRegistrationLink'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,HR')->name('admin.clients.get-passenger-registration-link');
         // Route::post('/get-extra-services-by-services', [ClientController::class, 'getExtraServicesByServices']);
     });
     Route::get('/fetch-services/{productId}', [ClientController::class, 'fetchServices'])->name('admin.clients.fetch-services');
@@ -1366,7 +1381,7 @@ Route::post(
     // Admin Follow-Up Status Routes
     // ===============================
     Route::prefix('admin/upcoming-follow-up')->group(function () {
-        Route::get('/', [UpcomingFollowUpController::class, 'index'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.upcoming-follow-up.index');
+        Route::get('/', [UpcomingFollowUpController::class, 'index'])->middleware('role:ADMIN_ROLES,SALES_ROLES,HR')->name('admin.upcoming-follow-up.index');
         Route::post('/toggle', [UpcomingFollowUpController::class, 'toggleStatus'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.upcoming-follow-up.toggle');
     });
 

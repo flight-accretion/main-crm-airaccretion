@@ -32,7 +32,8 @@ public function index(
      * Accounts / Operations:
      * own configured department scope.
      */
-    $canSwitchDepartment = $scope->isAdmin($current);
+    $canSwitchDepartment = $scope->isAdmin($current)
+        || $scope->isHrOversight($current);
 
     $department = $canSwitchDepartment
         ? ($filter['department'] ?: 'sales')
@@ -95,7 +96,7 @@ return view(
         $current = $request->user()->load('userType');
         $filter = $filters->fromRequest($request);
 
-        $department = $scope->isAdmin($current)
+        $department = ($scope->isAdmin($current) || $scope->isHrOversight($current))
             ? ($filter['department'] ?: 'sales')
             : $scope->departmentFor($current);
 

@@ -170,6 +170,7 @@ public function index(
         $scope->isAdmin(
             $user
         )
+        || $scope->isHrOversight($user)
     ) {
 
         $validated =
