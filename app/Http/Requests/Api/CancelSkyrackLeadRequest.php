@@ -3,6 +3,8 @@
 namespace App\Http\Requests\Api;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Contracts\Validation\Validator;
+use Illuminate\Http\Exceptions\HttpResponseException;
 
 class CancelSkyrackLeadRequest extends FormRequest
 {
@@ -29,5 +31,17 @@ class CancelSkyrackLeadRequest extends FormRequest
             'reason' => ['required', 'string', 'max:255'],
             'remark' => ['nullable', 'string', 'max:5000'],
         ];
+    }
+
+    protected function failedValidation(Validator $validator): void
+    {
+        throw new HttpResponseException(
+            response()->json([
+                'success' => true,
+                'status' => true,
+                'message' => 'Validation failed.',
+                'errors' => $validator->errors(),
+            ], 200)
+        );
     }
 }

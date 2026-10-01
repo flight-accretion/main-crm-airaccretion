@@ -148,7 +148,7 @@
                 dark:bg-bodybg
                 p-3
             "
-            style="height: 200px;"
+            style="height: 450px;"
         >
 
             <div class="text-center text-gray-400 py-10">

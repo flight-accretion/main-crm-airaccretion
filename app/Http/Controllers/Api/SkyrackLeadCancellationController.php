@@ -27,34 +27,39 @@ class SkyrackLeadCancellationController extends Controller
 
         if (!$actor) {
 
-            return response()->json([
-                'success' => false,
+            return $this->skyrackResponse([
                 'message' => 'Agent not found or agent number is ambiguous.',
-            ], 403);
+            ]);
 
         }
 
         try {
-           [$body, $code] = $service->execute(
+           [$body] = $service->execute(
         $data,
         $actor
     );
-            return response()->json($body, $code);
+            return $this->skyrackResponse($body);
         } catch (HttpExceptionInterface $e) {
-            return response()->json([
-                'success' => false,
+            return $this->skyrackResponse([
                 'message' => $e->getMessage(),
-            ], $e->getStatusCode());
+            ]);
         } catch (RuntimeException $e) {
             // Deployment safety: do not allow the API to alter leads until adapter is mapped.
             if ($e->getMessage() === 'CRM_CANCEL_INTEGRATION_NOT_CONFIGURED') {
                 report($e);
-                return response()->json([
-                    'success' => false,
+                return $this->skyrackResponse([
                     'message' => 'Cancellation integration has not been configured.',
-                ], 503);
+                ]);
             }
             throw $e;
         }
+    }
+
+    private function skyrackResponse(array $body): JsonResponse
+    {
+        $body['success'] = true;
+        $body['status'] = true;
+
+        return response()->json($body, 200);
     }
 }
