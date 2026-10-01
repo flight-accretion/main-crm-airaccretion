@@ -44,6 +44,44 @@
         <div class="xl:col-span-3 md:col-span-6 col-span-12">
             <div class="box">
                 <div class="box-body">
+                    <p class="text-sm text-gray-500">Leads This Month</p>
+                    <h4 class="text-2xl font-semibold mt-1">{{ number_format($monthLeads) }}</h4>
+                    <a href="{{ route('admin.clients.index') }}" class="text-primary text-sm">View Leads</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="xl:col-span-3 md:col-span-6 col-span-12">
+            <div class="box">
+                <div class="box-body">
+                    <p class="text-sm text-gray-500">Total Leads</p>
+                    <h4 class="text-2xl font-semibold mt-1">{{ number_format($totalLeads) }}</h4>
+                </div>
+            </div>
+        </div>
+
+        <div class="xl:col-span-3 md:col-span-6 col-span-12">
+            <div class="box">
+                <div class="box-body">
+                    <p class="text-sm text-gray-500">Today Followups</p>
+                    <h4 class="text-2xl font-semibold mt-1">{{ number_format($todayFollowups) }}</h4>
+                    <a href="{{ route('admin.upcoming-follow-up.index') }}" class="text-primary text-sm">View Followups</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="xl:col-span-3 md:col-span-6 col-span-12">
+            <div class="box">
+                <div class="box-body">
+                    <p class="text-sm text-gray-500">Missed Followups</p>
+                    <h4 class="text-2xl font-semibold mt-1">{{ number_format($missedFollowups) }}</h4>
+                </div>
+            </div>
+        </div>
+
+        <div class="xl:col-span-3 md:col-span-6 col-span-12">
+            <div class="box">
+                <div class="box-body">
                     <p class="text-sm text-gray-500">Pending Manual Operations KPI</p>
                     <h4 class="text-2xl font-semibold mt-1">{{ number_format($pendingManualKpis) }}</h4>
                 </div>

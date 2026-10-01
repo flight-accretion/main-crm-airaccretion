@@ -28,8 +28,8 @@ class UpcomingFollowUpController extends Controller
         $assignedExecutives = collect();
         if (in_array($currentUser->userType->user_type, [\App\Models\UserType::SALES_MANAGER, \App\Models\UserType::SENIOR_SALES_MANAGER])) {
             $assignedExecutives = \App\Models\SalesExecutiveAssignment::getSalesExecutivesForManager($currentUser->id);
-        } elseif (in_array($currentUser->userType->user_type, [\App\Models\UserType::ADMIN, \App\Models\UserType::SUPER_ADMIN])) {
-            // Admins: include all managers and sales executives
+        } elseif (in_array($currentUser->userType->user_type, [\App\Models\UserType::ADMIN, \App\Models\UserType::SUPER_ADMIN, \App\Models\UserType::HR])) {
+            // Admins/HR: include all managers and sales executives
             $managerTypes = \App\Models\UserType::whereIn('user_type', [\App\Models\UserType::SALES_MANAGER, \App\Models\UserType::SENIOR_SALES_MANAGER])->pluck('id')->toArray();
             $execType = \App\Models\UserType::where('user_type', \App\Models\UserType::SALES_EXECUTIVE)->first();
             $execTypeId = $execType ? $execType->id : null;

@@ -39,9 +39,14 @@ function getRepresentativeIds($currentUser)
 {
     $userType = $currentUser->userType;
 
-    // Super Admin, Admin and Operations team = unrestricted
-    // (Operations users should see all leads by default)
-    if (!$userType || in_array($userType->user_type, UserType::ADMIN_ROLES) || in_array($userType->user_type, UserType::OPERATIONS_ROLES)) {
+    // Super Admin, Admin, HR and Operations team = unrestricted
+    // (Oversight roles should see all leads by default)
+    if (
+        !$userType
+        || in_array($userType->user_type, UserType::ADMIN_ROLES)
+        || $userType->user_type === UserType::HR
+        || in_array($userType->user_type, UserType::OPERATIONS_ROLES)
+    ) {
         return null;
     }
 

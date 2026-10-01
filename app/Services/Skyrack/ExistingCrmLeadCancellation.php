@@ -19,7 +19,10 @@ class ExistingCrmLeadCancellation
         $agentNumber = preg_replace(
             '/\D+/',
             '',
-            (string) $request->input('agent_number', '')
+            (string) (
+                $request->input('agent_number')
+                ?: $request->input('agent_phone', '')
+            )
         );
 
         if (strlen($agentNumber) < 10) {

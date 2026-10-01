@@ -7,6 +7,8 @@ use App\Models\AttendanceImport;
 use App\Models\KpiManualValue;
 use App\Models\KpiMetric;
 use App\Models\KpiUserAssignment;
+use App\Models\Lead;
+use App\Models\LeadFollowup;
 use App\Models\PaymentAuditTrail;
 use App\Models\Target;
 use App\Models\User;
@@ -42,6 +44,12 @@ class HrDashboardController extends Controller
                 ->whereNotNull('confirmed_at')
                 ->whereBetween('confirmed_at', [$from, $to])
                 ->count(),
+            'totalLeads' => Lead::query()->count(),
+            'monthLeads' => Lead::query()
+                ->whereBetween('created_at', [$from, $to])
+                ->count(),
+            'todayFollowups' => $this->followupCountForDate(now()->startOfDay()),
+            'missedFollowups' => $this->missedFollowupCount(now()->startOfDay()),
             'pendingManualKpis' => $this->pendingManualKpis($period),
             'paymentsApproved' => (float) PaymentAuditTrail::query()
                 ->where('payment_status', 1)
@@ -56,6 +64,24 @@ class HrDashboardController extends Controller
                 ->where('month', $period->month)
                 ->sum('achieved_amount'),
         ]);
+    }
+
+    private function followupCountForDate(Carbon $date): int
+    {
+        return LeadFollowup::query()
+            ->whereDate('next_followup_date', $date->toDateString())
+            ->whereNotIn('status', LeadFollowup::TODAY_FOLLOWUP_HIDDEN_STATUSES)
+            ->distinct('lead_id')
+            ->count('lead_id');
+    }
+
+    private function missedFollowupCount(Carbon $date): int
+    {
+        return LeadFollowup::query()
+            ->whereDate('next_followup_date', '<', $date->toDateString())
+            ->whereIn('status', LeadFollowup::TODAY_FOLLOWUP_MISSED_OPEN_STATUSES)
+            ->distinct('lead_id')
+            ->count('lead_id');
     }
 
     private function pendingManualKpis(Carbon $period): int
