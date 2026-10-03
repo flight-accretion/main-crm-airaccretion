@@ -34,7 +34,7 @@ class InvoiceController extends Controller
             $fromDate = $request->input('from_date');
             $toDate = $request->input('to_date');
             $serviceDate = $request->input('service_date');
-            $perPage = min(max((int) $request->input('per_page', 20), 1), 100);
+            $perPage = min(max((int) $request->input('per_page', 10), 1), 100);
 
             // Build base voucher query
             $query = Voucher::with([
@@ -62,6 +62,20 @@ class InvoiceController extends Controller
                 $q->whereNotNull('received_amount')
                   ->where('received_amount', '>', 0);
             });
+
+            // Keep pagination aligned with rendered invoice rows by applying
+            // invoice eligibility before paginate(), not inside the display loop.
+            $query->whereHas('lead.client')
+                ->whereHas('lead.leadFollowups', function ($q) {
+                    $q->where('status', LeadFollowup::STATUS_CONFIRMED)
+                        ->whereRaw(
+                            'lead_followups.created_at = (
+                                select max(latest_invoice_followups.created_at)
+                                from lead_followups as latest_invoice_followups
+                                where latest_invoice_followups.lead_id = lead_followups.lead_id
+                            )'
+                        );
+                });
 
             // Date filters
             // Service Date should filter vouchers by the ride's from_date (service date), not the voucher created_at
@@ -185,16 +199,6 @@ class InvoiceController extends Controller
                     ->first();
                 if (!$latestPayment) continue;
 
-                // Ensure the latest followup (by created_at) is marked complete before showing invoice
-                // In this codebase status '5' corresponds to confirm/complete (see LeadFollowup model)
-                $latestFollowup = $lead->leadFollowups()->orderBy('created_at', 'desc')->first();
-                if (!$latestFollowup) continue;
-                $latestStatus = $latestFollowup->status;
-                // Accept numeric 5 or string '5' or literal 'complete' if present
-                if (!($latestStatus === 5 || $latestStatus === '5' || (is_string($latestStatus) && strtolower($latestStatus) === 'complete'))) {
-                    // skip this voucher since the most recent followup isn't complete
-                    continue;
-                }
 
                 $totalAmount = (float) $latestPayment->total_amount;
                 $totalReceived = PaymentAuditTrail::whereHas('leadFollowup', function($q) use ($lead) {

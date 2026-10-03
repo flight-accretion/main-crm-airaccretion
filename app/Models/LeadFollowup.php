@@ -83,6 +83,12 @@ class LeadFollowup extends Model
         'paid_date',
         'contact_outcome',
         'customer_not_picked_up',
+        'source',
+        'followup_type',
+        'ride_date',
+        'due_at',
+        'completed_by',
+        'completed_at',
     ];
 
     protected $casts = [
@@ -93,6 +99,9 @@ class LeadFollowup extends Model
         'service_details' => 'array',
         'paid_date' => 'date',
         'customer_not_picked_up' => 'boolean',
+        'ride_date' => 'date',
+        'due_at' => 'datetime',
+        'completed_at' => 'datetime',
     ];
 
     public function isCustomerNoAnswer(): bool

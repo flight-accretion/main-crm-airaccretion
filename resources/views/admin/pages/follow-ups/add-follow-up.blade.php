@@ -568,59 +568,12 @@
             {{-- =========================================================
                  CHAT ACCESS
                  ========================================================= --}}
-     @php
-    $splitUser = auth()->user();
-    $splitRole = $splitUser?->userType?->user_type;
-
-    $managerVisibleUserIds = [];
-
-    if (
-        $splitUser
-        && in_array($splitRole, [
-            \App\Models\UserType::SALES_MANAGER,
-            \App\Models\UserType::SENIOR_SALES_MANAGER,
-        ], true)
-    ) {
-        $teamIds = \App\Models\SalesExecutiveAssignment::query()
-            ->where('manager_id', $splitUser->id)
-            ->where('status', 1)
-            ->pluck('sales_executive_id')
-            ->filter()
-            ->values()
-            ->all();
-
-        $managerVisibleUserIds = array_values(array_unique(
-            array_merge([$splitUser->id], $teamIds)
-        ));
-    }
-
-    $showLeadChat =
-        (
-            $splitUser
-            && $splitUser->isSuperAdmin()
-        )
-
-        ||
-
-        (
-            $splitRole === \App\Models\UserType::SALES_EXECUTIVE
-            && (string) $lead->representative_user_id === (string) $splitUser?->id
-        )
-
-        ||
-
-        (
-            in_array($splitRole, [
-                \App\Models\UserType::SALES_MANAGER,
-                \App\Models\UserType::SENIOR_SALES_MANAGER,
-            ], true)
-            && in_array((string) $lead->representative_user_id, array_map('strval', $managerVisibleUserIds), true)
-        )
-
-        ||
-
-        in_array($splitRole, \App\Models\UserType::OPERATIONS_ROLES, true);
-@endphp
+            @php
+                $splitUser = auth()->user();
+                $showLeadChat = $splitUser && isset($lead)
+                    ? app(\App\Services\LeadChat\LeadChatAccessService::class)->canAccess($splitUser, $lead)
+                    : false;
+            @endphp
 
 
             {{--

@@ -166,6 +166,12 @@ class Kernel extends ConsoleKernel
             )
         );
 
+        $schedule
+            ->command('operations:process-ride-alerts')
+            ->hourly()
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/operations-ride-alerts.log'));
+
         $schedule->command('google-chat:ensure-subscription')->hourly()->withoutOverlapping();
         $schedule->command('google-chat:retry-pending')->everyMinute()->withoutOverlapping();
         $schedule->command('google-chat:reconcile')->hourly()->withoutOverlapping();

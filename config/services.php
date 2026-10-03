@@ -106,6 +106,19 @@ return [
         'vendor_refund_image_template' => env('WHATSCRM_VENDOR_REFUND_IMAGE_TEMPLATE', 'refund_vendor_notify_v2_img'),
     ],
 
+    'operations_ride_alert' => [
+        'enabled' => env('OPERATIONS_RIDE_ALERT_ENABLED', true),
+        'template' => env('OPERATIONS_RIDE_ALERT_TEMPLATE', 'ride_alert_noti'),
+        'api_url' => env(
+            'OPERATIONS_WHATSAPP_API_URL',
+            'https://web.airaccretion.com/api/v1/send_templet'
+        ),
+        'api_key' => env('OPERATIONS_WHATSAPP_API_KEY'),
+        'token' => env('OPERATIONS_WHATSAPP_TOKEN'),
+        'days_before' => 3,
+        'crm_url' => env('CRM_PUBLIC_URL', env('APP_URL')),
+    ],
+
     'skyrack' => [
         'leads_api_url' => env('SKYRACK_LEADS_API_URL', 'https://call.skyrack.ai/api/v1/leads'),
         'leads_api_token' => env('SKYRACK_LEADS_API_TOKEN'),
