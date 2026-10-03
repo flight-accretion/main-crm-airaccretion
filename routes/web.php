@@ -1585,7 +1585,7 @@ Route::get('/clear-all', function () {
     Artisan::call('config:cache');
     Artisan::call('view:clear');
     return "Cleared All !";
-});
+})->middleware('auth', 'role:ADMIN_ROLES');
 
 // Public registration routes - constrain voucher to UUID so static segments like 'thanks' are not treated as voucher id
 Route::get('/voucher/register/thanks', [\App\Http\Controllers\RegistrationController::class, 'thanks'])->name('voucher.register.thanks');

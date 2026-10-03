@@ -76,14 +76,15 @@ class LeadTransferServiceTest extends TestCase
             );
         }
 
-        $transfer->refresh();
+        $this->assertDatabaseMissing('lead_transfers', [
+            'id' => $transfer->id,
+        ]);
 
-        $this->assertSame('cancelled', $transfer->status);
-        $this->assertSame($superAdmin->id, $transfer->responded_by);
-        $this->assertNotNull($transfer->responded_at);
-        $this->assertSame(
-            'Transfer automatically cancelled because lead ownership changed before approval.',
-            $transfer->response_note
+        $this->assertTransferFollowupExists(
+            $lead,
+            $transfer,
+            'Lead Transfer Cancelled',
+            'Response Note: Transfer automatically cancelled because lead ownership changed before approval.'
         );
         $this->assertSame($currentOwner->id, $lead->fresh()->representative_user_id);
     }
@@ -115,14 +116,15 @@ class LeadTransferServiceTest extends TestCase
             );
         }
 
-        $transfer->refresh();
+        $this->assertDatabaseMissing('lead_transfers', [
+            'id' => $transfer->id,
+        ]);
 
-        $this->assertSame('cancelled', $transfer->status);
-        $this->assertSame($superAdmin->id, $transfer->responded_by);
-        $this->assertNotNull($transfer->responded_at);
-        $this->assertSame(
-            'Transfer automatically cancelled because lead ownership changed before rejection.',
-            $transfer->response_note
+        $this->assertTransferFollowupExists(
+            $lead,
+            $transfer,
+            'Lead Transfer Cancelled',
+            'Response Note: Transfer automatically cancelled because lead ownership changed before rejection.'
         );
         $this->assertSame($currentOwner->id, $lead->fresh()->representative_user_id);
     }
@@ -171,17 +173,21 @@ class LeadTransferServiceTest extends TestCase
             $followup->next_followup_date->format('Y-m-d H:i:s')
         );
         $this->assertStringContainsString(
-            'Lead transfer accepted.',
+            '[LEAD TRANSFER:' . $transfer->id . ']',
+            $followup->followup_note
+        );
+        $this->assertStringContainsString(
+            'Lead Transfer Accepted',
             $followup->followup_note
         );
         $this->assertStringContainsString(
             'Reason: Need this lead for customer follow-up.',
             $followup->followup_note
         );
-        $this->assertStringContainsString(
-            'Accepted at: 31-Aug-2026 01:30 PM IST',
-            $followup->followup_note
-        );
+
+        $this->assertDatabaseMissing('lead_transfers', [
+            'id' => $transfer->id,
+        ]);
     }
 
     public function test_owner_can_offer_own_lead_to_another_sales_user_for_recipient_approval(): void
@@ -230,21 +236,25 @@ class LeadTransferServiceTest extends TestCase
         $this->assertNotNull($followup);
         $this->assertSame($recipient->id, $followup->followed_by);
         $this->assertStringContainsString(
-            'Lead transfer accepted.',
+            '[LEAD TRANSFER:' . $transfer->id . ']',
             $followup->followup_note
         );
         $this->assertStringContainsString(
-            'From: Pallavi Singh',
+            'Lead Transfer Accepted',
             $followup->followup_note
         );
         $this->assertStringContainsString(
-            'To: Samarpit Sharma',
+            'Transferred From: Pallavi Singh',
             $followup->followup_note
         );
         $this->assertStringContainsString(
             'Reason: Please handle this lead from today.',
             $followup->followup_note
         );
+
+        $this->assertDatabaseMissing('lead_transfers', [
+            'id' => $transfer->id,
+        ]);
     }
 
     public function test_pending_action_count_only_counts_requests_waiting_on_that_user(): void
@@ -346,6 +356,35 @@ class LeadTransferServiceTest extends TestCase
             ->assertJson([
                 'count' => 1,
             ]);
+    }
+
+    private function assertTransferFollowupExists(
+        Lead $lead,
+        LeadTransfer $transfer,
+        string $outcome,
+        ?string $extraText = null
+    ): void {
+        $followup = LeadFollowup::query()
+            ->where('lead_id', $lead->id)
+            ->where(
+                'followup_note',
+                'like',
+                '%[LEAD TRANSFER:' . $transfer->id . ']%'
+            )
+            ->first();
+
+        $this->assertNotNull($followup);
+        $this->assertStringContainsString(
+            $outcome,
+            $followup->followup_note
+        );
+
+        if ($extraText !== null) {
+            $this->assertStringContainsString(
+                $extraText,
+                $followup->followup_note
+            );
+        }
     }
 
     private function createUser(string $name, string $role): User
@@ -576,16 +615,15 @@ Schema::create(
         $lead->fresh()->representative_user_id
     );
 
-    $pendingTransfer->refresh();
+    $this->assertDatabaseMissing('lead_transfers', [
+        'id' => $pendingTransfer->id,
+    ]);
 
-    $this->assertSame(
-        'cancelled',
-        $pendingTransfer->status
-    );
-
-    $this->assertSame(
-        $superAdmin->id,
-        $pendingTransfer->responded_by
+    $this->assertTransferFollowupExists(
+        $lead,
+        $pendingTransfer,
+        'Lead Transfer Cancelled',
+        'Response Note: Cancelled because Super Admin directly reassigned the lead.'
     );
 
     $audit = LeadAuditTrail::where(

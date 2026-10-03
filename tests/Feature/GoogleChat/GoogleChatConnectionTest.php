@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\GoogleChat;
 
-use App\Models\{Lead, User, UserType, GoogleChatIdentity, LeadChatMessage};
+use App\Models\{Lead, SalesExecutiveAssignment, User, UserType, GoogleChatIdentity, LeadChatMessage};
 use App\Services\GoogleChat\{GoogleChatClient, LeadGoogleChatConnectionService};
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -45,6 +45,29 @@ class GoogleChatConnectionTest extends GoogleChatTestCase
         $this->assertSame(1, LeadChatMessage::count());
         $this->assertStringContainsString('Passengers: 3', LeadChatMessage::first()->body);
         $this->assertSame($actor->id, DB::table('leads')->value('representative_user_id'));
+    }
+
+    public function test_sales_manager_can_connect_google_chat_for_assigned_executive_lead(): void
+    {
+        [$lead, $salesExecutive, $ops] = $this->fixture();
+        $manager = new User([
+            'id' => (string) Str::uuid(),
+            'name' => 'Manager',
+            'status' => 1,
+        ]);
+        $manager->setRelation('userType', new UserType(['user_type' => UserType::SALES_MANAGER]));
+        SalesExecutiveAssignment::create([
+            'manager_id' => $manager->id,
+            'sales_executive_id' => $salesExecutive->id,
+            'status' => 1,
+        ]);
+
+        $conversation = app(LeadGoogleChatConnectionService::class)
+            ->connect($lead, $manager, $ops, 'spaces/one');
+
+        $this->assertSame($lead->id, $conversation->lead_id);
+        $this->assertSame(1, LeadChatMessage::count());
+        $this->assertSame($manager->id, LeadChatMessage::first()->sender_user_id);
     }
 
     public function test_cross_lead_access_is_denied(): void

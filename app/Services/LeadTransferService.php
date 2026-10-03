@@ -9,6 +9,7 @@ use App\Models\LeadTransfer;
 use App\Models\User;
 use App\Models\UserType;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use App\Models\LeadAllocationQueue;
 use App\Models\LeadAllocationLog;
@@ -304,19 +305,18 @@ class LeadTransferService
                 !==
                 (string) $transfer->from_user_id
             ) {
-                $transfer->update([
-                    'status' =>
-                        'cancelled',
+                $responseNote =
+                    'Transfer automatically cancelled because lead ownership changed before approval.';
 
-                    'responded_at' =>
-                        now(),
+                $this->createTransferNote(
+                    $lead,
+                    $transfer,
+                    $user,
+                    'Cancelled',
+                    $responseNote
+                );
 
-                    'responded_by' =>
-                        $user->id,
-
-                    'response_note' =>
-                        'Transfer automatically cancelled because lead ownership changed before approval.',
-                ]);
+                $transfer->delete();
 
                 $staleOwnershipMessage =
                     'Lead ownership has already changed. This request is no longer valid.';
@@ -335,20 +335,9 @@ class LeadTransferService
 
             $lead->save();
 
-            $transfer->update([
-                'status' =>
-                    'accepted',
-
-                'responded_at' =>
-                    now(),
-
-                'responded_by' =>
-                    $user->id,
-            ]);
-
             LeadAuditTrail::create([
                 'id' =>
-                    (string) \Illuminate\Support\Str::uuid(),
+                    (string) Str::uuid(),
 
                 'lead_id' =>
                     $lead->id,
@@ -369,11 +358,16 @@ class LeadTransferService
                     now(),
             ]);
 
-            $this->recordAcceptedTransferFollowup(
+            $this->createTransferNote(
                 $lead,
                 $transfer,
-                $user
+                $user,
+                'Accepted',
+                null,
+                $transfer->to_user_id
             );
+
+            $transfer->delete();
         });
 
         if ($staleOwnershipMessage) {
@@ -437,19 +431,18 @@ class LeadTransferService
                 !==
                 (string) $transfer->from_user_id
             ) {
-                $transfer->update([
-                    'status' =>
-                        'cancelled',
+                $responseNote =
+                    'Transfer automatically cancelled because lead ownership changed before rejection.';
 
-                    'responded_at' =>
-                        now(),
+                $this->createTransferNote(
+                    $lead,
+                    $transfer,
+                    $user,
+                    'Cancelled',
+                    $responseNote
+                );
 
-                    'responded_by' =>
-                        $user->id,
-
-                    'response_note' =>
-                        'Transfer automatically cancelled because lead ownership changed before rejection.',
-                ]);
+                $transfer->delete();
 
                 $staleOwnershipMessage =
                     'Lead ownership has already changed. This request is no longer valid.';
@@ -457,19 +450,15 @@ class LeadTransferService
                 return;
             }
 
-            $transfer->update([
-                'status' =>
-                    'rejected',
+            $this->createTransferNote(
+                $lead,
+                $transfer,
+                $user,
+                'Rejected',
+                $note
+            );
 
-                'responded_at' =>
-                    now(),
-
-                'responded_by' =>
-                    $user->id,
-
-                'response_note' =>
-                    $note,
-            ]);
+            $transfer->delete();
         });
 
         if ($staleOwnershipMessage) {
@@ -591,28 +580,23 @@ public function directAssign(
              * Any old pending transfer request becomes invalid
              * because Super Admin is changing ownership now.
              */
-            LeadTransfer::query()
-                ->where(
-                    'lead_id',
-                    $lockedLead->id
-                )
-                ->where(
-                    'status',
-                    'pending'
-                )
-                ->update([
-                    'status' =>
-                        'cancelled',
+            $pendingTransfers = LeadTransfer::query()
+                ->where('lead_id', $lockedLead->id)
+                ->where('status', 'pending')
+                ->lockForUpdate()
+                ->get();
 
-                    'responded_at' =>
-                        now(),
+            foreach ($pendingTransfers as $pendingTransfer) {
+                $this->createTransferNote(
+                    $lockedLead,
+                    $pendingTransfer,
+                    $actor,
+                    'Cancelled',
+                    'Cancelled because Super Admin directly reassigned the lead.'
+                );
 
-                    'responded_by' =>
-                        $actor->id,
-
-                    'response_note' =>
-                        'Cancelled because Super Admin directly reassigned the lead.',
-                ]);
+                $pendingTransfer->delete();
+            }
 
             /*
              * Change ownership.
@@ -675,7 +659,7 @@ public function directAssign(
             LeadAuditTrail::create([
                 'id' =>
                     (string)
-                    \Illuminate\Support\Str::uuid(),
+                    Str::uuid(),
 
                 'lead_id' =>
                     $lockedLead->id,
@@ -745,7 +729,7 @@ public function recordDirectAssignmentFollowup(
 
     return LeadFollowup::create([
         'id' =>
-            (string) \Illuminate\Support\Str::uuid(),
+            (string) Str::uuid(),
 
         'lead_id' =>
             $lead->id,
@@ -775,49 +759,79 @@ public function recordDirectAssignmentFollowup(
     ]);
 }
 
-    private function recordAcceptedTransferFollowup(
+    private function createTransferNote(
         Lead $lead,
         LeadTransfer $transfer,
-        User $actor
-    ): LeadFollowup {
+        ?User $actor,
+        string $outcome,
+        ?string $responseNote = null,
+        ?string $followedBy = null
+    ): void {
+        $marker = '[LEAD TRANSFER:' . $transfer->id . ']';
+
+        $alreadyExists = LeadFollowup::query()
+            ->where('lead_id', $lead->id)
+            ->where(
+                'followup_note',
+                'like',
+                '%' . $marker . '%'
+            )
+            ->exists();
+
+        if ($alreadyExists) {
+            return;
+        }
+
         $fromUser = User::query()
             ->find($transfer->from_user_id);
 
         $toUser = User::query()
             ->find($transfer->to_user_id);
 
-        $acceptedAt = now();
+        $requestedBy = User::query()
+            ->find($transfer->requested_by);
+
+        $processedAt = now();
 
         $noteLines = [
-            'Lead transfer accepted.',
-            'From: ' . (optional($fromUser)->name ?: 'Unassigned'),
-            'To: ' . (optional($toUser)->name ?: 'N/A'),
-            'Accepted at: '
-                . $acceptedAt->format('d-M-Y h:i A')
-                . ' IST',
-            'Accepted by: ' . $actor->name,
+            $marker,
+            'Lead Transfer ' . $outcome,
+            'Transferred From: ' . (optional($fromUser)->name ?: 'Unknown'),
+            'Requested For: ' . (optional($toUser)->name ?: 'Unknown'),
+            'Requested By: ' . (optional($requestedBy)->name ?: 'Unknown'),
+            'Processed By: ' . (optional($actor)->name ?: 'System'),
+            'Reason: ' . (
+                trim((string) $transfer->reason) !== ''
+                    ? trim((string) $transfer->reason)
+                    : '-'
+            ),
+            'Processed Date: '
+                . $processedAt
+                    ->copy()
+                    ->timezone('Asia/Kolkata')
+                    ->format('d-m-Y H:i'),
         ];
 
-        if (!empty($transfer->reason)) {
+        if ($responseNote !== null && trim($responseNote) !== '') {
             $noteLines[] =
-                'Reason: ' . $transfer->reason;
+                'Response Note: ' . trim($responseNote);
         }
 
-        return LeadFollowup::create([
+        LeadFollowup::create([
             'id' =>
-                (string) \Illuminate\Support\Str::uuid(),
+                (string) Str::uuid(),
 
             'lead_id' =>
                 $lead->id,
 
             'next_followup_date' =>
-                $acceptedAt,
+                $processedAt,
 
             'followup_note' =>
                 implode(PHP_EOL, $noteLines),
 
             'followed_by' =>
-                $transfer->to_user_id,
+                $followedBy ?: $actor?->id,
 
             'status' =>
                 1,

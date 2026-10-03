@@ -3,6 +3,7 @@
 namespace App\Services\LeadChat;
 
 use App\Models\Lead;
+use App\Models\SalesExecutiveAssignment;
 use App\Models\User;
 use App\Models\UserType;
 
@@ -52,20 +53,22 @@ class LeadChatAccessService
         */
 
         if (
-            $role
-            ===
-            UserType::SALES_EXECUTIVE
+            in_array(
+                $role,
+                [
+                    UserType::SALES_EXECUTIVE,
+                    UserType::SALES_MANAGER,
+                    UserType::SENIOR_SALES_MANAGER,
+                ],
+                true
+            )
         ) {
 
-            return
-                (string)
-                $lead
-                    ->representative_user_id
-
-                ===
-
-                (string)
-                $user->id;
+            return $this->canAccessSalesLead(
+                $user,
+                $lead,
+                $role
+            );
         }
 
 
@@ -147,9 +150,15 @@ class LeadChatAccessService
 
 
         if (
-            $role
-            ===
-            UserType::SALES_EXECUTIVE
+            in_array(
+                $role,
+                [
+                    UserType::SALES_EXECUTIVE,
+                    UserType::SALES_MANAGER,
+                    UserType::SENIOR_SALES_MANAGER,
+                ],
+                true
+            )
         ) {
 
             return 'sales';
@@ -169,5 +178,60 @@ class LeadChatAccessService
 
 
         return null;
+    }
+
+
+    private function canAccessSalesLead(
+        User $user,
+        Lead $lead,
+        ?string $role
+    ): bool {
+
+        $representativeId =
+            (string)
+            $lead
+                ->representative_user_id;
+
+
+        if (
+            $representativeId
+            ===
+            ''
+        ) {
+
+            return false;
+        }
+
+
+        if (
+            $representativeId
+            ===
+            (string)
+            $user->id
+        ) {
+
+            return true;
+        }
+
+
+        if (
+            !in_array(
+                $role,
+                [
+                    UserType::SALES_MANAGER,
+                    UserType::SENIOR_SALES_MANAGER,
+                ],
+                true
+            )
+        ) {
+
+            return false;
+        }
+
+
+        return SalesExecutiveAssignment::isAssigned(
+            $user->id,
+            $representativeId
+        );
     }
 }

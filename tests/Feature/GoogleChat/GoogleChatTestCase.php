@@ -40,6 +40,13 @@ abstract class GoogleChatTestCase extends TestCase
         Schema::create('user_types', function (Blueprint $t) {
             $t->uuid('id')->primary(); $t->string('user_type'); $t->timestamps();
         });
+        Schema::create('sales_executive_assignments', function (Blueprint $t) {
+            $t->uuid('id')->primary();
+            $t->uuid('manager_id');
+            $t->uuid('sales_executive_id');
+            $t->integer('status')->default(1);
+            $t->timestamps();
+        });
         Schema::create('leads', function (Blueprint $t) {
             $t->uuid('id')->primary(); $t->uuid('representative_user_id')->nullable();
             $t->uuid('client_id')->nullable(); $t->timestamps();
