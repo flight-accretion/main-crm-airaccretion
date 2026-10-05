@@ -304,5 +304,46 @@ return [
         ),
 ],
 
+'google_drive_backup' => [
+
+    /*
+     * Backup-specific credentials are optional.
+     *
+     * If they are blank, reuse the existing
+     * Google Drive OAuth credentials.
+     */
+
+    'client_id' =>
+        env('GOOGLE_DRIVE_BACKUP_CLIENT_ID')
+        ?: env('GOOGLE_DRIVE_CLIENT_ID'),
+
+    'client_secret' =>
+        env('GOOGLE_DRIVE_BACKUP_CLIENT_SECRET')
+        ?: env('GOOGLE_DRIVE_CLIENT_SECRET'),
+
+    'refresh_token' =>
+        env('GOOGLE_DRIVE_BACKUP_REFRESH_TOKEN')
+        ?: env('GOOGLE_DRIVE_REFRESH_TOKEN'),
+
+    'api_key' =>
+        env('GOOGLE_DRIVE_BACKUP_API_KEY')
+        ?: env('GOOGLE_DRIVE_API_KEY'),
+
+    /*
+     * Separate Google Drive folders.
+     */
+
+    'db_folder_id' =>
+        env(
+            'GOOGLE_DRIVE_BACKUP_DB_FOLDER_ID'
+        ),
+
+    'code_folder_id' =>
+        env(
+            'GOOGLE_DRIVE_BACKUP_CODE_FOLDER_ID'
+        ),
+
+],
+
 
 ];

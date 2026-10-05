@@ -1,48 +1,32 @@
 @php
+    $notificationUser = auth()->user();
 
-    $notificationUser =
-        auth()->user();
-
-
-    $notificationRole =
-        $notificationUser
-            ?->userType
-            ?->user_type;
-
+    $notificationRole = $notificationUser
+        ?->userType
+        ?->user_type;
 
     $showChatNotification =
-
-        /*
-         * Super Admin
-         */
         (
             $notificationUser
             &&
             $notificationUser->isSuperAdmin()
         )
-
         ||
-
-        /*
-         * Sales Executive
-         */
-        (
-            $notificationRole
-            ===
-            \App\Models\UserType::SALES_EXECUTIVE
+        in_array(
+            $notificationRole,
+            [
+                \App\Models\UserType::SALES_EXECUTIVE,
+                \App\Models\UserType::SALES_MANAGER,
+                \App\Models\UserType::SENIOR_SALES_MANAGER,
+            ],
+            true
         )
-
         ||
-
-        /*
-         * Operations users
-         */
         in_array(
             $notificationRole,
             \App\Models\UserType::OPERATIONS_ROLES,
             true
         );
-
 @endphp
 
 

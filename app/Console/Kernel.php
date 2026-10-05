@@ -176,6 +176,39 @@ class Kernel extends ConsoleKernel
         $schedule->command('google-chat:retry-pending')->everyMinute()->withoutOverlapping();
         $schedule->command('google-chat:reconcile')->hourly()->withoutOverlapping();
 
+            if (
+        config(
+                'crm_backup.enabled',
+                false
+            )
+        ) {
+
+            $schedule
+                ->command(
+                    'crm:backup-daily'
+                )
+                ->dailyAt(
+                    config(
+                        'crm_backup.time',
+                        '02:30'
+                    )
+                )
+                ->timezone(
+                    config(
+                        'crm_backup.timezone',
+                        'Asia/Kolkata'
+                    )
+                )
+                ->withoutOverlapping(
+                    180
+                )
+                ->appendOutputTo(
+                    storage_path(
+                        'logs/crm-backup.log'
+                    )
+                );
+        }
+
     }
 
     /**
