@@ -599,7 +599,7 @@ public function cancelImageCollection(
     {
         return array_values(array_filter(
             OperationCase::validTypes(),
-            fn (string $type) => $type !== OperationCase::TYPE_CANCELLED
+            fn (string $type) => !in_array($type, [OperationCase::TYPE_CANCELLED, OperationCase::TYPE_VENDOR_FOLLOWUP], true)
         ));
     }
 }

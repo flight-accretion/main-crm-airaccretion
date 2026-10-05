@@ -771,7 +771,21 @@
 
 
                                    <td>
-
+@php
+    $vendorFollowupRole = optional(auth()->user()->userType)->user_type;
+    $canCreateVendorFollowup = $vendorFollowupRole === \App\Models\UserType::SUPER_ADMIN
+        || in_array($vendorFollowupRole, \App\Models\UserType::OPERATIONS_ROLES, true);
+@endphp
+@if($canCreateVendorFollowup && $case->lead_id)
+    <div class="mb-2">
+        <a
+            href="{{ route('admin.operations.vendor-followups.create', $case->lead_id) }}"
+            class="ti-btn ti-btn-sm ti-btn-info"
+        >
+            Vendor Follow-up
+        </a>
+    </div>
+@endif
     @if(
         $case->type
         ===

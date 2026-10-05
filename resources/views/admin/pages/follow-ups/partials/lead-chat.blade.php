@@ -2,49 +2,9 @@
 
     $leadChatUser = auth()->user();
 
-    $leadChatRole = $leadChatUser
-        ?->userType
-        ?->user_type;
-
-
-    $leadChatAllowed =
-
-        /*
-         * Super Admin
-         */
-        (
-            $leadChatUser
-            &&
-            $leadChatUser->isSuperAdmin()
-        )
-
-        ||
-
-        /*
-         * Sales Executive - own Lead only
-         */
-        (
-            $leadChatRole
-            ===
-            \App\Models\UserType::SALES_EXECUTIVE
-
-            &&
-
-            (string) $lead->representative_user_id
-            ===
-            (string) $leadChatUser?->id
-        )
-
-        ||
-
-        /*
-         * Operations
-         */
-        in_array(
-            $leadChatRole,
-            \App\Models\UserType::OPERATIONS_ROLES,
-            true
-        );
+    $leadChatAllowed = $leadChatUser && isset($lead)
+        ? app(\App\Services\LeadChat\LeadChatAccessService::class)->canAccess($leadChatUser, $lead)
+        : false;
 
 @endphp
 

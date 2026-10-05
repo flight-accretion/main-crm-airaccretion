@@ -58,6 +58,7 @@ use App\Http\Controllers\OperationsDashboardController;
 use App\Http\Controllers\OperationsFollowupController;
 use App\Http\Controllers\OperationsRescheduleController;
 use App\Http\Controllers\OperationsVendorRefundController;
+use App\Http\Controllers\OperationsVendorFollowupController;
 use App\Http\Controllers\OperationsKpiDashboardController;
 use App\Http\Controllers\Auth\GoogleLoginController;
 use App\Http\Controllers\LeadChatController;
@@ -1352,6 +1353,19 @@ Route::post(
             )->name('admin.operations.kpi.manual-value');
         });
 
+    Route::prefix('admin/operations/vendor-followups')
+        ->middleware('role:OPERATIONS_ROLES,SUPER_ADMIN,HR')
+        ->name('admin.operations.vendor-followups.')
+        ->group(function () {
+            Route::get('/', [OperationsVendorFollowupController::class, 'index'])->name('index');
+            Route::get('/export', [OperationsVendorFollowupController::class, 'export'])->name('export');
+            Route::get('/lead/{lead}/create', [OperationsVendorFollowupController::class, 'create'])->name('create');
+            Route::post('/lead/{lead}', [OperationsVendorFollowupController::class, 'store'])->name('store');
+            Route::get('/{case}', [OperationsVendorFollowupController::class, 'show'])->name('show');
+            Route::post('/{case}/reschedule', [OperationsVendorFollowupController::class, 'reschedule'])->name('reschedule');
+            Route::post('/{case}/complete', [OperationsVendorFollowupController::class, 'complete'])->name('complete');
+            Route::post('/{case}/cancel', [OperationsVendorFollowupController::class, 'cancel'])->name('cancel');
+        });
     Route::prefix('admin/client')->group(function () {
         Route::get('/', [ClientController::class, 'indexClient'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.client.index');
         Route::get('/create', [ClientController::class, 'createClient'])->name('admin.client.create');

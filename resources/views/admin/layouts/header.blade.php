@@ -765,7 +765,23 @@
                                         Vendor Refund
                                     </a>
                                     </li>
+                                    <li class="slide">
+                                        <a
+                                            href="{{ route('admin.operations.vendor-followups.index') }}"
+                                            class="side-menu__item {{ Route::is('admin.operations.vendor-followups.*') ? 'active' : '' }}"
+                                        >
+                                            Vendor Follow-ups
+                                        </a>
+                                    </li>
                                 </ul>
+                            </li>
+                        @endif
+                        @if ($isHr)
+                            <li class="slide {{ Route::is('admin.operations.vendor-followups.*') ? 'active' : '' }}">
+                                <a href="{{ route('admin.operations.vendor-followups.index') }}" class="side-menu__item">
+                                    <i class="bx bx-task side-menu__icon"></i>
+                                    <span class="side-menu__label">Vendor Follow-ups</span>
+                                </a>
                             </li>
                         @endif
 

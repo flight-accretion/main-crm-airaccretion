@@ -12,6 +12,7 @@ class OperationCase extends Model
     public const TYPE_RESCHEDULE = 'reschedule';
     public const TYPE_REFUND = 'refund';
     public const TYPE_CANCELLED = 'cancelled';
+    public const TYPE_VENDOR_FOLLOWUP = 'vendor_followup';
 
     public const STATUS_PENDING = 'pending';
     public const STATUS_IN_PROGRESS = 'in_progress';
@@ -60,6 +61,7 @@ class OperationCase extends Model
             self::TYPE_RESCHEDULE,
             self::TYPE_REFUND,
             self::TYPE_CANCELLED,
+            self::TYPE_VENDOR_FOLLOWUP,
         ];
     }
 
