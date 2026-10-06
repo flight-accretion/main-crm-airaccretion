@@ -326,58 +326,57 @@ class BookingConfirmationEmailService
     }
 
 
-    private function bookingConfirmationWhatsAppBody(
-        Lead $lead,
-        array $prepared
-    ): string {
-        $customerName =
-            $this->value(
-                optional(
-                    $lead->client
-                )->name
-            );
-
-        $registrationLink =
-            $prepared[
-                'registration'
-            ][
-                'short_link'
-            ]
-            ?: $prepared[
-                'registration'
-            ][
-                'long_link'
-            ];
-
-        $companyNumber =
-            trim(
-                (string) config(
-                    'services.booking_whatsapp.company_number',
-                    '+91 95753 40786'
-                )
-            );
-
-        if (
-            $companyNumber === ''
-        ) {
-            $companyNumber =
-                '+91 95753 40786';
-        }
-
-        return implode(
-            PHP_EOL,
-            [
-                'Dear ' . $customerName . ',',
-                '',
-                'Your booking confirmation has been sent to your email.',
-                'Passenger registration link: ' . $registrationLink,
-                'Please complete the payment steps shared in the booking email.',
-                'For any assistance, WhatsApp or call ' . $companyNumber . '.',
-                '',
-                'Accretion Aviation',
-            ]
+private function bookingConfirmationWhatsAppBody(
+    Lead $lead,
+    array $prepared
+): string {
+    $customerName =
+        $this->value(
+            optional(
+                $lead->client
+            )->name
         );
+
+    $registrationLink =
+        $prepared[
+            'registration'
+        ][
+            'short_link'
+        ]
+        ?: $prepared[
+            'registration'
+        ][
+            'long_link'
+        ];
+
+    $body =
+        trim(
+            (string) (
+                $prepared[
+                    'body'
+                ]
+                ?? ''
+            )
+        );
+
+    if ($body === '') {
+        $body =
+            'Dear ' . $customerName . ','
+            . PHP_EOL
+            . PHP_EOL
+            . 'Your booking confirmation has been sent to your email.';
     }
+
+    return implode(
+        PHP_EOL,
+        [
+            $body,
+            '',
+            'Passenger registration link:',
+            $registrationLink,
+        ]
+    );
+}
 
 
     /*
