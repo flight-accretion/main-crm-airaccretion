@@ -3,12 +3,14 @@
 namespace App\Services\Operations;
 
 use App\Models\Lead;
+use App\Models\LeadFollowup;
 use App\Models\OperationCase;
 use App\Models\OperationCaseActivity;
 use App\Models\User;
 use App\Models\Vendor;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class VendorFollowupService
@@ -93,6 +95,18 @@ class VendorFollowupService
                 ]
             );
 
+            $this->leadHistory(
+                $case,
+                $createdBy,
+                sprintf(
+                    'Operations member %s added Vendor Follow-up. Vendor: %s. Purpose: %s. Follow-up date: %s.',
+                    $createdBy->name,
+                    $vendor->name,
+                    data_get($metadata, 'purpose'),
+                    $followupDate->format('d-m-Y')
+                )
+            );
+
             return $case->fresh();
         });
     }
@@ -143,6 +157,19 @@ class VendorFollowupService
                 ]
             );
 
+            $this->leadHistory(
+                $case,
+                $user,
+                sprintf(
+                    'Operations member %s rescheduled Vendor Follow-up for %s from %s to %s. Reason: %s',
+                    $user->name,
+                    data_get($metadata, 'vendor_name_snapshot', 'Vendor'),
+                    $oldDate ? $oldDate->format('d-m-Y') : 'N/A',
+                    $newFollowupDate->format('d-m-Y'),
+                    $reason
+                )
+            );
+
             return $case->fresh();
         });
     }
@@ -191,6 +218,18 @@ class VendorFollowupService
                 ]
             );
 
+            $this->leadHistory(
+                $case,
+                $user,
+                sprintf(
+                    'Operations member %s collected vendor confirmation from %s. Ride confirmed for %s. Vendor response: %s',
+                    $user->name,
+                    data_get($metadata, 'vendor_name_snapshot', 'Vendor'),
+                    $confirmedRideAt->format('d-m-Y H:i'),
+                    $metadata['vendor_response']
+                )
+            );
+
             return $case->fresh();
         });
     }
@@ -227,6 +266,17 @@ class VendorFollowupService
                 ]
             );
 
+            $this->leadHistory(
+                $case,
+                $user,
+                sprintf(
+                    'Operations member %s cancelled Vendor Follow-up for %s. Reason: %s',
+                    $user->name,
+                    data_get($metadata, 'vendor_name_snapshot', 'Vendor'),
+                    $reason
+                )
+            );
+
             return $case->fresh();
         });
     }
@@ -247,6 +297,32 @@ class VendorFollowupService
 
         return $locked;
     }
+
+
+    private function leadHistory(
+        OperationCase $case,
+        User $user,
+        string $note,
+        $nextFollowupAt = null
+    ): LeadFollowup {
+        $latest = LeadFollowup::query()
+            ->where('lead_id', $case->lead_id)
+            ->orderByDesc('created_at')
+            ->first();
+
+        return LeadFollowup::create([
+            'id' => (string) Str::uuid(),
+            'operation_case_id' => $case->id,
+            'lead_id' => $case->lead_id,
+            'next_followup_date' => null,
+            'followup_note' => $note,
+            'followed_by' => $user->id,
+            'status' => $latest ? $latest->status : LeadFollowup::STATUS_ACTIVE,
+            'source' => 'operations_vendor_followup',
+            'followup_type' => 'vendor_followup_note',
+        ]);
+    }
+
 
     private function activity(
         OperationCase $case,

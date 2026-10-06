@@ -3,20 +3,31 @@ FROM php:8.2-fpm-bookworm
 WORKDIR /var/www/html
 
 # System dependencies
-RUN apt-get update && apt-get install -y \
-    git \
-    unzip \
-    libpng-dev \
-    libonig-dev \
-    libxml2-dev \
-    libzip-dev \
-    libjpeg-dev \
-    libfreetype6-dev \
-    libpq-dev \
-    libc-client2007e-dev \
-    libkrb5-dev \
-    default-mysql-client \
-    postgresql-client \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+    && install -d /usr/share/postgresql-common/pgdg \
+    && curl -fsSL \
+        https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+        -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+    && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        git \
+        unzip \
+        libpng-dev \
+        libonig-dev \
+        libxml2-dev \
+        libzip-dev \
+        libjpeg-dev \
+        libfreetype6-dev \
+        libpq-dev \
+        libc-client2007e-dev \
+        libkrb5-dev \
+        default-mysql-client \
+        postgresql-client-16 \
     && rm -rf /var/lib/apt/lists/*
 
 # PHP extensions — includes PostgreSQL + IMAP

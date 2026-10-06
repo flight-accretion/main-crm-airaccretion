@@ -456,6 +456,17 @@
                             class="ti-btn ti-btn-icon ti-btn-sm ti-btn-success-full" target="_blank"
                             data-bs-toggle="tooltip" data-bs-placement="top" title="Add Lead Followup"><i
                                 class="ri-add-line"></i></a>
+                        @php
+                            $vendorFollowupRole = optional(auth()->user()->userType)->user_type;
+                            $canCreateVendorFollowup = ($vendorFollowupRole === \App\Models\UserType::SUPER_ADMIN)
+                                || in_array($vendorFollowupRole, \App\Models\UserType::OPERATIONS_ROLES, true);
+                        @endphp
+                        @if($canCreateVendorFollowup)
+                            <a aria-label="Create Vendor Follow-up" href="{{ route('admin.operations.vendor-followups.create', $latestLead->id) }}"
+                                class="ti-btn ti-btn-icon ti-btn-sm ti-btn-warning-full" target="_blank"
+                                data-bs-toggle="tooltip" data-bs-placement="top" title="Create Vendor Follow-up"><i
+                                    class="ri-store-2-line"></i></a>
+                        @endif
 
                     </div>
                     <div class="box-body">

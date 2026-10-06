@@ -4,7 +4,6 @@ namespace App\Services\Operations;
 
 use App\Jobs\Operations\SendOperationRideAlert;
 use App\Models\Lead;
-use App\Models\LeadFollowup;
 use App\Models\RideAlertNotification;
 use Carbon\CarbonInterface;
 use Illuminate\Database\QueryException;
@@ -14,8 +13,7 @@ class RideAlertService
 {
     public function __construct(
         private RideAlertDataResolver $resolver,
-        private OperationsRecipientService $recipients,
-        private VendorFollowupAutomationService $followups
+        private OperationsRecipientService $recipients
     ) {
     }
 
@@ -39,14 +37,11 @@ class RideAlertService
             && !$previousRideDate->isSameDay($rideDate);
 
         if ($dateChanged) {
-            $this->syncChangedDateFollowup($lead, $rideDate);
             RideAlertNotification::query()
                 ->where('lead_id', $lead->id)
                 ->whereIn('status', ['pending', 'failed'])
                 ->whereDate('ride_date', '!=', $rideDate->toDateString())
                 ->update(['status' => 'cancelled']);
-        } else {
-            $this->followups->syncRideConfirmation($lead, $rideDate);
         }
 
         [$type, $dueAt] = $this->alertTypeAndDueAt($rideDate, $dateChanged);
@@ -83,27 +78,6 @@ class RideAlertService
             ->update(['status' => 'cancelled']);
     }
 
-    private function syncChangedDateFollowup(
-        Lead $lead,
-        CarbonInterface $rideDate
-    ): void {
-        $completedConfirmation = LeadFollowup::query()
-            ->where('lead_id', $lead->id)
-            ->where('followup_type', 'ride_confirmation')
-            ->where('status', LeadFollowup::STATUS_CONFIRMED)
-            ->exists();
-
-        if ($completedConfirmation) {
-            $this->followups->createNewForReschedule($lead, $rideDate);
-            return;
-        }
-
-        $this->followups->syncRideConfirmation(
-            $lead,
-            $rideDate,
-            'Ride date updated. Vendor reconfirmation required.'
-        );
-    }
 
     private function alertTypeAndDueAt(
         CarbonInterface $rideDate,

@@ -845,6 +845,17 @@
                                         <a aria-label="anchor" href="{{ route('admin.leads.view', $enquiry->id) }}"
                                             class="ti-btn ti-btn-icon ti-btn-sm ti-btn-primary-full" target="_blank"
                                             title="View Lead"><i class="ri-eye-line"></i></a>
+                                        @php
+                                            $vendorFollowupRole = optional(auth()->user()->userType)->user_type;
+                                            $canCreateVendorFollowup = ($vendorFollowupRole === \App\Models\UserType::SUPER_ADMIN)
+                                                || in_array($vendorFollowupRole, \App\Models\UserType::OPERATIONS_ROLES, true);
+                                        @endphp
+                                        @if($canCreateVendorFollowup)
+                                            <a aria-label="Create Vendor Follow-up"
+                                                href="{{ route('admin.operations.vendor-followups.create', $enquiry->id) }}"
+                                                class="ti-btn ti-btn-icon ti-btn-sm ti-btn-warning-full" target="_blank"
+                                                title="Create Vendor Follow-up"><i class="ri-store-2-line"></i></a>
+                                        @endif
                                         @if ($canCreateManualRepeatLead)
                                         <a aria-label="Create New Lead"
                                             href="{{ route('admin.clients.create', ['repeat_from_lead' => $enquiry->id]) }}"
