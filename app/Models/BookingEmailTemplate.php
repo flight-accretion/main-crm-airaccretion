@@ -140,6 +140,9 @@ class BookingEmailTemplate extends Model
             'agent_email',
             'agent_phone',
             'lead_code',
+            'manager_name',
+            'manager_email',
+            'manager_phone',
         ];
     }
 }

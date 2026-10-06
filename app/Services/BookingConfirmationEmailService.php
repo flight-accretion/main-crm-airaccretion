@@ -823,216 +823,244 @@ private function emailContext(
     string $registrationLink,
     array $travelOverrides = []
 ): array {
-        $amountFollowup =
-            $this->amountFollowup(
-                $lead
-            );
+    $amountFollowup =
+        $this->amountFollowup(
+            $lead
+        );
 
+    $serviceIds =
+        $this->selectedServiceIds(
+            $lead,
+            $amountFollowup
+        );
 
-        $serviceIds =
-            $this->selectedServiceIds(
-                $lead,
-                $amountFollowup
-            );
+    $extraServiceIds =
+        $this->selectedExtraServiceIds(
+            $amountFollowup
+        );
 
+    $services =
+        $this->services(
+            $serviceIds
+        );
 
-        $extraServiceIds =
-            $this->selectedExtraServiceIds(
-                $amountFollowup
-            );
+    $extraServices =
+        $this->extraServices(
+            $extraServiceIds
+        );
 
+    $products =
+        $this->products(
+            $lead,
+            $services
+        );
 
-        $services =
-            $this->services(
-                $serviceIds
-            );
+    $rideSegments =
+        $this->rideSegments(
+            $lead
+        );
 
+    $firstRide =
+        $rideSegments
+            ->first();
 
-        $extraServices =
-            $this->extraServices(
-                $extraServiceIds
-            );
+    $totalAmount =
+        $this->totalAmount(
+            $amountFollowup,
+            $services,
+            $extraServices
+        );
 
+    $travel =
+        $this->travelDetails(
+            $services,
+            $firstRide,
+            $travelOverrides
+        );
 
-        $products =
-            $this->products(
-                $lead,
-                $services
-            );
-
-
-        $rideSegments =
-            $this->rideSegments(
-                $lead
-            );
-
-        $firstRide =
-            $rideSegments
-                ->first();
-
-
-        /*
-         * CRM/service amount.
-         *
-         * This is only the default shown
-         * when popup opens.
-         */
-        $totalAmount =
-            $this->totalAmount(
-                $amountFollowup,
-                $services,
-                $extraServices
-            );
-
-        $travel =
-            $this->travelDetails(
-                $services,
-                $firstRide,
-                $travelOverrides
-            );
-
-        $timing =
-            $travel[
-                'timing'
-            ];
-
-        $duration =
-            $travel[
-                'duration'
-            ];
-
-
-        return [
-            'total_amount_numeric' =>
-                $totalAmount,
-
-            'travel' =>
-                $travel,
-
-            'variables' => [
-                'customer_name' =>
-                    $this->value(
-                        optional(
-                            $lead->client
-                        )->name
-                    ),
-
-                'customer_email' =>
-                    $this->value(
-                        optional(
-                            $lead->client
-                        )->email
-                    ),
-
-                'customer_phone' =>
-                    $this->value(
-                        optional(
-                            $lead->client
-                        )->contact_number
-                    ),
-
-                'service_name' =>
-                    $this->names(
-                        $services,
-                        'service'
-                    ),
-
-                'product_name' =>
-                    $this->names(
-                        $products,
-                        'product'
-                    ),
-
-                'service_date' =>
-                    $this->serviceDate(
-                        $firstRide
-                    ),
-
-                'duration' =>
-                    $duration,
-
-                'timing' =>
-                    $timing,
-
-                'time' =>
-                    $timing,
-
-                'passengers' =>
-                    $this->value(
-                        $lead
-                            ->number_of_passengers
-                    ),
-
-                'total_amount' =>
-                    $this->money(
-                        $totalAmount
-                    ),
-
-                /*
-                 * Kept so old/custom templates render
-                 * before payment section replacement.
-                 */
-                'advance_amount' =>
-                    $this->money(
-                        $totalAmount
-                    ),
-
-                'balance_amount' =>
-                    '',
-
-                'balance_due_by' =>
-                    '',
-
-                'registration_link' =>
-                    $registrationLink,
-
-                'product_service_notes' =>
-                    $this->productServiceNotes(
-                        $products,
-                        $services
-                    ),
-
-                'payment_link' =>
-                    'https://www.accretionaviation.com/pay',
-
-                    'bank_account_name' => config('services.booking_bank.account_name', ''),
-                    'bank_name' => config('services.booking_bank.bank_name', ''),
-                    'bank_account_number' => config('services.booking_bank.account_number', ''),
-                    'bank_ifsc' => config('services.booking_bank.ifsc', ''),
-                    'bank_branch' => config('services.booking_bank.branch', ''),
-
-                'terms_link' =>
-                    'https://www.accretionaviation.com/terms&condition.php',
-
-                'agent_name' =>
-                    $this->value(
-                        optional(
-                            $agent
-                        )->name
-                    ),
-
-                'agent_email' =>
-                    $this->value(
-                        optional(
-                            $agent
-                        )->email
-                    ),
-
-                'agent_phone' =>
-                    $this->value(
-                        optional(
-                            $agent
-                        )->contact_number
-                    ),
-
-                'lead_code' =>
-                    $this->value(
-                        $lead->crm_lead_code
-                        ?: $lead->id
-                    ),
-            ],
+    $timing =
+        $travel[
+            'timing'
         ];
-    }
+
+    $duration =
+        $travel[
+            'duration'
+        ];
+
+    $contacts =
+        app(\App\Services\BookingSalesContactResolver::class)
+            ->resolve(
+                $lead,
+                $agent
+            );
+
+    return [
+        'total_amount_numeric' =>
+            $totalAmount,
+
+        'travel' =>
+            $travel,
+
+        'variables' => [
+            'customer_name' =>
+                $this->value(
+                    optional(
+                        $lead->client
+                    )->name
+                ),
+
+            'customer_email' =>
+                $this->value(
+                    optional(
+                        $lead->client
+                    )->email
+                ),
+
+            'customer_phone' =>
+                $this->value(
+                    optional(
+                        $lead->client
+                    )->contact_number
+                ),
+
+            'service_name' =>
+                $this->names(
+                    $services,
+                    'service'
+                ),
+
+            'product_name' =>
+                $this->names(
+                    $products,
+                    'product'
+                ),
+
+            'service_date' =>
+                $this->serviceDate(
+                    $firstRide
+                ),
+
+            'duration' =>
+                $duration,
+
+            'timing' =>
+                $timing,
+
+            'time' =>
+                $timing,
+
+            'passengers' =>
+                $this->value(
+                    $lead
+                        ->number_of_passengers
+                ),
+
+            'total_amount' =>
+                $this->money(
+                    $totalAmount
+                ),
+
+            'advance_amount' =>
+                $this->money(
+                    $totalAmount
+                ),
+
+            'balance_amount' =>
+                '',
+
+            'balance_due_by' =>
+                '',
+
+            'registration_link' =>
+                $registrationLink,
+
+            'product_service_notes' =>
+                $this->productServiceNotes(
+                    $products,
+                    $services
+                ),
+
+            'payment_link' =>
+                'https://www.accretionaviation.com/pay',
+
+            'bank_account_name' =>
+                config(
+                    'services.booking_bank.account_name',
+                    ''
+                ),
+
+            'bank_name' =>
+                config(
+                    'services.booking_bank.bank_name',
+                    ''
+                ),
+
+            'bank_account_number' =>
+                config(
+                    'services.booking_bank.account_number',
+                    ''
+                ),
+
+            'bank_ifsc' =>
+                config(
+                    'services.booking_bank.ifsc',
+                    ''
+                ),
+
+            'bank_branch' =>
+                config(
+                    'services.booking_bank.branch',
+                    ''
+                ),
+
+            'terms_link' =>
+                'https://www.accretionaviation.com/terms&condition.php',
+
+            'agent_name' =>
+                $this->value(
+                    optional(
+                        $agent
+                    )->name
+                ),
+
+            'agent_email' =>
+                $this->value(
+                    optional(
+                        $agent
+                    )->email
+                ),
+
+            'agent_phone' =>
+                $this->value(
+                    optional(
+                        $agent
+                    )->contact_number
+                ),
+
+            'manager_name' =>
+                $contacts[
+                    'manager_name'
+                ],
+
+            'manager_email' =>
+                $contacts[
+                    'manager_email'
+                ],
+
+            'manager_phone' =>
+                $contacts[
+                    'manager_phone'
+                ],
+
+            'lead_code' =>
+                $this->value(
+                    $lead->crm_lead_code
+                    ?: $lead->id
+                ),
+        ],
+    ];
+}
 
 
     /*
