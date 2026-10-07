@@ -104,4 +104,16 @@ return [
 
     'timeout' => 10,
 
+    'booking_confirmation_template' =>
+    env(
+        'WHATCRM_BOOKING_CONFIRMATION_TEMPLATE',
+        'booking_confirmation'
+    ),
+
+'booking_confirmation_language' =>
+    env(
+        'WHATCRM_BOOKING_CONFIRMATION_LANGUAGE',
+        'en'
+    ),
+
 ];

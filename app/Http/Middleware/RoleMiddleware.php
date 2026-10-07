@@ -33,7 +33,9 @@ class RoleMiddleware
             }
         }
 
-        if (!in_array($user->userType->user_type, $roles, true)) {
+        $userRole = optional($user->userType)->user_type;
+
+        if (!$userRole || !in_array($userRole, $roles, true)) {
             abort(403, 'Unauthorized.');
         }
 

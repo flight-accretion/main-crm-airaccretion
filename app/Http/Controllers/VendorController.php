@@ -838,6 +838,10 @@ class VendorController extends Controller
 
     public function destroy(Vendor $vendor)
     {
+        if (!auth()->check() || !auth()->user()->isSuperAdmin()) {
+            abort(403, 'Only Super Admin can delete.');
+        }
+
         try {
             $vendor->delete();
 

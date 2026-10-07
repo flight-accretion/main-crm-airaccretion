@@ -159,6 +159,18 @@ class ClientController extends Controller
         return array_values(array_unique(array_map('strval', $ids)));
     }
 
+    private function abortUnlessCanAccessLead(Lead $lead): void
+{
+    $representatives = getRepresentativeIds(auth()->user());
+
+    if (
+        $representatives !== null
+        && !in_array($lead->representative_user_id, $representatives, true)
+    ) {
+        abort(403, 'You are not allowed to access this lead.');
+    }
+}
+
     public function buildLeadFollowupViewData(Lead $lead): array
     {
         $lead->loadMissing(['rideSegments', 'client']);
@@ -1725,6 +1737,10 @@ $leadFollowUp = LeadFollowUp::create([
     // }
     public function destroy(Client $client)
     {
+        if (!auth()->check() || !auth()->user()->isSuperAdmin()) {
+            abort(403, 'Only Super Admin can delete.');
+        }
+
         try {
             $client->update(['status' => 0]);
 
@@ -2201,6 +2217,7 @@ $leadFollowUp = LeadFollowUp::create([
      */
     public function generateLeadPassengerRegistrationLink(Lead $lead)
     {
+         $this->abortUnlessCanAccessLead($lead);
         try {
             return response()->json($this->generatePassengerRegistrationLinkPayload($lead));
         } catch (\Exception $e) {
@@ -2232,6 +2249,7 @@ $leadFollowUp = LeadFollowUp::create([
      */
     public function getLeadPassengerRegistrationLink(Lead $lead)
     {
+         $this->abortUnlessCanAccessLead($lead);
         try {
             return response()->json($this->getPassengerRegistrationLinkPayload($lead));
         } catch (\Exception $e) {
@@ -2868,6 +2886,8 @@ $leadFollowUp = LeadFollowUp::create([
     }
     public function storeLeadFollowUp(Request $request, Lead $lead)
     {
+            $this->abortUnlessCanAccessLead($lead);
+
         $messages = [
             'notes.max' => 'Follow-up notes cannot exceed 1000 characters',
             'image.required_if' => 'Upload Receipt is required when status is Full or Partial payment received',
@@ -3439,6 +3459,8 @@ $leadFollowUp = LeadFollowUp::create([
      */
     public function createLeadFollowUp(Lead $lead)
     {
+            $this->abortUnlessCanAccessLead($lead);
+
         $leadFollowupData = $this->buildLeadFollowupViewData($lead);
 
         $clientInfo = $leadFollowupData['clientInfo'];
@@ -5236,6 +5258,8 @@ $leadFollowUp = LeadFollowUp::create([
 
     public function editLead(Lead $lead)
     {
+            $this->abortUnlessCanAccessLead($lead);
+
         // Load the lead with necessary relationships
         $lead->load(['rideSegments', 'representative', 'client']);
 
@@ -5331,6 +5355,8 @@ $leadFollowUp = LeadFollowUp::create([
 
     public function updateLead(Request $request, Lead $lead)
     {
+            $this->abortUnlessCanAccessLead($lead);
+
         // Get the client associated with this lead
         $client = $lead->client;
 
@@ -5675,6 +5701,9 @@ $leadFollowUp = LeadFollowUp::create([
 
     public function viewLead(Lead $lead)
     {
+
+        $this->abortUnlessCanAccessLead($lead);
+
         // Load the lead with necessary relationships
         $lead->load([
             'rideSegments',
@@ -5825,6 +5854,10 @@ $leadFollowUp = LeadFollowUp::create([
      */
     public function destroyLead(Lead $lead)
     {
+        $this->abortUnlessCanAccessLead($lead);
+        if (!auth()->check() || !auth()->user()->isSuperAdmin()) {
+            abort(403, 'Only Super Admin can delete.');
+        }
         try {
             $lead->delete();
 

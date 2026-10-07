@@ -84,6 +84,11 @@ class OperationsVendorFollowupController extends Controller
         }, 'vendor-followups.csv');
     }
 
+    public function redirectCreate(Lead $lead)
+    {
+        return redirect()->route('admin.operations.vendor-followups.create', $lead);
+    }
+
     public function create(Request $request, Lead $lead)
     {
         $this->abortUnlessCanManage($request);

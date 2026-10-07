@@ -32,6 +32,7 @@ use App\Models\LeadVendorPayment;
 use App\Models\VendorPayment;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Storage;
+use App\Services\BookingSalesContactResolver;
 
 
 class RideController extends Controller
@@ -543,34 +544,18 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
         return strtolower((string) ($response['status'] ?? 'success')) !== 'fail';
     }
 
-    private function buildReminderSalesData($lead)
-    {
-        $salesName = $lead->representative->name ?? 'Sales Representative';
-        $salesPhone = $lead->representative->contact_number ?? 'N/A';
+   private function buildReminderSalesData($lead)
+{
+    $contacts = app(\App\Services\BookingSalesContactResolver::class)
+        ->resolve($lead, auth()->user());
 
-        $managerName = 'Manager';
-        $managerPhone = 'N/A';
-
-        if (!empty($lead->representative->id)) {
-            $assignment = SalesExecutiveAssignment::where('sales_executive_id', $lead->representative->id)
-                ->where('status', 1)
-                ->with('manager')
-                ->latest('assigned_date')
-                ->first();
-
-            if ($assignment && $assignment->manager) {
-                $managerName = $assignment->manager->name ?? $managerName;
-                $managerPhone = $assignment->manager->contact_number ?? $managerPhone;
-            }
-        }
-
-        return [
-            'sales_name' => $salesName,
-            'sales_phone' => $salesPhone,
-            'manager_name' => $managerName,
-            'manager_phone' => $managerPhone,
-        ];
-    }
+    return [
+        'sales_name' => $contacts['sales_name'],
+        'sales_phone' => $contacts['sales_phone'],
+        'manager_name' => $contacts['manager_name'],
+        'manager_phone' => $contacts['manager_phone'],
+    ];
+}
 
     private function buildMsg91EmailVariables($customerName, $serviceLines, $salesData)
     {

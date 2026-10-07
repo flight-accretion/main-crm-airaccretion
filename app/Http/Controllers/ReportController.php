@@ -22,6 +22,28 @@ use Illuminate\Support\Facades\Log;
 
 class ReportController extends Controller
 {
+    private function normalizeIds($ids): array
+    {
+        if ($ids instanceof \Illuminate\Support\Collection) {
+            $ids = $ids->toArray();
+        }
+
+        return array_map('strval', (array) $ids);
+    }
+
+    private function abortIfRepresentativeOutsideScope($representativeId): void
+    {
+        $allowedRepresentativeIds = getRepresentativeIds(auth()->user());
+
+        if ($allowedRepresentativeIds === null) {
+            return;
+        }
+
+        if (!in_array((string) $representativeId, $this->normalizeIds($allowedRepresentativeIds), true)) {
+            abort(403, 'You are not allowed to access this report data.');
+        }
+    }
+
     /**
      * Helper method to get users in hierarchy based on user types
      */
@@ -208,20 +230,18 @@ class ReportController extends Controller
             });
         }
         if (isset($representativeUserId) && !empty($representativeUserId)) {
+            $this->abortIfRepresentativeOutsideScope($representativeUserId);
             // representative_user_id lives on the leads (enquiry) table, not on the users table.
             $query->whereHas('enquiry', function ($q) use ($representativeUserId) {
                 $q->where('representative_user_id', $representativeUserId);
             });
         }
         if ($request->filled('product_id')) {
-            // product_ids lives on the leads (enquiry) table — same as KPI/dashboard logic.
+            // product_ids lives on the leads (enquiry) table, same as KPI/dashboard logic.
             $query->whereHas('enquiry', function ($q) use ($request) {
                 $q->where('product_ids', 'like', '%' . $request->product_id . '%');
             });
         }
-
-
-
 
         $allPayments = $query->orderBy('created_at', 'desc')->get();
         $statusArray = [0 => 'Initiated', 1 => 'Active', 2 => 'Cancelled', 3 => 'Full Payment Received', 4 => 'Partial Payment Received', 5 => 'Confirmed', 6 => 'Pending', 7 => 'Rescheduled', 8 => 'Approved', 9 => 'Rejected'];
@@ -698,6 +718,7 @@ class ReportController extends Controller
             // Sales Person Filter
             if ($request->filled('representative_user_id')) {
                 $representativeUserId = $request->representative_user_id;
+                $this->abortIfRepresentativeOutsideScope($representativeUserId);
                 $query->whereHas('enquiry', function ($q) use ($representativeUserId) {
                     $q->where('representative_user_id', $representativeUserId);
                 });
@@ -835,8 +856,8 @@ class ReportController extends Controller
                     if ($assignment && $assignment->manager) {
                         $managerName = $assignment->manager->name;
                     }
-                }
 
+                }
                 // ... rest of the code for products, services, etc. remains the same ...
 
                 $productNames = [];
@@ -1043,8 +1064,8 @@ class ReportController extends Controller
                     } catch (\Exception $e) {
                         $serviceDate = $firstRide->from_date;
                     }
-                }
 
+                }
                 // booking date - first payments in audit trail
                 $bookingDate = 'N/A';
                 $firstPaymentDate = null;
@@ -1062,8 +1083,8 @@ class ReportController extends Controller
                     } catch (\Exception $e) {
                         $bookingDate = $firstPaymentDate;
                     }
-                }
 
+                }
                 // ride status -- compute similar to export
                 $rideStatus = 'Pending';
                 $followupStatusRecord = $lead->leadFollowups()->orderByDesc('created_at')->first();
@@ -1094,8 +1115,8 @@ class ReportController extends Controller
                             else $rideStatus = 'Completed';
                         } else $rideStatus = 'Pending';
                     }
-                }
 
+                }
                 // booking slip number
                 $bookingSlipNumber = 'N/A';
                 if ($vp->voucher && $vp->voucher->invoice) {
@@ -1183,6 +1204,10 @@ class ReportController extends Controller
     {
         $format = $request->get('format', 'xlsx');
         $filters = $request->except('format');
+
+        if (!empty($filters['representative_user_id'])) {
+            $this->abortIfRepresentativeOutsideScope($filters['representative_user_id']);
+        }
 
         $fileName = 'sales_report_' . date('Y-m-d_His') . '.' . $format;
 
@@ -1301,6 +1326,7 @@ class ReportController extends Controller
 
         if ($request->filled('representative_user_id')) {
             $representativeUserId = $request->representative_user_id;
+            $this->abortIfRepresentativeOutsideScope($representativeUserId);
             $query->whereHas('enquiry', function ($q) use ($representativeUserId) {
                 $q->where('representative_user_id', $representativeUserId);
             });
@@ -1314,7 +1340,6 @@ class ReportController extends Controller
         // Build manager list: users whose user_type is a parent of other user types
         $parentTypeIds = \App\Models\UserType::whereNotNull('parent_id')->pluck('parent_id')->unique();
         $managers = User::whereIn('user_type_id', $parentTypeIds)->where('status', 1)->orderBy('name')->get();
-
 
         $allData = $query->orderBy('created_at', 'desc')->get();
 
@@ -1375,8 +1400,8 @@ class ReportController extends Controller
                 if ($vp->vendor) {
                     $vendorNames[] = $vp->vendor->name;
                 }
-            }
 
+            }
             // Calculate profit/loss
             $profitLoss = $clientReceivedAmount - $totalVendorAmount;
             $profitLossPercent = 0;
@@ -1398,8 +1423,8 @@ class ReportController extends Controller
                 if ($assignment && $assignment->manager) {
                     $managerName = $assignment->manager->name;
                 }
-            }
 
+            }
             // Get last paid date from approved payments
             $lastPaidDate = $approvedPayments->sortByDesc('paid_date')->first();
             $paidDateFormatted = $lastPaidDate && $lastPaidDate->paid_date
@@ -1503,8 +1528,6 @@ class ReportController extends Controller
         //     });
         // }
 
-
-
         if ($request->filled('from_create_date')) {
             $fromDate = Carbon::parse($request->from_create_date)->startOfDay();
             $query->whereHas('enquiry', function ($q) use ($fromDate) {
@@ -1529,6 +1552,7 @@ class ReportController extends Controller
 
         if ($request->filled('representative_user_id')) {
             $representativeUserId = $request->representative_user_id;
+            $this->abortIfRepresentativeOutsideScope($representativeUserId);
             $query->whereHas('enquiry', function ($q) use ($representativeUserId) {
                 $q->where('representative_user_id', $representativeUserId);
             });
@@ -1633,6 +1657,11 @@ class ReportController extends Controller
         try {
             $format = $request->get('format', 'xlsx');
             $filters = $request->except('format');
+
+            if (!empty($filters['representative_user_id'])) {
+                $this->abortIfRepresentativeOutsideScope($filters['representative_user_id']);
+            }
+
             $fileName = 'kpi_report_' . date('Y-m-d_His') . '.' . $format;
 
             return Excel::download(new \App\Exports\KPIReportExport($filters), $fileName);
@@ -1663,6 +1692,12 @@ class ReportController extends Controller
             $format = $request->get('format', 'xlsx');
             $filters = $request->except('format');
 
+            $this->abortIfRepresentativeOutsideScope($representative_id);
+
+            if (!empty($filters['representative_user_id'])) {
+                $this->abortIfRepresentativeOutsideScope($filters['representative_user_id']);
+            }
+
             // Get the representative name for the filename
             $representative = User::find($representative_id);
             $repName = $representative ? preg_replace('/[^A-Za-z0-9_]/', '_', $representative->name) : 'unknown';
@@ -1684,6 +1719,10 @@ class ReportController extends Controller
         try {
             $format = $request->get('format', 'xlsx');
             $filters = $request->except('format');
+
+            if (!empty($filters['representative_user_id'])) {
+                $this->abortIfRepresentativeOutsideScope($filters['representative_user_id']);
+            }
 
             $fileName = 'profit_loss_report_' . date('Y-m-d_His') . '.' . $format;
 
@@ -1858,7 +1897,7 @@ class ReportController extends Controller
             ->get()
             ->groupBy('lead_followup_id');
 
-        // Step 6: per-lead — latest qualifying followup, subtract refunds
+        // Step 6: per-lead latest qualifying followup, subtract refunds
         $achievedAmount = $allFollowups->groupBy('lead_id')->map(function ($group) use ($allFollowupIdsByLead, $refundsByFollowupId) {
             $qualifying = $group->filter(fn($f) => in_array((int) $f->status, LeadFollowup::salesAmountStatuses(), true));
             $latest = $qualifying->sortByDesc('created_at')->first();

@@ -979,9 +979,20 @@ Route::post(
     //         ->whereUuid('transfer')
     //         ->name('admin.leads.transfer.reject');
         // Static routes first so segments like "import" are not captured by the dynamic {lead} binding
-        Route::get('/import', [ClientController::class, 'showImportForm'])->name('admin.leads.import');
-        Route::post('/import', [ClientController::class, 'importLeads'])->name('admin.leads.import.store');
-        Route::get('/import/sample', [ClientController::class, 'downloadSampleExcel'])->name('admin.leads.import.sample');
+        // Route::get('/import', [ClientController::class, 'showImportForm'])->name('admin.leads.import');
+        // Route::post('/import', [ClientController::class, 'importLeads'])->name('admin.leads.import.store');
+        // Route::get('/import/sample', [ClientController::class, 'downloadSampleExcel'])->name('admin.leads.import.sample');
+        Route::get('/import', [ClientController::class, 'showImportForm'])
+    ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')
+    ->name('admin.leads.import');
+
+Route::post('/import', [ClientController::class, 'importLeads'])
+    ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')
+    ->name('admin.leads.import.store');
+
+Route::get('/import/sample', [ClientController::class, 'downloadSampleExcel'])
+    ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')
+    ->name('admin.leads.import.sample');
         Route::get('/export', [ClientController::class, 'exportLeads'])->name('admin.leads.export');
 
         Route::post(
@@ -1156,11 +1167,21 @@ Route::post(
         Route::post('/exceptional/create-refund-note', [ExceptionalController::class, 'createRefundNote'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')->name('admin.account.exceptional.create-refund-note');
         Route::post('/exceptional/{followupId}/add-to-sales', [ExceptionalController::class, 'addToSales'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')->name('admin.account.exceptional.add-to-sales');
         Route::get('/payment-review', [PaymentReviewController::class, 'index'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')->name('admin.account.payment-review');
-        Route::get('/payment-review/{id}', [PaymentReviewController::class, 'show'])->name('admin.account.payment-review.show');
-        Route::post('/payment-review/{id}/approve', [PaymentReviewController::class, 'approve'])->name('admin.account.payment-review.approve');
-        Route::post('/payment-review/{id}/reject', [PaymentReviewController::class, 'reject'])->name('admin.account.payment-review.reject');
-        Route::post('/payment-review/{id}/approve-all', [PaymentReviewController::class, 'approveAll'])->name('admin.account.payment-review.approve-all');
-        Route::post('/payment-review/{id}/reject-all', [PaymentReviewController::class, 'rejectAll'])->name('admin.account.payment-review.reject-all');
+        Route::get('/payment-review/{id}', [PaymentReviewController::class, 'show'])
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->name('admin.account.payment-review.show');
+        Route::post('/payment-review/{id}/approve', [PaymentReviewController::class, 'approve'])
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->name('admin.account.payment-review.approve');
+        Route::post('/payment-review/{id}/reject', [PaymentReviewController::class, 'reject'])
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->name('admin.account.payment-review.reject');
+        Route::post('/payment-review/{id}/approve-all', [PaymentReviewController::class, 'approveAll'])
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->name('admin.account.payment-review.approve-all');
+        Route::post('/payment-review/{id}/reject-all', [PaymentReviewController::class, 'rejectAll'])
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->name('admin.account.payment-review.reject-all');
         Route::post('/payment-history/{id}/approve', [PaymentReviewController::class, 'approveHistory'])->name('admin.account.payment-history.approve');
         Route::post('/payment-history/{id}/reject', [PaymentReviewController::class, 'rejectHistory'])->name('admin.account.payment-history.reject');
         Route::get('/payment-review-export', [PaymentReviewController::class, 'export'])->name('admin.account.payment-review.export');
@@ -1185,9 +1206,15 @@ Route::post(
         // Invoice Routes
         Route::get('/invoices', [InvoiceController::class, 'index'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')->name('admin.account.invoices');
         Route::get('/invoices/{id}', [InvoiceController::class, 'show'])->name('admin.account.invoices.show');
-        Route::post('/invoices/{id}/generate', [InvoiceController::class, 'generateInvoice'])->name('admin.account.invoices.generate');
-        Route::put('/invoices/{id}/gst-info', [InvoiceController::class, 'updateGstInfo'])->name('admin.account.invoices.update-gst-info');
-        Route::post('/invoices/{id}/finalize', [InvoiceController::class, 'finalizeInvoice'])->name('admin.account.invoices.finalize');
+        Route::post('/invoices/{id}/generate', [InvoiceController::class, 'generateInvoice'])
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES')
+            ->name('admin.account.invoices.generate');
+        Route::put('/invoices/{id}/gst-info', [InvoiceController::class, 'updateGstInfo'])
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES')
+            ->name('admin.account.invoices.update-gst-info');
+        Route::post('/invoices/{id}/finalize', [InvoiceController::class, 'finalizeInvoice'])
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES')
+            ->name('admin.account.invoices.finalize');
         Route::get('/invoices/{id}/pdf', [InvoiceController::class, 'generatePDF'])->name('admin.account.invoices.pdf');
         Route::get('/invoices/{id}/download', [InvoiceController::class, 'downloadPDF'])->name('admin.account.invoices.download');
         Route::get('/invoices/{id}/preview', [InvoiceController::class, 'previewHTML'])->name('admin.account.invoices.preview');
@@ -1359,6 +1386,7 @@ Route::post(
         ->group(function () {
             Route::get('/', [OperationsVendorFollowupController::class, 'index'])->name('index');
             Route::get('/export', [OperationsVendorFollowupController::class, 'export'])->name('export');
+            Route::get('/lead/{lead}', [OperationsVendorFollowupController::class, 'redirectCreate'])->name('create.redirect');
             Route::get('/lead/{lead}/create', [OperationsVendorFollowupController::class, 'create'])->name('create');
             Route::post('/lead/{lead}', [OperationsVendorFollowupController::class, 'store'])->name('store');
             Route::get('/{case}', [OperationsVendorFollowupController::class, 'show'])->name('show');
@@ -1532,7 +1560,9 @@ Route::post(
         Route::get('/ride-status/{rideId}/details', [RideController::class, 'getRideStatusDetails'])->name('admin.rides.ride-status.details');
         Route::post('/ride-status/{rideId}/update-status', [RideController::class, 'updateRideStatus'])->name('admin.rides.ride-status.update-status');
         Route::post('/ride-status/{rideId}/update-dates', [RideController::class, 'updateRideDates'])->name('admin.rides.ride-status.update-dates');
-        Route::post('/ride-status/{rideId}/generate-invoice', [RideController::class, 'generateInvoice'])->name('admin.rides.ride-status.generate-invoice');
+        Route::post('/ride-status/{rideId}/generate-invoice', [RideController::class, 'generateInvoice'])
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES')
+            ->name('admin.rides.ride-status.generate-invoice');
         Route::post('/ride-status/{rideId}/generate-refund', [RideController::class, 'generateRefundNote'])->name('admin.rides.ride-status.generate-refund');
         Route::post('/ride-status/{rideId}/save-refund', [RideController::class, 'saveRefundFromRideStatus'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')->name('admin.rides.ride-status.save-refund');
         Route::post('/rides/{rideId}/send-refund-email', [RideController::class, 'sendRefundEmail'])->name('admin.rides.ride-status.send-refund-email');
@@ -1574,7 +1604,9 @@ Route::post(
         Route::get('/{refundId}/invoice/preview', [RefundController::class, 'previewRefundInvoice'])->name('admin.refunds.invoice.preview');
     });
 
-    Route::prefix('admin/report')->group(function () {
+    Route::prefix('admin/report')
+        ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,SALES_ROLES,HR')
+        ->group(function () {
         Route::get('/', [ReportController::class, 'index'])->name('admin.report');
         Route::get('/sales', [ReportController::class, 'salesReport'])->name('admin.report.sales');
         Route::get('/sales/sales-persons-by-manager', [ReportController::class, 'getSalesPersonsByManager'])->name('admin.report.sales.persons-by-manager');

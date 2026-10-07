@@ -121,8 +121,16 @@ class NotificationMasterController extends Controller
 
     public function destroy($id)
     {
+        if (!auth()->check() || !auth()->user()->isSuperAdmin()) {
+            abort(403, 'Only Super Admin can delete.');
+        }
+
         $master = NotificationMaster::findOrFail($id);
         $master->delete();
-        return response()->json(['success' => true, 'message' => 'Deleted successfully.']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Deleted successfully.'
+        ]);
     }
 }

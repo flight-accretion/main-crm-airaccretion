@@ -6,6 +6,7 @@ use App\Models\Lead;
 use App\Services\BookingConfirmationEmailService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use function App\Helpers\getRepresentativeIds;
 
 class LeadBookingConfirmationEmailController extends Controller
 {
@@ -14,6 +15,7 @@ class LeadBookingConfirmationEmailController extends Controller
         Lead $lead,
         BookingConfirmationEmailService $service
     ) {
+        $this->abortUnlessCanAccessLead($lead);
         /*
          * =====================================================
          * PREVIEW
@@ -256,6 +258,19 @@ class LeadBookingConfirmationEmailController extends Controller
      * A key is included only when the popup actually sent it, so callers
      * that send nothing keep the automatic behaviour.
      */
+
+    private function abortUnlessCanAccessLead(Lead $lead): void
+    {
+        $representatives = getRepresentativeIds(auth()->user());
+
+        if (
+            $representatives !== null
+            && !in_array($lead->representative_user_id, $representatives, true)
+        ) {
+            abort(403, 'You are not allowed to access this lead.');
+        }
+    }
+    
     private function travelInput(
         Request $request
     ): array {

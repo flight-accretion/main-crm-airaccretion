@@ -103,15 +103,14 @@ class BookingConfirmationEmailService
             );
 
 
-            $whatsAppResult =
-                $this->sendBookingConfirmationWhatsApp(
-                    $lead,
-                    $actor
-                        ?: $prepared[
-                            'agent'
-                        ],
-                    $prepared
-                );
+           $whatsAppResult =
+        $this->sendBookingConfirmationWhatsApp(
+            $lead,
+            $actor
+                ?: $prepared['agent'],
+            $prepared,
+            $paymentData
+        );
 
 
             return [
@@ -182,117 +181,534 @@ class BookingConfirmationEmailService
         }
     }
 
+    private function bookingConfirmationTemplateValues(
+    Lead $lead,
+    array $prepared,
+    array $paymentData
+): array {
+    $variables =
+        $prepared['variables']
+        ?? [];
 
-    private function sendBookingConfirmationWhatsApp(
-        Lead $lead,
-        ?User $actor,
-        array $prepared
-    ): array {
-        if (
-            !config(
-                'services.booking_whatsapp.enabled',
-                true
-            )
-        ) {
-            return [
-                'sent' => false,
-                'message' => 'Booking confirmation WhatsApp is disabled.',
-            ];
-        }
-
-        $lead->loadMissing([
-            'client',
-        ]);
-
-        $customerNumber =
-            $this->customerWhatsAppNumber(
-                $lead
-            );
-
-        if (
-            $customerNumber === ''
-        ) {
-            return [
-                'sent' => false,
-                'message' => 'Customer WhatsApp number is not available.',
-            ];
-        }
-
-        $body =
-            $this->bookingConfirmationWhatsAppBody(
-                $lead,
-                $prepared
-            );
-
-        try {
-            $result =
-                app(
-                    WhatCrmOutboundMessageService::class
-                )->sendText([
-                    'number' =>
-                        $customerNumber,
-
-                    'name' =>
-                        optional(
-                            $lead->client
-                        )->name,
-
-                    'message' =>
-                        $body,
-
-                    'agent_user_id' =>
-                        optional(
-                            $actor
-                        )->id,
-
-                    'lead_id' =>
-                        $lead->id,
-                ]);
-
-            return [
-                'sent' =>
-                    (bool) (
-                        $result[
-                            'success'
-                        ]
-                        ?? false
-                    ),
-
-                'message' =>
-                    (
-                        $result[
-                            'success'
-                        ]
-                        ?? false
-                    )
-                        ? 'Booking confirmation WhatsApp sent successfully.'
-                        : 'WhatCRM did not accept the booking confirmation WhatsApp message.',
-
-                'provider_message_id' =>
-                    $result[
-                        'provider_message_id'
-                    ]
-                    ?? null,
-            ];
-        } catch (\Throwable $exception) {
-            Log::warning(
-                'Booking confirmation WhatsApp failed',
-                [
-                    'lead_id' =>
-                        $lead->id,
-
-                    'error' =>
-                        $exception
-                            ->getMessage(),
+    /*
+     * Reuse the SAME payment formatter
+     * already used by the email.
+     */
+    $paymentBreakdown =
+        $this->buildPaymentBreakdown(
+            (float) (
+                $prepared[
+                    'total_amount_numeric'
                 ]
+                ?? 0
+            ),
+            $paymentData
+        );
+
+    /*
+     * Meta body already contains PAYMENT heading.
+     */
+    $paymentBreakdown =
+        preg_replace(
+            '/^PAYMENT BREAKDOWN\s*/u',
+            '',
+            trim(
+                (string) $paymentBreakdown
+            )
+        );
+
+    /*
+     * Prefer short registration URL.
+     */
+    $registrationLink =
+        trim(
+            (string) (
+                $prepared[
+                    'registration'
+                ][
+                    'short_link'
+                ]
+                ?? ''
+            )
+        );
+
+    if ($registrationLink === '') {
+        $registrationLink =
+            trim(
+                (string) (
+                    $prepared[
+                        'registration'
+                    ][
+                        'long_link'
+                    ]
+                    ?? ''
+                )
+            );
+    }
+
+    $paymentLink =
+        $this->cleanBookingWhatsAppUrl(
+            $variables[
+                'payment_link'
+            ]
+            ?? 'https://www.accretionaviation.com/pay'
+        );
+
+    $registrationLink =
+        $this->cleanBookingWhatsAppUrl(
+            $registrationLink
+        );
+
+    $termsLink =
+        $this->cleanBookingWhatsAppUrl(
+            $variables[
+                'terms_link'
+            ]
+            ?? 'https://www.accretionaviation.com/terms&condition.php'
+        );
+
+    $serviceNotes =
+        $this->bookingWhatsAppValue(
+            $variables[
+                'product_service_notes'
+            ]
+            ?? '',
+            500,
+            true
+        );
+
+    if ($serviceNotes === 'N/A') {
+        $serviceNotes =
+            'No additional service notes.';
+    }
+
+    /*
+     * CRITICAL:
+     * Do not change this order unless the
+     * approved Meta template also changes.
+     */
+    return [
+
+        // {{1}} Customer Name
+        $this->bookingWhatsAppValue(
+            optional(
+                $lead->client
+            )->name,
+            80
+        ),
+
+        // {{2}} Service
+        $this->bookingWhatsAppValue(
+            $variables[
+                'service_name'
+            ]
+            ?? '',
+            150
+        ),
+
+        // {{3}} Date
+        $this->bookingWhatsAppValue(
+            $variables[
+                'service_date'
+            ]
+            ?? '',
+            60
+        ),
+
+        // {{4}} Duration
+        $this->bookingWhatsAppValue(
+            $variables[
+                'duration'
+            ]
+            ?? 'TBA',
+            50
+        ),
+
+        // {{5}} Time
+        $this->bookingWhatsAppValue(
+            $variables[
+                'time'
+            ]
+            ?? 'TBA',
+            50
+        ),
+
+        // {{6}} Passengers
+        $this->bookingWhatsAppValue(
+            $variables[
+                'passengers'
+            ]
+            ?? '',
+            20
+        ),
+
+        // {{7}} Payment Breakdown
+        $this->bookingWhatsAppValue(
+            $paymentBreakdown,
+            700,
+            true
+        ),
+
+        // {{8}} Payment Link
+        $this->bookingWhatsAppValue(
+            $paymentLink,
+            220
+        ),
+
+        // {{9}} Registration Link
+        $this->bookingWhatsAppValue(
+            $registrationLink,
+            220
+        ),
+
+        // {{10}} Terms Link
+        $this->bookingWhatsAppValue(
+            $termsLink,
+            220
+        ),
+
+        // {{11}} Product / Service Notes
+        $serviceNotes,
+
+        // {{12}} Agent Name
+        $this->bookingWhatsAppValue(
+            optional(
+                $prepared['agent']
+            )->name,
+            80
+        ),
+
+        // {{13}} Agent Phone
+        $this->bookingWhatsAppValue(
+            optional(
+                $prepared['agent']
+            )->contact_number,
+            30
+        ),
+    ];
+}
+
+private function bookingWhatsAppValue(
+    $value,
+    int $maxLength,
+    bool $allowNewLines = false
+): string {
+    $value =
+        trim(
+            (string) $value
+        );
+
+    if ($allowNewLines) {
+        $value =
+            preg_replace(
+                "/[ \t]+/u",
+                ' ',
+                $value
             );
 
-            return [
-                'sent' => false,
-                'message' => $exception->getMessage(),
-            ];
-        }
+        $value =
+            preg_replace(
+                "/\r\n|\r/u",
+                "\n",
+                $value
+            );
+
+        $value =
+            preg_replace(
+                "/\n{3,}/u",
+                "\n\n",
+                $value
+            );
+    } else {
+        $value =
+            preg_replace(
+                '/\s+/u',
+                ' ',
+                $value
+            );
     }
+
+    if ($value === '') {
+        return 'N/A';
+    }
+
+    return mb_substr(
+        $value,
+        0,
+        $maxLength
+    );
+}
+
+private function cleanBookingWhatsAppUrl(
+    $url
+): string {
+    $url =
+        trim(
+            (string) $url
+        );
+
+    return str_replace(
+        [
+            '\:',
+            '\.',
+            '\/',
+        ],
+        [
+            ':',
+            '.',
+            '/',
+        ],
+        $url
+    );
+}
+
+   private function sendBookingConfirmationWhatsApp(
+    Lead $lead,
+    ?User $actor,
+    array $prepared,
+    array $paymentData
+): array {
+    if (
+        !config(
+            'services.booking_whatsapp.enabled',
+            true
+        )
+    ) {
+        return [
+            'sent' => false,
+            'message' =>
+                'Booking confirmation WhatsApp is disabled.',
+        ];
+    }
+
+    $lead->loadMissing([
+        'client',
+    ]);
+
+    $customerNumber =
+        $this->customerWhatsAppNumber(
+            $lead
+        );
+
+    if ($customerNumber === '') {
+        return [
+            'sent' => false,
+            'message' =>
+                'Customer WhatsApp number is not available.',
+        ];
+    }
+
+    try {
+        $bodyValues =
+            $this->bookingConfirmationTemplateValues(
+                $lead,
+                $prepared,
+                $paymentData
+            );
+
+        /*
+         * Your approved Meta template has
+         * exactly 13 BODY parameters.
+         */
+        if (count($bodyValues) !== 13) {
+            throw new RuntimeException(
+                'booking_confirmation requires exactly 13 body values.'
+            );
+        }
+
+        $renderedBody =
+            $this->renderBookingConfirmationWhatsApp(
+                $bodyValues
+            );
+
+        /*
+         * Protect against unexpected long CRM data.
+         */
+        if (
+            mb_strlen(
+                $renderedBody
+            ) > 3900
+        ) {
+            throw new RuntimeException(
+                'Booking confirmation WhatsApp exceeds 3900 characters.'
+            );
+        }
+
+        /*
+         * Same structure already used by the
+         * CRM's existing Meta template flow.
+         */
+        $templatePayload = [
+            'number' =>
+                $customerNumber,
+
+            'name' =>
+                optional(
+                    $lead->client
+                )->name,
+
+            'template_name' =>
+                trim(
+                    (string) config(
+                        'whatcrm.booking_confirmation_template',
+                        'booking_confirmation'
+                    )
+                ),
+
+            'body_values' =>
+                $bodyValues,
+
+            'rendered_body' =>
+                $renderedBody,
+
+            'agent_user_id' =>
+                $actor?->id,
+
+            /*
+             * Customer-facing salesperson remains
+             * the Lead's booking agent.
+             */
+            'assigned_agent_user_id' =>
+                optional(
+                    $prepared['agent']
+                )->id,
+
+            'assigned_agent' =>
+                optional(
+                    $prepared['agent']
+                )->name,
+
+            'lead_id' =>
+                $lead->id,
+        ];
+
+        $result =
+            app(
+                WhatCrmOutboundMessageService::class
+            )->sendTemplate(
+                $templatePayload
+            );
+
+        return [
+            'sent' =>
+                (bool) (
+                    $result['success']
+                    ?? false
+                ),
+
+            'message' =>
+                (
+                    $result['success']
+                    ?? false
+                )
+                    ? 'Booking confirmation WhatsApp sent successfully.'
+                    : 'Meta did not accept the booking_confirmation template.',
+
+            'provider_message_id' =>
+                $result[
+                    'provider_message_id'
+                ]
+                ?? null,
+        ];
+
+    } catch (\Throwable $exception) {
+
+        Log::warning(
+            'Booking confirmation WhatsApp template failed',
+            [
+                'lead_id' =>
+                    $lead->id,
+
+                'actor_user_id' =>
+                    $actor?->id,
+
+                'template' =>
+                    'booking_confirmation',
+
+                'error' =>
+                    $exception
+                        ->getMessage(),
+            ]
+        );
+
+        /*
+         * Email was already sent.
+         * WhatsApp failure must not mark
+         * the email itself as failed.
+         */
+        return [
+            'sent' => false,
+            'message' =>
+                $exception->getMessage(),
+        ];
+    }
+}
+
+private function renderBookingConfirmationWhatsApp(
+    array $values
+): string {
+    $template = <<<'TEXT'
+Dear {{1}},
+
+Thank you for choosing Accretion Aviation. Your booking details:
+
+SERVICE DETAILS
+Service: {{2}}
+Date: {{3}}
+Duration: {{4}}
+Time: {{5}}
+Passengers: {{6}}
+
+PAYMENT
+{{7}}
+
+Pay securely:
+{{8}}
+
+After payment, please share the payment screenshot for verification.
+
+PASSENGER REGISTRATION
+After payment confirmation, complete passenger details and upload government-issued ID:
+{{9}}
+
+IMPORTANT
+• Slot is not held until advance payment is received.
+• Timing is subject to weather/air traffic clearance; final timing will be shared 24–48 hours before the ride.
+• Carry original government-issued photo ID on service day.
+• Terms: {{10}}
+
+{{11}}
+
+Need help? Contact us.
+
+Regards,
+{{12}}
+Sales & Reservations
+Accretion Aviation
++91 {{13}}
+www.accretionaviation.com
+TEXT;
+
+    foreach (
+        array_values(
+            $values
+        )
+        as $index => $value
+    ) {
+        $template =
+            str_replace(
+                '{{'
+                    . ($index + 1)
+                    . '}}',
+
+                (string) $value,
+
+                $template
+            );
+    }
+
+    return $template;
+}
 
 
     private function customerWhatsAppNumber(
@@ -685,6 +1101,8 @@ public function previewForLead(
                 $variables
             );
 
+            $subject .= ' | Ref: ' . $variables['lead_code'] . '-' . now()->format('YmdHis');
+
 
         $body =
             $this->renderTemplate(
@@ -716,30 +1134,32 @@ public function previewForLead(
             );
 
 
-        return [
-            'customer_email' =>
-                $customerEmail,
+       return [
+    'customer_email' =>
+        $customerEmail,
 
-            'agent' =>
-                $agent,
+    'agent' =>
+        $agent,
 
-            'registration' =>
-                $registration,
+    'registration' =>
+        $registration,
 
-            'subject' =>
-                $subject,
+    'subject' =>
+        $subject,
 
-            'body' =>
-                $body,
+    'body' =>
+        $body,
 
-            'total_amount_numeric' =>
-                $totalAmountForEmail,
+    'total_amount_numeric' =>
+        $totalAmountForEmail,
 
-            'travel' =>
-                $context[
-                    'travel'
-                ],
-        ];
+    /*
+     * Reuse resolved booking data for Meta.
+     * This does not alter the email itself.
+     */
+    'variables' =>
+        $variables,
+];
     }
 
 
