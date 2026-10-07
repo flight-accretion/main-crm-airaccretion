@@ -100,18 +100,24 @@ class WhatCrmOutboundMessageService
             ->post($apiUrl, $payload);
 
         $result = $response->json();
+        $hasJsonResponse = is_array($result);
 
-        if (!is_array($result)) {
+        if (!$hasJsonResponse) {
             $result = [
                 'raw_response' => $response->body(),
             ];
         }
 
+        $providerMessageId = $this->providerMessageId($result);
+
         $accepted =
             $response->successful()
-            && ($result['success'] ?? true) !== false;
+            && $hasJsonResponse
+            && (
+                ($result['success'] ?? false) === true
+                || $providerMessageId !== null
+            );
 
-        $providerMessageId = $this->providerMessageId($result);
         $crmResult = null;
 
         if ($accepted) {

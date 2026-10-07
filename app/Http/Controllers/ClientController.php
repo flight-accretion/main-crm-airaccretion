@@ -1735,26 +1735,26 @@ $leadFollowUp = LeadFollowUp::create([
     //         return back()->withInput()->with('error', 'Error updating client: ' . $e->getMessage());
     //     }
     // }
-    public function destroy(Client $client)
-    {
-        if (!auth()->check() || !auth()->user()->isSuperAdmin()) {
-            abort(403, 'Only Super Admin can delete.');
-        }
-
-        try {
-            $client->update(['status' => 0]);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Client Deleted successfully'
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete client'
-            ], 500);
-        }
+  public function destroy(Client $client)
+{
+    if (!auth()->check() || !auth()->user()->isSuperAdmin()) {
+        abort(403, 'Only Super Admin can delete.');
     }
+
+    try {
+        $client->update(['status' => 0]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Client Deleted successfully'
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to delete client'
+        ], 500);
+    }
+}
     public function view(Client $client)
     {
         // Remove the UUID check since we're using route model binding
@@ -5852,33 +5852,30 @@ $leadFollowUp = LeadFollowUp::create([
     /**
      * Delete a lead and cascade-delete related data.
      */
-    public function destroyLead(Lead $lead)
-    {
-        $this->abortUnlessCanAccessLead($lead);
-        if (!auth()->check() || !auth()->user()->isSuperAdmin()) {
-            abort(403, 'Only Super Admin can delete.');
-        }
-        try {
-            $lead->delete();
+public function destroyLead(Lead $lead)
+{
+    $this->abortUnlessCanAccessLead($lead);
 
-            // Flash a session message so a full page reload will show the blade alert
-            session()->flash('success', 'Lead deleted successfully');
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Lead deleted successfully'
-            ]);
-        } catch (\Exception $e) {
-            Log::error('Error deleting lead: ' . $e->getMessage());
-            // Also flash an error so a reload can show it in blade if desired
-            session()->flash('error', 'Failed to delete lead: ' . $e->getMessage());
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete lead'
-            ], 500);
-        }
+    if (!auth()->check() || !auth()->user()->isSuperAdmin()) {
+        abort(403, 'Only Super Admin can delete.');
     }
+
+    try {
+        $lead->delete();
+
+        session()->flash('success', 'Lead deleted successfully');
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Lead deleted successfully'
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to delete lead'
+        ], 500);
+    }
+}
     public function updateImage(Request $request, LeadFollowup $followup)
     {
         $request->validate([

@@ -589,6 +589,33 @@ private function cleanBookingWhatsAppUrl(
                 $templatePayload
             );
 
+        if (!($result['success'] ?? false)) {
+            Log::warning(
+                'Booking confirmation WhatsApp provider rejected template',
+                [
+                    'lead_id' =>
+                        $lead->id,
+
+                    'template' =>
+                        $templatePayload[
+                            'template_name'
+                        ],
+
+                    'http_status' =>
+                        $result[
+                            'http_status'
+                        ]
+                        ?? null,
+
+                    'provider_response' =>
+                        $result[
+                            'whatcrm_response'
+                        ]
+                        ?? null,
+                ]
+            );
+        }
+
         return [
             'sent' =>
                 (bool) (
