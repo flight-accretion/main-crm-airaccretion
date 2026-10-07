@@ -39,7 +39,9 @@ class ReportController extends Controller
             return;
         }
 
-        if (!in_array((string) $representativeId, $this->normalizeIds($allowedRepresentativeIds), true)) {
+        $allowedRepresentativeIds = $this->normalizeIds($allowedRepresentativeIds);
+
+        if (!in_array((string) $representativeId, $allowedRepresentativeIds, true)) {
             abort(403, 'You are not allowed to access this report data.');
         }
     }
@@ -706,6 +708,7 @@ class ReportController extends Controller
             // Sales Manager Filter
             if ($request->filled('manager_user_id')) {
                 $managerUserId = $request->manager_user_id;
+                $this->abortIfRepresentativeOutsideScope($managerUserId);
                 $assignedExecutives = \App\Models\SalesExecutiveAssignment::getSalesExecutivesForManager($managerUserId);
                 $assignedExecutiveIds = $assignedExecutives->pluck('id')->toArray();
                 $assignedExecutiveIds[] = $managerUserId;
@@ -1209,6 +1212,10 @@ class ReportController extends Controller
             $this->abortIfRepresentativeOutsideScope($filters['representative_user_id']);
         }
 
+        if (!empty($filters['manager_user_id'])) {
+            $this->abortIfRepresentativeOutsideScope($filters['manager_user_id']);
+        }
+
         $fileName = 'sales_report_' . date('Y-m-d_His') . '.' . $format;
 
         return Excel::download(new SalesReportExport($filters), $fileName);
@@ -1269,6 +1276,7 @@ class ReportController extends Controller
 
         if ($request->filled('manager_user_id')) {
             $managerUserId = $request->manager_user_id;
+            $this->abortIfRepresentativeOutsideScope($managerUserId);
             // Get all sales executives assigned to this manager
             $assignedExecutives = \App\Models\SalesExecutiveAssignment::getSalesExecutivesForManager($managerUserId);
             $assignedExecutiveIds = $assignedExecutives->pluck('id')->toArray();
@@ -1566,6 +1574,7 @@ class ReportController extends Controller
 
         if ($request->filled('manager_user_id')) {
             $managerUserId = $request->manager_user_id;
+            $this->abortIfRepresentativeOutsideScope($managerUserId);
             // Get all sales executives assigned to this manager
             $assignedExecutives = \App\Models\SalesExecutiveAssignment::getSalesExecutivesForManager($managerUserId);
             $assignedExecutiveIds = $assignedExecutives->pluck('id')->toArray();
@@ -1662,6 +1671,10 @@ class ReportController extends Controller
                 $this->abortIfRepresentativeOutsideScope($filters['representative_user_id']);
             }
 
+            if (!empty($filters['manager_user_id'])) {
+                $this->abortIfRepresentativeOutsideScope($filters['manager_user_id']);
+            }
+
             $fileName = 'kpi_report_' . date('Y-m-d_His') . '.' . $format;
 
             return Excel::download(new \App\Exports\KPIReportExport($filters), $fileName);
@@ -1698,6 +1711,10 @@ class ReportController extends Controller
                 $this->abortIfRepresentativeOutsideScope($filters['representative_user_id']);
             }
 
+            if (!empty($filters['manager_user_id'])) {
+                $this->abortIfRepresentativeOutsideScope($filters['manager_user_id']);
+            }
+
             // Get the representative name for the filename
             $representative = User::find($representative_id);
             $repName = $representative ? preg_replace('/[^A-Za-z0-9_]/', '_', $representative->name) : 'unknown';
@@ -1722,6 +1739,10 @@ class ReportController extends Controller
 
             if (!empty($filters['representative_user_id'])) {
                 $this->abortIfRepresentativeOutsideScope($filters['representative_user_id']);
+            }
+
+            if (!empty($filters['manager_user_id'])) {
+                $this->abortIfRepresentativeOutsideScope($filters['manager_user_id']);
             }
 
             $fileName = 'profit_loss_report_' . date('Y-m-d_His') . '.' . $format;

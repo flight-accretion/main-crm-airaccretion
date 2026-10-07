@@ -1153,6 +1153,11 @@ public function previewForLead(
     'total_amount_numeric' =>
         $totalAmountForEmail,
 
+    'travel' =>
+        $context[
+            'travel'
+        ],
+
     /*
      * Reuse resolved booking data for Meta.
      * This does not alter the email itself.
