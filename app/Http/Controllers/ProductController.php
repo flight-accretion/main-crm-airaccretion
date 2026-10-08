@@ -376,8 +376,13 @@ public function index(Request $request)
 
     public function destroy($product)
     {
-        // Example superadmin check (adjust as per your auth logic)
-        if (!auth()->user() || !auth()->user()->isSuperAdmin()) {
+        $user = auth()->user();
+        $userRole = optional($user?->userType)->user_type;
+
+        if (
+            !$user ||
+            !in_array($userRole, array_merge(UserType::ADMIN_ROLES, UserType::OPERATIONS_ROLES), true)
+        ) {
             return redirect()->route('admin.products.index')
                 ->with('error', 'You do not have permission to delete products.');
         }

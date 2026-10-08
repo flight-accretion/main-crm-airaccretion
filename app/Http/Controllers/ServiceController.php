@@ -6,6 +6,7 @@ use App\Models\Service;
 use App\Models\ExtraService;
 use App\Models\Product;
 use App\Models\User;
+use App\Models\UserType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -430,10 +431,15 @@ public function index(Request $request)
     public function destroy(Service $service)
     {
         $user = auth()->user();
-        if (!$user || !$user->isSuperAdmin()) {
+        $userRole = optional($user?->userType)->user_type;
+
+        if (
+            !$user ||
+            !in_array($userRole, array_merge(UserType::ADMIN_ROLES, UserType::OPERATIONS_ROLES), true)
+        ) {
             return response()->json([
                 'success' => false,
-                'message' => 'Unauthorized: Only Super Admin can delete services.'
+                'message' => 'Unauthorized: You do not have permission to delete services.'
             ], 403);
         }
         try {

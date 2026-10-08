@@ -4,6 +4,7 @@ namespace App\Exports;
 
 use App\Models\Lead;
 use App\Models\Service;
+use App\Support\PhoneNormalizer;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
@@ -94,7 +95,7 @@ class DnpLeadsExport implements FromCollection, WithHeadings, WithMapping, WithS
                 'sno' => $index + 1,
                 'name' => $enquiry->client->name ?? 'N/A',
                 'email' => $enquiry->client->email ?? 'N/A',
-                'phone' => ($enquiry->client->contact_number ?? '') !== '' ? preg_replace('/\D/', '', $enquiry->client->contact_number) : 'N/A',
+                'phone' => ($enquiry->client->contact_number ?? '') !== '' ? PhoneNormalizer::digits($enquiry->client->contact_number) : 'N/A',
                 'next_follow_up' => $nextFollowUp,
                 'created_date' => $enquiry->created_at ? Carbon::parse($enquiry->created_at)->format('d-m-Y') : '',
                 'assigned' => $enquiry->representative->name ?? 'N/A',

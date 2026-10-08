@@ -22,6 +22,24 @@ use Illuminate\Support\Facades\Log;
 
 class ReportController extends Controller
 {
+    private function abortLargeUnfilteredExport(Request $request)
+    {
+        $filters = collect($request->except(['format', '_token', 'page']))
+            ->filter(function ($value) {
+                if (is_array($value)) {
+                    return count(array_filter($value, fn($item) => filled($item))) > 0;
+                }
+
+                return filled($value);
+            });
+
+        if ($filters->isEmpty()) {
+            return back()->with('error', 'Please apply at least one filter before exporting large reports.');
+        }
+
+        return null;
+    }
+
     private function normalizeIds($ids): array
     {
         if ($ids instanceof \Illuminate\Support\Collection) {
@@ -43,6 +61,24 @@ class ReportController extends Controller
 
         if (!in_array((string) $representativeId, $allowedRepresentativeIds, true)) {
             abort(403, 'You are not allowed to access this report data.');
+        }
+    }
+
+    private function abortIfSalesRoleForSensitiveExport(): void
+    {
+        $role = optional(auth()->user()?->userType)->user_type;
+
+        if (in_array($role, UserType::SALES_ROLES, true)) {
+            abort(403, 'Sales roles are not allowed to export sensitive reports.');
+        }
+    }
+
+    private function abortIfSalesRoleForSensitiveReport(): void
+    {
+        $role = optional(auth()->user()?->userType)->user_type;
+
+        if (in_array($role, UserType::SALES_ROLES, true)) {
+            abort(403, 'Sales roles are not allowed to access sensitive reports.');
         }
     }
 
@@ -246,7 +282,7 @@ class ReportController extends Controller
         }
 
         $allPayments = $query->orderBy('created_at', 'desc')->get();
-        $statusArray = [0 => 'Initiated', 1 => 'Active', 2 => 'Cancelled', 3 => 'Full Payment Received', 4 => 'Partial Payment Received', 5 => 'Confirmed', 6 => 'Pending', 7 => 'Rescheduled', 8 => 'Approved', 9 => 'Rejected'];
+            $statusArray = LeadFollowup::statusLabels();
         // Group by lead_id and process
         $payments = $allPayments
             ->groupBy('lead_id')
@@ -258,7 +294,7 @@ class ReportController extends Controller
                 $totalAmount = (float) $latest->total_amount;
 
                 $approvedPayments = PaymentAuditTrail::whereIn('lead_followup_id', $group->pluck('id'))
-                    ->where('payment_status', 1) // Only approved payments
+                    ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
                     ->get();
 
                 $totalReceived = $approvedPayments->sum('paid_amount');
@@ -626,6 +662,7 @@ class ReportController extends Controller
             $request->filled('product_id');
 
         $salesData = collect();
+        $reportLimited = false;
 
         if ($hasFilters) {
             // Base query for sales data - include submitted and approved payment states
@@ -654,7 +691,7 @@ class ReportController extends Controller
 
             if ($request->filled('month') || $request->filled('year')) {
                 // Get all approved payments in the selected month/year
-                $paidDateQuery = \App\Models\PaymentAuditTrail::where('payment_status', 1);
+                $paidDateQuery = \App\Models\PaymentAuditTrail::where('payment_status', PaymentAuditTrail::STATUS_APPROVED);
                 if ($request->filled('month')) {
                     $paidDateQuery->whereMonth('paid_date', $request->month);
                 }
@@ -677,7 +714,7 @@ class ReportController extends Controller
 
                 // Get the FIRST approved payment per lead (single query, no loop)
                 $firstPaymentPerLead = \App\Models\PaymentAuditTrail::whereIn('lead_followup_id', $allFollowupIdsFlat)
-                    ->where('payment_status', 1)
+                    ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
                     ->orderBy('paid_date')
                     ->get()
                     ->groupBy(function ($payment) use ($allFollowupIdsByLead) {
@@ -763,19 +800,40 @@ class ReportController extends Controller
                 });
             }
 
-            $allSalesData = $query->orderBy('created_at', 'desc')->get();
+            $maxReportRows = 2000;
+            $allSalesData = $query->orderBy('created_at', 'desc')->limit($maxReportRows)->get();
+            $reportLimited = $allSalesData->count() >= $maxReportRows;
 
             // Get all services and products for reference
             $allServices = Service::all()->keyBy('id');
             $allExtraServices = ExtraService::all()->keyBy('id');
             $allProducts = Product::all()->keyBy('id');
+            $leadIds = $allSalesData->pluck('lead_id')->filter()->unique()->values();
+            $followupIdsByLead = \App\Models\LeadFollowup::whereIn('lead_id', $leadIds)
+                ->get(['id', 'lead_id'])
+                ->groupBy('lead_id')
+                ->map(fn($items) => $items->pluck('id'));
+            $allFollowupIds = $followupIdsByLead->flatten()->unique()->values();
+            $paymentsByFollowup = PaymentAuditTrail::whereIn('lead_followup_id', $allFollowupIds)
+                ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
+                ->get()
+                ->groupBy('lead_followup_id');
+            $refundsByFollowup = \App\Models\LeadRefund::whereIn('lead_followup_id', $allFollowupIds)
+                ->whereIn('status', [1, 2])
+                ->get(['lead_followup_id', 'refund_amount'])
+                ->groupBy('lead_followup_id');
+            $managerAssignments = \App\Models\SalesExecutiveAssignment::with('manager')
+                ->whereIn('sales_executive_id', $allSalesData->pluck('enquiry.representative_user_id')->filter()->unique())
+                ->where('status', 1)
+                ->get()
+                ->keyBy('sales_executive_id');
 
             // Capture filter month/year for use inside closure
             $filterMonth = $request->filled('month') ? $request->month : null;
             $filterYear = $request->filled('year') ? $request->year : null;
 
             // Process sales data
-            $salesData = $allSalesData->groupBy('lead_id')->map(function ($group) use ($allServices, $allExtraServices, $allProducts, $statusArray, $filterMonth, $filterYear) {
+            $salesData = $allSalesData->groupBy('lead_id')->map(function ($group) use ($allServices, $allExtraServices, $allProducts, $statusArray, $filterMonth, $filterYear, $followupIdsByLead, $paymentsByFollowup, $refundsByFollowup, $managerAssignments) {
                 $latest = $group->sortByDesc('created_at')->first();
                 $client = $latest->enquiry->client ?? null;
                 $ride = $latest->enquiry->rideSegments->first() ?? null;
@@ -784,20 +842,18 @@ class ReportController extends Controller
                 // Get ALL followup IDs for this lead (not just current group)
                 // This is important because payment might be in an earlier followup (status 3)
                 // but current status is 5 (Confirmed) or 7 (Rescheduled)
-                $allFollowupIdsForLead = \App\Models\LeadFollowup::where('lead_id', $latest->lead_id)
-                    ->pluck('id');
+                $allFollowupIdsForLead = $followupIdsByLead->get($latest->lead_id, collect());
 
                 // Get approved payments from ALL followups of this lead
-                $approvedPayments = PaymentAuditTrail::whereIn('lead_followup_id', $allFollowupIdsForLead)
-                    ->where('payment_status', 1)
-                    ->get();
+                $approvedPayments = $allFollowupIdsForLead
+                    ->flatMap(fn($followupId) => $paymentsByFollowup->get($followupId, collect()));
 
                 $totalReceived = $approvedPayments->sum('paid_amount');
                 $pendingAmount = $totalAmount - $totalReceived;
 
                 // Get processed/completed refund amounts for this lead
-                $refundAmount = \App\Models\LeadRefund::whereIn('lead_followup_id', $allFollowupIdsForLead)
-                    ->whereIn('status', [1, 2]) // 1=processed, 2=completed
+                $refundAmount = $allFollowupIdsForLead
+                    ->flatMap(fn($followupId) => $refundsByFollowup->get($followupId, collect()))
                     ->sum('refund_amount');
 
                 // Sales Amount = Total Amount minus service fees and processed refunds.
@@ -852,10 +908,7 @@ class ReportController extends Controller
                 // Get manager name from SalesExecutiveAssignment table
                 $managerName = 'N/A';
                 if ($salesPerson) {
-                    $assignment = \App\Models\SalesExecutiveAssignment::where('sales_executive_id', $salesPerson->id)
-                        ->where('status', 1)
-                        ->with('manager')
-                        ->first();
+                    $assignment = $managerAssignments->get($salesPerson->id);
                     if ($assignment && $assignment->manager) {
                         $managerName = $assignment->manager->name;
                     }
@@ -961,6 +1014,7 @@ class ReportController extends Controller
             'statusArray',
             'representatives',
             'hasFilters',
+            'reportLimited',
             'pendingTransfersByLead'
         ));
     }
@@ -970,6 +1024,8 @@ class ReportController extends Controller
      */
     public function vendorReport(Request $request)
     {
+        $this->abortIfSalesRoleForSensitiveReport();
+
         if (!auth()->check()) {
             return redirect()->route('login');
         }
@@ -1182,7 +1238,14 @@ class ReportController extends Controller
      */
     public function exportVendorReport(Request $request)
     {
+        $this->abortIfSalesRoleForSensitiveReport();
+        $this->abortIfSalesRoleForSensitiveExport();
+
         try {
+            if ($response = $this->abortLargeUnfilteredExport($request)) {
+                return $response;
+            }
+
             $filters = [
                 'client_id' => $request->get('client_id'),
                 'vendor_id' => $request->get('vendor_id'),
@@ -1205,8 +1268,13 @@ class ReportController extends Controller
      */
     public function exportSalesReport(Request $request)
     {
+        $this->abortIfSalesRoleForSensitiveExport();
+
         $format = $request->get('format', 'xlsx');
         $filters = $request->except('format');
+        if ($response = $this->abortLargeUnfilteredExport($request)) {
+            return $response;
+        }
 
         if (!empty($filters['representative_user_id'])) {
             $this->abortIfRepresentativeOutsideScope($filters['representative_user_id']);
@@ -1226,6 +1294,8 @@ class ReportController extends Controller
      */
     public function profitLossReport(Request $request)
     {
+        $this->abortIfSalesRoleForSensitiveReport();
+
         if (!auth()->check()) {
             return redirect()->route('login');
         }
@@ -1363,7 +1433,7 @@ class ReportController extends Controller
         $allFollowupIds = $allFollowupsForLeads->pluck('id');
         // Get lead IDs that have at least one approved payment
         $approvedLeadIds = PaymentAuditTrail::whereIn('lead_followup_id', $allFollowupIds)
-            ->where('payment_status', 1)
+            ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
             ->get()
             ->map(function ($pat) use ($followupToLeadMap) {
                 return $followupToLeadMap->get($pat->lead_followup_id);
@@ -1393,7 +1463,7 @@ class ReportController extends Controller
 
             // Get approved payments (client received amount)
             $approvedPayments = PaymentAuditTrail::whereIn('lead_followup_id', $allFollowupIdsForLead)
-                ->where('payment_status', 1)
+                ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
                 ->get();
             $clientReceivedAmount = $approvedPayments->sum('paid_amount');
 
@@ -1664,6 +1734,10 @@ class ReportController extends Controller
     public function exportKpiReport(Request $request)
     {
         try {
+            if ($response = $this->abortLargeUnfilteredExport($request)) {
+                return $response;
+            }
+
             $format = $request->get('format', 'xlsx');
             $filters = $request->except('format');
 
@@ -1702,6 +1776,10 @@ class ReportController extends Controller
     public function exportKpiReportIndividual(Request $request, $representative_id)
     {
         try {
+            if ($response = $this->abortLargeUnfilteredExport($request)) {
+                return $response;
+            }
+
             $format = $request->get('format', 'xlsx');
             $filters = $request->except('format');
 
@@ -1733,7 +1811,14 @@ class ReportController extends Controller
      */
     public function exportProfitLossReport(Request $request)
     {
+        $this->abortIfSalesRoleForSensitiveReport();
+        $this->abortIfSalesRoleForSensitiveExport();
+
         try {
+            if ($response = $this->abortLargeUnfilteredExport($request)) {
+                return $response;
+            }
+
             $format = $request->get('format', 'xlsx');
             $filters = $request->except('format');
 
@@ -1794,6 +1879,10 @@ class ReportController extends Controller
     public function getSalesPersonsByManager(Request $request)
     {
         $managerId = $request->get('manager_id');
+
+        if ($managerId) {
+            $this->abortIfRepresentativeOutsideScope($managerId);
+        }
 
         if (!$managerId) {
             // Return all staff in hierarchy when no manager selected
@@ -1871,7 +1960,7 @@ class ReportController extends Controller
 
         // Mirror dashboard logic exactly:
         // Step 1: paid followup IDs in this period
-        $paidFollowupIds = \App\Models\PaymentAuditTrail::where('payment_status', 1)
+        $paidFollowupIds = \App\Models\PaymentAuditTrail::where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
             ->whereYear('paid_date', $year)
             ->whereMonth('paid_date', $month)
             ->pluck('lead_followup_id')->unique();

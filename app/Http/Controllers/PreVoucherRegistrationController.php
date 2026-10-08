@@ -9,6 +9,7 @@ use App\Models\ExtraService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
+use App\Support\SafeUploadName;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 
@@ -178,13 +179,13 @@ class PreVoucherRegistrationController extends Controller
 
             if ($request->hasFile("passengers.{$index}.front_document")) {
                 $file = $request->file("passengers.{$index}.front_document");
-                $path = $file->storeAs('leads/documents', time() . '_front_' . $file->getClientOriginalName(), 'public');
+                $path = $file->storeAs('leads/documents', SafeUploadName::make($file, 'front'), 'public');
                 $passenger->update(['front_document' => $path]);
             }
 
             if ($request->hasFile("passengers.{$index}.back_document")) {
                 $file = $request->file("passengers.{$index}.back_document");
-                $path = $file->storeAs('leads/documents', time() . '_back_' . $file->getClientOriginalName(), 'public');
+                $path = $file->storeAs('leads/documents', SafeUploadName::make($file, 'back'), 'public');
                 $passenger->update(['back_document' => $path]);
             }
         }

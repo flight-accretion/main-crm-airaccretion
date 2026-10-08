@@ -278,7 +278,7 @@ class ProfitLossReportExport implements FromCollection, WithHeadings, WithMappin
     $allFollowupIds = $allFollowupsForLeads->pluck('id');
 
     $approvedLeadIds = PaymentAuditTrail::whereIn('lead_followup_id', $allFollowupIds)
-        ->where('payment_status', 1)
+        ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
         ->get()
         ->map(fn($pat) => $followupToLeadMap->get($pat->lead_followup_id))
         ->filter()
@@ -305,7 +305,7 @@ class ProfitLossReportExport implements FromCollection, WithHeadings, WithMappin
         $allFollowupIdsForLead = LeadFollowup::where('lead_id', $latest->lead_id)->pluck('id');
 
         $approvedPayments = PaymentAuditTrail::whereIn('lead_followup_id', $allFollowupIdsForLead)
-            ->where('payment_status', 1)
+            ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
             ->get();
         $clientReceivedAmount = $approvedPayments->sum('paid_amount');
 

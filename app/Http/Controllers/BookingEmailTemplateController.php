@@ -11,7 +11,7 @@ class BookingEmailTemplateController extends Controller
 {
     public function edit()
     {
-        $this->ensureSuperAdmin();
+        $this->ensureAdminOrSuperAdmin();
 
         return view('admin.pages.email-template.booking-confirmation', [
             'template' => BookingEmailTemplate::active(),
@@ -21,7 +21,7 @@ class BookingEmailTemplateController extends Controller
 
     public function update(Request $request)
     {
-        $this->ensureSuperAdmin();
+        $this->ensureAdminOrSuperAdmin();
 
         $validated = $request->validate([
             'subject' => [
@@ -48,10 +48,14 @@ class BookingEmailTemplateController extends Controller
             ->with('success', 'Booking email template updated successfully.');
     }
 
-    private function ensureSuperAdmin(): void
+    private function ensureAdminOrSuperAdmin(): void
     {
         $role = optional(Auth::user()->userType)->user_type;
 
-        abort_unless($role === UserType::SUPER_ADMIN, 403);
+        abort_unless(
+            $role === UserType::SUPER_ADMIN
+            || in_array($role, UserType::ADMIN_ROLES, true),
+            403
+        );
     }
 }

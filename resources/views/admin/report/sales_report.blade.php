@@ -24,6 +24,12 @@
 </div>
 <!-- Page Header Close -->
 
+@if(!empty($reportLimited))
+<div class="alert alert-warning mb-4">
+  Showing latest 2000 rows only. Please use filters or export for full report.
+</div>
+@endif
+
 <div class="grid grid-cols-12 gap-6">
   <div class="col-span-12">
     <div class="box">

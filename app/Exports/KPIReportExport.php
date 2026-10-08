@@ -109,7 +109,7 @@ trait KpiReportTargetHelper
         //     ->sum('total_amount');
 
         // Step 1: paid followup IDs in this period
-        $paidFollowupIds = \App\Models\PaymentAuditTrail::where('payment_status', 1)
+        $paidFollowupIds = \App\Models\PaymentAuditTrail::where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
             ->whereYear('paid_date', $period['year'])
             ->whereMonth('paid_date', $period['month'])
             ->pluck('lead_followup_id')->unique();

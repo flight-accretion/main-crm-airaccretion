@@ -19,9 +19,28 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Models\VendorRefund;
+use App\Services\ActivityAuditService;
 
 class VendorPaymentController extends Controller
 {
+    private function abortLargeUnfilteredExport(Request $request)
+    {
+        $filters = collect($request->except(['format', '_token', 'page']))
+            ->filter(function ($value) {
+                if (is_array($value)) {
+                    return count(array_filter($value, fn($item) => filled($item))) > 0;
+                }
+
+                return filled($value);
+            });
+
+        if ($filters->isEmpty()) {
+            return back()->with('error', 'Please apply at least one filter before exporting large reports.');
+        }
+
+        return null;
+    }
+
     /**
      * Display a listing of the vendor payments.
      */
@@ -1185,6 +1204,10 @@ $leadVendorPayment =
             $request->lead_vendor_payment_id
         );
 
+$oldVendorPaymentStatus =
+    $leadVendorPayment
+        ->payment_status;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -1336,9 +1359,54 @@ $leadVendorPayment
             $status,
     ]);
 
+$leadVendorPayment->loadMissing([
+    'lead.client',
+    'vendor',
+]);
+
+app(ActivityAuditService::class)->record(
+    'vendor_payment',
+    'created',
+    $vendorPayment,
+    [],
+    [
+        'vendor_id' => $leadVendorPayment->vendor_id,
+        'amount' => $vendorPayment->paid_amount,
+        'status' => $vendorPayment->status,
+        'payment_status' => $status,
+    ],
+    [
+        'lead_id' => $leadVendorPayment->lead_id,
+        'client_id' => $leadVendorPayment->lead?->client_id,
+        'lead_vendor_payment_id' => $leadVendorPayment->id,
+    ]
+);
+
+if ($oldVendorPaymentStatus !== 'paid' && $status === 'paid') {
+    app(ActivityAuditService::class)->record(
+        'vendor_payment',
+        'marked_paid',
+        $vendorPayment,
+        [
+            'payment_status' => $oldVendorPaymentStatus,
+        ],
+        [
+            'payment_status' => $status,
+            'paid_amount' => $vendorPayment->paid_amount,
+            'paid_date' => $vendorPayment->paid_date,
+        ],
+        [
+            'lead_id' => $leadVendorPayment->lead_id,
+            'client_id' => $leadVendorPayment->lead?->client_id,
+            'lead_vendor_payment_id' => $leadVendorPayment->id,
+        ]
+    );
+}
+
             DB::commit();
 
             // Schedule notifications after the response is sent.
+            // TODO P5: Move vendor payment notifications to queued job.
             app()->terminating(function () use ($leadVendorPayment, $request, $receiptPath) {
                 try {
                     set_time_limit(300);
@@ -1912,9 +1980,55 @@ $balanceAmount =
 
         try {
             $vendorPayment = LeadVendorPayment::findOrFail($id);
+            $oldValues = [
+                'vendor_id' => $vendorPayment->vendor_id,
+                'amount' => $vendorPayment->total_vendor_service_amount,
+                'status' => $vendorPayment->payment_status,
+            ];
+
+            $hasFinalVendorPayment = VendorPayment::query()
+                ->where('lead_vendor_payment_id', $vendorPayment->id)
+                ->whereIn('status', [1, 2])
+                ->exists();
+
+            if ($hasFinalVendorPayment) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Payment amount cannot be changed after vendor payment processing has started.',
+                ], 423);
+            }
+
+            if (
+                !empty($vendorPayment->refund_status)
+                || (float) ($vendorPayment->refund_amount ?? 0) > 0
+            ) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Payment amount cannot be changed after refund processing has started.',
+                ], 423);
+            }
+
             $vendorPayment->update([
                 'total_vendor_service_amount' => $request->total_vendor_service_amount,
             ]);
+
+            $vendorPayment->loadMissing('lead.client');
+
+            app(ActivityAuditService::class)->record(
+                'vendor_payment',
+                'updated',
+                $vendorPayment,
+                $oldValues,
+                [
+                    'vendor_id' => $vendorPayment->vendor_id,
+                    'amount' => $vendorPayment->total_vendor_service_amount,
+                    'status' => $vendorPayment->payment_status,
+                ],
+                [
+                    'lead_id' => $vendorPayment->lead_id,
+                    'client_id' => $vendorPayment->lead?->client_id,
+                ]
+            );
 
             return response()->json([
                 'success' => true,
@@ -1932,6 +2046,10 @@ $balanceAmount =
     public function export(Request $request)
     {
         try {
+            if ($response = $this->abortLargeUnfilteredExport($request)) {
+                return $response;
+            }
+
             $filters = [
                 'client_id' => $request->get('client_id'),
                 'vendor_id' => $request->get('vendor_id'),

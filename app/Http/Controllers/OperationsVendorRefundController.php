@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\LeadVendorPayment;
 use App\Models\OperationCase;
 use App\Models\VendorRefund;
+use App\Services\ActivityAuditService;
 use App\Services\Operations\OperationsActivityService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
@@ -144,7 +145,13 @@ class OperationsVendorRefundController extends Controller
             );
         }
 
-        DB::transaction(function () use ($request, $validated, $vendorPayment, $refund) {
+        $oldValues = [
+            'vendor_id' => $refund->vendor_id,
+            'amount' => $refund->refund_amount,
+            'status' => $refund->status,
+        ];
+
+        DB::transaction(function () use ($request, $validated, $vendorPayment, $refund, $oldValues) {
             foreach (['refund_type', 'refund_date', 'refund_reason'] as $field) {
                 if (array_key_exists($field, $validated)) {
                     $refund->{$field} = $validated[$field];
@@ -164,6 +171,25 @@ class OperationsVendorRefundController extends Controller
             }
 
             $refund->save();
+
+            $vendorPayment->loadMissing('lead.client');
+
+            app(ActivityAuditService::class)->record(
+                'vendor_refund',
+                'updated',
+                $refund,
+                $oldValues,
+                [
+                    'vendor_id' => $refund->vendor_id,
+                    'amount' => $refund->refund_amount,
+                    'status' => $refund->status,
+                ],
+                [
+                    'lead_id' => $refund->lead_id ?? $vendorPayment->lead_id,
+                    'client_id' => $vendorPayment->lead?->client_id,
+                    'lead_vendor_payment_id' => $vendorPayment->id,
+                ]
+            );
 
             $this->writeOperationsNote(
                 $vendorPayment,
@@ -275,12 +301,34 @@ class OperationsVendorRefundController extends Controller
                 );
             }
 
-            DB::transaction(function () use ($vendorPayment, $pending) {
+        DB::transaction(function () use ($vendorPayment, $pending) {
+                $vendorPayment->loadMissing('lead.client');
+
                 foreach ($pending as $refund) {
+                    $oldStatus = $refund->status;
+
                     $refund->status = VendorRefund::STATUS_COMPLETED;
                     $refund->completed_at = now();
                     $refund->completed_by = auth()->id();
                     $refund->save();
+
+                    app(ActivityAuditService::class)->record(
+                        'vendor_refund',
+                        'marked_done',
+                        $refund,
+                        [
+                            'status' => $oldStatus,
+                        ],
+                        [
+                            'status' => $refund->status,
+                            'completed_at' => optional($refund->completed_at)->toDateTimeString(),
+                        ],
+                        [
+                            'lead_id' => $refund->lead_id ?? $vendorPayment->lead_id,
+                            'client_id' => $vendorPayment->lead?->client_id,
+                            'lead_vendor_payment_id' => $vendorPayment->id,
+                        ]
+                    );
                 }
 
                 $this->writeOperationsNote(

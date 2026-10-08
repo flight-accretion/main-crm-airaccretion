@@ -18,7 +18,7 @@ class LeadAllocationSettingController extends Controller
      */
     public function edit()
     {
-        $this->ensureSuperAdmin();
+        $this->ensureAdminRole();
 
         $settings = LeadAllocationSetting::getActiveSettings();
 
@@ -110,7 +110,7 @@ class LeadAllocationSettingController extends Controller
      */
     public function update(Request $request)
     {
-        $this->ensureSuperAdmin();
+        $this->ensureAdminRole();
 
         $settings = LeadAllocationSetting::getActiveSettings();
 
@@ -293,17 +293,16 @@ class LeadAllocationSettingController extends Controller
 
 
     /**
-     * Super Admin only.
+     * Admin only.
      */
-    private function ensureSuperAdmin(): void
+    private function ensureAdminRole(): void
     {
         $user = auth()->user();
+        $role = optional($user?->userType)->user_type;
 
         if (
             !$user ||
-            !$user->userType ||
-            $user->userType->user_type
-                !== UserType::SUPER_ADMIN
+            !in_array($role, UserType::ADMIN_ROLES, true)
         ) {
             abort(403);
         }

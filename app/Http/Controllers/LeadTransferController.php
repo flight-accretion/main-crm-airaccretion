@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use App\Models\User;
 use App\Services\LeadAllocationService;
+use function App\Helpers\getRepresentativeIds;
 
 class LeadTransferController extends Controller
 {
@@ -504,9 +505,20 @@ public function directAssign(
      *
      * Do not rely only on hiding the Blade button.
      */
+    $actorRole = optional($actor?->userType)->user_type;
+
+    $isAdminOrOperations = $actor && (
+        in_array($actorRole, UserType::ADMIN_ROLES, true)
+        || in_array($actorRole, UserType::OPERATIONS_ROLES, true)
+    );
+
+    $isSalesManager = $actor && in_array($actorRole, [
+        UserType::SENIOR_SALES_MANAGER,
+        UserType::SALES_MANAGER,
+    ], true);
+
     abort_unless(
-        $actor &&
-        $actor->isSuperAdmin(),
+        $isAdminOrOperations || $isSalesManager,
         403
     );
 
@@ -556,6 +568,28 @@ public function directAssign(
         );
     }
 
+    $allowedRepresentativeIds = null;
+
+    if ($isSalesManager) {
+        $allowedRepresentativeIds = getRepresentativeIds($actor);
+
+        if ($allowedRepresentativeIds instanceof \Illuminate\Support\Collection) {
+            $allowedRepresentativeIds = $allowedRepresentativeIds->toArray();
+        }
+
+        $allowedRepresentativeIds = array_map(
+            'strval',
+            $allowedRepresentativeIds ?: []
+        );
+
+        if (!in_array((string) $representative->id, $allowedRepresentativeIds, true)) {
+            return back()->with(
+                'error',
+                'You can only assign leads to sales users inside your own team.'
+            );
+        }
+    }
+
     $leadIds =
         array_values(
             array_unique(
@@ -576,6 +610,17 @@ public function directAssign(
                 Lead::findOrFail(
                     $leadId
                 );
+
+            if ($allowedRepresentativeIds !== null) {
+                if (
+                    empty($lead->representative_user_id)
+                    || !in_array((string) $lead->representative_user_id, $allowedRepresentativeIds, true)
+                ) {
+                    $skipped++;
+                    $lastSkipReason = 'One or more selected leads are outside your team scope.';
+                    continue;
+                }
+            }
 
             $result =
                 $transferService->directAssign(

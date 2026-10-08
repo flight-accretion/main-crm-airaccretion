@@ -15,23 +15,27 @@ class UserTypeSeeder extends Seeder
         $now = Carbon::now();
 
         // Define hierarchy
-        $roleHierarchy = [
-            'Super Admin' => [
-                'Admin' => [],
-                'Senior Sales Manager' => [
-                    'Sales Manager' => [
-                        'Sales Executive' => []
-                    ]
-                ],
-                'Accounts' => [],
-                'Senior Operations Manager' => [
-                    'Operations Manager' => [
-                        'Operations Executive' => []
-                    ]
-                ],
-                'Hr' => []
-            ]
-        ];
+      $roleHierarchy = [
+        'Super Admin' => [
+            'Admin' => [],
+            'Senior Sales Manager' => [
+                'Sales Manager' => [
+                    'Sales Executive' => []
+                ]
+            ],
+            'Senior Accounts Manager' => [
+                'Accounts Manager' => [
+                    'Accounts Executive' => []
+                ]
+            ],
+            'Senior Operations Manager' => [
+                'Operations Manager' => [
+                    'Operations Executive' => []
+                ]
+            ],
+            'Hr' => []
+        ]
+    ];
 
         // Clean up roles not in the hierarchy
         $allRoles = $this->flattenRoles($roleHierarchy);

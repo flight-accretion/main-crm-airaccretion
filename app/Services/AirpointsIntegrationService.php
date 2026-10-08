@@ -8,6 +8,7 @@ use App\Models\LeadRide;
 use App\Models\Lead;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use App\Support\SafeLogContext;
 use Exception;
 
 /**
@@ -103,11 +104,10 @@ class AirpointsIntegrationService
                     'data' => $data
                 ];
             } else {
-                Log::error('Customer sync failed', [
+                Log::error('Customer sync failed', SafeLogContext::httpFailure([
                     'client_uuid' => $client->id,
                     'status_code' => $response->status(),
-                    'response' => $response->body()
-                ]);
+                ]));
 
                 return [
                     'success' => false,
@@ -116,11 +116,9 @@ class AirpointsIntegrationService
                 ];
             }
         } catch (Exception $e) {
-            Log::error('Customer sync exception', [
+            Log::error('Customer sync exception', SafeLogContext::exception($e, [
                 'client_uuid' => $client->id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
+            ]));
 
             return [
                 'success' => false,
@@ -174,11 +172,10 @@ class AirpointsIntegrationService
                     'data' => $data
                 ];
             } else {
-                Log::error('Product sync failed', [
+                Log::error('Product sync failed', SafeLogContext::httpFailure([
                     'product_uuid' => $product->id,
                     'status_code' => $response->status(),
-                    'response' => $response->body()
-                ]);
+                ]));
 
                 return [
                     'success' => false,
@@ -187,11 +184,9 @@ class AirpointsIntegrationService
                 ];
             }
         } catch (Exception $e) {
-            Log::error('Product sync exception', [
+            Log::error('Product sync exception', SafeLogContext::exception($e, [
                 'product_uuid' => $product->id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
+            ]));
 
             return [
                 'success' => false,
@@ -257,11 +252,10 @@ class AirpointsIntegrationService
                 ];
             } else {
                 $responseBody = $response->body();
-                Log::error('Point claim creation failed', [
+                Log::error('Point claim creation failed', SafeLogContext::httpFailure([
                     'ride_uuid' => $ride->id,
                     'status_code' => $response->status(),
-                    'response' => $responseBody
-                ]);
+                ]));
 
                 return [
                     'success' => false,
@@ -269,11 +263,9 @@ class AirpointsIntegrationService
                 ];
             }
         } catch (Exception $e) {
-            Log::error('Point claim creation exception', [
+            Log::error('Point claim creation exception', SafeLogContext::exception($e, [
                 'ride_uuid' => $ride->id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
+            ]));
 
             return [
                 'success' => false,
@@ -315,8 +307,8 @@ class AirpointsIntegrationService
             $products = $ride->enquiry->products;
             
             // If products is a method that returns a collection, call it
-            if (!$products && method_exists($ride->enquiry, 'products')) {
-                $products = $ride->enquiry->products();
+            if (!$products && method_exists($ride->enquiry, 'getProductsCollection')) {
+                $products = $ride->enquiry->getProductsCollection();
             }
             
             // Convert to collection if it's an array
@@ -414,11 +406,9 @@ class AirpointsIntegrationService
             ];
 
         } catch (Exception $e) {
-            Log::error('Ride processing exception', [
+            Log::error('Ride processing exception', SafeLogContext::exception($e, [
                 'ride_uuid' => $ride->id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
+            ]));
 
             return [
                 'success' => false,
@@ -624,11 +614,10 @@ class AirpointsIntegrationService
                     // Keep default message if JSON parsing fails
                 }
 
-                Log::error('Get user points failed', [
+                Log::error('Get user points failed', SafeLogContext::httpFailure([
                     'client_uuid' => $client->id,
                     'status_code' => $response->status(),
-                    'response' => $response->body()
-                ]);
+                ]));
 
                 return [
                     'success' => false,
@@ -667,12 +656,10 @@ class AirpointsIntegrationService
                 }
             }
 
-            Log::error('Get user points exception', [
+            Log::error('Get user points exception', SafeLogContext::exception($e, [
                 'client_uuid' => $client->id,
-                'error' => $e->getMessage(),
                 'friendly' => $friendlyMessage,
-                'trace' => $e->getTraceAsString()
-            ]);
+            ]));
 
             return [
                 'success' => false,
@@ -785,11 +772,10 @@ class AirpointsIntegrationService
                 }
 
                 $responseBody = $response->body();
-                Log::error('Point redemption failed', [
+                Log::error('Point redemption failed', SafeLogContext::httpFailure([
                     'client_uuid' => $client->id,
                     'status_code' => $response->status(),
-                    'response' => $responseBody
-                ]);
+                ]));
 
                 return [
                     'success' => false,
@@ -825,12 +811,10 @@ class AirpointsIntegrationService
                 }
             }
 
-            Log::error('Point redemption exception', [
+            Log::error('Point redemption exception', SafeLogContext::exception($e, [
                 'client_uuid' => $client->id,
-                'error' => $e->getMessage(),
                 'friendly' => $friendlyMessage,
-                'trace' => $e->getTraceAsString()
-            ]);
+            ]));
 
             return [
                 'success' => false,

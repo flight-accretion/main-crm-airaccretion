@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ExtraService;
 use App\Models\Product;
 use App\Models\User;
+use App\Models\UserType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -228,10 +229,15 @@ class ExtraServiceController extends Controller
     public function destroy(ExtraService $extraService)
     {
         $user = auth()->user();
-        if (!$user || !$user->isSuperAdmin()) {
+        $userRole = optional($user?->userType)->user_type;
+
+        if (
+            !$user ||
+            !in_array($userRole, array_merge(UserType::ADMIN_ROLES, UserType::OPERATIONS_ROLES), true)
+        ) {
             return response()->json([
                 'success' => false,
-                'message' => 'Unauthorized: Only Super Admin can delete extra services.'
+                'message' => 'Unauthorized: You do not have permission to delete extra services.'
             ], 403);
         }
         try {

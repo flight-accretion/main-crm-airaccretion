@@ -209,4 +209,10 @@ class User extends Authenticatable
         // Default: only own leads
         return Lead::where('representative_user_id', $this->id);
     }
+
+    public function salesExecutiveAssignments()
+{
+    return $this->hasMany(\App\Models\SalesExecutiveAssignment::class, 'sales_executive_id');
+}
+
 }

@@ -53,75 +53,96 @@ class SalesExecutiveManagementController extends Controller
     /**
      * Store a newly created assignment
      */
-    public function store(Request $request)
-    {
-        $user = Auth::user();
-        $userType = $user->userType->user_type ?? '';
+ public function store(Request $request)
+{
+    $user = Auth::user();
+    $userType = $user->userType->user_type ?? '';
 
-        if (!$this->canAssignExecutives($userType)) {
-            abort(403, 'Unauthorized to assign sales executives');
-        }
+    if (!$this->canAssignExecutives($userType)) {
+        abort(403, 'Unauthorized to assign sales executives');
+    }
 
-        $request->validate([
-            'manager_id' => 'required|exists:users,id',
-            'sales_executive_id' => 'required|exists:users,id',
-            'notes' => 'nullable|string|max:1000'
+    $request->validate([
+        'manager_id' => 'required|exists:users,id',
+        'sales_executive_id' => 'required|exists:users,id',
+        'notes' => 'nullable|string|max:1000'
+    ]);
+
+    // Ensure selected user is actually a Sales Executive.
+    $salesExecutive = User::with('userType')->find($request->sales_executive_id);
+
+    if (
+        !$salesExecutive
+        || optional($salesExecutive->userType)->user_type !== UserType::SALES_EXECUTIVE
+    ) {
+        return back()->withErrors([
+            'sales_executive_id' => 'Selected user is not a Sales Executive.'
         ]);
+    }
 
-        // Additional validation: ensure sales_executive_id is actually a sales executive
-        $salesExecutive = User::with('userType')->find($request->sales_executive_id);
-        if (!$salesExecutive || $salesExecutive->userType->user_type !== UserType::SALES_EXECUTIVE) {
-            return back()->withErrors(['sales_executive_id' => 'Selected user is not a Sales Executive.']);
+    try {
+        DB::beginTransaction();
+
+        // Non-admin managers can assign executives only to themselves.
+        if (
+            !in_array($userType, [UserType::SUPER_ADMIN, UserType::ADMIN], true)
+            && $request->manager_id !== $user->id
+        ) {
+            DB::rollBack();
+
+            return back()->withErrors([
+                'manager_id' => 'You can only assign sales executives to yourself.'
+            ]);
         }
 
-        // Check if assignment already exists (including inactive).
-        // If an active assignment exists, block. If an inactive assignment exists, reactivate it instead of inserting a duplicate.
-        $existingAssignment = SalesExecutiveAssignment::where('manager_id', $request->manager_id)
+        /*
+         * One Sales Executive can have only one active manager.
+         * If this executive is active under another manager,
+         * deactivate that old assignment before assigning the new manager.
+         */
+        SalesExecutiveAssignment::where('sales_executive_id', $request->sales_executive_id)
+            ->where('status', 1)
+            ->where('manager_id', '!=', $request->manager_id)
+            ->update(['status' => 0]);
+
+        /*
+         * If same manager + same executive row already exists,
+         * reactivate/update it. Otherwise create a new assignment.
+         */
+        $assignment = SalesExecutiveAssignment::where('manager_id', $request->manager_id)
             ->where('sales_executive_id', $request->sales_executive_id)
             ->first();
 
-        if ($existingAssignment) {
-            if ((int) $existingAssignment->status === 1) {
-                return back()->withErrors(['sales_executive_id' => 'This sales executive is already assigned to the selected manager.']);
-            }
-
-            // Reactivate the previous (inactive) assignment and update notes/assigned_date
-            try {
-                $existingAssignment->update([
-                    'status' => 1,
-                    'notes' => $request->notes,
-                    'assigned_date' => now(),
-                ]);
-
-                return redirect()->route('admin.sales-executive-management.index')
-                    ->with('success', 'Sales Executive assigned successfully!');
-            } catch (\Exception $e) {
-                Log::error('Error reactivating sales executive assignment: ' . $e->getMessage());
-                return back()->withErrors(['error' => 'Failed to assign sales executive. Please try again.']);
-            }
-        }
-
-        // For non-admin users, ensure they can only assign to themselves
-        if (!in_array($userType, [UserType::SUPER_ADMIN, UserType::ADMIN]) && $request->manager_id !== $user->id) {
-            return back()->withErrors(['manager_id' => 'You can only assign sales executives to yourself.']);
-        }
-
-        try {
+        if ($assignment) {
+            $assignment->update([
+                'status' => 1,
+                'notes' => $request->notes,
+                'assigned_date' => now(),
+            ]);
+        } else {
             SalesExecutiveAssignment::create([
                 'manager_id' => $request->manager_id,
                 'sales_executive_id' => $request->sales_executive_id,
                 'notes' => $request->notes,
                 'assigned_date' => now(),
-                'status' => 1
+                'status' => 1,
             ]);
-
-            return redirect()->route('admin.sales-executive-management.index')
-                ->with('success', 'Sales Executive assigned successfully!');
-        } catch (\Exception $e) {
-            Log::error('Error creating sales executive assignment: ' . $e->getMessage());
-            return back()->withErrors(['error' => 'Failed to assign sales executive. Please try again.']);
         }
+
+        DB::commit();
+
+        return redirect()->route('admin.sales-executive-management.index')
+            ->with('success', 'Sales Executive assigned successfully!');
+    } catch (\Exception $e) {
+        DB::rollBack();
+
+        Log::error('Error creating sales executive assignment: ' . $e->getMessage());
+
+        return back()->withErrors([
+            'error' => 'Failed to assign sales executive. Please try again.'
+        ]);
     }
+}
 
     /**
      * Remove an assignment
@@ -215,10 +236,17 @@ class SalesExecutiveManagementController extends Controller
     /**
      * Get available sales executives
      */
-    private function getAvailableSalesExecutives()
-    {
-        return User::whereHas('userType', function ($query) {
-            $query->where('user_type', UserType::SALES_EXECUTIVE);
-        })->where('status', 1)->get();
-    }
+   private function getAvailableSalesExecutives()
+{
+    return User::whereHas('userType', function ($query) {
+        $query->where('user_type', UserType::SALES_EXECUTIVE);
+    })
+        ->where('status', 1)
+        ->whereDoesntHave('salesExecutiveAssignments', function ($query) {
+            $query->where('status', 1);
+        })
+        ->orderBy('name')
+        ->get();
+}
+
 }

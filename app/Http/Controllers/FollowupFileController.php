@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\LeadFollowup;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\ResponseHeaderBag;
+use function App\Helpers\getRepresentativeIds;
 
 class FollowupFileController extends Controller
 {
@@ -17,9 +19,33 @@ class FollowupFileController extends Controller
         }
 
         $path = 'followups/' . $safeFilename;
+
+        $followup = LeadFollowup::with('enquiry')
+            ->where('file', $path)
+            ->orWhere('file', $safeFilename)
+            ->first();
+
+        if (!$followup || !$followup->enquiry) {
+            abort(404, 'Follow-up file not found.');
+        }
+
+        $representatives = getRepresentativeIds(auth()->user());
+
+        if ($representatives !== null) {
+            if ($representatives instanceof \Illuminate\Support\Collection) {
+                $representatives = $representatives->toArray();
+            }
+
+            $representatives = array_map('strval', (array) $representatives);
+
+            if (!in_array((string) $followup->enquiry->representative_user_id, $representatives, true)) {
+                abort(403, 'You are not allowed to access this file.');
+            }
+        }
+
         $disk = Storage::disk('public');
 
-        if (! $disk->exists($path)) {
+        if (!$disk->exists($path)) {
             abort(404, 'Follow-up file not found.');
         }
 

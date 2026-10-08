@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\ArrayIdNormalizer;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Support\Facades\Log;
@@ -67,11 +68,7 @@ class Lead extends Model
      */
     public function getServiceIdsArrayAttribute()
     {
-        $serviceIds = $this->service_ids;
-        if (is_string($serviceIds)) {
-            $serviceIds = json_decode($serviceIds, true) ?? [];
-        }
-        return is_array($serviceIds) ? $serviceIds : [];
+        return ArrayIdNormalizer::normalize($this->service_ids);
     }
 
     /**
@@ -79,11 +76,7 @@ class Lead extends Model
      */
     public function getProductIdsArrayAttribute()
     {
-        $productIds = $this->product_ids;
-        if (is_string($productIds)) {
-            $productIds = json_decode($productIds, true) ?? [];
-        }
-        return is_array($productIds) ? $productIds : [];
+        return ArrayIdNormalizer::normalize($this->product_ids);
     }
 
     public function client()
@@ -115,9 +108,10 @@ class Lead extends Model
 
     public function getProductsAttribute()
     {
-        return Product::whereIn('id', $this->product_ids_array)->get();
+        return $this->getProductsCollection();
     }
-    public function products()
+
+    public function getProductsCollection()
     {
         return Product::whereIn('id', $this->product_ids_array)->get();
     }

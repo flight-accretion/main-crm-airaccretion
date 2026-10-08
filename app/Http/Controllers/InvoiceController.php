@@ -16,11 +16,46 @@ use App\Models\LeadFollowup;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
+use App\Services\ActivityAuditService;
 
 class InvoiceController extends Controller
 {
+    private function voucherIsInvoiceReady(Voucher $voucher): bool
+    {
+        $voucher->loadMissing('lead.leadFollowups');
+
+        if (!$voucher->lead) {
+            return false;
+        }
+
+        $followupIds = $voucher->lead->leadFollowups->pluck('id');
+
+        if ($followupIds->isEmpty()) {
+            return false;
+        }
+
+        $query = PaymentAuditTrail::query()
+            ->whereIn('lead_followup_id', $followupIds)
+            ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
+            ->where(function ($query) {
+                $query->where('paid_amount', '>', 0);
+
+                if (Schema::hasColumn('payment_audit_trail', 'amount_received')) {
+                    $query->orWhere('amount_received', '>', 0);
+                }
+            });
+
+        return $query->exists();
+    }
+
+    private function invoiceIsFinalized(?Invoice $invoice): bool
+    {
+        return $invoice && (int) $invoice->status === 2;
+    }
+
     /**
      * Display a listing of invoices.
      */
@@ -203,7 +238,7 @@ class InvoiceController extends Controller
                 $totalAmount = (float) $latestPayment->total_amount;
                 $totalReceived = PaymentAuditTrail::whereHas('leadFollowup', function($q) use ($lead) {
                     $q->where('lead_id', $lead->id);
-                })->where('payment_status', 1)->sum('paid_amount');
+                })->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)->sum('paid_amount');
 
                 $paymentStatus = 'Unpaid';
                 if ($totalReceived >= $totalAmount && $totalAmount > 0) {
@@ -348,6 +383,14 @@ class InvoiceController extends Controller
             DB::beginTransaction();
 
             $voucher = Voucher::with('lead.client')->findOrFail($voucherId);
+
+            if (!$this->voucherIsInvoiceReady($voucher)) {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invoice can be generated only after approved payment.',
+                ], 422);
+            }
             
             // Check if invoice already exists -> return existing invoice instead of treating as error
             $existingInvoice = Invoice::where('voucher_id', $voucher->id)->first();
@@ -399,6 +442,23 @@ class InvoiceController extends Controller
             $invoice->status = 1;
             $invoice->save();
 
+            app(ActivityAuditService::class)->record(
+                'invoice',
+                'generated',
+                $invoice,
+                [],
+                [
+                    'invoice_number' => $invoice->invoice_id,
+                    'amount' => null,
+                    'status' => $invoice->status,
+                ],
+                [
+                    'lead_id' => $voucher->lead?->id,
+                    'client_id' => $voucher->lead?->client_id,
+                    'voucher_id' => $voucher->id,
+                ]
+            );
+
             DB::commit();
 
             return response()->json([
@@ -446,6 +506,13 @@ class InvoiceController extends Controller
             // If invoice for this voucher doesn't exist yet, create one so GST info can be saved
             $invoice = Invoice::where('voucher_id', $voucher->id)->first();
             if (!$invoice) {
+                if (!$this->voucherIsInvoiceReady($voucher)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Invoice can be created only after approved payment.',
+                    ], 422);
+                }
+
                 $invoice = Invoice::create([
                     'id' => Str::uuid(),
                     'invoice_id' => $this->generateInvoiceId(),
@@ -455,9 +522,60 @@ class InvoiceController extends Controller
                     'billing_address' => $validatedData['billing_address'] ?? null,
                     'status' => 1
                 ]);
+
+                app(ActivityAuditService::class)->record(
+                    'invoice',
+                    'generated',
+                    $invoice,
+                    [],
+                    [
+                        'invoice_number' => $invoice->invoice_id,
+                        'amount' => null,
+                        'status' => $invoice->status,
+                    ],
+                    [
+                        'lead_id' => $voucher->lead?->id,
+                        'client_id' => $voucher->lead?->client_id,
+                        'voucher_id' => $voucher->id,
+                    ]
+                );
             } else {
+                if ($this->invoiceIsFinalized($invoice)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Finalized invoice cannot be edited.',
+                    ], 423);
+                }
+
+                $oldValues = [
+                    'gst_number' => $invoice->gst_number,
+                    'company_name' => $invoice->company_name,
+                    'billing_address' => $invoice->billing_address,
+                ];
+
                 $invoice->update($validatedData);
             }
+
+            app(ActivityAuditService::class)->record(
+                'invoice',
+                'gst_updated',
+                $invoice,
+                $oldValues ?? [
+                    'gst_number' => null,
+                    'company_name' => null,
+                    'billing_address' => null,
+                ],
+                [
+                    'gst_number' => $invoice->gst_number,
+                    'company_name' => $invoice->company_name,
+                    'billing_address' => $invoice->billing_address,
+                ],
+                [
+                    'lead_id' => $voucher->lead?->id,
+                    'client_id' => $voucher->lead?->client_id,
+                    'voucher_id' => $voucher->id,
+                ]
+            );
 
             return response()->json([
                 'success' => true,
@@ -487,8 +605,27 @@ class InvoiceController extends Controller
             }
 
             // mark as finalized/completed (use status = 2 for completed)
+            $oldStatus = $invoice->status;
             $invoice->status = 2;
             $invoice->save();
+
+            app(ActivityAuditService::class)->record(
+                'invoice',
+                'finalized',
+                $invoice,
+                [
+                    'status' => $oldStatus,
+                ],
+                [
+                    'status' => $invoice->status,
+                    'finalized_at' => now()->toDateTimeString(),
+                ],
+                [
+                    'lead_id' => $voucher->lead?->id,
+                    'client_id' => $voucher->lead?->client_id,
+                    'voucher_id' => $voucher->id,
+                ]
+            );
 
             return response()->json([ 'success' => true, 'message' => 'Invoice marked as finalized.' ]);
         } catch (\Exception $e) {
@@ -993,7 +1130,7 @@ class InvoiceController extends Controller
         // Sum all approved payments for this lead (across followups)
         $totalReceived = PaymentAuditTrail::whereHas('leadFollowup', function($q) use ($lead) {
             $q->where('lead_id', $lead->id);
-        })->where('payment_status', 1)->sum('paid_amount');
+        })->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)->sum('paid_amount');
 
         // build service and vendor data once so we can reuse values and keep paths consistent
         $service = $this->getServiceInformation($lead);

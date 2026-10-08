@@ -102,16 +102,11 @@
                                             <label for="sales_executive_id" class="ti-form-label mb-0">Sales Executive<span class="text-danger">*</span></label>
                                             <select class="ti-form-select rounded-sm form-control-sm" name="sales_executive_id" id="sales_executive_id" required>
                                                 <option value="">Select Sales Executive</option>
-                                                @php
-                                                    $salesExecutives = \App\Models\User::whereHas('userType', function ($query) {
-                                                        $query->where('user_type', \App\Models\UserType::SALES_EXECUTIVE);
-                                                    })->where('status', 1)->get();
-                                                @endphp
                                                 @foreach($salesExecutives as $executive)
-                                                    <option value="{{ $executive->id }}" {{ old('sales_executive_id') == $executive->id ? 'selected' : '' }}>
-                                                        {{ $executive->name }} ({{ $executive->email }})
-                                                    </option>
-                                                @endforeach
+                                                <option value="{{ $executive->id }}" {{ old('sales_executive_id') == $executive->id ? 'selected' : '' }}>
+                                                    {{ $executive->name }} ({{ $executive->email }})
+                                                </option>
+                                            @endforeach
                                             </select>
                                             @error('sales_executive_id')
                                                 <div class="text-danger mt-1 text-sm">{{ $message }}</div>

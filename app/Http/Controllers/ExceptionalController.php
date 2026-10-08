@@ -59,7 +59,7 @@ class ExceptionalController extends Controller
 
                     // Get approved received amount too (for reference)
                     $approvedPayments = PaymentAuditTrail::whereIn('lead_followup_id', $group->pluck('id'))
-                        ->where('payment_status', 1)
+                        ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
                         ->get();
                     $totalReceivedApproved = $approvedPayments->sum('paid_amount');
 
@@ -279,7 +279,7 @@ class ExceptionalController extends Controller
             $allFollowupIds = LeadFollowup::where('lead_id', $followup->lead_id)->pluck('id');
 
             $approvedTotal = PaymentAuditTrail::whereIn('lead_followup_id', $allFollowupIds)
-                ->where('payment_status', 1)
+                ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
                 ->sum('paid_amount');
 
             $followupReceivedSum = LeadFollowup::whereIn('id', $allFollowupIds)->sum('received_amount');

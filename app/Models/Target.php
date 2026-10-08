@@ -97,7 +97,7 @@ class Target extends Model
     {
         // Achieved = Sum of Total Amount (latest followup per lead with payment in this month) - refunds
         // Find leads with approved payments in the target month/year (based on paid_date)
-        $paidFollowupIds = \App\Models\PaymentAuditTrail::where('payment_status', 1)
+        $paidFollowupIds = PaymentAuditTrail::where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
             ->whereYear('paid_date', $this->year)
             ->whereMonth('paid_date', $this->month)
             ->pluck('lead_followup_id')->unique();

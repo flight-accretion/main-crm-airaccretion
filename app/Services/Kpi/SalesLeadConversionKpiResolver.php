@@ -4,6 +4,7 @@ namespace App\Services\Kpi;
 
 use App\Models\KpiMetric;
 use App\Models\LeadFollowup;
+use App\Models\PaymentAuditTrail;
 use App\Models\User;
 use Carbon\Carbon;
 
@@ -35,7 +36,7 @@ class SalesLeadConversionKpiResolver implements KpiMetricResolverInterface
                 ->whereIn('lead_id', $leadIds)
                 ->whereHas('paymentAuditTrail', function ($query) {
                     $query
-                        ->where('payment_status', 1)
+                        ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
                         ->where('paid_amount', '>', 0);
                 })
                 ->pluck('lead_id')

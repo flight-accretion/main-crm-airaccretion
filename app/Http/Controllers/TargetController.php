@@ -130,6 +130,8 @@ class TargetController extends Controller
                 ->with('error', 'Please correct the errors below.');
         }
 
+        $this->abortUnlessCanAssignTargetTo($request->sales_executive_id);
+
         // Check if target already exists for this user, year, and month
         $existingTarget = Target::where('sales_executive_id', $request->sales_executive_id)
             ->where('year', $request->year)
@@ -246,6 +248,8 @@ class TargetController extends Controller
             'description' => 'nullable|string|max:1000',
             'status' => 'required|in:active,inactive',
         ]);
+
+        $this->abortUnlessCanAssignTargetTo($request->sales_executive_id);
 
         $target->update([
             'sales_executive_id' => $request->sales_executive_id,
@@ -388,6 +392,85 @@ class TargetController extends Controller
         ]);
     }
 
+    private function isTargetAdminUser($user): bool
+{
+    $role = optional($user->userType)->user_type;
+
+    return in_array($role, [
+        \App\Models\UserType::SUPER_ADMIN,
+        \App\Models\UserType::ADMIN,
+        \App\Models\UserType::HR,
+    ], true);
+}
+
+private function isSalesManagerUser($user): bool
+{
+    $role = optional($user->userType)->user_type;
+
+    return in_array($role, [
+        \App\Models\UserType::SENIOR_SALES_MANAGER,
+        \App\Models\UserType::SALES_MANAGER,
+    ], true);
+}
+
+private function abortUnlessCanManageTargets(): void
+{
+    $user = auth()->user();
+
+    if (!$user) {
+        abort(403, 'Unauthorized.');
+    }
+
+    if ($this->isTargetAdminUser($user) || $this->isSalesManagerUser($user)) {
+        return;
+    }
+
+    abort(403, 'You are not allowed to manage targets.');
+}
+
+private function targetAssignableUserIds(): array
+{
+    $user = auth()->user();
+
+    if (!$user) {
+        return [];
+    }
+
+    if ($this->isTargetAdminUser($user)) {
+        return \App\Models\User::whereHas('userType', function ($q) {
+            $q->whereIn('user_type', [
+                \App\Models\UserType::SENIOR_SALES_MANAGER,
+                \App\Models\UserType::SALES_MANAGER,
+                \App\Models\UserType::SALES_EXECUTIVE,
+            ]);
+        })
+        ->where('status', 1)
+        ->pluck('id')
+        ->map(fn ($id) => (string) $id)
+        ->toArray();
+    }
+
+    if ($this->isSalesManagerUser($user)) {
+        return \App\Models\SalesExecutiveAssignment::getSalesExecutivesForManager($user->id)
+            ->pluck('id')
+            ->map(fn ($id) => (string) $id)
+            ->toArray();
+    }
+
+    return [];
+}
+
+private function abortUnlessCanAssignTargetTo($userId): void
+{
+    $this->abortUnlessCanManageTargets();
+
+    $allowedUserIds = $this->targetAssignableUserIds();
+
+    if (!in_array((string) $userId, $allowedUserIds, true)) {
+        abort(403, 'You are not allowed to assign target to this user.');
+    }
+}
+
     /**
      * Get sales executives based on user hierarchy
      */
@@ -397,33 +480,45 @@ class TargetController extends Controller
      * - Sales Manager / Senior Sales Manager: all Sales Managers + executives assigned to current manager
      * - Sales Executive: only themselves
      */
-    private function getAssignableStaff($user)
-    {
-        $currentType = $user->userType->user_type ?? null;
+  private function getAssignableStaff()
+{
+    $user = auth()->user();
 
-        // Get user type ids for managers and executives
-        $managerTypes = [UserType::SALES_MANAGER, UserType::SENIOR_SALES_MANAGER];
-        $managerTypeIds = UserType::whereIn('user_type', $managerTypes)->pluck('id')->toArray();
-
-        $salesExecType = UserType::where('user_type', UserType::SALES_EXECUTIVE)->first();
-
-        // Admins: return managers + all execs
-        if (in_array($currentType, [UserType::SUPER_ADMIN, UserType::ADMIN])) {
-            $managers = User::whereIn('user_type_id', $managerTypeIds)->where('status', 1)->with('userType')->orderBy('name')->get();
-            $executives = $salesExecType ? User::where('user_type_id', $salesExecType->id)->where('status', 1)->with('userType')->orderBy('name')->get() : collect();
-            return $managers->merge($executives);
-        }
-
-        // Sales Manager: include ONLY the logged-in manager + executives assigned to this manager
-        if (in_array($currentType, [UserType::SENIOR_SALES_MANAGER, UserType::SALES_MANAGER])) {
-            // include only the current user as the manager option
-            $currentManager = User::where('id', $user->id)->where('status', 1)->with('userType')->get();
-            $assignedExecutives = \App\Models\SalesExecutiveAssignment::getSalesExecutivesForManager($user->id);
-            return $currentManager->merge($assignedExecutives);
-        }
-
-        // Sales Executive: only themselves
-        return collect([$user]);
+    if (!$user) {
+        return collect();
     }
+
+    $userType = optional($user->userType)->user_type;
+
+    if (in_array($userType, [
+        \App\Models\UserType::SUPER_ADMIN,
+        \App\Models\UserType::ADMIN,
+        \App\Models\UserType::HR,
+    ], true)) {
+        return \App\Models\User::with('userType')
+            ->where('status', 1)
+            ->whereHas('userType', function ($q) {
+                $q->whereIn('user_type', [
+                    \App\Models\UserType::SENIOR_SALES_MANAGER,
+                    \App\Models\UserType::SALES_MANAGER,
+                    \App\Models\UserType::SALES_EXECUTIVE,
+                ]);
+            })
+            ->orderBy('name')
+            ->get();
+    }
+
+    if (in_array($userType, [
+        \App\Models\UserType::SENIOR_SALES_MANAGER,
+        \App\Models\UserType::SALES_MANAGER,
+    ], true)) {
+        return \App\Models\SalesExecutiveAssignment::getSalesExecutivesForManager($user->id)
+            ->where('status', 1)
+            ->sortBy('name')
+            ->values();
+    }
+
+    return collect();
+}
     
 }

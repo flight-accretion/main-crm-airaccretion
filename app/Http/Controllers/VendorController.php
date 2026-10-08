@@ -838,8 +838,17 @@ class VendorController extends Controller
 
     public function destroy(Vendor $vendor)
     {
-        if (!auth()->check() || !auth()->user()->isSuperAdmin()) {
-            abort(403, 'Only Super Admin can delete.');
+       $user = auth()->user();
+        $userRole = optional($user->userType)->user_type;
+
+        if (
+            !$user
+            || !in_array($userRole, array_merge(
+                \App\Models\UserType::ADMIN_ROLES,
+                \App\Models\UserType::OPERATIONS_ROLES
+            ), true)
+        ) {
+            abort(403, 'You are not allowed to delete vendors.');
         }
 
         try {

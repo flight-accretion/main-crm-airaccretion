@@ -32,9 +32,13 @@ use Illuminate\Support\Facades\Mail;
 use Barryvdh\DomPDF\Facade\Pdf as PDF;
 use App\Models\LeadVendorPaymentDetail;
 use App\Models\PaymentAuditTrail;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use App\Http\Controllers\SendMessageController;
+use App\Jobs\SendVoucherNotification;
+use App\Support\SafeUploadName;
+use App\Services\ActivityAuditService;
 
 class VoucherController extends Controller
 {
@@ -47,6 +51,64 @@ class VoucherController extends Controller
     public function __construct(SendMessageController $sendMessageController)
     {
         $this->sendMessageController = $sendMessageController;
+    }
+
+    private function debugLog(string $message, array $context = []): void
+    {
+        if (config('crm.debug_flow_logs')) {
+            Log::info($message, $context);
+        }
+    }
+
+    private function abortUnlessCanViewVoucherLead(Lead $lead): void
+    {
+        $user = auth()->user();
+
+        if (!$user) {
+            abort(403, 'You are not allowed to access this voucher.');
+        }
+
+        $representatives = getRepresentativeIds($user);
+
+        if ($representatives === null) {
+            return;
+        }
+
+        if ($representatives instanceof \Illuminate\Support\Collection) {
+            $representatives = $representatives->all();
+        }
+
+        $representatives = array_map('strval', (array) $representatives);
+
+        if (!in_array((string) $lead->representative_user_id, $representatives, true)) {
+            abort(403, 'You are not allowed to access this voucher.');
+        }
+    }
+
+    private function abortUnlessCanManageVoucher(): void
+    {
+        $role = optional(auth()->user()?->userType)->user_type;
+
+        if (
+            !$role ||
+            !(
+                in_array($role, UserType::ADMIN_ROLES, true)
+                || in_array($role, UserType::OPERATIONS_ROLES, true)
+            )
+        ) {
+            abort(403, 'You are not allowed to manage vouchers.');
+        }
+    }
+
+    private function abortUnlessCanViewVoucher(Voucher $voucher): void
+    {
+        $voucher->loadMissing('lead');
+
+        if (!$voucher->lead) {
+            abort(404, 'Voucher lead not found.');
+        }
+
+        $this->abortUnlessCanViewVoucherLead($voucher->lead);
     }
 
     /**
@@ -69,6 +131,33 @@ class VoucherController extends Controller
             ]);
     }
 
+    private function leadHasApprovedPayment(Lead $lead): bool
+    {
+        $followupIds = $lead->leadFollowups()->pluck('id');
+
+        if ($followupIds->isEmpty()) {
+            return false;
+        }
+
+        $query = PaymentAuditTrail::query()
+            ->whereIn('lead_followup_id', $followupIds)
+            ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
+            ->where(function ($query) {
+                $query->where('paid_amount', '>', 0);
+
+                if (Schema::hasColumn('payment_audit_trail', 'amount_received')) {
+                    $query->orWhere('amount_received', '>', 0);
+                }
+            });
+
+        return $query->exists();
+    }
+
+    private function voucherAlreadySentToCustomer(Voucher $voucher): bool
+    {
+        return !empty($voucher->customer_sent_at);
+    }
+
     /**
      * Display a listing of leads with approved payments for voucher generation
      */
@@ -85,7 +174,7 @@ class VoucherController extends Controller
         $query = Lead::with(['client', 'representative', 'rideSegments', 'leadFollowups.followedBy'])
             ->whereHas('leadFollowups', function ($q) {
                 $q->whereHas('paymentAuditTrail', function ($pq) {
-                    $pq->where('payment_status', 1)
+                    $pq->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
                         ->where('paid_amount', '>', 0);
                 });
             })
@@ -207,9 +296,12 @@ class VoucherController extends Controller
 
         $staff = $this->getUsersInHierarchy() ?: collect([auth()->user()]);
 
-        $leadsWithApprovedPayments = PaymentAuditTrail::where('payment_status', 1)
+        $leadsWithApprovedPayments = PaymentAuditTrail::where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
             ->where('paid_amount', '>', 0)
-            ->whereHas('leadFollowup', fn($q) => $q->whereIn('status', [3, 4]))
+            ->whereHas('leadFollowup', fn($q) => $q->whereIn('status', [
+                LeadFollowup::STATUS_FULL_PAYMENT_RECEIVED,
+                LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
+            ]))
             ->get()
             ->pluck('leadFollowup')
             ->filter()
@@ -268,6 +360,13 @@ class VoucherController extends Controller
                 'latestFollowup'
             ])->findOrFail($lead_id);
 
+            $this->abortUnlessCanViewVoucherLead($lead);
+
+            if (!$this->leadHasApprovedPayment($lead)) {
+                return redirect()->route('admin.vouchers.index')
+                    ->with('error', 'Voucher can be generated only after approved payment.');
+            }
+
             // Check if voucher already exists for this lead
             $existingVoucher = Voucher::where('lead_id', $lead_id)->first();
 
@@ -282,7 +381,7 @@ class VoucherController extends Controller
                 ->first();
 
             // Debug output
-            Log::info('Followup data:', [
+            $this->debugLog('Followup data:', [
                 'followup_id' => $latestFollowup?->id,
                 'service_ids' => $latestFollowup?->service_ids,
                 'extra_service_ids' => $latestFollowup?->extra_service_ids,
@@ -301,14 +400,14 @@ class VoucherController extends Controller
                 $leadServiceIds = is_string($lead->service_ids) ? json_decode($lead->service_ids, true) : $lead->service_ids;
                 if (!empty($leadServiceIds)) {
                     $selectedServiceIds = $leadServiceIds;
-                    Log::info('Using services from lead as fallback:', [
+                    $this->debugLog('Using services from lead as fallback:', [
                         'lead_service_ids' => $leadServiceIds
                     ]);
                 }
             }
 
             // Debug: Log the processed IDs
-            Log::info('Processed IDs:', [
+            $this->debugLog('Processed IDs:', [
                 'service_ids' => $selectedServiceIds,
                 'extra_service_ids' => $selectedExtraServiceIds,
                 'using_lead_fallback' => !empty($leadServiceIds ?? []) ? true : false
@@ -378,10 +477,10 @@ class VoucherController extends Controller
 
             // If no services found, add some fallback for testing
             if ($selectedServices->isEmpty()) {
-                Log::info('No services found in followup, table will show empty with add buttons');
+                $this->debugLog('No services found in followup, table will show empty with add buttons');
             }
             if ($selectedExtraServices->isEmpty()) {
-                Log::info('No extra services found in followup, table will show empty with add buttons');
+                $this->debugLog('No extra services found in followup, table will show empty with add buttons');
             }
             // Load vendors for each service and extra service (ensure we assign collections, not relation objects)
             foreach ($selectedServices as $service) {
@@ -446,7 +545,7 @@ class VoucherController extends Controller
             }
 
             // Debug: Log vendor counts for final verification
-            Log::info('Voucher form ready:', [
+            $this->debugLog('Voucher form ready:', [
                 'selected_services_count' => $selectedServices->count(),
                 'selected_extra_services_count' => $selectedExtraServices->count(),
                 'lead_id' => $lead->id,
@@ -906,7 +1005,7 @@ class VoucherController extends Controller
                 Log::warning('Error merging follow-up services into existing voucher: ' . $e->getMessage());
             }
 
-            Log::info('Services for existing voucher (voucher + newer follow-ups merged)', [
+            $this->debugLog('Services for existing voucher (voucher + newer follow-ups merged)', [
                 'voucher_id' => $voucher->id,
                 'lead_id' => $lead->id,
                 'voucher_services' => $allServiceIds,
@@ -1205,6 +1304,8 @@ $allVendors =
      */
     public function storeVoucher(Request $request)
     {
+        $this->abortUnlessCanManageVoucher();
+
         try {
             // Filter out empty/null passengers from the request BEFORE validation
             if ($request->has('passengers') && is_array($request->passengers)) {
@@ -1218,7 +1319,7 @@ $allVendors =
                 // Replace the passengers array with cleaned version
                 $request->merge(['passengers' => $cleanedPassengers]);
 
-                Log::info('Filtered passengers', [
+                $this->debugLog('Filtered passengers', [
                     'original_count' => count($request->passengers ?? []),
                     'cleaned_count' => count($cleanedPassengers)
                 ]);
@@ -1232,7 +1333,7 @@ $allVendors =
                 $deletedPassengerIds = $deletedIds;
                 if (!empty($deletedIds)) {
                     LeadPassenger::whereIn('id', $deletedIds)->delete();
-                    Log::info('Deleted passengers via deleted_passenger_ids', ['deleted_ids' => $deletedIds]);
+                    $this->debugLog('Deleted passengers via deleted_passenger_ids', ['deleted_ids' => $deletedIds]);
                 }
             }
             // Define regex patterns as PHP variables to avoid escaping issues in inline rule strings
@@ -1487,6 +1588,30 @@ $allVendors =
 
             // Update client information if it has changed
             $lead = Lead::with('client')->findOrFail($request->lead_id);
+            $this->abortUnlessCanViewVoucherLead($lead);
+
+            if (!$this->leadHasApprovedPayment($lead)) {
+                DB::rollBack();
+                return redirect()->back()
+                    ->withInput()
+                    ->with('error', 'Voucher can be saved only after approved payment.');
+            }
+
+            $operationUser = User::with('userType')
+                ->where('id', $request->operation_team_user_id)
+                ->where('status', 1)
+                ->first();
+
+            if (
+                !$operationUser ||
+                !in_array(optional($operationUser->userType)->user_type, UserType::OPERATIONS_ROLES, true)
+            ) {
+                DB::rollBack();
+                return redirect()->back()
+                    ->withInput()
+                    ->with('error', 'Please select an active Operations user.');
+            }
+
             $client = $lead->client;
 
             $clientUpdated = false;
@@ -1509,7 +1634,7 @@ $allVendors =
 
             if ($clientUpdated) {
                 $client->save();
-                Log::info('Client information updated for lead: ' . $request->lead_id);
+                $this->debugLog('Client information updated for lead: ' . $request->lead_id);
             }
 
             // Update travel information if provided
@@ -1521,6 +1646,12 @@ $allVendors =
             if ($existingVoucher) {
                 // Update existing voucher
                 $voucherId = $existingVoucher->id;
+                $oldVoucherValues = [
+                    'status' => $existingVoucher->status,
+                    'operation_team_user_id' => $existingVoucher->operation_team_user_id,
+                    'naration' => $existingVoucher->naration,
+                    'extra_upload' => $existingVoucher->extra_upload,
+                ];
 
                 // Handle extra upload first
                 $extraUploadPath = $existingVoucher->extra_upload; // Keep existing path by default
@@ -1531,7 +1662,7 @@ $allVendors =
                     }
 
                     $file = $request->file('extra_upload');
-                    $filename = time() . '_' . $file->getClientOriginalName();
+                    $filename = SafeUploadName::make($file, 'extra_upload');
                     $extraUploadPath = $file->storeAs('vouchers/uploads', $filename, 'public');
 
                     // DEBUG: write stored path
@@ -1553,6 +1684,21 @@ $allVendors =
                     'updated_at' => now(),
                     'registration_token' => $existingVoucher->registration_token ?? (string) Str::random(40)
                 ]);
+
+                app(ActivityAuditService::class)->record(
+                    'voucher',
+                    'updated',
+                    $existingVoucher,
+                    $oldVoucherValues,
+                    [
+                        'voucher_id' => $existingVoucher->id,
+                        'status' => $existingVoucher->status,
+                    ],
+                    [
+                        'lead_id' => $existingVoucher->lead_id,
+                        'client_id' => $lead->client_id,
+                    ]
+                );
 
                 // Collect existing LeadVendorPayment entries and their VendorPayment history so we can reassign
              $existingPayments =
@@ -1637,6 +1783,21 @@ foreach ($existingPayments as $payment) {
                     'registration_token' => (string) Str::random(40)
                 ]);
 
+                app(ActivityAuditService::class)->record(
+                    'voucher',
+                    'generated',
+                    $voucher,
+                    [],
+                    [
+                        'voucher_id' => $voucher->id,
+                        'status' => $voucher->status,
+                    ],
+                    [
+                        'lead_id' => $voucher->lead_id,
+                        'client_id' => $lead->client_id,
+                    ]
+                );
+
                 // Handle extra upload for new voucher
                 // if ($request->hasFile('extra_upload')) {
                 //     $file = $request->file('extra_upload');
@@ -1661,7 +1822,7 @@ foreach ($existingPayments as $payment) {
     if ($extension === 'pdf') {
 
         // Store PDF directly
-        $filename = time() . '.pdf';
+        $filename = SafeUploadName::make($file, 'extra_upload');
         $path = $file->storeAs('vouchers/uploads', $filename, 'public');
 
     } else {
@@ -1689,7 +1850,7 @@ foreach ($existingPayments as $payment) {
 
         $pdf->Image($tempImage, 0, 0, $width, $height);
 
-        $filename = time() . '.pdf';
+        $filename = (string) Str::uuid() . '.pdf';
 
         $relativePath = 'vouchers/uploads/' . $filename;
         $absolutePath = storage_path('app/public/' . $relativePath);
@@ -1723,7 +1884,7 @@ foreach ($existingPayments as $payment) {
 
                     // Skip passengers whose IDs were explicitly deleted via deleted_passenger_ids
                     if (!empty($passengerData['id']) && in_array($passengerData['id'], $deletedPassengerIds)) {
-                        Log::info('Skipping deleted passenger during form processing', ['passenger_id' => $passengerData['id']]);
+                        $this->debugLog('Skipping deleted passenger during form processing', ['passenger_id' => $passengerData['id']]);
                         continue;
                     }
 
@@ -1740,7 +1901,7 @@ foreach ($existingPayments as $payment) {
                                 'weight' => $passengerData['weight'] ?? $passenger->weight,
                             ]);
 
-                            Log::info('Updated existing passenger', ['passenger_id' => $passenger->id]);
+                            $this->debugLog('Updated existing passenger', ['passenger_id' => $passenger->id]);
                         }
                     } else {
                         // Create new passenger (no ID in form)
@@ -1756,20 +1917,20 @@ foreach ($existingPayments as $payment) {
                             'is_additional_person' => false,
                         ]);
 
-                        Log::info('Created new passenger', ['passenger_id' => $passenger->id]);
+                        $this->debugLog('Created new passenger', ['passenger_id' => $passenger->id]);
                     }
 
                     // Handle document uploads for both existing and new passengers
                     if ($request->hasFile("passengers.{$index}.front_document")) {
                         $file = $request->file("passengers.{$index}.front_document");
-                        $filename = time() . '_front_' . $file->getClientOriginalName();
+                        $filename = SafeUploadName::make($file, 'front');
                         $path = $file->storeAs('vouchers/documents', $filename, 'public');
                         $passenger->update(['front_document' => $path]);
                     }
 
                     if ($request->hasFile("passengers.{$index}.back_document")) {
                         $file = $request->file("passengers.{$index}.back_document");
-                        $filename = time() . '_back_' . $file->getClientOriginalName();
+                        $filename = SafeUploadName::make($file, 'back');
                         $path = $file->storeAs('vouchers/documents', $filename, 'public');
                         $passenger->update(['back_document' => $path]);
                     }
@@ -2014,7 +2175,7 @@ if (!empty($oldVendorRefundsMap)) {
             //                             'message' => $message['message'] ?? 'Unknown error'
             //                         ]);
             //                     } else {
-            //                         Log::info('Registration link sent via WhatsApp during voucher creation', ['voucher' => $voucher->id]);
+            //                         $this->debugLog('Registration link sent via WhatsApp during voucher creation', ['voucher' => $voucher->id]);
             //                     }
             //                 }
             //             }
@@ -2062,6 +2223,9 @@ if (!empty($oldVendorRefundsMap)) {
                 'lead.latestFollowup'
             ])->findOrFail($voucher_id);
 
+            $this->abortUnlessCanManageVoucher();
+            $this->abortUnlessCanViewVoucher($voucher);
+
             // Compute pending amount from PaymentAuditTrail (approved payments)
             // Ensure we fetch the actual latest followup (most recently created)
             $latestFollowup = $voucher->lead->leadFollowups()->orderBy('created_at', 'desc')->first();
@@ -2071,7 +2235,7 @@ if (!empty($oldVendorRefundsMap)) {
             $approvedPaid = 0;
             if (!empty($followupIds)) {
                 $approvedPaid = PaymentAuditTrail::whereIn('lead_followup_id', $followupIds)
-                    ->where('payment_status', 1)
+                    ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
                     ->sum('paid_amount');
             }
             $pendingAmount = max(0, $totalAmount - $approvedPaid);
@@ -2219,7 +2383,7 @@ if (!empty($oldVendorRefundsMap)) {
             $approvedPaid = 0;
             if (!empty($followupIds)) {
                 $approvedPaid = PaymentAuditTrail::whereIn('lead_followup_id', $followupIds)
-                    ->where('payment_status', 1)
+                    ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
                     ->sum('paid_amount');
             }
             $pendingAmount = max(0, $totalAmount - $approvedPaid);
@@ -2326,28 +2490,19 @@ if (!empty($oldVendorRefundsMap)) {
                 Log::warning('Invalid or missing recipient email for voucher send', ['voucher' => $voucher->id, 'email' => $recipientEmail]);
                 return redirect()->back()->with('error', 'Client email is not available or invalid. Cannot send voucher email.');
             }
-            // Defer mail and WhatsApp sends to after the response is sent
-            app()->terminating(function () use ($recipientEmail, $emailTemplate, $subject, $data, $filePath, $type, $whatsAppTemplate, $whatsAppdata, $whatsAppNumber, $voucher) {
-                try {
-                    Mail::to($recipientEmail)->send(new VoucherMail($emailTemplate, $subject, $data, $filePath));
-                    $this->markVoucherCustomerSent($voucher, 'email');
-                } catch (\Throwable $e) {
-                    Log::error('Deferred voucher email failed: ' . $e->getMessage());
-                }
+            SendVoucherNotification::dispatch($voucher->id, 'email', [
+                'recipient' => $recipientEmail,
+                'template' => $emailTemplate,
+                'subject' => $subject,
+                'data' => $data,
+                'file' => $filePath,
+            ]);
+            SendVoucherNotification::dispatch($voucher->id, 'whatsapp', [
+                'method' => 'sendWhatsAppMessage',
+                'args' => [$type, $whatsAppTemplate, $whatsAppdata, $whatsAppNumber, $filePath],
+            ]);
 
-                try {
-                    $message = $this->sendMessageController->sendWhatsAppMessage($type, $whatsAppTemplate, $whatsAppdata, $whatsAppNumber, $filePath);
-                    if (isset($message['result']) && $message['result'] == false) {
-                        Log::warning('Deferred WhatsApp failed for voucher: ' . ($message['message'] ?? 'unknown'));
-                    } else {
-                        $this->markVoucherCustomerSent($voucher, 'whatsapp');
-                    }
-                } catch (\Throwable $e) {
-                    Log::error('Deferred WhatsApp failed: ' . $e->getMessage());
-                }
-            });
-
-            // Return immediately; actual sending happens in terminating callback
+            // Return immediately; actual sending happens in queue jobs.
             return redirect()->back()->with('success', 'Voucher generated and queued for sending.');
         } catch (\Exception $e) {
             Log::error('Error generating and sending voucher PDF: ' . $e->getMessage());
@@ -2369,6 +2524,16 @@ if (!empty($oldVendorRefundsMap)) {
                 'vendorPayments.paymentDetails.service'
             ])->findOrFail($voucher_id);
 
+            $this->abortUnlessCanManageVoucher();
+            $this->abortUnlessCanViewVoucher($voucher);
+
+            if ($this->voucherAlreadySentToCustomer($voucher) && !request()->boolean('force_resend')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This voucher has already been sent to the customer. Use force_resend=1 to send again.',
+                ], 409);
+            }
+
             // File name + storage path on public disk
             $storePath = 'vouchers/voucher-' . $voucher->id . '.pdf';
             $fullStoragePath = storage_path('app/public/' . $storePath);
@@ -2385,7 +2550,7 @@ if (!empty($oldVendorRefundsMap)) {
             $approvedPaid = 0;
             if (!empty($followupIds)) {
                 $approvedPaid = PaymentAuditTrail::whereIn('lead_followup_id', $followupIds)
-                    ->where('payment_status', 1)
+                    ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
                     ->sum('paid_amount');
             }
             $pendingAmount = max(0, $totalAmount - $approvedPaid);
@@ -2428,16 +2593,13 @@ if (!empty($oldVendorRefundsMap)) {
                 // Optionally schedule cleanup of old voucher files.
                 return response()->json(['success' => false, 'message' => 'Client email is not available or invalid. Cannot send voucher email.'], 400);
             }
-            // Defer the actual email send to after response to avoid blocking
-            app()->terminating(function () use ($recipientEmail, $emailTemplate, $subject, $data, $fileUrl, $voucher) {
-                try {
-                    Mail::to($recipientEmail)->send(new VoucherMail($emailTemplate, $subject, $data, $fileUrl));
-                    $this->markVoucherCustomerSent($voucher, 'email');
-                    Log::info('Deferred voucher email sent', ['voucher' => $voucher->id, 'to' => $recipientEmail]);
-                } catch (\Throwable $e) {
-                    Log::error('Deferred voucher email failed: ' . $e->getMessage(), ['voucher' => $voucher->id]);
-                }
-            });
+            SendVoucherNotification::dispatch($voucher->id, 'email', [
+                'recipient' => $recipientEmail,
+                'template' => $emailTemplate,
+                'subject' => $subject,
+                'data' => $data,
+                'file' => $fileUrl,
+            ]);
 
             return response()->json([
                 'success' => true,
@@ -2462,6 +2624,16 @@ if (!empty($oldVendorRefundsMap)) {
 
             $voucher = Voucher::with(['lead.client', 'lead.rideSegments.serviceAddress', 'vendorPayments.paymentDetails.service'])->findOrFail($voucher_id);
 
+            $this->abortUnlessCanManageVoucher();
+            $this->abortUnlessCanViewVoucher($voucher);
+
+            if ($this->voucherAlreadySentToCustomer($voucher) && !request()->boolean('force_resend')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This voucher has already been sent to the customer. Use force_resend=1 to send again.',
+                ], 409);
+            }
+
             // Compute pending amount from PaymentAuditTrail (approved payments)
             // Ensure we fetch the actual latest followup (most recently created)
             $latestFollowup = $voucher->lead->leadFollowups()->orderBy('created_at', 'desc')->first();
@@ -2470,7 +2642,7 @@ if (!empty($oldVendorRefundsMap)) {
             $approvedPaid = 0;
             if (!empty($followupIds)) {
                 $approvedPaid = PaymentAuditTrail::whereIn('lead_followup_id', $followupIds)
-                    ->where('payment_status', 1)
+                    ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
                     ->sum('paid_amount');
             }
 
@@ -2539,36 +2711,17 @@ if (!empty($oldVendorRefundsMap)) {
             $filePath = asset('storage/' . $storePath);
             $filename = 'voucher-' . $voucher->id . '.pdf';
 
-            // Log payload for debugging
-            Log::info('Sending Voucher WhatsApp via WhatsCRM Vouchers Account', [
-                'voucher' => $voucher->id,
-                'template' => 'customer_whatsapp_msg_ke',
-                'bodyValues' => $whatsAppdata,
-                'number' => $whatsAppNumber,
-                'file' => $filePath
+            if (config('crm.debug_flow_logs')) {
+                $this->debugLog('Queueing voucher WhatsApp via WhatsCRM Vouchers Account', [
+                    'voucher' => $voucher->id,
+                    'template' => 'customer_whatsapp_msg_ke',
+                ]);
+            }
+
+            SendVoucherNotification::dispatch($voucher->id, 'whatsapp', [
+                'method' => 'sendWhatsCrmVoucherMessage',
+                'args' => [$whatsAppNumber, $whatsAppdata, $filePath, $filename, 'customer_whatsapp_msg_ke'],
             ]);
-
-            // NEW: Use dedicated WhatsCRM Vouchers method with separate account
-            // Defer WhatsApp send so request isn't blocked; respond immediately
-            app()->terminating(function () use ($whatsAppNumber, $whatsAppdata, $filePath, $filename, $voucher) {
-                try {
-                    $message = $this->sendMessageController->sendWhatsCrmVoucherMessage(
-                        $whatsAppNumber,
-                        $whatsAppdata,
-                        $filePath,
-                        $filename,
-                        'customer_whatsapp_msg_ke'
-                    );
-
-                    if (($message['success'] ?? false) === true) {
-                        $this->markVoucherCustomerSent($voucher, 'whatsapp');
-                    }
-
-                    Log::info('Deferred WhatsCRM Vouchers API response', ['voucher' => $voucher->id, 'response' => $message]);
-                } catch (\Throwable $e) {
-                    Log::error('Deferred WhatsApp send failed: ' . $e->getMessage(), ['voucher' => $voucher->id]);
-                }
-            });
 
             return response()->json(['success' => true, 'message' => 'WhatsApp send queued']);
         } catch (\Exception $e) {
@@ -2584,6 +2737,9 @@ if (!empty($oldVendorRefundsMap)) {
     {
         try {
             $voucher = Voucher::findOrFail($voucher_id);
+
+            $this->abortUnlessCanManageVoucher();
+            $this->abortUnlessCanViewVoucher($voucher);
 
             if (empty($voucher->extra_upload)) {
                 return redirect()->back()->with('error', 'No attachment found for this voucher.');
@@ -2617,6 +2773,10 @@ if (!empty($oldVendorRefundsMap)) {
     {
         try {
             $voucher = Voucher::with('lead.client')->findOrFail($voucher_id);
+
+            $this->abortUnlessCanManageVoucher();
+            $this->abortUnlessCanViewVoucher($voucher);
+
             $link = $voucher->registrationLink();
             if (!$link) {
                 return response()->json(['success' => false, 'message' => 'Registration link not available'], 400);
@@ -2632,7 +2792,7 @@ if (!empty($oldVendorRefundsMap)) {
                 ? $voucher->lead->client->alternate_number
                 : $voucher->lead->client->contact_number;
 
-            Log::info('Resend registration link request', [
+            $this->debugLog('Resend registration link request', [
                 'voucher' => $voucher->id,
                 'email' => $recipientEmail,
                 'whatsapp_number' => $whatsAppNumber,
@@ -2643,27 +2803,20 @@ if (!empty($oldVendorRefundsMap)) {
                 Log::warning('Invalid or missing recipient email for resend registration link', ['voucher' => $voucher->id, 'email' => $recipientEmail]);
                 return response()->json(['success' => false, 'message' => 'Client email is not available or invalid. Cannot resend registration link.'], 400);
             }
-            // Defer email and WhatsApp sends to after response
-            app()->terminating(function () use ($recipientEmail, $emailTemplate, $subject, $data, $whatsAppNumber, $link, $voucher) {
-                try {
-                    Mail::to($recipientEmail)->send(new VoucherMail($emailTemplate, $subject, $data, null));
-                } catch (\Throwable $e) {
-                    Log::error('Deferred registration email failed: ' . $e->getMessage(), ['voucher' => $voucher->id]);
-                }
+            SendVoucherNotification::dispatch($voucher->id, 'email', [
+                'recipient' => $recipientEmail,
+                'template' => $emailTemplate,
+                'subject' => $subject,
+                'data' => $data,
+                'file' => null,
+            ]);
 
-                if (!empty($whatsAppNumber)) {
-                    $whatsAppData = [$voucher->lead->client->name, $link];
-                    try {
-                        $message = $this->sendMessageController->sendWhatsCrmRegistrationLinkMessage($whatsAppNumber, $whatsAppData);
-                        Log::info('Deferred WhatsApp registration send response', ['voucher' => $voucher->id, 'response' => $message]);
-                        if (!($message['success'] ?? false)) {
-                            Log::warning('Deferred WhatsApp registration link failed', ['voucher' => $voucher->id, 'error' => $message['error'] ?? 'Unknown error']);
-                        }
-                    } catch (\Throwable $e) {
-                        Log::error('Deferred WhatsApp registration send failed', ['voucher' => $voucher->id, 'error' => $e->getMessage()]);
-                    }
-                }
-            });
+            if (!empty($whatsAppNumber)) {
+                SendVoucherNotification::dispatch($voucher->id, 'whatsapp', [
+                    'method' => 'sendWhatsCrmRegistrationLinkMessage',
+                    'args' => [$whatsAppNumber, [$voucher->lead->client->name, $link]],
+                ]);
+            }
 
             return response()->json(['success' => true, 'message' => 'Registration link queued for sending']);
         } catch (\Exception $e) {
@@ -2679,6 +2832,10 @@ if (!empty($oldVendorRefundsMap)) {
     {
         try {
             $voucher = Voucher::with('lead.client')->findOrFail($voucher_id);
+
+            $this->abortUnlessCanManageVoucher();
+            $this->abortUnlessCanViewVoucher($voucher);
+
             $link = $voucher->registrationLink();
             if (!$link) {
                 return response()->json(['success' => false, 'message' => 'Registration link not available'], 400);
@@ -2687,7 +2844,7 @@ if (!empty($oldVendorRefundsMap)) {
             $clientName = $voucher->lead->client->name ?? 'Customer';
             $whatsAppNumber = !empty($voucher->lead->client->alternate_number) ? $voucher->lead->client->alternate_number : $voucher->lead->client->contact_number;
 
-            Log::info('Send registration link via WhatsApp-only request', [
+            $this->debugLog('Send registration link via WhatsApp-only request', [
                 'voucher' => $voucher->id,
                 'whatsapp_number' => $whatsAppNumber,
                 'link' => $link,
@@ -2701,23 +2858,10 @@ if (!empty($oldVendorRefundsMap)) {
             // Body values expected by sendWhatsCrmRegistrationLinkMessage: [client_name, full_link]
             $whatsAppData = [$clientName, $link];
 
-            try {
-                // Defer WhatsApp send and return immediately
-                app()->terminating(function () use ($whatsAppNumber, $whatsAppData, $voucher) {
-                    try {
-                        $message = $this->sendMessageController->sendWhatsCrmRegistrationLinkMessage($whatsAppNumber, $whatsAppData);
-                        Log::info('Deferred WhatsApp registration send response', ['voucher' => $voucher->id, 'response' => $message]);
-                        if (!($message['success'] ?? false)) {
-                            Log::warning('Deferred WhatsApp registration link sending failed', ['voucher' => $voucher->id, 'error' => $message['error'] ?? 'Unknown error']);
-                        }
-                    } catch (\Throwable $e) {
-                        Log::error('Deferred WhatsApp registration send failed', ['voucher' => $voucher->id, 'error' => $e->getMessage()]);
-                    }
-                });
-            } catch (\Exception $e) {
-                Log::error('Error sending WhatsApp registration link', ['voucher' => $voucher->id, 'error' => $e->getMessage()]);
-                return response()->json(['success' => false, 'message' => 'Error: ' . $e->getMessage()], 500);
-            }
+            SendVoucherNotification::dispatch($voucher->id, 'whatsapp', [
+                'method' => 'sendWhatsCrmRegistrationLinkMessage',
+                'args' => [$whatsAppNumber, $whatsAppData],
+            ]);
 
             return response()->json(['success' => true, 'message' => 'Registration link sent via WhatsApp successfully']);
         } catch (\Exception $e) {
@@ -2857,7 +3001,7 @@ if (!empty($oldVendorRefundsMap)) {
 
                             if ($contactUpdated) {
                                 $serviceAddress->save();
-                                Log::info('Service address contact updated for address: ' . $serviceAddress->id);
+                                $this->debugLog('Service address contact updated for address: ' . $serviceAddress->id);
                             }
                         }
                     }
@@ -2867,7 +3011,7 @@ if (!empty($oldVendorRefundsMap)) {
             }
 
             if ($updated) {
-                Log::info('Travel information updated for lead: ' . $lead->id);
+                $this->debugLog('Travel information updated for lead: ' . $lead->id);
             }
 
             return $updated;
@@ -3114,7 +3258,7 @@ if (!empty($oldVendorRefundsMap)) {
                     $hasAuditLock = false;
                     try {
                         $hasAuditLock = \App\Models\PaymentAuditTrail::where('lead_followup_id', $latestFollowup->id)
-                            ->whereIn('payment_status', [1, 2]) // 1=Approved, 2=Rejected
+                            ->whereIn('payment_status', PaymentAuditTrail::FINAL_REVIEW_STATUSES)
                             ->exists();
                     } catch (\Exception $e) {
                         Log::warning('Could not check audit lock status: ' . $e->getMessage());
@@ -3217,7 +3361,7 @@ if (!empty($oldVendorRefundsMap)) {
                         'updated_at' => now(),
                     ]);
 
-                    Log::info('Updated latest follow-up with service changes and recalculated amounts', [
+                    $this->debugLog('Updated latest follow-up with service changes and recalculated amounts', [
                         'lead_id' => $lead->id,
                         'followup_id' => $latestFollowup->id,
                         'new_services' => $newServiceIds,
@@ -3335,7 +3479,7 @@ if (!empty($oldVendorRefundsMap)) {
 
                     $newFollowup = \App\Models\LeadFollowup::create($followupData);
 
-                    Log::info('Created new follow-up with recalculated amounts', [
+                    $this->debugLog('Created new follow-up with recalculated amounts', [
                         'lead_id' => $lead->id,
                         'followup_id' => $newFollowup->id,
                         'new_services' => $newServiceIds,
@@ -3348,7 +3492,7 @@ if (!empty($oldVendorRefundsMap)) {
                     ]);
                 }
             } else {
-                Log::info('No new services to add to follow-up', [
+                $this->debugLog('No new services to add to follow-up', [
                     'lead_id' => $lead->id,
                     'current_services' => $currentServiceIds,
                     'followup_services' => $followupServiceIds,

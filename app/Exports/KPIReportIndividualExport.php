@@ -101,7 +101,7 @@ class KPIReportIndividualExport implements FromCollection, WithHeadings, WithMap
         //     ->sum('total_amount');
 
         // Step 1: followup IDs with approved payments whose paid_date is in the period
-        $paidFollowupIds = \App\Models\PaymentAuditTrail::where('payment_status', 1)
+        $paidFollowupIds = \App\Models\PaymentAuditTrail::where('payment_status', \App\Models\PaymentAuditTrail::STATUS_APPROVED)
             ->whereYear('paid_date', $period['year'])
             ->whereMonth('paid_date', $period['month'])
             ->pluck('lead_followup_id')->unique();

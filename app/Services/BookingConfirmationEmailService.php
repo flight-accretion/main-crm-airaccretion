@@ -51,33 +51,20 @@ class BookingConfirmationEmailService
             );
 
 
-            Mail::to(
-                $prepared[
-                    'customer_email'
-                ]
-            )->send(
-                new BookingConfirmationMail(
-                    $prepared[
-                        'subject'
-                    ],
+     $mail = Mail::to($prepared['customer_email']);
 
-                    $prepared[
-                        'body'
-                    ],
+        if (!empty($prepared['cc_emails'])) {
+            $mail->cc($prepared['cc_emails']);
+        }
 
-                    optional(
-                        $prepared[
-                            'agent'
-                        ]
-                    )->email,
-
-                    optional(
-                        $prepared[
-                            'agent'
-                        ]
-                    )->name
-                )
-            );
+        $mail->send(
+            new BookingConfirmationMail(
+                $prepared['subject'],
+                $prepared['body'],
+                optional($prepared['agent'])->email,
+                optional($prepared['agent'])->name
+            )
+        );
 
 
             /*
@@ -246,41 +233,10 @@ class BookingConfirmationEmailService
             );
     }
 
-    $paymentLink =
-        $this->cleanBookingWhatsAppUrl(
-            $variables[
-                'payment_link'
-            ]
-            ?? 'https://www.accretionaviation.com/pay'
-        );
-
     $registrationLink =
         $this->cleanBookingWhatsAppUrl(
             $registrationLink
         );
-
-    $termsLink =
-        $this->cleanBookingWhatsAppUrl(
-            $variables[
-                'terms_link'
-            ]
-            ?? 'https://www.accretionaviation.com/terms&condition.php'
-        );
-
-    $serviceNotes =
-        $this->bookingWhatsAppValue(
-            $variables[
-                'product_service_notes'
-            ]
-            ?? '',
-            500,
-            true
-        );
-
-    if ($serviceNotes === 'N/A') {
-        $serviceNotes =
-            'No additional service notes.';
-    }
 
     /*
      * CRITICAL:
@@ -289,15 +245,7 @@ class BookingConfirmationEmailService
      */
     return [
 
-        // {{1}} Customer Name
-        $this->bookingWhatsAppValue(
-            optional(
-                $lead->client
-            )->name,
-            80
-        ),
-
-        // {{2}} Service
+        // {{1}} Service
         $this->bookingWhatsAppValue(
             $variables[
                 'service_name'
@@ -306,7 +254,7 @@ class BookingConfirmationEmailService
             150
         ),
 
-        // {{3}} Date
+        // {{2}} Date
         $this->bookingWhatsAppValue(
             $variables[
                 'service_date'
@@ -315,7 +263,7 @@ class BookingConfirmationEmailService
             60
         ),
 
-        // {{4}} Duration
+        // {{3}} Duration
         $this->bookingWhatsAppValue(
             $variables[
                 'duration'
@@ -324,7 +272,7 @@ class BookingConfirmationEmailService
             50
         ),
 
-        // {{5}} Time
+        // {{4}} Time
         $this->bookingWhatsAppValue(
             $variables[
                 'time'
@@ -333,7 +281,7 @@ class BookingConfirmationEmailService
             50
         ),
 
-        // {{6}} Passengers
+        // {{5}} Passengers
         $this->bookingWhatsAppValue(
             $variables[
                 'passengers'
@@ -342,48 +290,17 @@ class BookingConfirmationEmailService
             20
         ),
 
-        // {{7}} Payment Breakdown
+        // {{6}} Amount / Payment Breakdown
         $this->bookingWhatsAppValue(
             $paymentBreakdown,
             700,
             true
         ),
 
-        // {{8}} Payment Link
-        $this->bookingWhatsAppValue(
-            $paymentLink,
-            220
-        ),
-
-        // {{9}} Registration Link
+        // {{7}} Registration Link
         $this->bookingWhatsAppValue(
             $registrationLink,
             220
-        ),
-
-        // {{10}} Terms Link
-        $this->bookingWhatsAppValue(
-            $termsLink,
-            220
-        ),
-
-        // {{11}} Product / Service Notes
-        $serviceNotes,
-
-        // {{12}} Agent Name
-        $this->bookingWhatsAppValue(
-            optional(
-                $prepared['agent']
-            )->name,
-            80
-        ),
-
-        // {{13}} Agent Phone
-        $this->bookingWhatsAppValue(
-            optional(
-                $prepared['agent']
-            )->contact_number,
-            30
         ),
     ];
 }
@@ -508,11 +425,11 @@ private function cleanBookingWhatsAppUrl(
 
         /*
          * Your approved Meta template has
-         * exactly 13 BODY parameters.
+         * exactly 7 BODY parameters.
          */
-        if (count($bodyValues) !== 13) {
+        if (count($bodyValues) !== 7) {
             throw new RuntimeException(
-                'booking_confirmation requires exactly 13 body values.'
+                'booking_confirmation requires exactly 7 body values.'
             );
         }
 
@@ -675,45 +592,28 @@ private function renderBookingConfirmationWhatsApp(
     array $values
 ): string {
     $template = <<<'TEXT'
-Dear {{1}},
-
 Thank you for choosing Accretion Aviation. Your booking details:
 
-SERVICE DETAILS
-Service: {{2}}
-Date: {{3}}
-Duration: {{4}}
-Time: {{5}}
-Passengers: {{6}}
+*SERVICE DETAILS*
+Service: {{1}}
+Date: {{2}}
+Duration: {{3}}
+Time: {{4}}
+Passengers: {{5}}
 
-PAYMENT
-{{7}}
-
-Pay securely:
-{{8}}
+*AMOUNT*
+{{6}}
 
 After payment, please share the payment screenshot for verification.
 
-PASSENGER REGISTRATION
-After payment confirmation, complete passenger details and upload government-issued ID:
-{{9}}
+*PASSENGER REGISTRATION*
+Please complete the passenger details and upload the government-issued ID details of all passengers:
+{{7}}
 
-IMPORTANT
-• Slot is not held until advance payment is received.
-• Timing is subject to weather/air traffic clearance; final timing will be shared 24–48 hours before the ride.
-• Carry original government-issued photo ID on service day.
-• Terms: {{10}}
-
-{{11}}
-
-Need help? Contact us.
-
-Regards,
-{{12}}
-Sales & Reservations
-Accretion Aviation
-+91 {{13}}
-www.accretionaviation.com
+*IMPORTANT*
+• Your slot is not held until the advance payment is received.
+• Timing is subject to weather and clearances.
+• Please carry the original government-issued photo ID on the day of service.
 TEXT;
 
     foreach (
@@ -1174,8 +1074,14 @@ public function previewForLead(
     'subject' =>
         $subject,
 
-    'body' =>
-        $body,
+   'body' =>
+    $body,
+
+    'cc_emails' =>
+        $this->bookingConfirmationCcEmails(
+            $variables,
+            $customerEmail
+        ),
 
     'total_amount_numeric' =>
         $totalAmountForEmail,
@@ -1193,6 +1099,23 @@ public function previewForLead(
         $variables,
 ];
     }
+
+    private function bookingConfirmationCcEmails(array $variables, string $customerEmail): array
+{
+    $emails = [
+        $variables['agent_email'] ?? null,
+        $variables['manager_email'] ?? null,
+        $variables['sales_email'] ?? null,
+    ];
+
+    return collect($emails)
+        ->map(fn ($email) => strtolower(trim((string) $email)))
+        ->filter(fn ($email) => $email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL))
+        ->reject(fn ($email) => $email === strtolower(trim($customerEmail)))
+        ->unique()
+        ->values()
+        ->all();
+}
 
 
     /*
@@ -1488,6 +1411,21 @@ private function emailContext(
                         $agent
                     )->contact_number
                 ),
+
+                'sales_name' =>
+            $contacts[
+                'sales_name'
+            ],
+
+        'sales_email' =>
+            $contacts[
+                'sales_email'
+            ],
+
+        'sales_phone' =>
+            $contacts[
+                'sales_phone'
+            ],
 
             'manager_name' =>
                 $contacts[

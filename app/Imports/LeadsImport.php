@@ -19,6 +19,7 @@ use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
+use function App\Helpers\getRepresentativeIds;
 
 class LeadsImport implements ToCollection, WithHeadingRow
 {
@@ -69,6 +70,29 @@ class LeadsImport implements ToCollection, WithHeadingRow
             }
         }
     }
+
+    private function abortUnlessRepresentativeInScope($representativeId): void
+{
+    if (!$representativeId) {
+        return;
+    }
+
+    $representatives = getRepresentativeIds(auth()->user());
+
+    if ($representatives === null) {
+        return;
+    }
+
+    if ($representatives instanceof \Illuminate\Support\Collection) {
+        $representatives = $representatives->toArray();
+    }
+
+    $representatives = array_map('strval', (array) $representatives);
+
+    if (!in_array((string) $representativeId, $representatives, true)) {
+        throw new \Exception('You are not allowed to import leads for this representative.');
+    }
+}
 
     /**
      * Return array of service ids associated with product ids.
@@ -316,6 +340,8 @@ class LeadsImport implements ToCollection, WithHeadingRow
         if (!$staff) {
             throw new \Exception("Staff representative '{$row['staff_representative']}' not found");
         }
+
+        $this->abortUnlessRepresentativeInScope($staff->id);
 
         // Check if client already exists
         $client = Client::where('email', trim($row['email_address']))->first();

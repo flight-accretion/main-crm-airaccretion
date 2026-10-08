@@ -26,6 +26,7 @@ class OperationsLeadAssignmentController extends Controller
                 || in_array(
                     optional($viewer->userType)->user_type,
                     [
+                        UserType::ADMIN,
                         UserType::OPERATIONS_MANAGER,
                         UserType::SENIOR_OPERATIONS_MANAGER,
                     ],
@@ -37,13 +38,19 @@ class OperationsLeadAssignmentController extends Controller
 
         $validated = $request->validate([
             'operations_user_id' => 'required|uuid|exists:users,id',
+            'reassignment_reason' => 'nullable|string|max:1000',
         ]);
 
         $operationsUser = User::with('userType')
             ->findOrFail($validated['operations_user_id']);
 
         try {
-            $service->assign($lead, $operationsUser, $viewer);
+            $service->assign(
+                $lead,
+                $operationsUser,
+                $viewer,
+                $validated['reassignment_reason'] ?? null
+            );
         } catch (RuntimeException $exception) {
             return back()->withErrors([
                 'operations_user_id' => $exception->getMessage(),

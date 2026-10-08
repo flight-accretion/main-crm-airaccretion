@@ -31,15 +31,10 @@ class SalesReportExport implements FromCollection, WithHeadings, WithMapping, Wi
 
     public function collection()
     {
-        // Status array
-        $statusArray = [
-            2 => 'Cancelled',
-            3 => 'Full Payment Received',
-            4 => 'Partial Payment Received',
-            5 => 'Confirmed',
-            7 => 'Rescheduled',
-            8 => 'Approved'
-        ];
+        $statusArray = array_intersect_key(
+            LeadFollowup::statusLabels(),
+            array_flip(LeadFollowup::salesAmountStatuses())
+        );
 
         // Build query with same filtering logic as controller
         $query = LeadFollowup::with([
@@ -53,7 +48,7 @@ class SalesReportExport implements FromCollection, WithHeadings, WithMapping, Wi
         // Apply month/year filter based on PAID DATE (from PaymentAuditTrail)
         // Only show leads that received approved payment in the selected month/year
         if (!empty($this->filters['month']) || !empty($this->filters['year'])) {
-            $paidDateQuery = \App\Models\PaymentAuditTrail::where('payment_status', 1);
+            $paidDateQuery = \App\Models\PaymentAuditTrail::where('payment_status', PaymentAuditTrail::STATUS_APPROVED);
             if (!empty($this->filters['month'])) {
                 $paidDateQuery->whereMonth('paid_date', $this->filters['month']);
             }
@@ -151,13 +146,32 @@ class SalesReportExport implements FromCollection, WithHeadings, WithMapping, Wi
         $allServices = Service::all()->keyBy('id');
         $allExtraServices = ExtraService::all()->keyBy('id');
         $allProducts = Product::all()->keyBy('id');
+        $leadIds = $allSalesData->pluck('lead_id')->filter()->unique()->values();
+        $followupIdsByLead = LeadFollowup::whereIn('lead_id', $leadIds)
+            ->get(['id', 'lead_id'])
+            ->groupBy('lead_id')
+            ->map(fn($items) => $items->pluck('id'));
+        $allFollowupIds = $followupIdsByLead->flatten()->unique()->values();
+        $paymentsByFollowup = PaymentAuditTrail::whereIn('lead_followup_id', $allFollowupIds)
+            ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
+            ->get()
+            ->groupBy('lead_followup_id');
+        $refundsByFollowup = \App\Models\LeadRefund::whereIn('lead_followup_id', $allFollowupIds)
+            ->whereIn('status', [1, 2])
+            ->get(['lead_followup_id', 'refund_amount'])
+            ->groupBy('lead_followup_id');
+        $managerAssignments = \App\Models\SalesExecutiveAssignment::with('manager')
+            ->whereIn('sales_executive_id', $allSalesData->pluck('enquiry.representative_user_id')->filter()->unique())
+            ->where('status', 1)
+            ->get()
+            ->keyBy('sales_executive_id');
 
         // Capture filter month/year for use inside closure
         $filterMonth = !empty($this->filters['month']) ? $this->filters['month'] : null;
         $filterYear = !empty($this->filters['year']) ? $this->filters['year'] : null;
 
         // Process sales data
-        $salesData = $allSalesData->groupBy('lead_id')->map(function ($group) use ($allServices, $allExtraServices, $allProducts, $statusArray, $filterMonth, $filterYear) {
+        $salesData = $allSalesData->groupBy('lead_id')->map(function ($group) use ($allServices, $allExtraServices, $allProducts, $statusArray, $filterMonth, $filterYear, $followupIdsByLead, $paymentsByFollowup, $refundsByFollowup, $managerAssignments) {
             $latest = $group->sortByDesc('created_at')->first();
             $client = $latest->enquiry->client ?? null;
             $ride = $latest->enquiry->rideSegments->first() ?? null;
@@ -165,20 +179,18 @@ class SalesReportExport implements FromCollection, WithHeadings, WithMapping, Wi
 
             // Get ALL followup IDs for this lead (not just current group)
             // This is important because payment might be in an earlier followup
-            $allFollowupIdsForLead = LeadFollowup::where('lead_id', $latest->lead_id)
-                ->pluck('id');
+            $allFollowupIdsForLead = $followupIdsByLead->get($latest->lead_id, collect());
 
             // Get approved payments from ALL followups of this lead
-            $approvedPayments = PaymentAuditTrail::whereIn('lead_followup_id', $allFollowupIdsForLead)
-                ->where('payment_status', 1)
-                ->get();
+            $approvedPayments = $allFollowupIdsForLead
+                ->flatMap(fn($followupId) => $paymentsByFollowup->get($followupId, collect()));
 
             $totalReceived = $approvedPayments->sum('paid_amount');
             $pendingAmount = $totalAmount - $totalReceived;
 
             // Get processed/completed refund amounts for this lead
-            $refundAmount = \App\Models\LeadRefund::whereIn('lead_followup_id', $allFollowupIdsForLead)
-                ->whereIn('status', [1, 2]) // 1=processed, 2=completed
+            $refundAmount = $allFollowupIdsForLead
+                ->flatMap(fn($followupId) => $refundsByFollowup->get($followupId, collect()))
                 ->sum('refund_amount');
 
             // Sales Amount = Total Amount minus service fees and processed refunds.
@@ -223,10 +235,7 @@ class SalesReportExport implements FromCollection, WithHeadings, WithMapping, Wi
             // Get manager name from SalesExecutiveAssignment table
             $managerName = 'N/A';
             if ($salesPerson) {
-                $assignment = \App\Models\SalesExecutiveAssignment::where('sales_executive_id', $salesPerson->id)
-                    ->where('status', 1)
-                    ->with('manager')
-                    ->first();
+                $assignment = $managerAssignments->get($salesPerson->id);
                 if ($assignment && $assignment->manager) {
                     $managerName = $assignment->manager->name;
                 }

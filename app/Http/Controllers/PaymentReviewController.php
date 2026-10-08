@@ -12,11 +12,50 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use App\Exports\PaymentReportExport;
+use App\Services\ActivityAuditService;
 use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Facades\Excel;
 
 class PaymentReviewController extends Controller
 {
+    private function abortLargeUnfilteredExport(Request $request)
+    {
+        $filters = collect($request->except(['format', '_token', 'page']))
+            ->filter(function ($value) {
+                if (is_array($value)) {
+                    return count(array_filter($value, fn($item) => filled($item))) > 0;
+                }
+
+                return filled($value);
+            });
+
+        if ($filters->isEmpty()) {
+            return back()->with('error', 'Please apply at least one filter before exporting large reports.');
+        }
+
+        return null;
+    }
+
+    private function paymentAuditAlreadyFinalized($followupId): bool
+    {
+        return PaymentAuditTrail::query()
+            ->where('lead_followup_id', $followupId)
+            ->whereIn('payment_status', PaymentAuditTrail::FINAL_REVIEW_STATUSES)
+            ->exists();
+    }
+
+    private function rejectIfPaymentAuditFinalized($followupId)
+    {
+        if ($this->paymentAuditAlreadyFinalized($followupId)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This payment has already been approved or rejected.',
+            ], 409);
+        }
+
+        return null;
+    }
+
     public function index(Request $request)
     {
         // Ensure user is authenticated
@@ -47,7 +86,10 @@ class PaymentReviewController extends Controller
             ])
                 ->whereNotNull('received_amount')
                 ->where('received_amount', '>', 0)
-                ->whereIn('status', [3, 4]);
+                ->whereIn('status', [
+                    LeadFollowup::STATUS_FULL_PAYMENT_RECEIVED,
+                    LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
+                ]);
 
             if ($fromDate && $toDate) {
                 $query->whereBetween('created_at', [
@@ -113,7 +155,7 @@ class PaymentReviewController extends Controller
             if ($paymentStatus && $paymentStatus !== '') {
                 if ($paymentStatus === 'approved') {
                     $query->whereHas('paymentAuditTrail', function ($q) {
-                        $q->where('payment_status', 1);
+                        $q->where('payment_status', PaymentAuditTrail::STATUS_APPROVED);
                     });
                 } elseif ($paymentStatus === 'rejected') {
                     $query->whereHas('paymentAuditTrail', function ($q) {
@@ -121,7 +163,7 @@ class PaymentReviewController extends Controller
                     });
                 } elseif ($paymentStatus === 'pending') {
                     $query->whereDoesntHave('paymentAuditTrail', function ($q) {
-                        $q->whereIn('payment_status', [1, 2]);
+                        $q->whereIn('payment_status', PaymentAuditTrail::FINAL_REVIEW_STATUSES);
                     });
                 }
             }
@@ -160,7 +202,7 @@ class PaymentReviewController extends Controller
 
                     // Calculate received amount only from approved payments (audit trail status = 1)
                     $approvedPayments = PaymentAuditTrail::whereIn('lead_followup_id', $group->pluck('id'))
-                        ->where('payment_status', 1) // Only approved payments
+                        ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
                         ->get();
 
                     $totalReceivedApproved = $approvedPayments->sum('paid_amount');
@@ -178,7 +220,7 @@ class PaymentReviewController extends Controller
                     // unreviewed, the lead should stay visible.
                     $followupIds = $group->pluck('id')->toArray();
                     $reviewedFollowupCount = PaymentAuditTrail::whereIn('lead_followup_id', $followupIds)
-                        ->whereIn('payment_status', [1, 2])
+                        ->whereIn('payment_status', PaymentAuditTrail::FINAL_REVIEW_STATUSES)
                         ->distinct()
                         ->count('lead_followup_id');
 
@@ -372,7 +414,7 @@ class PaymentReviewController extends Controller
 
         $validator = $request->validate([
             'payment_method' => 'required|string',
-            'received_date' => 'required|date',
+            'received_date' => 'required|date|before_or_equal:today',
             'narration' => 'nullable|string'
         ]);
 
@@ -383,7 +425,19 @@ class PaymentReviewController extends Controller
             ], 422);
         }
 
+        $isSuperAdmin = (auth()->user()->userType->user_type ?? '') === \App\Models\UserType::SUPER_ADMIN;
+        if (!$isSuperAdmin && $request->received_date < date('Y-m-d')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only Super Admin can select a past date.'
+            ], 403);
+        }
+
         $originalFollowup = LeadFollowup::findOrFail($id);
+
+        if ($response = $this->rejectIfPaymentAuditFinalized($originalFollowup->id)) {
+            return $response;
+        }
 
         DB::beginTransaction();
         try {
@@ -426,14 +480,35 @@ class PaymentReviewController extends Controller
                 'next_followup_date' => $latestFollowup->next_followup_date,
             ]);
 
+            $paymentAudit = PaymentAuditTrail::where('lead_followup_id', $originalFollowup->id)->first();
+            $oldPaymentStatus = $paymentAudit?->payment_status;
+
             PaymentAuditTrail::where('lead_followup_id', $originalFollowup->id)
                 ->update([
-                    'payment_status' => 1, // 1 = Approve
+                    'payment_status' => PaymentAuditTrail::STATUS_APPROVED,
                     'payment_method' => $request->payment_method,
                     'paid_date' => $parsedPaidDate,
                     'narration' => $request->narration,
                     'updated_at' => now()
                 ]);
+
+            $paymentAudit = PaymentAuditTrail::where('lead_followup_id', $originalFollowup->id)->first();
+            app(ActivityAuditService::class)->record(
+                'payment',
+                'approved',
+                $paymentAudit,
+                ['payment_status' => $oldPaymentStatus],
+                [
+                    'payment_status' => PaymentAuditTrail::STATUS_APPROVED,
+                    'approved_by' => auth()->id(),
+                ],
+                [
+                    'lead_id' => $originalFollowup->lead_id,
+                    'client_id' => $originalFollowup->enquiry?->client_id,
+                    'followup_id' => $originalFollowup->id,
+                    'amount' => $originalFollowup->received_amount,
+                ]
+            );
 
             Log::info('Payment approved successfully', [
                 'followup_id' => $newFollowup->id,
@@ -473,6 +548,10 @@ class PaymentReviewController extends Controller
 
         $originalFollowup = LeadFollowup::findOrFail($id);
 
+        if ($response = $this->rejectIfPaymentAuditFinalized($originalFollowup->id)) {
+            return $response;
+        }
+
         DB::beginTransaction();
         try {
             // Get latest followup for this lead
@@ -501,16 +580,33 @@ class PaymentReviewController extends Controller
             ]);
 
             // Create audit trail with correct status codes
-            PaymentAuditTrail::create([
+            $paymentAudit = PaymentAuditTrail::create([
                 'id' => Str::uuid(),
                 'lead_followup_id' => $newFollowup->id,
                 'paid_amount' => $originalFollowup->received_amount,
                 'paid_date' => now(),
                 'payment_method' => $request->payment_method ?? 'Manual Rejection',
                 'narration' => $request->narration ?? 'Payment rejected',
-                'payment_status' => 2, // 2 = Reject (audit trail status)
+                'payment_status' => PaymentAuditTrail::STATUS_REJECTED,
                 'created_by' => auth()->id()
             ]);
+
+            app(ActivityAuditService::class)->record(
+                'payment',
+                'rejected',
+                $paymentAudit,
+                ['payment_status' => null],
+                [
+                    'payment_status' => PaymentAuditTrail::STATUS_REJECTED,
+                    'rejection_reason' => $request->narration ?? null,
+                ],
+                [
+                    'lead_id' => $originalFollowup->lead_id,
+                    'client_id' => $originalFollowup->enquiry?->client_id,
+                    'followup_id' => $newFollowup->id,
+                    'amount' => $originalFollowup->received_amount,
+                ]
+            );
             DB::commit();
 
             return response()->json([
@@ -536,7 +632,7 @@ class PaymentReviewController extends Controller
 
         $request->validate([
             'payment_method' => 'required|string',
-            'received_date' => 'required|date',
+            'received_date' => 'required|date|before_or_equal:today',
             'narration' => 'nullable|string'
         ]);
 
@@ -565,6 +661,11 @@ class PaymentReviewController extends Controller
             // Find the original payment followup entry
             $originalFollowup = LeadFollowup::findOrFail($id);
 
+            if ($response = $this->rejectIfPaymentAuditFinalized($originalFollowup->id)) {
+                DB::rollBack();
+                return $response;
+            }
+
             // Get latest followup for this lead to copy all data
             $latestFollowup = LeadFollowup::where('lead_id', $originalFollowup->lead_id)
                 ->orderBy('created_at', 'desc')
@@ -590,14 +691,35 @@ class PaymentReviewController extends Controller
                 'next_followup_date' => $latestFollowup->next_followup_date,
             ]);
 
+            $paymentAudit = PaymentAuditTrail::where('lead_followup_id', $originalFollowup->id)->first();
+            $oldPaymentStatus = $paymentAudit?->payment_status;
+
             PaymentAuditTrail::where('lead_followup_id', $originalFollowup->id)
                 ->update([
-                    'payment_status' => 1, // 1 = Approve
+                    'payment_status' => PaymentAuditTrail::STATUS_APPROVED,
                     'payment_method' => $request->payment_method,
                     'paid_date' => $parsedPaidDate,
                     'narration' => $request->narration,
                     'updated_at' => now()
                 ]);
+
+            $paymentAudit = PaymentAuditTrail::where('lead_followup_id', $originalFollowup->id)->first();
+            app(ActivityAuditService::class)->record(
+                'payment',
+                'approved',
+                $paymentAudit,
+                ['payment_status' => $oldPaymentStatus],
+                [
+                    'payment_status' => PaymentAuditTrail::STATUS_APPROVED,
+                    'approved_by' => auth()->id(),
+                ],
+                [
+                    'lead_id' => $originalFollowup->lead_id,
+                    'client_id' => $originalFollowup->enquiry?->client_id,
+                    'followup_id' => $originalFollowup->id,
+                    'amount' => $originalFollowup->received_amount,
+                ]
+            );
 
             DB::commit();
 
@@ -630,6 +752,11 @@ class PaymentReviewController extends Controller
             // Find the original payment followup entry
             $originalFollowup = LeadFollowup::findOrFail($id);
 
+            if ($response = $this->rejectIfPaymentAuditFinalized($originalFollowup->id)) {
+                DB::rollBack();
+                return $response;
+            }
+
             // Get latest followup for this lead to copy all data
             $latestFollowup = LeadFollowup::where('lead_id', $originalFollowup->lead_id)
                 ->orderBy('created_at', 'desc')
@@ -656,15 +783,36 @@ class PaymentReviewController extends Controller
             ]);
 
             // Create new audit trail entry for the new followup
+            $paymentAudit = PaymentAuditTrail::where('lead_followup_id', $originalFollowup->id)->first();
+            $oldPaymentStatus = $paymentAudit?->payment_status;
+
             PaymentAuditTrail::where('lead_followup_id', $originalFollowup->id)
                 ->update([
-                    'payment_status' => 2, // 2 = Reject
+                    'payment_status' => PaymentAuditTrail::STATUS_REJECTED,
                     'paid_amount' => $originalFollowup->received_amount,
                     'paid_date' => now(),
                     'payment_method' => $request->payment_method ?? 'Manual Rejection',
                     'narration' => $request->narration ?? 'Payment rejected',
                     'updated_at' => now()
                 ]);
+
+            $paymentAudit = PaymentAuditTrail::where('lead_followup_id', $originalFollowup->id)->first();
+            app(ActivityAuditService::class)->record(
+                'payment',
+                'rejected',
+                $paymentAudit,
+                ['payment_status' => $oldPaymentStatus],
+                [
+                    'payment_status' => PaymentAuditTrail::STATUS_REJECTED,
+                    'rejection_reason' => $request->narration ?? null,
+                ],
+                [
+                    'lead_id' => $originalFollowup->lead_id,
+                    'client_id' => $originalFollowup->enquiry?->client_id,
+                    'followup_id' => $originalFollowup->id,
+                    'amount' => $originalFollowup->received_amount,
+                ]
+            );
 
             DB::commit();
 
@@ -690,9 +838,17 @@ class PaymentReviewController extends Controller
 
         $request->validate([
             'payment_method' => 'required|string',
-            'received_date' => 'required|date',
+            'received_date' => 'required|date|before_or_equal:today',
             'narration' => 'nullable|string'
         ]);
+
+        $isSuperAdmin = (auth()->user()->userType->user_type ?? '') === \App\Models\UserType::SUPER_ADMIN;
+        if (!$isSuperAdmin && $request->received_date < date('Y-m-d')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only Super Admin can select a past date.'
+            ], 403);
+        }
 
         DB::beginTransaction();
         try {
@@ -712,14 +868,17 @@ class PaymentReviewController extends Controller
             $paymentFollowups = LeadFollowup::where('lead_id', $originalFollowup->lead_id)
                 ->whereNotNull('received_amount')
                 ->where('received_amount', '>', 0)
-                ->whereIn('status', [3, 4]) // Only Full Paid (3) and Partial Paid (4)
+                ->whereIn('status', [
+                    LeadFollowup::STATUS_FULL_PAYMENT_RECEIVED,
+                    LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
+                ])
                 ->get();
 
             // Filter to only include followups that don't have approved/rejected audit trails
             $followupsToProcess = $paymentFollowups->filter(function ($followup) {
                 $auditTrail = PaymentAuditTrail::where('lead_followup_id', $followup->id)->first();
                 // Only process if no audit trail exists OR audit trail is not approved (1) or rejected (2)
-                return !$auditTrail || !in_array($auditTrail->payment_status, [1, 2]);
+                return !$auditTrail || !in_array($auditTrail->payment_status, PaymentAuditTrail::FINAL_REVIEW_STATUSES, true);
             });
 
             $processedCount = 0;
@@ -731,6 +890,7 @@ class PaymentReviewController extends Controller
 
                 // Find and update existing audit trail entry or create new one
                 $auditTrail = PaymentAuditTrail::where('lead_followup_id', $followup->id)->first();
+                $oldPaymentStatus = $auditTrail?->payment_status;
 
                 if ($auditTrail) {
                     $auditTrail->payment_status = 1; // 1 = Approve
@@ -740,7 +900,7 @@ class PaymentReviewController extends Controller
                     $auditTrail->save();
                     Log::info('Audit trail updated for followup ID: ' . $followup->id);
                 } else {
-                    PaymentAuditTrail::create([
+                    $auditTrail = PaymentAuditTrail::create([
                         'id' => Str::uuid(),
                         'lead_followup_id' => $followup->id,
                         'paid_amount' => $followup->received_amount,
@@ -751,6 +911,23 @@ class PaymentReviewController extends Controller
                         'created_by' => auth()->id()
                     ]);
                 }
+
+                app(ActivityAuditService::class)->record(
+                    'payment',
+                    'approved',
+                    $auditTrail,
+                    ['payment_status' => $oldPaymentStatus],
+                    [
+                        'payment_status' => PaymentAuditTrail::STATUS_APPROVED,
+                        'approved_by' => auth()->id(),
+                    ],
+                    [
+                        'lead_id' => $followup->lead_id,
+                        'client_id' => $followup->enquiry?->client_id,
+                        'followup_id' => $followup->id,
+                        'amount' => $followup->received_amount,
+                    ]
+                );
                 $processedCount++;
             }
             DB::commit();
@@ -787,14 +964,17 @@ class PaymentReviewController extends Controller
             $paymentFollowups = LeadFollowup::where('lead_id', $originalFollowup->lead_id)
                 ->whereNotNull('received_amount')
                 ->where('received_amount', '>', 0)
-                ->whereIn('status', [3, 4]) // Only Full Paid (3) and Partial Paid (4)
+                ->whereIn('status', [
+                    LeadFollowup::STATUS_FULL_PAYMENT_RECEIVED,
+                    LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
+                ])
                 ->get();
 
             // Filter to only include followups that don't have approved/rejected audit trails
             $followupsToProcess = $paymentFollowups->filter(function ($followup) {
                 $auditTrail = PaymentAuditTrail::where('lead_followup_id', $followup->id)->first();
                 // Only process if no audit trail exists OR audit trail is not approved (1) or rejected (2)
-                return !$auditTrail || !in_array($auditTrail->payment_status, [1, 2]);
+                return !$auditTrail || !in_array($auditTrail->payment_status, PaymentAuditTrail::FINAL_REVIEW_STATUSES, true);
             });
 
             $processedCount = 0;
@@ -806,6 +986,7 @@ class PaymentReviewController extends Controller
 
                 // Find and update existing audit trail entry or create new one
                 $auditTrail = PaymentAuditTrail::where('lead_followup_id', $followup->id)->first();
+                $oldPaymentStatus = $auditTrail?->payment_status;
 
                 if ($auditTrail) {
                     $auditTrail->payment_status = 2; // 2 = Reject
@@ -813,7 +994,7 @@ class PaymentReviewController extends Controller
                     $auditTrail->save();
                     Log::info('Audit trail updated for followup ID: ' . $followup->id);
                 } else {
-                    PaymentAuditTrail::create([
+                    $auditTrail = PaymentAuditTrail::create([
                         'id' => Str::uuid(),
                         'lead_followup_id' => $followup->id,
                         'paid_amount' => $followup->received_amount,
@@ -824,6 +1005,23 @@ class PaymentReviewController extends Controller
                         'created_by' => auth()->id()
                     ]);
                 }
+
+                app(ActivityAuditService::class)->record(
+                    'payment',
+                    'rejected',
+                    $auditTrail,
+                    ['payment_status' => $oldPaymentStatus],
+                    [
+                        'payment_status' => PaymentAuditTrail::STATUS_REJECTED,
+                        'rejection_reason' => $request->narration ?? null,
+                    ],
+                    [
+                        'lead_id' => $followup->lead_id,
+                        'client_id' => $followup->enquiry?->client_id,
+                        'followup_id' => $followup->id,
+                        'amount' => $followup->received_amount,
+                    ]
+                );
                 $processedCount++;
             }
 
@@ -846,6 +1044,9 @@ class PaymentReviewController extends Controller
     public function export(Request $request)
     {
         try {
+            if ($response = $this->abortLargeUnfilteredExport($request)) {
+                return $response;
+            }
 
             $filters = [
                 'service_date' => $request->input('service_date'),

@@ -497,6 +497,53 @@
             @endif
         </div>
     </div>
+
+    @if(isset($auditTimeline) && $auditTimeline->count())
+        <div class="box">
+            <div class="box-header">
+                <h5 class="box-title">Business Activity Timeline</h5>
+            </div>
+            <div class="box-body">
+                <div class="space-y-4">
+                    @foreach($auditTimeline as $audit)
+                        <div class="pb-4 border-b border-defaultborder last:border-b-0 last:pb-0">
+                            <div class="flex flex-wrap items-start justify-between gap-2">
+                                <strong class="text-gray-800 dark:text-white">
+                                    {{ ucwords(str_replace('_', ' ', $audit->module)) }}
+                                    -
+                                    {{ ucwords(str_replace('_', ' ', $audit->action)) }}
+                                </strong>
+                                <small class="text-[#8c9097] dark:text-white/50">
+                                    {{ optional($audit->created_at)->format('d M Y, h:i A') }}
+                                </small>
+                            </div>
+
+                            <div class="text-[#8c9097] dark:text-white/50 text-sm mt-1">
+                                By {{ $audit->actor_name ?? 'System' }}
+                                @if($audit->actor_role)
+                                    ({{ $audit->actor_role }})
+                                @endif
+                            </div>
+
+                            @if(!empty($audit->new_values))
+                                <div class="mt-2 flex flex-wrap gap-2">
+                                    @foreach($audit->new_values as $key => $value)
+                                        @if(!is_array($value) && !is_object($value) && $value !== null && $value !== '')
+                                            <span class="badge bg-light text-dark">
+                                                {{ ucwords(str_replace('_', ' ', $key)) }}:
+                                                {{ $value }}
+                                            </span>
+                                        @endif
+                                    @endforeach
+                                </div>
+                            @endif
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+    @endif
+
     <div id="addEnquiryModal" class="hs-overlay hidden ti-modal">
         <div class="hs-overlay-open:mt-7 ti-modal-box mt-0 ease-out">
             <div class="ti-modal-content">

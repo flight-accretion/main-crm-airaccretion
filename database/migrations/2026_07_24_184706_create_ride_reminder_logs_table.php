@@ -6,47 +6,36 @@ use Illuminate\Support\Facades\Schema;
 
 class CreateRideReminderLogsTable extends Migration
 {
-    /**
-     * Run the migrations.
-     *
-     * @return void
-     */
-   public function up()
-{
-    Schema::create('ride_reminder_logs', function (Blueprint $table) {
-        $table->uuid('id')->primary();
+    public function up()
+    {
+        if (Schema::hasTable('ride_reminder_logs')) {
+            return;
+        }
 
-        $table->uuid('ride_id');
-        $table->uuid('lead_id');
+        Schema::create('ride_reminder_logs', function (Blueprint $table) {
+            $table->uuid('id')->primary();
 
-        // 5, 3, or 1 day reminder
-        $table->tinyInteger('reminder_type');
+            $table->uuid('ride_id');
+            $table->uuid('lead_id')->nullable();
 
-        $table->string('template_name')->nullable();
+            $table->unsignedSmallInteger('hours_before');
+            $table->string('channel', 30);
+            $table->string('recipient')->nullable();
+            $table->string('status')->default('pending');
+            $table->text('error_message')->nullable();
+            $table->timestamp('sent_at')->nullable();
 
-        $table->timestamp('sent_at');
+            $table->timestamps();
 
-        $table->timestamps();
+            $table->unique(['ride_id', 'hours_before', 'channel'], 'ride_reminder_logs_unique_delivery');
+            $table->index('ride_id');
+            $table->index('lead_id');
+            $table->index('status');
+        });
+    }
 
-        $table->softDeletes();
-
-        $table->index(['ride_id', 'reminder_type']);
-        $table->index('lead_id');
-
-        $table->foreign('ride_id')
-            ->references('id')
-            ->on('lead_rides')
-            ->onDelete('cascade');
-
-        $table->foreign('lead_id')
-            ->references('id')
-            ->on('leads')
-            ->onDelete('cascade');
-    });
-}
-
-public function down()
-{
-    Schema::dropIfExists('ride_reminder_logs');
-}
+    public function down()
+    {
+        Schema::dropIfExists('ride_reminder_logs');
+    }
 }

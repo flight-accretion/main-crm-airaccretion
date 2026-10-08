@@ -133,7 +133,7 @@ class SalesExecutiveNotificationController extends Controller
     private function getSalesCompleted(string $executiveId, int $year, int $month): float
     {
         // Step 1: Get paid followup IDs this month
-        $paidFollowupIds = PaymentAuditTrail::where('payment_status', 1)
+        $paidFollowupIds = PaymentAuditTrail::where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
             ->whereYear('paid_date', $year)
             ->whereMonth('paid_date', $month)
             ->pluck('lead_followup_id')
@@ -158,7 +158,7 @@ class SalesExecutiveNotificationController extends Controller
         $allFollowupIdsFlat = $allFollowupIdsByLead->flatten()->unique();
 
         $firstPaymentPerLead = PaymentAuditTrail::whereIn('lead_followup_id', $allFollowupIdsFlat)
-            ->where('payment_status', 1)
+            ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
             ->orderBy('paid_date')
             ->get()
             ->groupBy(function ($p) use ($allFollowupIdsByLead) {

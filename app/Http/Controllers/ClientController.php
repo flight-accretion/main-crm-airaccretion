@@ -37,6 +37,7 @@ use App\Services\LeadAssignmentFollowupService;
 use App\Services\LeadAiCurrentFactsService;
 use App\Services\LeadSourceFollowupService;
 use App\Services\SalesAmountCalculator;
+use App\Support\PhoneNormalizer;
 use function App\Helpers\getRepresentativeIds;
 use App\Services\ActiveLeadService;
 use App\Models\LeadAllocationQueue;
@@ -45,6 +46,8 @@ use App\Models\LeadAiScoringSetting;
 use App\Models\KpiOutreachAssignment;
 use App\Services\Kpi\KpiOutreachService;
 use App\Services\Kpi\KpiActivityRecorder;
+use App\Services\ActivityAuditService;
+use App\Models\ActivityAudit;
 
 class ClientController extends Controller
 {
@@ -159,17 +162,123 @@ class ClientController extends Controller
         return array_values(array_unique(array_map('strval', $ids)));
     }
 
-    private function abortUnlessCanAccessLead(Lead $lead): void
-{
-    $representatives = getRepresentativeIds(auth()->user());
+    private function buildLeadExportRow($lead, int $index, $allProducts): array
+    {
+        $productIds = is_array($lead->product_ids)
+            ? $lead->product_ids
+            : (json_decode($lead->product_ids, true) ?? []);
 
-    if (
-        $representatives !== null
-        && !in_array($lead->representative_user_id, $representatives, true)
-    ) {
-        abort(403, 'You are not allowed to access this lead.');
+        $productNames = collect($productIds)
+            ->map(fn($id) => $allProducts->get((string) $id) ?? $allProducts->get($id))
+            ->filter()
+            ->pluck('product')
+            ->implode(', ');
+
+        $firstSegment = $lead->rideSegments->first();
+        $lastSegment = $lead->rideSegments->last();
+        $latestFollowup = $lead->leadFollowups->sortByDesc('created_at')->first();
+
+        $statusText = $latestFollowup ? $latestFollowup->statusLabel() : 'N/A';
+
+        $formatDate = function ($date, $format = 'Y-m-d') {
+            if (!$date) return '';
+            try {
+                if (is_string($date)) {
+                    return Carbon::parse($date)->format($format);
+                }
+                return $date->format($format);
+            } catch (\Exception $e) {
+                return is_string($date) ? $date : '';
+            }
+        };
+
+        $phoneDigits = $lead->client
+            ? PhoneNormalizer::digits($lead->client->contact_number)
+            : '';
+        $altDigits = $lead->client
+            ? PhoneNormalizer::digits($lead->client->alternate_number)
+            : '';
+
+        return [
+            $index + 1,
+            $lead->client->name ?? '',
+            $lead->client->company_name ?? '',
+            $lead->client->gst_number ?? '',
+            $lead->client->email ?? '',
+            $phoneDigits,
+            $altDigits,
+            $lead->client->date_of_birth ? $formatDate($lead->client->date_of_birth) : '',
+            $lead->client->address ?? '',
+            $lead->client->country->name ?? '',
+            $lead->client->city->name ?? '',
+            $productNames,
+            $lead->representative->name ?? '',
+            $lead->number_of_passengers ?? 1,
+            $firstSegment ? $formatDate($firstSegment->from_date) : '',
+            $lastSegment ? $formatDate($lastSegment->to_date) : '',
+            $firstSegment ? $firstSegment->from_place : '',
+            $lastSegment ? $lastSegment->to_place : '',
+            $latestFollowup && $latestFollowup->next_followup_date ? $formatDate($latestFollowup->next_followup_date, 'Y-m-d H:i') : '',
+            $statusText,
+            $formatDate($lead->created_at, 'Y-m-d H:i:s'),
+            $formatDate($lead->updated_at, 'Y-m-d H:i:s'),
+            $lead->leadFollowups->pluck('followup_note')->filter()->implode('; '),
+        ];
     }
-}
+
+    private function abortUnlessCanAccessLead(Lead $lead): void
+    {
+        $user = auth()->user();
+
+        if (!$user) {
+            abort(403, 'You are not allowed to access this lead.');
+        }
+
+        $representatives = getRepresentativeIds($user);
+
+        if ($representatives === null) {
+            return;
+        }
+
+        if ($representatives instanceof \Illuminate\Support\Collection) {
+            $representatives = $representatives->all();
+        }
+
+        $representatives = array_map('strval', (array) $representatives);
+
+        if (!in_array((string) $lead->representative_user_id, $representatives, true)) {
+            abort(403, 'You are not allowed to access this lead.');
+        }
+    }
+
+    private function abortUnlessCanAccessClient(Client $client): void
+    {
+        $user = auth()->user();
+
+        if (!$user) {
+            abort(403, 'You are not allowed to access this client.');
+        }
+
+        $representatives = getRepresentativeIds($user);
+
+        if ($representatives === null) {
+            return;
+        }
+
+        if ($representatives instanceof \Illuminate\Support\Collection) {
+            $representatives = $representatives->all();
+        }
+
+        $representatives = array_map('strval', (array) $representatives);
+
+        $canAccess = $client->leads()
+            ->whereIn('representative_user_id', $representatives)
+            ->exists();
+
+        if (!$canAccess) {
+            abort(403, 'You are not allowed to access this client.');
+        }
+    }
 
     public function buildLeadFollowupViewData(Lead $lead): array
     {
@@ -503,13 +612,16 @@ class ClientController extends Controller
             }
         }
 
-        if ($request->filled('representative_user_id')) {
-            if ($this->isUnassignedRepresentativeFilter($request->input('representative_user_id'))) {
-                $query->whereNull('representative_user_id');
-            } else {
-                $query->where('representative_user_id', $request->representative_user_id);
-            }
-        }
+    if ($request->filled('representative_user_id')) {
+    $representativeId = $request->input('representative_user_id');
+
+    if ($this->isUnassignedRepresentativeFilter($representativeId)) {
+        $query->whereNull('representative_user_id');
+    } else {
+        $this->abortUnlessRepresentativeInScope($representativeId);
+        $query->where('representative_user_id', $representativeId);
+    }
+}
 
         // Status filter (latest follow-up) - using subquery for efficiency
         // Note: Using created_at instead of MAX(id) because id is UUID type which doesn't support MAX() in PostgreSQL
@@ -766,10 +878,13 @@ if ($isSuperAdmin) {
 }
 
         // Optimize approved payments query - use select and distinct
-        $leadsWithApprovedPayments = \App\Models\PaymentAuditTrail::where('payment_status', 1)
+        $leadsWithApprovedPayments = \App\Models\PaymentAuditTrail::where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
             ->where('paid_amount', '>', 0)
             ->join('lead_followups', 'payment_audit_trail.lead_followup_id', '=', 'lead_followups.id')
-            ->whereIn('lead_followups.status', [3, 4])
+            ->whereIn('lead_followups.status', [
+                LeadFollowup::STATUS_FULL_PAYMENT_RECEIVED,
+                LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
+            ])
             ->select('lead_followups.lead_id')
             ->distinct()
             ->pluck('lead_followups.lead_id')
@@ -1737,6 +1852,8 @@ $leadFollowUp = LeadFollowUp::create([
     // }
   public function destroy(Client $client)
 {
+    $this->abortUnlessCanAccessClient($client);
+
     if (!auth()->check() || !auth()->user()->isSuperAdmin()) {
         abort(403, 'Only Super Admin can delete.');
     }
@@ -1757,6 +1874,8 @@ $leadFollowUp = LeadFollowUp::create([
 }
     public function view(Client $client)
     {
+        $this->abortUnlessCanAccessClient($client);
+
         // Remove the UUID check since we're using route model binding
         $client->load(['leads.rideSegments', 'leads.representative']);
 
@@ -1843,6 +1962,8 @@ $leadFollowUp = LeadFollowUp::create([
     }
     public function toggleStatus(Client $client)
     {
+        $this->abortUnlessCanAccessClient($client);
+
         try {
             $client->update(['status' => !$client->status]);
             return response()->json([
@@ -1860,11 +1981,15 @@ $leadFollowUp = LeadFollowUp::create([
 
     public function update(Request $request, Client $client)
     {
+        $this->abortUnlessCanAccessClient($client);
+
         return $this->updateClient($request, $client);
     }
 
     public function createFollowUp(Client $client)
     {
+        $this->abortUnlessCanAccessClient($client);
+
         $lead = $client->latestLead;
 
         if (!$lead) {
@@ -1877,6 +2002,8 @@ $leadFollowUp = LeadFollowUp::create([
 
     public function storeFollowUp(Request $request, Client $client)
     {
+        $this->abortUnlessCanAccessClient($client);
+
         $lead = $client->latestLead;
 
         if (!$lead) {
@@ -2199,6 +2326,8 @@ $leadFollowUp = LeadFollowUp::create([
      */
     public function generatePassengerRegistrationLink(Client $client)
     {
+        $this->abortUnlessCanAccessClient($client);
+
         try {
             $lead = $this->resolvePassengerRegistrationLeadForClient($client);
             if (!$lead) {
@@ -2231,6 +2360,8 @@ $leadFollowUp = LeadFollowUp::create([
      */
     public function getPassengerRegistrationLink(Client $client)
     {
+        $this->abortUnlessCanAccessClient($client);
+
         try {
             $lead = $this->resolvePassengerRegistrationLeadForClient($client);
             if (!$lead) {
@@ -2579,6 +2710,8 @@ $leadFollowUp = LeadFollowUp::create([
 
     public function updateClient(Request $request, Client $client)
     {
+        $this->abortUnlessCanAccessClient($client);
+
         // Trim whitespace from inputs
         $request->merge([
             'email' => trim($request->input('email')),
@@ -2818,6 +2951,8 @@ $leadFollowUp = LeadFollowUp::create([
 
     public function editClient(Client $client)
     {
+        $this->abortUnlessCanAccessClient($client);
+
         $countries = Country::where('status', 1)->get();
 
         // Get cities for the client's country
@@ -2837,6 +2972,8 @@ $leadFollowUp = LeadFollowUp::create([
 
     public function getClientData(Client $client)
     {
+        $this->abortUnlessCanAccessClient($client);
+
         $countries = Country::where('status', 1)->get();
         $cities = [];
 
@@ -2864,6 +3001,8 @@ $leadFollowUp = LeadFollowUp::create([
         $client = Client::with(['leads' => function ($query) {
             $query->orderBy('created_at', 'desc');
         }, 'leads.representative', 'leads.leadFollowups', 'leads.rideSegments'])->findOrFail($clientId);
+
+        $this->abortUnlessCanAccessClient($client);
 
         if (!$client) {
             abort(404, 'Client not found');
@@ -3231,11 +3370,11 @@ $leadFollowUp = LeadFollowUp::create([
                 'status' => $request->status,
                 'followed_by' => $followedById,
                 'file' => $imagePath,
-                'service_ids' => !empty($services) ? json_encode(array_values($services)) : null,
-                'extra_service_ids' => !empty($extraServices) ? json_encode(array_values($extraServices)) : null,
+                'service_ids' => !empty($services) ? array_values($services) : null,
+                'extra_service_ids' => !empty($extraServices) ? array_values($extraServices) : null,
                 'service_amount' => $calculatedServiceAmount,
                 'discount_amount' => $discountAmount,
-                'service_details' => !empty($serviceDetails) ? json_encode($serviceDetails) : null,
+                'service_details' => !empty($serviceDetails) ? array_values($serviceDetails) : null,
                 'total_amount' => $totalAmount,
                 'received_amount' => $request->received_amount,
                 'payment_method' => $request->payment_method,
@@ -3255,9 +3394,15 @@ $leadFollowUp = LeadFollowUp::create([
                 $request->user()
             );
 
-            // Status 3 = Full Payment Received, 4 = Partial Payment Received
-            if (in_array((int)$request->status, [3, 4]) && $request->filled('received_amount') && $request->received_amount > 0) {
-                PaymentAuditTrail::create([
+            if (
+                in_array((int) $request->status, [
+                    LeadFollowup::STATUS_FULL_PAYMENT_RECEIVED,
+                    LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
+                ], true)
+                && $request->filled('received_amount')
+                && $request->received_amount > 0
+            ) {
+                $paymentAudit = PaymentAuditTrail::create([
                     'id' => Str::uuid(),
                     'lead_followup_id' => $followup->id,
                     'paid_amount' => $request->received_amount,
@@ -3267,6 +3412,25 @@ $leadFollowUp = LeadFollowUp::create([
                     'payment_status' => $request->status,
                     'created_by' => auth()->id(),
                 ]);
+
+                app(ActivityAuditService::class)->record(
+                    'payment',
+                    (int) $request->status === LeadFollowup::STATUS_FULL_PAYMENT_RECEIVED
+                        ? 'full_payment_received'
+                        : 'partial_payment_received',
+                    $paymentAudit,
+                    [],
+                    [
+                        'amount' => $paymentAudit->paid_amount,
+                        'payment_type' => (int) $request->status === LeadFollowup::STATUS_FULL_PAYMENT_RECEIVED ? 'full' : 'partial',
+                        'status' => $paymentAudit->payment_status,
+                    ],
+                    [
+                        'lead_id' => $lead->id,
+                        'client_id' => $lead->client_id,
+                        'followup_id' => $followup->id,
+                    ]
+                );
 
                 // If payment method is Acepoint, redeem points from Airpoints system
                 if ($isAcepointPayment && $request->filled('redeem_points')) {
@@ -4043,6 +4207,11 @@ $leadFollowUp = LeadFollowUp::create([
                 return back()->with('error', 'No leads selected for import');
             }
 
+            $maxSyncImportRows = 500;
+            if (count($selectedLeads) > $maxSyncImportRows) {
+                return back()->with('error', "You selected more than {$maxSyncImportRows} rows. Please split the import or use queued import.");
+            }
+
             $imported = 0;
             $skipped = 0;
             $skippedDuplicates = 0;
@@ -4175,16 +4344,20 @@ $leadFollowUp = LeadFollowUp::create([
             $staff = User::where('name', 'LIKE', '%' . trim($leadData['staff_representative']) . '%')->first();
         }
 
-        if (!$staff) {
-            try {
-                $authUser = auth()->user();
-                if ($authUser) {
-                    $staff = $authUser;
-                }
-            } catch (\Exception $e) {
-                // ignore auth errors and keep staff null
-            }
+if (!$staff) {
+    try {
+        $authUser = auth()->user();
+        if ($authUser) {
+            $staff = $authUser;
         }
+    } catch (\Exception $e) {
+        // ignore auth errors and keep staff null
+    }
+}
+
+$this->abortUnlessRepresentativeInScope($staff ? $staff->id : null);
+
+// Normalize phone and whatsapp for deduplication within this import batch
 
         // Normalize phone and whatsapp for deduplication within this import batch
         $normalizedPhoneDigits = $this->cleanPhoneNumber($leadData['phone_number'] ?? '');
@@ -4817,7 +4990,13 @@ $leadFollowUp = LeadFollowUp::create([
             //     // ignore logging failures
             // }
             // Build the same query as the index method but with filters
-            $query = Lead::with(['client', 'representative', 'rideSegments', 'leadFollowups.followedBy']);
+            $query = Lead::with([
+                'client.country',
+                'client.city',
+                'representative',
+                'rideSegments',
+                'leadFollowups.followedBy',
+            ]);
 
             // Apply the same filters as in index method
             // Restrict exported leads to the current user's representative hierarchy (same as index)
@@ -4826,6 +5005,10 @@ $leadFollowUp = LeadFollowUp::create([
             // If the user applied a specific staff filter, use that exact representative
             if ($request->filled('representative_user_id')) {
                 $repId = $request->input('representative_user_id');
+
+                if (!$this->isUnassignedRepresentativeFilter($repId)) {
+                    $this->abortUnlessRepresentativeInScope($repId);
+                }
 
                 if ($this->isUnassignedRepresentativeFilter($repId)) {
                     if ($representatives === null) {
@@ -4955,6 +5138,7 @@ $leadFollowUp = LeadFollowUp::create([
 
             // Reindex collection keys so $index in foreach starts from 0..n-1
             $leads = $leads->values();
+            $allProducts = Product::select('id', 'product')->get()->keyBy('id');
 
             // Create new Spreadsheet object
             $spreadsheet = new Spreadsheet();
@@ -5005,77 +5189,7 @@ $leadFollowUp = LeadFollowUp::create([
             // Add data rows
             $row = 2;
             foreach ($leads as $index => $lead) {
-                // Get product names
-                $productIds = json_decode($lead->product_ids, true) ?? [];
-                $products = Product::whereIn('id', $productIds)->pluck('product')->toArray();
-                $productNames = implode(', ', $products);
-
-                // Get ride segments
-                $firstSegment = $lead->rideSegments->first();
-                $lastSegment = $lead->rideSegments->last();
-
-                // Get latest follow-up
-                $latestFollowup = $lead->leadFollowups->sortByDesc('created_at')->first();
-
-                // Get status
-                $status = $latestFollowup ? $latestFollowup->status : null;
-                $statusText = 'N/A';
-                if ($status == 0) $statusText = 'Initiated';
-                elseif ($status == 1) $statusText = 'Active';
-                elseif ($status == 2) $statusText = 'Cancelled';
-                elseif ($status == 3) $statusText = 'Full payment received';
-                elseif ($status == 4) $statusText = 'Partial payment received';
-                elseif ($status == 5) $statusText = 'Completed';
-                elseif ($status == 6) $statusText = 'pending';
-                elseif ($status == 7) $statusText = 'Rescheduled';
-                elseif ($status == 8) $statusText = 'Approved';
-                elseif ($status == 9) $statusText = 'Rejected';
-
-                // Get follow-up notes
-                $followupNotes = $lead->leadFollowups->pluck('followup_note')->filter()->implode('; ');
-
-                // Helper function to safely format dates
-                $formatDate = function ($date, $format = 'Y-m-d') {
-                    if (!$date) return '';
-                    try {
-                        if (is_string($date)) {
-                            return Carbon::parse($date)->format($format);
-                        }
-                        return $date->format($format);
-                    } catch (\Exception $e) {
-                        return is_string($date) ? $date : '';
-                    }
-                };
-
-                // Normalize phone numbers to digits-only (remove "+", "-", spaces etc.) per export requirements
-                $phoneDigits = $lead->client && ($lead->client->contact_number ?? '') !== '' ? preg_replace('/\D/', '', $lead->client->contact_number) : '';
-                $altDigits = $lead->client && ($lead->client->alternate_number ?? '') !== '' ? preg_replace('/\D/', '', $lead->client->alternate_number) : '';
-
-                $rowData = [
-                    $index + 1, // S.No
-                    $lead->client->name ?? '', // Full Name
-                    $lead->client->company_name ?? '', // Company Name
-                    $lead->client->gst_number ?? '', // GST Number
-                    $lead->client->email ?? '', // Email Address
-                    $phoneDigits, // Phone Number (digits-only)
-                    $altDigits, // WhatsApp Number (digits-only)
-                    $lead->client->date_of_birth ? $formatDate($lead->client->date_of_birth) : '', // Date of Birth
-                    $lead->client->address ?? '', // Address
-                    $lead->client->country->name ?? '', // Country
-                    $lead->client->city->name ?? '', // City
-                    $productNames, // Product
-                    $lead->representative->name ?? '', // Staff Representative
-                    $lead->number_of_passengers ?? 1, // Number of Passengers
-                    $firstSegment ? $formatDate($firstSegment->from_date) : '', // From Date
-                    $lastSegment ? $formatDate($lastSegment->to_date) : '', // To Date
-                    $firstSegment ? $firstSegment->from_place : '', // From Place
-                    $lastSegment ? $lastSegment->to_place : '', // To Place
-                    $latestFollowup && $latestFollowup->next_followup_date ? $formatDate($latestFollowup->next_followup_date, 'Y-m-d H:i') : '', // Next Follow Up
-                    $statusText, // Status
-                    $formatDate($lead->created_at, 'Y-m-d H:i:s'), // Created Date
-                    $formatDate($lead->updated_at, 'Y-m-d H:i:s'), // Last Update
-                    $followupNotes // Follow-up Notes
-                ];
+                $rowData = $this->buildLeadExportRow($lead, $index, $allProducts);
 
                 $sheet->fromArray($rowData, NULL, 'A' . $row);
 
@@ -5108,9 +5222,8 @@ $leadFollowUp = LeadFollowUp::create([
                 $rows = [];
                 // Rebuild rows same as spreadsheet but as simple arrays
                 foreach ($leads as $index => $lead) {
-                    $productIds = json_decode($lead->product_ids, true) ?? [];
-                    $products = Product::whereIn('id', $productIds)->pluck('product')->toArray();
-                    $productNames = implode(', ', $products);
+                    $rows[] = $this->buildLeadExportRow($lead, $index, $allProducts);
+                    continue;
 
                     $firstSegment = $lead->rideSegments->first();
                     $lastSegment = $lead->rideSegments->last();
@@ -5149,8 +5262,8 @@ $leadFollowUp = LeadFollowUp::create([
                     $rawPhone = $lead->client && ($lead->client->contact_number ?? '') !== '' ? trim($lead->client->contact_number) : '';
                     $rawAlt = $lead->client && ($lead->client->alternate_number ?? '') !== '' ? trim($lead->client->alternate_number) : '';
 
-                    $digitsPhone = $rawPhone !== '' ? preg_replace('/\D/', '', $rawPhone) : '';
-                    $digitsAlt = $rawAlt !== '' ? preg_replace('/\D/', '', $rawAlt) : '';
+                    $digitsPhone = $rawPhone !== '' ? PhoneNormalizer::digits($rawPhone) : '';
+                    $digitsAlt = $rawAlt !== '' ? PhoneNormalizer::digits($rawAlt) : '';
 
                     // Escape any double-quotes (unlikely in digits-only) but keep it safe
                     $digitsPhoneEscaped = $digitsPhone !== '' ? str_replace('"', '""', $digitsPhone) : '';
@@ -5541,6 +5654,7 @@ $leadFollowUp = LeadFollowUp::create([
                         'changed_by' => auth()->id(),
                         'created_at' => now(),
                     ]);
+
                 }
             } catch (\Exception $e) {
                 Log::error('Failed to write lead audit trail: ' . $e->getMessage());
@@ -5828,6 +5942,17 @@ $leadFollowUp = LeadFollowUp::create([
             Log::warning('Could not load client payment history for lead view: ' . $e->getMessage());
         }
 
+        $auditTimeline = ActivityAudit::where('lead_id', $lead->id)
+            ->whereIn('module', [
+                'payment',
+                'vendor_payment',
+                'vendor_refund',
+                'voucher',
+                'invoice',
+            ])
+            ->latest()
+            ->get();
+
         return view('admin.pages.leads.view-lead', compact(
             'client',
             'leads',
@@ -5845,7 +5970,8 @@ $leadFollowUp = LeadFollowUp::create([
             'isStoredAmount',
             'followups',
             'clientPaymentHistory',
-            'clientInfo'
+            'clientInfo',
+            'auditTimeline'
         ));
     }
 
@@ -5876,8 +6002,34 @@ public function destroyLead(Lead $lead)
         ], 500);
     }
 }
+
+        private function abortUnlessRepresentativeInScope($representativeId): void
+        {
+            if (!$representativeId) {
+                return;
+            }
+            $representatives = getRepresentativeIds(auth()->user());
+
+            if ($representatives === null) {
+                return;
+            }
+
+            if ($representatives instanceof \Illuminate\Support\Collection) {
+                $representatives = $representatives->toArray();
+            }
+
+            $representatives = array_map('strval', (array) $representatives);
+
+            if (!in_array((string) $representativeId, $representatives, true)) {
+                abort(403, 'You are not allowed to assign leads to this representative.');
+            }
+        }
     public function updateImage(Request $request, LeadFollowup $followup)
     {
+        if ($followup->enquiry) {
+            $this->abortUnlessCanAccessLead($followup->enquiry);
+        }
+
         $request->validate([
             'image' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048'
         ]);
@@ -5885,7 +6037,7 @@ public function destroyLead(Lead $lead)
         try {
             // Prevent image update if there's any approved payment audit (1 = Approved)
             $hasApprovedAudit = \App\Models\PaymentAuditTrail::where('lead_followup_id', $followup->id)
-                ->where('payment_status', 1)
+                ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
                 ->exists();
 
             if ($hasApprovedAudit) {
@@ -5930,8 +6082,10 @@ public function destroyLead(Lead $lead)
             return response()->json(['success' => false, 'message' => 'Unauthorized.'], 403);
         }
 
-        // Only allow deletion for payment-related statuses (3 = full, 4 = partial)
-        if (! in_array((int) $followup->status, [3, 4])) {
+        if (! in_array((int) $followup->status, [
+            LeadFollowup::STATUS_FULL_PAYMENT_RECEIVED,
+            LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
+        ], true)) {
             return response()->json(['success' => false, 'message' => 'Only payment-related followups can be deleted.'], 400);
         }
 
@@ -6087,6 +6241,10 @@ public function destroyLead(Lead $lead)
             // If the user selected a specific staff representative, apply that filter
             if ($request->filled('representative_user_id')) {
                 $repId = $request->input('representative_user_id');
+
+                if (!$this->isUnassignedRepresentativeFilter($repId)) {
+                $this->abortUnlessRepresentativeInScope($repId);
+                }
                 // Ensure the selected rep is allowed within the current user's hierarchy when applicable
                 if (is_array($representatives) && !empty($representatives)) {
                     if (in_array($repId, $representatives)) {

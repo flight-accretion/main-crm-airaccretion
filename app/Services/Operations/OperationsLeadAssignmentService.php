@@ -21,7 +21,8 @@ class OperationsLeadAssignmentService
     public function assign(
         Lead $lead,
         User $operationsUser,
-        ?User $assignedBy = null
+        ?User $assignedBy = null,
+        ?string $reassignmentReason = null
     ): OperationsLeadAssignment {
         if (!$this->eligibility->isEligible($lead)) {
             throw new RuntimeException(
@@ -36,7 +37,7 @@ class OperationsLeadAssignmentService
             throw new RuntimeException('Selected user is not an Operations user.');
         }
 
-        return DB::transaction(function () use ($lead, $operationsUser, $assignedBy) {
+        return DB::transaction(function () use ($lead, $operationsUser, $assignedBy, $reassignmentReason) {
             $current = OperationsLeadAssignment::query()
                 ->where('lead_id', $lead->id)
                 ->where('is_active', true)
@@ -54,6 +55,12 @@ class OperationsLeadAssignmentService
             $previousName = null;
 
             if ($current) {
+                if (trim((string) $reassignmentReason) === '') {
+                    throw new RuntimeException(
+                        'Please provide a reassignment reason before changing the Operations handler.'
+                    );
+                }
+
                 $current->loadMissing('operationsUser');
                 $previousName = optional($current->operationsUser)->name;
 
@@ -79,10 +86,11 @@ class OperationsLeadAssignmentService
 
             $note = $previousName
                 ? sprintf(
-                    'Operations handling reassigned from %s to %s by %s.',
+                    'Operations handling reassigned from %s to %s by %s. Reason: %s',
                     $previousName,
                     $operationsUser->name,
-                    $assignedBy?->name ?? 'System'
+                    $assignedBy?->name ?? 'System',
+                    trim((string) $reassignmentReason)
                 )
                 : sprintf(
                     'Operations handling assigned to %s by %s.',

@@ -90,7 +90,7 @@ class ExistingCrmLeadCancellation
 
         if (PaymentAuditTrail::query()
             ->whereIn('lead_followup_id', $followupIds)
-            ->where('payment_status', 1)
+            ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
             ->where('paid_amount', '>', 0)
             ->exists()) {
             return true;

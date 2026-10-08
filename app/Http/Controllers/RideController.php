@@ -26,6 +26,8 @@ use Illuminate\Support\Facades\Mail;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\RideStatusExport;
 use Illuminate\Support\Facades\Schema;
+use App\Support\SafeUploadName;
+use App\Services\ActivityAuditService;
 
 use App\Models\VendorRefund;
 use App\Models\LeadVendorPayment;
@@ -37,6 +39,23 @@ use App\Services\BookingSalesContactResolver;
 
 class RideController extends Controller
 {
+    private function abortLargeUnfilteredExport(Request $request)
+    {
+        $filters = collect($request->except(['format', '_token', 'page']))
+            ->filter(function ($value) {
+                if (is_array($value)) {
+                    return count(array_filter($value, fn($item) => filled($item))) > 0;
+                }
+
+                return filled($value);
+            });
+
+        if ($filters->isEmpty()) {
+            return back()->with('error', 'Please apply at least one filter before exporting large reports.');
+        }
+
+        return null;
+    }
 
 public function sendRideReminders($minutes = null, $leadId = null, $today = false)
 {
@@ -171,8 +190,9 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
         if ($shouldTrackReminderLogs) {
             $alreadySent = DB::table('ride_reminder_logs')
                 ->where('ride_id', $ride->id)
-                ->where('reminder_type', (int) $days)
-                ->whereNull('deleted_at')
+                ->where('hours_before', (int) $days)
+                ->where('channel', 'booking')
+                ->where('status', 'sent')
                 ->exists();
 
             if ($alreadySent) {
@@ -381,8 +401,11 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                     'id' => (string) Str::uuid(),
                     'ride_id' => $ride->id,
                     'lead_id' => $leadId,
-                    'reminder_type' => (int) $days,
-                    'template_name' => $templateName,
+                    'hours_before' => (int) $days,
+                    'channel' => 'booking',
+                    'recipient' => $client->alternate_number ?: $client->contact_number ?: $client->email,
+                    'status' => 'sent',
+                    'error_message' => null,
                     'sent_at' => $now,
                     'created_at' => $now,
                     'updated_at' => $now,
@@ -1143,6 +1166,49 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
     /**
      * Get ride details by ID for calendar event clicks
      */
+    private function canAccessRideDetails(LeadRide $ride): bool
+    {
+        $user = auth()->user();
+        $role = optional($user?->userType)->user_type;
+
+        if (!$user || !$role) {
+            return false;
+        }
+
+        if (
+            $role === UserType::SUPER_ADMIN
+            || in_array($role, UserType::ADMIN_ROLES, true)
+            || in_array($role, UserType::OPERATIONS_ROLES, true)
+        ) {
+            return true;
+        }
+
+        if (
+            !in_array($role, [
+                UserType::SENIOR_SALES_MANAGER,
+                UserType::SALES_MANAGER,
+            ], true)
+        ) {
+            return false;
+        }
+
+        $representativeId = optional($ride->enquiry)->representative_id;
+
+        if (!$representativeId) {
+            return false;
+        }
+
+        if ((string) $representativeId === (string) $user->id) {
+            return true;
+        }
+
+        return SalesExecutiveAssignment::query()
+            ->where('manager_id', $user->id)
+            ->where('sales_executive_id', $representativeId)
+            ->where('status', 1)
+            ->exists();
+    }
+
     public function getRideDetails($rideId)
     {
         try {
@@ -1173,6 +1239,10 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                     'total_rides_in_db' => $totalRides,
                     'message' => 'The requested ride could not be found in the database.'
                 ], 404);
+            }
+
+            if (!$this->canAccessRideDetails($ride)) {
+                return response()->json(['error' => 'Forbidden'], 403);
             }
 
             $lead = $ride->enquiry;
@@ -1568,7 +1638,7 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                 $followupIds = $lead->leadFollowups->pluck('id')->toArray();
                 if (!empty($followupIds)) {
                     $totalReceivedAmount = PaymentAuditTrail::whereIn('lead_followup_id', $followupIds)
-                        ->where('payment_status', 1) // only approved
+                        ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
                         ->sum('paid_amount');
                 }
 
@@ -1693,6 +1763,9 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
         try {
             $format = $request->get('format', 'xlsx');
             $filters = $request->except('format');
+            if ($response = $this->abortLargeUnfilteredExport($request)) {
+                return $response;
+            }
 
             $fileName = 'ride_status_' . date('Y-m-d_His') . '.' . $format;
 
@@ -1909,7 +1982,7 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
             $followupIds = $lead->leadFollowups->pluck('id')->toArray();
             if (!empty($followupIds)) {
                 $approvedPayments = PaymentAuditTrail::whereIn('lead_followup_id', $followupIds)
-                    ->where('payment_status', 1) // Only approved payments
+                    ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
                     ->get();
 
                 $totalReceived = $approvedPayments->sum('paid_amount');
@@ -2283,7 +2356,7 @@ return [
 
                         if ($existingInvoice) {
                             // Auto-generate invoice in active state (not auto-finalizing)
-                            if ($existingInvoice->status != 1) {
+                            if ((int) $existingInvoice->status !== 2 && $existingInvoice->status != 1) {
                                 $existingInvoice->status = 1;
                                 $existingInvoice->save();
                                 Log::info('Auto-generated invoice on ride completion (active state)', [
@@ -2324,6 +2397,23 @@ return [
                                 'billing_address' => optional($lead->client)->address ?? null,
                                 'status' => 1
                             ]);
+
+                            app(ActivityAuditService::class)->record(
+                                'invoice',
+                                'generated',
+                                $invoice,
+                                [],
+                                [
+                                    'invoice_number' => $invoice->invoice_id,
+                                    'amount' => null,
+                                    'status' => $invoice->status,
+                                ],
+                                [
+                                    'lead_id' => $lead->id,
+                                    'client_id' => $lead->client_id,
+                                    'voucher_id' => $voucher->id,
+                                ]
+                            );
 
                             $invoiceData = [
                                 'invoice_id' => $invoice->invoice_id,
@@ -2476,6 +2566,13 @@ return [
                 foreach ($tripDates as $tripData) {
                     $tripRide = LeadRide::find($tripData['trip_id']);
                     if ($tripRide) {
+                        if ((string) $tripRide->lead_id !== (string) $ride->lead_id) {
+                            return response()->json([
+                                'success' => false,
+                                'message' => "Trip {$tripData['trip_id']} does not belong to this lead",
+                            ], 422);
+                        }
+
                         $updateData = [];
 
                         if ($noDate) {
@@ -2497,6 +2594,22 @@ return [
                                     Log::error("Error parsing to_date: {$tripData['to_date']}", ['error' => $e->getMessage()]);
                                     return response()->json(['success' => false, 'message' => 'Invalid to_date format'], 400);
                                 }
+                            }
+
+                            $fromDateForValidation = $updateData['from_date']
+                                ?? ($tripRide->from_date ? Carbon::parse($tripRide->from_date) : null);
+                            $toDateForValidation = $updateData['to_date']
+                                ?? ($tripRide->to_date ? Carbon::parse($tripRide->to_date) : null);
+
+                            if (
+                                $fromDateForValidation
+                                && $toDateForValidation
+                                && $toDateForValidation->lt($fromDateForValidation)
+                            ) {
+                                return response()->json([
+                                    'success' => false,
+                                    'message' => 'Trip to_date cannot be before from_date',
+                                ], 422);
                             }
                         }
 
@@ -2531,6 +2644,23 @@ return [
                             return response()->json(['success' => false, 'message' => 'Invalid to_date format'], 400);
                         }
                     }
+
+                    $fromDateForValidation = $updateData['from_date']
+                        ?? ($ride->from_date ? Carbon::parse($ride->from_date) : null);
+                    $toDateForValidation = $updateData['to_date']
+                        ?? ($ride->to_date ? Carbon::parse($ride->to_date) : null);
+
+                    if (
+                        $fromDateForValidation
+                        && $toDateForValidation
+                        && $toDateForValidation->lt($fromDateForValidation)
+                    ) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'to_date cannot be before from_date',
+                        ], 422);
+                    }
+
                     Log::info("Setting new dates for ride {$rideId}", $updateData);
                 }
 
@@ -2619,6 +2749,23 @@ return [
                     'billing_address' => optional($lead->client)->address ?? null,
                     'status' => 1
                 ]);
+
+                app(ActivityAuditService::class)->record(
+                    'invoice',
+                    'generated',
+                    $invoice,
+                    [],
+                    [
+                        'invoice_number' => $invoice->invoice_id,
+                        'amount' => null,
+                        'status' => $invoice->status,
+                    ],
+                    [
+                        'lead_id' => $lead->id,
+                        'client_id' => $lead->client_id,
+                        'voucher_id' => $voucher->id,
+                    ]
+                );
 
                 DB::commit();
             } catch (\Exception $ex) {
@@ -3743,11 +3890,7 @@ return [
             if ($request->hasFile('refund_proof')) {
                 try {
                     $file = $request->file('refund_proof');
-                    $originalName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
-                    $extension = $file->getClientOriginalExtension();
-                    $cleanName = preg_replace('/[^A-Za-z0-9\-]/', '_', $originalName);
-                    $cleanName = substr($cleanName, 0, 100);
-                    $fileName = 'refund_' . time() . '_' . $cleanName . '.' . $extension;
+                    $fileName = SafeUploadName::make($file, 'refund');
                     $refundProofPath = $file->storeAs('refunds', $fileName, 'public');
                 } catch (\Exception $e) {
                     Log::error('Error uploading refund proof from ride status', [
@@ -4300,6 +4443,12 @@ public function saveVendorRefundFromRideStatus(
                                 2
                             ) > 0;
 
+                        $oldVendorRefundValues = [
+                            'vendor_id' => $existingVendorSettlement->vendor_id,
+                            'amount' => $existingVendorSettlement->refund_amount,
+                            'status' => $existingVendorSettlement->status,
+                        ];
+
 
                         $settlementPayload = [
                             'lead_id' =>
@@ -4445,6 +4594,23 @@ public function saveVendorRefundFromRideStatus(
                                 'payment_status' =>
                                     $paymentStatus,
                             ]);
+
+                        app(ActivityAuditService::class)->record(
+                            'vendor_refund',
+                            'updated',
+                            $existingVendorSettlement,
+                            $oldVendorRefundValues,
+                            [
+                                'vendor_id' => $existingVendorSettlement->vendor_id,
+                                'amount' => $existingVendorSettlement->refund_amount,
+                                'status' => $existingVendorSettlement->status,
+                            ],
+                            [
+                                'lead_id' => $lead->id,
+                                'client_id' => $lead->client_id,
+                                'lead_vendor_payment_id' => $leadVendorPayment->id,
+                            ]
+                        );
 
 
                         $refundStatus =
@@ -4669,6 +4835,23 @@ public function saveVendorRefundFromRideStatus(
                             $paymentStatus,
                     ]);
 
+                app(ActivityAuditService::class)->record(
+                    'vendor_refund',
+                    'created',
+                    $vendorRefund,
+                    [],
+                    [
+                        'vendor_id' => $vendorRefund->vendor_id,
+                        'amount' => $vendorRefund->refund_amount,
+                        'status' => $vendorRefund->status,
+                    ],
+                    [
+                        'lead_id' => $lead->id,
+                        'client_id' => $lead->client_id,
+                        'lead_vendor_payment_id' => $leadVendorPayment->id,
+                    ]
+                );
+
 
                 /*
                 |--------------------------------------------------------------------------
@@ -4780,6 +4963,7 @@ public function saveVendorRefundFromRideStatus(
 
 private function queueVendorRefundNotifications(string $vendorRefundId): void
 {
+    // TODO P5: Move vendor refund notifications to queued job.
     app()->terminating(function () use ($vendorRefundId) {
         try {
             set_time_limit(300);
@@ -5076,7 +5260,7 @@ private function formatNotificationDate($value): string
 
         // Calculate received amount only from approved payments (audit trail status = 1)
         $totalReceived = PaymentAuditTrail::whereIn('lead_followup_id', $followupIds)
-            ->where('payment_status', 1) // Only approved payments
+            ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
             ->sum('paid_amount');
 
         return max(0, $totalAmount - (float) $totalReceived);

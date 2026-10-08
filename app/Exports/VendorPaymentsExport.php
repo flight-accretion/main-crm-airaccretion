@@ -3,6 +3,7 @@
 namespace App\Exports;
 
 use App\Models\LeadVendorPayment;
+use App\Models\PaymentAuditTrail;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
@@ -429,9 +430,8 @@ class VendorPaymentsExport implements FromCollection, WithHeadings, WithMapping,
 
         foreach ($leadFollowups as $followup) {
             // Get all approved payment audit trail entries for this followup
-            // payment_status = 1 means approved/confirmed
             $confirmedPayments = $followup->paymentAuditTrail()
-                ->where('payment_status', 1)
+                ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
                 ->get();
 
             // Sum up all confirmed payments

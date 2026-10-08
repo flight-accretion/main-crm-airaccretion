@@ -52,7 +52,7 @@ class HrDashboardController extends Controller
             'missedFollowups' => $this->missedFollowupCount(now()->startOfDay()),
             'pendingManualKpis' => $this->pendingManualKpis($period),
             'paymentsApproved' => (float) PaymentAuditTrail::query()
-                ->where('payment_status', 1)
+                ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
                 ->whereBetween('paid_date', [$from, $to])
                 ->sum('paid_amount'),
             'salesTarget' => (float) Target::query()

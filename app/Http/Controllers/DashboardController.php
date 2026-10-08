@@ -134,7 +134,7 @@ class DashboardController extends Controller
             return 0.0;
         }
 
-        $paidFollowupQuery = PaymentAuditTrail::where('payment_status', 1)
+        $paidFollowupQuery = PaymentAuditTrail::where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
             ->whereYear('paid_date', $year)
             ->whereMonth('paid_date', $month);
 
@@ -169,7 +169,7 @@ class DashboardController extends Controller
         }
 
         $firstPaymentPerLead = PaymentAuditTrail::whereIn('lead_followup_id', $allFollowupIdsFlat)
-            ->where('payment_status', 1)
+            ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
             ->orderBy('paid_date')
             ->get()
             ->groupBy(function ($payment) use ($allFollowupIdsByLead) {
@@ -768,10 +768,13 @@ class DashboardController extends Controller
 
         // ── STEP 1: Get candidate lead IDs (today + missed) in 2 queries ──────
         $todayLeadIds = (clone $followUpQuery)
-            ->whereDate('next_followup_date', '=', $currentDate)
-            ->whereNotIn('status', LeadFollowup::TODAY_FOLLOWUP_HIDDEN_STATUSES)
-            ->pluck('lead_id')
-            ->unique();
+    ->where(function ($query) use ($currentDate) {
+        $query->whereDate('next_followup_date', '=', $currentDate)
+            ->orWhereNull('next_followup_date');
+    })
+    ->whereNotIn('status', LeadFollowup::TODAY_FOLLOWUP_HIDDEN_STATUSES)
+    ->pluck('lead_id')
+    ->unique();
 
         $missedLeadIds = (clone $followUpQuery)
             ->whereDate('next_followup_date', '<', $currentDate)
@@ -797,7 +800,11 @@ class DashboardController extends Controller
             // Apply same rules as UpcomingFollowUpController
             foreach ($allFollowupsForLeads as $leadId => $latest) {
                 if (LeadFollowup::hiddenFromTodayFollowups($latest->status)) continue;
-                if (!$latest->next_followup_date) continue;
+                if (!$latest->next_followup_date) {
+    $latest->is_missed = false;
+    $latestFollowups->push($latest);
+    continue;
+}
 
                 $latestDate = $latest->next_followup_date->toDateString();
                 if ($latestDate === $currentDate) {
@@ -1167,11 +1174,14 @@ class DashboardController extends Controller
             });
         }
 
-        $todayLeadIds = (clone $followUpQuery)
-            ->whereDate('next_followup_date', '=', $currentDate)
-            ->whereNotIn('status', LeadFollowup::TODAY_FOLLOWUP_HIDDEN_STATUSES)
-            ->pluck('lead_id')
-            ->unique();
+       $todayLeadIds = (clone $followUpQuery)
+    ->where(function ($query) use ($currentDate) {
+        $query->whereDate('next_followup_date', '=', $currentDate)
+            ->orWhereNull('next_followup_date');
+    })
+    ->whereNotIn('status', LeadFollowup::TODAY_FOLLOWUP_HIDDEN_STATUSES)
+    ->pluck('lead_id')
+    ->unique();
 
         $missedLeadIds = (clone $followUpQuery)
             ->whereDate('next_followup_date', '<', $currentDate)
@@ -1192,7 +1202,11 @@ class DashboardController extends Controller
 
             foreach ($allFollowupsForLeads as $latest) {
                 if (LeadFollowup::hiddenFromTodayFollowups($latest->status)) continue;
-                if (!$latest->next_followup_date) continue;
+               if (!$latest->next_followup_date) {
+    $latest->is_missed = false;
+    $latestFollowups->push($latest);
+    continue;
+}
 
                 $latestDate = $latest->next_followup_date->toDateString();
                 if ($latestDate === $currentDate) {
@@ -1382,10 +1396,14 @@ class DashboardController extends Controller
             });
 
         // ── Bulk fetch: get candidate lead IDs ───────────────────────────────
-        $todayLeadIds = (clone $followUpQuery)
-            ->whereDate('next_followup_date', '=', $currentDate)
-            ->whereNotIn('status', LeadFollowup::TODAY_FOLLOWUP_HIDDEN_STATUSES)
-            ->pluck('lead_id')->unique();
+       $todayLeadIds = (clone $followUpQuery)
+    ->where(function ($query) use ($currentDate) {
+        $query->whereDate('next_followup_date', '=', $currentDate)
+            ->orWhereNull('next_followup_date');
+    })
+    ->whereNotIn('status', LeadFollowup::TODAY_FOLLOWUP_HIDDEN_STATUSES)
+    ->pluck('lead_id')
+    ->unique();
 
         $missedLeadIds = (clone $followUpQuery)
             ->whereDate('next_followup_date', '<', $currentDate)
@@ -1408,7 +1426,11 @@ class DashboardController extends Controller
             $latestPerLead = collect();
             foreach ($allFollowupsForLeads as $leadId => $latest) {
                 if (LeadFollowup::hiddenFromTodayFollowups($latest->status)) continue;
-                if (!$latest->next_followup_date) continue;
+                if (!$latest->next_followup_date) {
+    $latest->is_missed = false;
+    $latestPerLead->push($latest);
+    continue;
+}
                 $latestDate = $latest->next_followup_date->toDateString();
                 if ($latestDate === $currentDate) {
                     $latest->is_missed = false;
@@ -1739,3 +1761,4 @@ class DashboardController extends Controller
         return response()->json(['error' => 'Unauthorized'], 403);
     }
 }
+

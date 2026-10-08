@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\ArrayIdNormalizer;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
@@ -22,7 +23,14 @@ class LeadFollowup extends Model
     public const STATUS_APPROVED = 8;
     public const STATUS_REJECTED = 9;
 
-    public const SALES_AMOUNT_STATUSES = [2, 3, 4, 5, 7, 8];
+    public const SALES_AMOUNT_STATUSES = [
+        self::STATUS_CANCELLED,
+        self::STATUS_FULL_PAYMENT_RECEIVED,
+        self::STATUS_PARTIAL_PAYMENT_RECEIVED,
+        self::STATUS_CONFIRMED,
+        self::STATUS_RESCHEDULED,
+        self::STATUS_APPROVED,
+    ];
     public const TODAY_FOLLOWUP_MISSED_OPEN_STATUSES = [
         self::STATUS_INITIATED,
         self::STATUS_ACTIVE,
@@ -123,6 +131,27 @@ class LeadFollowup extends Model
     public static function salesAmountStatuses(): array
     {
         return self::SALES_AMOUNT_STATUSES;
+    }
+
+    public static function statusLabels(): array
+    {
+        return [
+            self::STATUS_INITIATED => 'Initiated',
+            self::STATUS_ACTIVE => 'Active',
+            self::STATUS_CANCELLED => 'Cancelled',
+            self::STATUS_FULL_PAYMENT_RECEIVED => 'Full Payment Received',
+            self::STATUS_PARTIAL_PAYMENT_RECEIVED => 'Partial Payment Received',
+            self::STATUS_CONFIRMED => 'Confirmed',
+            self::STATUS_PENDING => 'Pending',
+            self::STATUS_RESCHEDULED => 'Rescheduled',
+            self::STATUS_APPROVED => 'Approved',
+            self::STATUS_REJECTED => 'Rejected',
+        ];
+    }
+
+    public function statusLabel(string $fallback = 'N/A'): string
+    {
+        return self::statusLabels()[(int) $this->status] ?? $fallback;
     }
 
     public function followedBy()
@@ -241,8 +270,8 @@ static::saving(function (LeadFollowup $followup) {
     // Helper methods to get services and extra services from JSON
     public function getServicesAttribute()
     {
-        if (!empty($this->service_ids)) {
-            $serviceIds = is_string($this->service_ids) ? json_decode($this->service_ids, true) : $this->service_ids;
+        $serviceIds = $this->service_ids_array;
+        if (!empty($serviceIds)) {
             return Service::whereIn('id', $serviceIds)->get();
         }
         return collect();
@@ -250,39 +279,50 @@ static::saving(function (LeadFollowup $followup) {
 
     public function getExtraServicesAttribute()
     {
-        if (!empty($this->extra_service_ids)) {
-            $extraServiceIds = is_string($this->extra_service_ids) ? json_decode($this->extra_service_ids, true) : $this->extra_service_ids;
+        $extraServiceIds = $this->extra_service_ids_array;
+        if (!empty($extraServiceIds)) {
             return ExtraService::whereIn('id', $extraServiceIds)->get();
         }
         return collect();
     }
 
-    public function getServiceIdsArrayAttribute()
+public function getServiceIdsArrayAttribute()
 {
-    if (empty($this->service_ids)) {
-        return [];
-    }
-
-    // Handle the escaped JSON string format
-    $serviceIds = is_string($this->service_ids) ?
-        json_decode(stripslashes($this->service_ids), true) :
-        $this->service_ids;
-
-    return is_array($serviceIds) ? $serviceIds : [];
+    return ArrayIdNormalizer::normalize($this->service_ids);
 }
 
 public function getExtraServiceIdsArrayAttribute()
 {
-    if (empty($this->extra_service_ids)) {
+    return ArrayIdNormalizer::normalize($this->extra_service_ids);
+}
+
+public function getServiceDetailsArrayAttribute()
+{
+    if (empty($this->service_details)) {
         return [];
     }
 
-    // Handle the escaped JSON string format
-    $extraServiceIds = is_string($this->extra_service_ids) ?
-        json_decode(stripslashes($this->extra_service_ids), true) :
-        $this->extra_service_ids;
+    if (is_array($this->service_details)) {
+        return $this->service_details;
+    }
 
-    return is_array($extraServiceIds) ? $extraServiceIds : [];
+    if (is_string($this->service_details)) {
+        $decoded = json_decode($this->service_details, true);
+
+        if (is_string($decoded)) {
+            $decoded = json_decode(stripslashes($decoded), true);
+        }
+
+        if (is_array($decoded)) {
+            return $decoded;
+        }
+
+        $decoded = json_decode(stripslashes($this->service_details), true);
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    return [];
 }
 
     // Scope for filtering by service date

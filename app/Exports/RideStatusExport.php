@@ -188,7 +188,7 @@ class RideStatusExport implements FromCollection, WithHeadings, WithMapping, Wit
             $followupIds = $lead->leadFollowups->pluck('id')->toArray();
             if (!empty($followupIds)) {
                 $totalReceivedAmount = PaymentAuditTrail::whereIn('lead_followup_id', $followupIds)
-                    ->where('payment_status', 1)
+                    ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
                     ->sum('paid_amount');
             }
 

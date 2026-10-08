@@ -485,13 +485,13 @@ public function directAssign(
 ): array {
 
     /*
-     * Direct reassignment is Super Admin only.
+     * Direct reassignment is restricted to Admin and Operations roles.
      */
-    if (!$this->isSuperAdmin($actor)) {
+    if (!$this->canDirectAssignLead($actor)) {
 
         throw ValidationException::withMessages([
             'transfer' =>
-                'Only Super Admin can directly assign or transfer leads.',
+                'Only Admin or Operations can directly assign or transfer leads.',
         ]);
     }
 
@@ -703,10 +703,10 @@ public function recordDirectAssignmentFollowup(
     User $actor,
     ?string $fromUserId = null
 ): LeadFollowup {
-    if (!$this->isSuperAdmin($actor)) {
+    if (!$this->canDirectAssignLead($actor)) {
         throw ValidationException::withMessages([
             'transfer' =>
-                'Only Super Admin can record direct lead transfer follow-ups.',
+                'Only Admin or Operations can record direct lead transfer follow-ups.',
         ]);
     }
 
@@ -904,5 +904,14 @@ public function recordDirectAssignmentFollowup(
             &&
             $user->userType->user_type
                 === UserType::SUPER_ADMIN;
+    }
+
+    public function canDirectAssignLead(User $user): bool
+    {
+        $role = optional($user->userType)->user_type;
+
+        return $role === UserType::SUPER_ADMIN
+            || in_array($role, UserType::ADMIN_ROLES, true)
+            || in_array($role, UserType::OPERATIONS_ROLES, true);
     }
 }

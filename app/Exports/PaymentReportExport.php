@@ -17,6 +17,7 @@ use Illuminate\Support\Str;
 class PaymentReportExport implements FromCollection, WithHeadings, WithMapping, WithStyles, WithEvents
 {
     protected $filters;
+    protected $servicesById;
 
     public function __construct($filters = [])
     {
@@ -31,6 +32,7 @@ class PaymentReportExport implements FromCollection, WithHeadings, WithMapping, 
         $status = $this->filters['status'] ?? null;
         $fromDate = $this->filters['from_date'] ?? null;
         $toDate = $this->filters['to_date'] ?? null;
+        $this->servicesById = Service::select('id', 'service')->get()->keyBy('id');
  $exportData = collect();
          // Build query with same filtering logic as controller
          $query = LeadFollowup::with([
@@ -39,7 +41,10 @@ class PaymentReportExport implements FromCollection, WithHeadings, WithMapping, 
                 'enquiry.rideSegments'
             ])->whereNotNull('received_amount')
                 ->where('received_amount', '>', 0)
-                ->whereIn('status', [ 3, 4]);
+                ->whereIn('status', [
+                    LeadFollowup::STATUS_FULL_PAYMENT_RECEIVED,
+                    LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
+                ]);
   
  
             // Apply service name filter
@@ -57,11 +62,21 @@ class PaymentReportExport implements FromCollection, WithHeadings, WithMapping, 
             }
 
             $allPayments = $query->orderBy('created_at', 'desc')->get();
+            $followupIds = $allPayments->pluck('id')->filter()->unique()->values();
+            $auditTrailsByFollowup = PaymentAuditTrail::whereIn('lead_followup_id', $followupIds)
+                ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
+                ->get()
+                ->groupBy('lead_followup_id');
+            $latestAuditByFollowup = PaymentAuditTrail::whereIn('lead_followup_id', $followupIds)
+                ->orderBy('created_at', 'desc')
+                ->get()
+                ->groupBy('lead_followup_id')
+                ->map(fn($items) => $items->first());
 
             // Group by lead_id and process
             $payments = $allPayments
                 ->groupBy('lead_id')
-                ->map(function ($group) use($exportData){
+                ->map(function ($group) use($exportData, $auditTrailsByFollowup, $latestAuditByFollowup){
                     // Get the latest followup entry
                     $latest = $group->sortByDesc('created_at')->first();
                     $client = $latest->enquiry->client ?? null;
@@ -69,9 +84,8 @@ class PaymentReportExport implements FromCollection, WithHeadings, WithMapping, 
                     $totalAmount = (float) $latest->total_amount;
 
                     // Calculate received amount only from approved payments (audit trail status = 1)
-                    $approvedPayments = PaymentAuditTrail::whereIn('lead_followup_id', $group->pluck('id'))
-                        ->where('payment_status', 1) // Only approved payments
-                        ->get();
+                    $approvedPayments = $group->pluck('id')
+                        ->flatMap(fn($followupId) => $auditTrailsByFollowup->get($followupId, collect()));
 
                     $totalReceived = $approvedPayments->sum('paid_amount');
 
@@ -84,9 +98,7 @@ class PaymentReportExport implements FromCollection, WithHeadings, WithMapping, 
                     }
 
                     // Get latest audit trail
-                    $latestAudit = PaymentAuditTrail::where('lead_followup_id', $latest->id)
-                        ->orderBy('created_at', 'desc')
-                        ->first();
+                    $latestAudit = $latestAuditByFollowup->get($latest->id);
 
                     // Determine audit status: prefer latest audit, but if total received meets or
                     // exceeds total amount treat it as approved so the UI shows completed.
@@ -160,9 +172,6 @@ class PaymentReportExport implements FromCollection, WithHeadings, WithMapping, 
                 }
                 return true;
             })->values();
-            // Get services for filter dropdown (same as refund notes)
-            $services = Service::select('id', 'service')->get(); 
-
         return $exportData;
   
     }
@@ -187,15 +196,15 @@ class PaymentReportExport implements FromCollection, WithHeadings, WithMapping, 
     {
         static $index = 0;
         $index++;
-        $followupStatusLabels = [ 2 => 'Cancelled', 3 => 'Full Paid', 4 => 'Partial Paid', 5 => 'Confirmed/Complete', 6 => 'Pending', 7 => 'Rescheduled', 8 => 'Approved',  9 => 'Rejected'];
+        $followupStatusLabels = LeadFollowup::statusLabels();
         $payment_status = 'Pending';
        
         if(isset($row['audit_status'])){
             $received = (float) $row['received_amount'];
             $total = (float) $row['total_amount'];
-            if($row['audit_status'] == 1 && $received >= $total && $total > 0){
+            if($row['audit_status'] == PaymentAuditTrail::STATUS_APPROVED && $received >= $total && $total > 0){
                 $payment_status = 'Approved';
-            }elseif($row['audit_status'] == 2){
+            }elseif($row['audit_status'] == PaymentAuditTrail::STATUS_REJECTED){
                 $payment_status = 'Rejected';
             }
         }
@@ -204,7 +213,9 @@ class PaymentReportExport implements FromCollection, WithHeadings, WithMapping, 
         $serviceIds = is_string($row['service_ids']) ? json_decode($row['service_ids'], true) : $row['service_ids'];
 
         if ($serviceIds) {
-            $services = \App\Models\Service::whereIn('id', $serviceIds)
+            $services = collect($serviceIds)
+                ->map(fn($id) => $this->servicesById->get((string) $id) ?? $this->servicesById->get($id))
+                ->filter()
                 ->pluck('service')
                 ->toArray();
 

@@ -198,7 +198,7 @@ class LeadTrackingController extends Controller
             $rejectedPayments = collect();
             if (!empty($followupIds)) {
                 $approvedPayments = PaymentAuditTrail::whereIn('lead_followup_id', $followupIds)
-                    ->where('payment_status', 1) // 1 == approved
+                    ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
                     ->with('leadFollowup')
                     ->orderBy('created_at', 'desc')
                     ->get();

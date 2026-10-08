@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use App\Models\Product;
+use App\Support\SafeLogContext;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -111,7 +112,7 @@ class SyncProductsToAirpoints extends Command
                         }
                     } else {
                         $this->error('Product sync failed: HTTP ' . $response->status());
-                        Log::warning('airpoints.product_sync.product_failed', ['product_id' => $product->id, 'status' => $response->status(), 'body' => $response->body(), 'endpoint' => $url]);
+                        Log::warning('airpoints.product_sync.product_failed', SafeLogContext::httpFailure(['product_id' => $product->id, 'status' => $response->status(), 'endpoint' => $url]));
                         $failed++;
                     }
                 } catch (\Exception $e) {
@@ -119,9 +120,9 @@ class SyncProductsToAirpoints extends Command
 
                     // Special-case cURL timeout (DNS resolution / connect timeouts)
                     if (stripos($e->getMessage(), 'cURL error 28') !== false || stripos($e->getMessage(), 'timed out') !== false) {
-                        Log::error('airpoints.product_sync.product_exception.dns_timeout', ['product_id' => $product->id, 'error' => $e->getMessage(), 'trace' => $e->getTraceAsString(), 'endpoint' => $url]);
+                        Log::error('airpoints.product_sync.product_exception.dns_timeout', SafeLogContext::exception($e, ['product_id' => $product->id, 'endpoint' => $url]));
                     } else {
-                        Log::error('airpoints.product_sync.product_exception', ['product_id' => $product->id, 'error' => $e->getMessage(), 'trace' => $e->getTraceAsString(), 'endpoint' => $url]);
+                        Log::error('airpoints.product_sync.product_exception', SafeLogContext::exception($e, ['product_id' => $product->id, 'endpoint' => $url]));
                     }
 
                     $failed++;
@@ -136,7 +137,7 @@ class SyncProductsToAirpoints extends Command
             return 0;
 
         } catch (\Exception $e) {
-            Log::error('airpoints.product_sync.failed', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            Log::error('airpoints.product_sync.failed', SafeLogContext::exception($e));
             $this->error('Product sync failed: ' . $e->getMessage());
             return 1;
         }

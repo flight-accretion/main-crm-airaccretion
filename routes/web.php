@@ -172,6 +172,7 @@ Route::middleware('auth')->group(function () {
         'redirect'
     ]
 )
+    ->middleware('role:SUPER_ADMIN')
     ->name(
         'admin.google-chat.oauth'
     );
@@ -184,6 +185,7 @@ Route::get(
         'callback'
     ]
 )
+    ->middleware('role:SUPER_ADMIN')
     ->name(
         'admin.google-chat.oauth.callback'
     );
@@ -195,6 +197,7 @@ Route::get(
 */
 
 Route::prefix('admin/lead-chat')
+    ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')
     ->name('admin.lead-chat.')
     ->group(function () {
         Route::get('/lead/{lead}/google/options', [\App\Http\Controllers\LeadGoogleChatConnectionController::class, 'options'])
@@ -322,6 +325,7 @@ Route::prefix('admin/lead-chat')
 */
 
 Route::prefix('admin/chat-notifications')
+    ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')
     ->name('admin.chat-notifications.')
     ->group(function () {
 
@@ -407,99 +411,38 @@ Route::prefix('admin/chat-notifications')
         ->name('admin.kpi.details');
 
 
-        Route::prefix('admin/attendance')
-    ->middleware(
-        'role:ATTENDANCE_IMPORT_ROLES'
-    )
-    ->group(function () {
+    Route::prefix('admin/attendance')->group(function () {
+        Route::get('/import', [AttendanceImportController::class, 'index'])
+            ->middleware('role:ATTENDANCE_IMPORT_ROLES')
+            ->name('admin.attendance.import.index');
 
-        Route::get(
-            '/import',
-            [
-                AttendanceImportController::class,
-                'index',
-            ]
-        )
-            ->name(
-                'admin.attendance.import.index'
-            );
+        Route::get('/import/sample', [AttendanceImportController::class, 'downloadSample'])
+            ->middleware('role:ATTENDANCE_IMPORT_ROLES')
+            ->name('admin.attendance.import.sample');
 
-        Route::get(
-            '/import/sample',
-            [
-                AttendanceImportController::class,
-                'downloadSample',
-            ]
-        )
-            ->name(
-                'admin.attendance.import.sample'
-            );
+        Route::post('/import/preview', [AttendanceImportController::class, 'preview'])
+            ->middleware('role:ATTENDANCE_IMPORT_ROLES')
+            ->name('admin.attendance.import.preview');
 
-        Route::get(
-            '/settings',
-            [
-                AttendanceSettingsController::class,
-                'index',
-            ]
-        )
-            ->name(
-                'admin.attendance.settings.index'
-            );
+        Route::post('/import/confirm', [AttendanceImportController::class, 'confirm'])
+            ->middleware('role:ATTENDANCE_IMPORT_ROLES')
+            ->name('admin.attendance.import.confirm');
 
-        Route::post(
-            '/settings/policies',
-            [
-                AttendanceSettingsController::class,
-                'storePolicy',
-            ]
-        )
-            ->name(
-                'admin.attendance.settings.policies.store'
-            );
+        Route::get('/settings', [AttendanceSettingsController::class, 'index'])
+            ->middleware('role:ADMIN_ROLES,HR')
+            ->name('admin.attendance.settings.index');
 
-        Route::put(
-            '/settings/policies/{policy}',
-            [
-                AttendanceSettingsController::class,
-                'updatePolicy',
-            ]
-        )
-            ->name(
-                'admin.attendance.settings.policies.update'
-            );
+        Route::post('/settings/policies', [AttendanceSettingsController::class, 'storePolicy'])
+            ->middleware('role:ADMIN_ROLES,HR')
+            ->name('admin.attendance.settings.policies.store');
 
-        Route::post(
-            '/settings/assignments',
-            [
-                AttendanceSettingsController::class,
-                'storeAssignments',
-            ]
-        )
-            ->name(
-                'admin.attendance.settings.assignments.store'
-            );
+        Route::put('/settings/policies/{policy}', [AttendanceSettingsController::class, 'updatePolicy'])
+            ->middleware('role:ADMIN_ROLES,HR')
+            ->name('admin.attendance.settings.policies.update');
 
-        Route::post(
-            '/import/preview',
-            [
-                AttendanceImportController::class,
-                'preview',
-            ]
-        )
-            ->name(
-                'admin.attendance.import.preview'
-            );
-
-        Route::post(
-            '/import/confirm',
-            [
-                AttendanceImportController::class,
-                'confirm',
-            ]
-        )
-            ->name(
-                'admin.attendance.import.confirm'
-            );
+        Route::post('/settings/assignments', [AttendanceSettingsController::class, 'storeAssignments'])
+            ->middleware('role:ADMIN_ROLES,HR')
+            ->name('admin.attendance.settings.assignments.store');
     });
 
 /*
@@ -633,6 +576,7 @@ Route::prefix(
         });
 
     Route::prefix('admin/whatsapp')
+        ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')
         ->name('admin.whatsapp.')
         ->group(function () {
 
@@ -642,7 +586,8 @@ Route::prefix(
         AiAgentController::class,
         'store'
             ]
-        )->name(
+        )->middleware('role:ADMIN_ROLES')
+        ->name(
             'ai-agents.store'
         );
 
@@ -653,7 +598,8 @@ Route::prefix(
                 AiAgentController::class,
                 'update'
             ]
-        )->name(
+        )->middleware('role:ADMIN_ROLES')
+        ->name(
             'ai-agents.update'
         );
 
@@ -664,15 +610,18 @@ Route::prefix(
                 AiAgentController::class,
                 'destroy'
             ]
-        )->name(
+        )->middleware('role:ADMIN_ROLES')
+        ->name(
             'ai-agents.destroy'
         );
 
             Route::get('/', [WhatsAppInboxController::class, 'index'])
                 ->name('index');
             Route::get('/ai-agent', [WhatsAppAiAgentSettingController::class, 'edit'])
+                ->middleware('role:ADMIN_ROLES')
                 ->name('ai-agent.edit');
             Route::put('/ai-agent', [WhatsAppAiAgentSettingController::class, 'update'])
+                ->middleware('role:ADMIN_ROLES')
                 ->name('ai-agent.update');
                 Route::post(
                 '/ai-agent/test-connection',
@@ -680,7 +629,8 @@ Route::prefix(
                     WhatsAppAiAgentSettingController::class,
                     'testConnection'
                 ]
-            )->name(
+            )->middleware('role:ADMIN_ROLES')
+            ->name(
                 'ai-agent.test-connection'
             );
 
@@ -690,7 +640,8 @@ Route::prefix(
         AiModelProfileController::class,
         'store'
             ]
-        )->name(
+        )->middleware('role:ADMIN_ROLES')
+        ->name(
             'ai-models.store'
         );
 
@@ -700,7 +651,8 @@ Route::prefix(
                 AiModelProfileController::class,
                 'update'
             ]
-        )->name(
+        )->middleware('role:ADMIN_ROLES')
+        ->name(
             'ai-models.update'
         );
 
@@ -710,7 +662,8 @@ Route::prefix(
                 AiModelProfileController::class,
                 'destroy'
             ]
-        )->name(
+        )->middleware('role:ADMIN_ROLES')
+        ->name(
             'ai-models.destroy'
         );
 
@@ -720,7 +673,8 @@ Route::prefix(
                 AiModelProfileController::class,
                 'testConnection'
             ]
-        )->name(
+        )->middleware('role:ADMIN_ROLES')
+        ->name(
             'ai-models.test-connection'
         );
 
@@ -737,55 +691,35 @@ Route::prefix(
         });
 
 
-        Route::post(
-        '/admin/vendor-extra-services',
-        [
-            VendorExtraServiceController::class,
-            'store'
-        ]
-    )
-    ->name(
-        'admin.vendor-extra-services.store'
-    );
+    Route::post('/admin/vendor-extra-services', [VendorExtraServiceController::class, 'store'])
+        ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
+        ->name('admin.vendor-extra-services.store');
 
 
-    Route::delete(
-        '/admin/vendor-extra-services/{id}',
-        [
-            VendorExtraServiceController::class,
-            'destroy'
-        ]
-    )
-    ->name(
-        'admin.vendor-extra-services.destroy'
-    );
+    Route::delete('/admin/vendor-extra-services/{id}', [VendorExtraServiceController::class, 'destroy'])
+        ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
+        ->name('admin.vendor-extra-services.destroy');
 
-    Route::get(
-        '/admin/lead-allocation/settings',
-        [LeadAllocationSettingController::class, 'edit']
-    )
-        ->name(
-            'admin.lead-allocation.settings.edit'
-        );
+    Route::get('/admin/lead-allocation/settings', [LeadAllocationSettingController::class, 'edit'])
+        ->middleware('role:ADMIN_ROLES')
+        ->name('admin.lead-allocation.settings.edit');
 
-    Route::put(
-        '/admin/lead-allocation/settings',
-        [LeadAllocationSettingController::class, 'update']
-    )
-        ->name(
-            'admin.lead-allocation.settings.update'
-        );
+    Route::put('/admin/lead-allocation/settings', [LeadAllocationSettingController::class, 'update'])
+        ->middleware('role:ADMIN_ROLES')
+        ->name('admin.lead-allocation.settings.update');
 
     Route::get(
         '/admin/booking-email-template',
         [BookingEmailTemplateController::class, 'edit']
     )
+        ->middleware('role:ADMIN_ROLES')
         ->name('admin.booking-email-template.edit');
 
     Route::put(
         '/admin/booking-email-template',
         [BookingEmailTemplateController::class, 'update']
     )
+        ->middleware('role:ADMIN_ROLES')
         ->name('admin.booking-email-template.update');
 
 
@@ -875,7 +809,9 @@ Route::prefix(
         Route::get('/{client}/get-passenger-registration-link', [ClientController::class, 'getPassengerRegistrationLink'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,HR')->name('admin.clients.get-passenger-registration-link');
         // Route::post('/get-extra-services-by-services', [ClientController::class, 'getExtraServicesByServices']);
     });
-    Route::get('/fetch-services/{productId}', [ClientController::class, 'fetchServices'])->name('admin.clients.fetch-services');
+    Route::get('/fetch-services/{productId}', [ClientController::class, 'fetchServices'])
+        ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
+        ->name('admin.clients.fetch-services');
 
     // Lead Tracking Routes
     Route::prefix('admin/lead-tracking')->group(function () {
@@ -888,7 +824,9 @@ Route::prefix(
     });
 
     // Separate route group for lead-specific operations
-    Route::prefix('admin/leads')->group(function () {
+    Route::prefix('admin/leads')
+        ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')
+        ->group(function () {
 
  /*
     |--------------------------------------------------------------------------
@@ -902,6 +840,7 @@ Route::post(
         'directAssign'
     ]
 )
+    ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
     ->name(
         'admin.leads.transfer.direct-assign'
     );
@@ -993,7 +932,9 @@ Route::post('/import', [ClientController::class, 'importLeads'])
 Route::get('/import/sample', [ClientController::class, 'downloadSampleExcel'])
     ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')
     ->name('admin.leads.import.sample');
-        Route::get('/export', [ClientController::class, 'exportLeads'])->name('admin.leads.export');
+        Route::get('/export', [ClientController::class, 'exportLeads'])
+            ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')
+            ->name('admin.leads.export');
 
         Route::post(
             '/{lead}/send-booking-confirmation-email',
@@ -1080,6 +1021,7 @@ Route::post(
 
     // Airpoints integration routes
     Route::post('admin/airpoints/check-user-points', [ClientController::class, 'checkUserPoints'])
+        ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')
         ->name('admin.airpoints.check-user-points');
 
     Route::get('admin/dnp-leads', [ClientController::class, 'getDnpLeads'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.leads.dnp');
@@ -1134,7 +1076,8 @@ Route::post(
             ->name('admin.vendors.getCitiesByState');
     });
 
-    Route::get('/get-cities/{countryId}', [ClientController::class, 'getCitiesByCountry']);
+    Route::get('/get-cities/{countryId}', [ClientController::class, 'getCitiesByCountry'])
+        ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES');
 
     Route::post('/change-password', [UserController::class, 'updatePassword'])->name('user.password.update');
     Route::get('change-password', [UserController::class, 'showChangePasswordForm'])->name('password.change');
@@ -1142,22 +1085,22 @@ Route::post(
 
     Route::get('/payment-detail', function () {
         return view('admin.pages.payments.payment-details');
-    });
+    })->middleware('role:ADMIN_ROLES');
 
     Route::get('/leads-payment-detail', function () {
         return view('admin.pages.accounts.leads-payment-details');
-    });
+    })->middleware('role:ADMIN_ROLES');
 
     Route::get('/booking-detail', function () {
         return view('admin.pages.bookings.booking-details');
-    });
+    })->middleware('role:ADMIN_ROLES');
     Route::get('/generate-invoice', function () {
         return view('admin.pages.bookings.booking-invoice-pdf');
-    });
+    })->middleware('role:ADMIN_ROLES');
 
     Route::get('/voucher', function () {
         return view('admin.pages.voucher.voucher');
-    });
+    })->middleware('role:ADMIN_ROLES');
 
     // Payment Review Routes
     Route::prefix('admin/account')->group(function () {
@@ -1182,9 +1125,15 @@ Route::post(
         Route::post('/payment-review/{id}/reject-all', [PaymentReviewController::class, 'rejectAll'])
             ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
             ->name('admin.account.payment-review.reject-all');
-        Route::post('/payment-history/{id}/approve', [PaymentReviewController::class, 'approveHistory'])->name('admin.account.payment-history.approve');
-        Route::post('/payment-history/{id}/reject', [PaymentReviewController::class, 'rejectHistory'])->name('admin.account.payment-history.reject');
-        Route::get('/payment-review-export', [PaymentReviewController::class, 'export'])->name('admin.account.payment-review.export');
+        Route::post('/payment-history/{id}/approve', [PaymentReviewController::class, 'approveHistory'])
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->name('admin.account.payment-history.approve');
+        Route::post('/payment-history/{id}/reject', [PaymentReviewController::class, 'rejectHistory'])
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->name('admin.account.payment-history.reject');
+        Route::get('/payment-review-export', [PaymentReviewController::class, 'export'])
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->name('admin.account.payment-review.export');
 
 
        //vendor refund
@@ -1197,30 +1146,54 @@ Route::post(
 
         
         // Vendor Payments Routes
-        Route::get('/vendor-payments', [VendorPaymentController::class, 'index'])->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES')->name('admin.account.vendor-payments');
-        Route::get('/vendor-payments/export', [VendorPaymentController::class, 'export'])->name('admin.account.vendor-payments.export');
-        Route::get('/vendor-payments/{id}', [VendorPaymentController::class, 'show'])->name('admin.account.vendor-payments.show');
-        Route::post('/vendor-payments', [VendorPaymentController::class, 'storePayment'])->name('admin.account.vendor-payments.store');
-        Route::put('/vendor-payments/{id}/amount', [VendorPaymentController::class, 'updatePaymentAmount'])->name('admin.account.vendor-payments.update-amount');
+       Route::get('/vendor-payments', [VendorPaymentController::class, 'index'])
+    ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES')
+    ->name('admin.account.vendor-payments');
+
+        Route::get('/vendor-payments/export', [VendorPaymentController::class, 'export'])
+            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES')
+            ->name('admin.account.vendor-payments.export');
+
+        Route::get('/vendor-payments/{id}', [VendorPaymentController::class, 'show'])
+            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES')
+            ->name('admin.account.vendor-payments.show');
+
+        Route::post('/vendor-payments', [VendorPaymentController::class, 'storePayment'])
+            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES')
+            ->name('admin.account.vendor-payments.store');
+
+        Route::put('/vendor-payments/{id}/amount', [VendorPaymentController::class, 'updatePaymentAmount'])
+            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES')
+            ->name('admin.account.vendor-payments.update-amount');
 
         // Invoice Routes
         Route::get('/invoices', [InvoiceController::class, 'index'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')->name('admin.account.invoices');
-        Route::get('/invoices/{id}', [InvoiceController::class, 'show'])->name('admin.account.invoices.show');
+        Route::get('/invoices/{id}', [InvoiceController::class, 'show'])
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->name('admin.account.invoices.show');
         Route::post('/invoices/{id}/generate', [InvoiceController::class, 'generateInvoice'])
-            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES')
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
             ->name('admin.account.invoices.generate');
         Route::put('/invoices/{id}/gst-info', [InvoiceController::class, 'updateGstInfo'])
-            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES')
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
             ->name('admin.account.invoices.update-gst-info');
         Route::post('/invoices/{id}/finalize', [InvoiceController::class, 'finalizeInvoice'])
-            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES')
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
             ->name('admin.account.invoices.finalize');
-        Route::get('/invoices/{id}/pdf', [InvoiceController::class, 'generatePDF'])->name('admin.account.invoices.pdf');
-        Route::get('/invoices/{id}/download', [InvoiceController::class, 'downloadPDF'])->name('admin.account.invoices.download');
-        Route::get('/invoices/{id}/preview', [InvoiceController::class, 'previewHTML'])->name('admin.account.invoices.preview');
+        Route::get('/invoices/{id}/pdf', [InvoiceController::class, 'generatePDF'])
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->name('admin.account.invoices.pdf');
+        Route::get('/invoices/{id}/download', [InvoiceController::class, 'downloadPDF'])
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->name('admin.account.invoices.download');
+        Route::get('/invoices/{id}/preview', [InvoiceController::class, 'previewHTML'])
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->name('admin.account.invoices.preview');
     });
 
-    Route::prefix('admin/services')->group(function () {
+    Route::prefix('admin/services')
+        ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
+        ->group(function () {
         Route::get('/', [ServiceController::class, 'index'])->name('admin.services.index');
         Route::get('/create', [ServiceController::class, 'create'])->name('admin.services.create');
         Route::post('/', [ServiceController::class, 'store'])->name('admin.services.store');
@@ -1234,7 +1207,9 @@ Route::post(
     // ===============================
     // Admin Extra Services Routes
     // ===============================
-    Route::prefix('admin/extra-services')->group(function () {
+    Route::prefix('admin/extra-services')
+        ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
+        ->group(function () {
         Route::get('/', [ExtraServiceController::class, 'index'])->name('admin.extra-services.index');
         Route::get('/create', [ExtraServiceController::class, 'create'])->name('admin.extra-services.create');
         Route::post('/', [ExtraServiceController::class, 'store'])->name('admin.extra-services.store');
@@ -1247,7 +1222,10 @@ Route::post(
     });
 
       // IVR Management - Super Admin access is enforced inside each controller.
-    Route::prefix('admin/ivr')->name('admin.ivr.')->group(function () {
+    Route::prefix('admin/ivr')
+        ->middleware('role:ADMIN_ROLES')
+        ->name('admin.ivr.')
+        ->group(function () {
         Route::get('/call-types', [IvrCallTypeController::class, 'index'])->name('call-types.index');
         Route::get('/call-types/create', [IvrCallTypeController::class, 'create'])->name('call-types.create');
         Route::post('/call-types', [IvrCallTypeController::class, 'store'])->name('call-types.store');
@@ -1381,28 +1359,61 @@ Route::post(
         });
 
     Route::prefix('admin/operations/vendor-followups')
-        ->middleware('role:OPERATIONS_ROLES,SUPER_ADMIN,HR')
         ->name('admin.operations.vendor-followups.')
         ->group(function () {
-            Route::get('/', [OperationsVendorFollowupController::class, 'index'])->name('index');
-            Route::get('/export', [OperationsVendorFollowupController::class, 'export'])->name('export');
-            Route::get('/lead/{lead}', [OperationsVendorFollowupController::class, 'redirectCreate'])->name('create.redirect');
-            Route::get('/lead/{lead}/create', [OperationsVendorFollowupController::class, 'create'])->name('create');
-            Route::post('/lead/{lead}', [OperationsVendorFollowupController::class, 'store'])->name('store');
-            Route::get('/{case}', [OperationsVendorFollowupController::class, 'show'])->name('show');
-            Route::post('/{case}/reschedule', [OperationsVendorFollowupController::class, 'reschedule'])->name('reschedule');
-            Route::post('/{case}/complete', [OperationsVendorFollowupController::class, 'complete'])->name('complete');
-            Route::post('/{case}/cancel', [OperationsVendorFollowupController::class, 'cancel'])->name('cancel');
+            Route::get('/', [OperationsVendorFollowupController::class, 'index'])
+                ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES,HR')
+                ->name('index');
+
+            Route::get('/export', [OperationsVendorFollowupController::class, 'export'])
+                ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES,HR')
+                ->name('export');
+
+            Route::get('/{case}', [OperationsVendorFollowupController::class, 'show'])
+                ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES,HR')
+                ->name('show');
+
+            Route::get('/lead/{lead}', [OperationsVendorFollowupController::class, 'redirectCreate'])
+                ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES')
+                ->name('create.redirect');
+
+            Route::get('/lead/{lead}/create', [OperationsVendorFollowupController::class, 'create'])
+                ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES')
+                ->name('create');
+
+            Route::post('/lead/{lead}', [OperationsVendorFollowupController::class, 'store'])
+                ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES')
+                ->name('store');
+
+            Route::post('/{case}/reschedule', [OperationsVendorFollowupController::class, 'reschedule'])
+                ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES')
+                ->name('reschedule');
+
+            Route::post('/{case}/complete', [OperationsVendorFollowupController::class, 'complete'])
+                ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES')
+                ->name('complete');
+
+            Route::post('/{case}/cancel', [OperationsVendorFollowupController::class, 'cancel'])
+                ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES')
+                ->name('cancel');
         });
-    Route::prefix('admin/client')->group(function () {
-        Route::get('/', [ClientController::class, 'indexClient'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.client.index');
-        Route::get('/create', [ClientController::class, 'createClient'])->name('admin.client.create');
-        Route::post('/', [ClientController::class, 'storeClient'])->name('admin.client.store');
+    Route::prefix('admin/client')
+        ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')
+        ->group(function () {
+        Route::get('/', [ClientController::class, 'indexClient'])->name('admin.client.index');
+        Route::get('/create', [ClientController::class, 'createClient'])
+            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
+            ->name('admin.client.create');
+        Route::post('/', [ClientController::class, 'storeClient'])
+            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
+            ->name('admin.client.store');
         Route::get('/{client}/edit', [ClientController::class, 'editClient'])->name('admin.client.edit');
         // Route::post('/{client}', [ClientController::class, 'updateClient'])->name('admin.client.update');
         Route::patch('/{client}', [ClientController::class, 'updateClient'])->name('admin.client.update');
         Route::get('/{client}', [ClientController::class, 'viewClient'])->name('admin.client.view');
-        Route::delete('/{client}', [ClientController::class, 'destroy'])->name('admin.client.destroy');
+        Route::delete('/{client}', [ClientController::class, 'destroy'])
+            ->middleware('role:SUPER_ADMIN')
+            ->name('admin.client.destroy');
         Route::get('/{client}/data', [ClientController::class, 'getClientData'])->name('admin.client.data');
     });
 
@@ -1410,7 +1421,9 @@ Route::post(
     // ===============================
     // Admin User Roles Routes
     // ===============================
-    Route::prefix('admin/user-types')->group(function () {
+    Route::prefix('admin/user-types')
+        ->middleware('role:SUPER_ADMIN')
+        ->group(function () {
         Route::get('/', [UserTypeController::class, 'create'])->name('admin.user-types.create');
         Route::post('/', [UserTypeController::class, 'store'])->name('admin.user-types.store');
         Route::get('/edit/{id}', [UserTypeController::class, 'edit'])->name('admin.user-types.edit');
@@ -1424,11 +1437,15 @@ Route::post(
     // ===============================
     Route::prefix('admin/upcoming-follow-up')->group(function () {
         Route::get('/', [UpcomingFollowUpController::class, 'index'])->middleware('role:ADMIN_ROLES,SALES_ROLES,HR')->name('admin.upcoming-follow-up.index');
-        Route::post('/toggle', [UpcomingFollowUpController::class, 'toggleStatus'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.upcoming-follow-up.toggle');
+        Route::post('/toggle', [UpcomingFollowUpController::class, 'toggleStatus'])
+            ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')
+            ->name('admin.upcoming-follow-up.toggle');
     });
 
 
-    Route::prefix('admin/users')->group(function () {
+    Route::prefix('admin/users')
+    ->middleware('role:ADMIN_ROLES')
+    ->group(function () {
         Route::get('/', [UserController::class, 'index'])->name('admin.users.index');
         Route::get('/create', [UserController::class, 'create'])->name('admin.users.create');
         Route::post('/', [UserController::class, 'store'])->name('admin.users.store');
@@ -1445,7 +1462,9 @@ Route::post(
     });
 
     // Target Master Routes
-    Route::prefix('admin/targets')->group(function () {
+    Route::prefix('admin/targets')
+    ->middleware('role:ADMIN_ROLES,SALES_ROLES,HR')
+    ->group(function () {
         Route::get('/', [TargetController::class, 'index'])->name('admin.targets.index');
         Route::get('/create', [TargetController::class, 'create'])->name('admin.targets.create');
         Route::post('/', [TargetController::class, 'store'])->name('admin.targets.store');
@@ -1461,7 +1480,10 @@ Route::post(
     });
 
     //notification master routes
-    Route::prefix('admin')->name('admin.')->group(function () {
+   Route::prefix('admin')
+    ->name('admin.')
+    ->middleware('role:ADMIN_ROLES')
+    ->group(function () {
 
         Route::get('/notification-master', [NotificationMasterController::class, 'index'])
             ->name('notification-master.index');
@@ -1479,6 +1501,7 @@ Route::post(
             ->name('notification-master.update');
 
         Route::delete('/notification-master/{id}', [NotificationMasterController::class, 'destroy'])
+            ->middleware('role:SUPER_ADMIN')
             ->name('notification-master.destroy');
     });
 
@@ -1490,7 +1513,9 @@ Route::post(
         Route::get('/api/assigned-executives', [\App\Http\Controllers\SalesExecutiveManagementController::class, 'getAssignedSalesExecutives'])->name('admin.sales-executive-management.assigned-executives');
     });
 
-    Route::prefix('admin/products')->group(function () {
+    Route::prefix('admin/products')
+        ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
+        ->group(function () {
         Route::get('/', [ProductController::class, 'index'])->name('admin.products.index');
         Route::get('/create', [ProductController::class, 'create'])->name('admin.products.create');
         Route::post('/', [ProductController::class, 'store'])->name('admin.products.store');
@@ -1503,12 +1528,16 @@ Route::post(
     });
 
     // Product Sync to Airpoints
-    Route::prefix('admin/product-sync')->group(function () {
+    Route::prefix('admin/product-sync')
+        ->middleware('role:ADMIN_ROLES')
+        ->group(function () {
         Route::get('/', [ProductSyncController::class, 'index'])->name('admin.product-sync.index');
         Route::post('/sync', [ProductSyncController::class, 'syncProducts'])->name('admin.product-sync.sync');
     });
 
-    Route::prefix('admin/service-addresses')->group(function () {
+    Route::prefix('admin/service-addresses')
+        ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
+        ->group(function () {
         Route::get('/', [ServiceAddressController::class, 'index'])->name('admin.service-addresses.index');
         Route::get('/create', [ServiceAddressController::class, 'create'])->name('admin.service-addresses.create');
         Route::post('/', [ServiceAddressController::class, 'store'])->name('admin.service-addresses.store');
@@ -1527,27 +1556,59 @@ Route::post(
     });
 
     Route::prefix('admin/vouchers')->group(function () {
-        Route::get('/', [VoucherController::class, 'index'])->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')->name('admin.vouchers.index');
-        Route::get('/generate/{lead_id}', [VoucherController::class, 'showVoucherForm'])->name('admin.vouchers.generate');
-        Route::get('/form/{lead_id}', [VoucherController::class, 'showVoucherForm'])->name('admin.vouchers.form');
-        Route::post('/store', [VoucherController::class, 'storeVoucher'])->name('admin.vouchers.store');
-        Route::post('/get-service-addresses', [VoucherController::class, 'getServiceAddresses'])->name('admin.vouchers.getServiceAddresses');
-        Route::get('/{voucher_id}/pdf', [VoucherController::class, 'generateVoucherPdf'])->name('admin.vouchers.pdf');
-        Route::post('/{voucher_id}/send', [VoucherController::class, 'sendVoucherPdf'])->name('admin.vouchers.send');
-        // Send voucher via WhatsApp (generate PDF and send via WhatsApp)
-        Route::post('/{voucher_id}/send-whatsapp', [VoucherController::class, 'sendVoucherWhatsApp'])->name('admin.vouchers.send-whatsapp');
-        // Resend registration link to client email
-        Route::post('/{voucher_id}/resend-registration-link', [VoucherController::class, 'resendRegistrationLink'])->name('admin.vouchers.resend-registration-link');
-        // Send registration link via WhatsApp only
-        Route::post('/{voucher_id}/send-registration-whatsapp', [VoucherController::class, 'sendRegistrationLinkWhatsApp'])->name('admin.vouchers.send-registration-whatsapp');
-        // Delete extra attachment (file) associated with a voucher
-        Route::delete('/{voucher_id}/attachment', [VoucherController::class, 'deleteAttachment'])->name('admin.vouchers.delete-attachment');
+        Route::get('/', [VoucherController::class, 'index'])
+            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
+            ->name('admin.vouchers.index');
+
+        Route::get('/{voucher_id}/pdf', [VoucherController::class, 'generateVoucherPdf'])
+            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
+            ->name('admin.vouchers.pdf');
+
+        Route::get('/generate/{lead_id}', [VoucherController::class, 'showVoucherForm'])
+            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,SALES_ROLES')
+            ->name('admin.vouchers.generate');
+
+        Route::get('/form/{lead_id}', [VoucherController::class, 'showVoucherForm'])
+            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,SALES_ROLES')
+            ->name('admin.vouchers.form');
+
+        Route::post('/store', [VoucherController::class, 'storeVoucher'])
+            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
+            ->name('admin.vouchers.store');
+
+        Route::post('/get-service-addresses', [VoucherController::class, 'getServiceAddresses'])
+            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
+            ->name('admin.vouchers.getServiceAddresses');
+
+        Route::post('/{voucher_id}/send', [VoucherController::class, 'sendVoucherPdf'])
+            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
+            ->name('admin.vouchers.send');
+
+        Route::post('/{voucher_id}/send-whatsapp', [VoucherController::class, 'sendVoucherWhatsApp'])
+            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
+            ->name('admin.vouchers.send-whatsapp');
+
+        Route::post('/{voucher_id}/resend-registration-link', [VoucherController::class, 'resendRegistrationLink'])
+            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
+            ->name('admin.vouchers.resend-registration-link');
+
+        Route::post('/{voucher_id}/send-registration-whatsapp', [VoucherController::class, 'sendRegistrationLinkWhatsApp'])
+            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
+            ->name('admin.vouchers.send-registration-whatsapp');
+
+        Route::delete('/{voucher_id}/attachment', [VoucherController::class, 'deleteAttachment'])
+            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
+            ->name('admin.vouchers.delete-attachment');
     });
 
     Route::prefix('admin/rides')->group(function () {
         Route::get('/upcoming-ride', [RideController::class, 'upcomingRides'])->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,SALES_ROLES')->name('admin.rides.upcoming');
-        Route::get('/api/calendar-events', [RideController::class, 'getCalendarEvents'])->name('admin.rides.calendar.events');
-        Route::get('/api/ride-details/{rideId}', [RideController::class, 'getRideDetails'])->name('admin.rides.details');
+        Route::get('/api/calendar-events', [RideController::class, 'getCalendarEvents'])
+            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES,SALES_ROLES')
+            ->name('admin.rides.calendar.events');
+        Route::get('/api/ride-details/{rideId}', [RideController::class, 'getRideDetails'])
+            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,SENIOR_SALES_MANAGER,SALES_MANAGER')
+            ->name('admin.rides.details');
         if (app()->environment('local')) {
             Route::get('/debug/test-data', [RideController::class, 'debugTestData'])
                 ->middleware('role:ADMIN_ROLES')
@@ -1557,21 +1618,37 @@ Route::post(
         // Ride Status Routes
         Route::get('/ride-status', [RideController::class, 'rideStatus'])->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES')->name('admin.rides.ride-status');
         Route::get('/ride-status/export', [RideController::class, 'exportRideStatus'])->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES')->name('admin.rides.ride-status.export');
-        Route::get('/ride-status/{rideId}/details', [RideController::class, 'getRideStatusDetails'])->name('admin.rides.ride-status.details');
-        Route::post('/ride-status/{rideId}/update-status', [RideController::class, 'updateRideStatus'])->name('admin.rides.ride-status.update-status');
-        Route::post('/ride-status/{rideId}/update-dates', [RideController::class, 'updateRideDates'])->name('admin.rides.ride-status.update-dates');
+
+        Route::get('/ride-status/{rideId}/details', [RideController::class, 'getRideStatusDetails'])
+    ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES')
+    ->name('admin.rides.ride-status.details');
+
+        Route::post('/ride-status/{rideId}/update-status', [RideController::class, 'updateRideStatus'])
+            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
+            ->name('admin.rides.ride-status.update-status');
+
+        Route::post('/ride-status/{rideId}/update-dates', [RideController::class, 'updateRideDates'])
+            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
+            ->name('admin.rides.ride-status.update-dates');
+
+        Route::post('/ride-status/{rideId}/generate-refund', [RideController::class, 'generateRefundNote'])
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->name('admin.rides.ride-status.generate-refund');
+
+        Route::post('/rides/{rideId}/send-refund-email', [RideController::class, 'sendRefundEmail'])
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->name('admin.rides.ride-status.send-refund-email');
+
         Route::post('/ride-status/{rideId}/generate-invoice', [RideController::class, 'generateInvoice'])
             ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES')
             ->name('admin.rides.ride-status.generate-invoice');
-        Route::post('/ride-status/{rideId}/generate-refund', [RideController::class, 'generateRefundNote'])->name('admin.rides.ride-status.generate-refund');
         Route::post('/ride-status/{rideId}/save-refund', [RideController::class, 'saveRefundFromRideStatus'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')->name('admin.rides.ride-status.save-refund');
-        Route::post('/rides/{rideId}/send-refund-email', [RideController::class, 'sendRefundEmail'])->name('admin.rides.ride-status.send-refund-email');
     Route::post(
     '/ride-status/{rideId}/save-vendor-refund',
     [RideController::class, 'saveVendorRefundFromRideStatus']
 )
 ->middleware(
-    'role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES'
+    'role:ADMIN_ROLES,OPERATIONS_ROLES'
 )
 ->name(
     'admin.rides.ride-status.save-vendor-refund'
@@ -1592,8 +1669,10 @@ Route::post(
     'admin.account.vendor-refunds'
 );
 
-    Route::prefix('admin/refunds')->group(function () {
-        Route::get('/', [RefundController::class, 'index'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')->name('admin.refunds.index');
+ Route::prefix('admin/refunds')
+    ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+    ->group(function () {
+        Route::get('/', [RefundController::class, 'index'])->name('admin.refunds.index');
         Route::get('/{followupId}/details', [RefundController::class, 'show'])->name('admin.refunds.show');
         Route::post('/store', [RefundController::class, 'store'])->name('admin.refunds.store');
         Route::get('/{refundId}/download', [RefundController::class, 'download'])->name('admin.refunds.download');

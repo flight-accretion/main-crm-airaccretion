@@ -21,6 +21,7 @@ use Carbon\Carbon;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Validator;
 use App\Models\UserType;
+use App\Support\SafeUploadName;
 
 class RefundController extends Controller
 {
@@ -183,14 +184,14 @@ class RefundController extends Controller
                 try {
                     if ($ride && $ride->id) {
                         $approvedForThisFollowup = (float) PaymentAuditTrail::where('lead_followup_id', $ride->id)
-                            ->where('payment_status', 1)
+                            ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
                             ->sum('paid_amount');
                     }
                     if ($lead) {
                         $followupIds = $lead->leadFollowups()->pluck('id')->toArray();
                         if (!empty($followupIds)) {
                             $approvedForLead = (float) PaymentAuditTrail::whereIn('lead_followup_id', $followupIds)
-                                ->where('payment_status', 1)
+                                ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
                                 ->sum('paid_amount');
                         }
                     }
@@ -381,14 +382,14 @@ class RefundController extends Controller
             // Prefer approved payment audit amounts when available
             try {
                 $approvedForThisFollowup = (float) PaymentAuditTrail::where('lead_followup_id', $latestFollowup->id)
-                    ->where('payment_status', 1)
+                    ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
                     ->sum('paid_amount');
 
                 $followupIds = $lead->leadFollowups()->pluck('id')->toArray();
                 $approvedForLead = 0;
                 if (!empty($followupIds)) {
                     $approvedForLead = (float) PaymentAuditTrail::whereIn('lead_followup_id', $followupIds)
-                        ->where('payment_status', 1)
+                        ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
                         ->sum('paid_amount');
                 }
                 // If no existing refund.original_amount present, prefer approved sums
@@ -586,27 +587,26 @@ class RefundController extends Controller
                 return response()->json(['success' => false, 'message' => 'Followup not found'], 404);
             }
 
+            if ((int) $followup->status !== 2) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Refund can only be created for cancelled followups.',
+                ], 422);
+            }
+
             // Handle file upload
             $refundProofPath = null;
             if ($request->hasFile('refund_proof')) {
                 try {
                     $file = $request->file('refund_proof');
 
-                    // Sanitize the filename
-                    $originalName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
-                    $extension = $file->getClientOriginalExtension();
-
-                    // Remove special characters and replace spaces with underscores
-                    $cleanName = preg_replace('/[^A-Za-z0-9\-]/', '_', $originalName);
-                    $cleanName = substr($cleanName, 0, 100); // Limit length
-
-                    $fileName = 'refund_' . time() . '_' . $cleanName . '.' . $extension;
+                    $fileName = SafeUploadName::make($file, 'refund');
 
                     $refundProofPath = $file->storeAs('refunds', $fileName, 'public');
 
                     Log::info('Refund proof uploaded successfully', [
                         'path' => $refundProofPath,
-                        'original_name' => $file->getClientOriginalName(),
+                        'extension' => $file->getClientOriginalExtension(),
                         'stored_name' => $fileName
                     ]);
                 } catch (\Exception $e) {
@@ -756,6 +756,29 @@ class RefundController extends Controller
         }
         try {
             $refund = LeadRefund::findOrFail($refundId);
+
+            $requiredFields = [
+                'refund_amount',
+                'refund_reason',
+                'refund_type',
+                'refund_date',
+            ];
+
+            foreach ($requiredFields as $field) {
+                if ($refund->{$field} === null || $refund->{$field} === '') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Refund amount, reason, type, and date are required before marking done.',
+                    ], 422);
+                }
+            }
+
+            if ((float) $refund->refund_amount > 0 && empty($refund->refund_proof)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Refund proof is required before marking a paid refund done.',
+                ], 422);
+            }
 
             // Update status to "completed" (status 2)
             $refund->update([

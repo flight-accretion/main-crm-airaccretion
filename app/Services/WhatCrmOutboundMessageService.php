@@ -562,6 +562,7 @@ class WhatCrmOutboundMessageService
             $apiUrl =
                 config('whatcrm.template_message_url')
                 ?: config('services.whatscrm.api_url')
+                ?: config('services.operations_ride_alert.api_url')
                 ?: '';
         }
 
@@ -579,6 +580,8 @@ class WhatCrmOutboundMessageService
             $apiToken =
                 config('whatcrm.template_message_token')
                 ?: config('services.whatscrm.api_token')
+                ?: config('services.operations_ride_alert.api_key')
+                ?: config('services.operations_ride_alert.token')
                 ?: '';
         }
 

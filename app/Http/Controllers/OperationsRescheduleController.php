@@ -363,7 +363,7 @@ class OperationsRescheduleController extends Controller
         }
 
         return (float) PaymentAuditTrail::whereIn('lead_followup_id', $followupIds)
-            ->where('payment_status', 1)
+            ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
             ->sum('paid_amount');
     }
 }

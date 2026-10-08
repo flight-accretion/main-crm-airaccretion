@@ -142,8 +142,11 @@ class UpcomingFollowUpController extends Controller
         
         // Get today's open follow-ups
         $todayOpenQuery = (clone $baseQuery)
-            ->whereDate('next_followup_date', '=', $fromDate)
-            ->whereNotIn('status', LeadFollowup::TODAY_FOLLOWUP_HIDDEN_STATUSES);
+        ->where(function ($query) use ($fromDate) {
+            $query->whereDate('next_followup_date', '=', $fromDate)
+                ->orWhereNull('next_followup_date');
+        })
+        ->whereNotIn('status', LeadFollowup::TODAY_FOLLOWUP_HIDDEN_STATUSES);
         $todayOpenFollowUps = $todayOpenQuery->get();
         
         // Get missed open follow-ups
@@ -183,22 +186,25 @@ class UpcomingFollowUpController extends Controller
                 }
                 
                 // If the latest follow-up is open, check if it should appear for the selected date or is missed
-                if ($latestFollowupForLead->next_followup_date) {
-                    $followupDate = $latestFollowupForLead->next_followup_date->toDateString();
-                    $selectedDate = $fromDate->toDateString();
-                    
-                    if ($followupDate === $selectedDate) {
-                        // This follow-up is for the selected date
-                        $latestFollowupForLead->is_missed = false;
-                        $latestPerLead->push($latestFollowupForLead);
-                    } elseif ($latestFollowupForLead->next_followup_date->lt($fromDate) &&
-                             in_array($latestFollowupForLead->status, LeadFollowup::TODAY_FOLLOWUP_MISSED_OPEN_STATUSES)) {
-                        // This is a missed follow-up that's still open
-                        $latestFollowupForLead->is_missed = true;
-                        $latestPerLead->push($latestFollowupForLead);
-                    }
+               if (!$latestFollowupForLead->next_followup_date) {
+                $latestFollowupForLead->is_missed = false;
+                $latestPerLead->push($latestFollowupForLead);
+            } else {
+                $followupDate = $latestFollowupForLead->next_followup_date->toDateString();
+                $selectedDate = $fromDate->toDateString();
+
+                if ($followupDate === $selectedDate) {
+                    $latestFollowupForLead->is_missed = false;
+                    $latestPerLead->push($latestFollowupForLead);
+                } elseif (
+                    $latestFollowupForLead->next_followup_date->lt($fromDate)
+                    && in_array($latestFollowupForLead->status, LeadFollowup::TODAY_FOLLOWUP_MISSED_OPEN_STATUSES)
+                ) {
+                    $latestFollowupForLead->is_missed = true;
+                    $latestPerLead->push($latestFollowupForLead);
                 }
             }
+                        }
             
             $processedLeads->push($leadId);
         }
