@@ -95,6 +95,7 @@ class ExtraServiceController extends Controller
             ]);
 
             DB::commit();
+            app(\App\Services\MasterDataCacheService::class)->clear();
 
             return redirect()->route('admin.extra-services.index')->with('success', 'Extra Service added successfully!');
         } catch (\Exception $e) {
@@ -195,6 +196,7 @@ class ExtraServiceController extends Controller
             ]);
 
             DB::commit();
+            app(\App\Services\MasterDataCacheService::class)->clear();
 
             return redirect()->route('admin.extra-services.index')
                 ->with('success', 'Extra Service updated successfully.');
@@ -212,6 +214,7 @@ class ExtraServiceController extends Controller
     {
         try {
             $extraService->update(['status' => !$extraService->status]);
+            app(\App\Services\MasterDataCacheService::class)->clear();
             return response()->json([
                 'success' => true,
                 'message' => 'Extra Service status updated successfully.',
@@ -251,6 +254,7 @@ class ExtraServiceController extends Controller
                     'usage_scope' =>
                         ExtraService::SCOPE_VENDOR,
                 ]);
+                app(\App\Services\MasterDataCacheService::class)->clear();
 
                 return response()->json([
                     'success' => true,
@@ -260,6 +264,7 @@ class ExtraServiceController extends Controller
             }
 
             $extraService->delete();
+            app(\App\Services\MasterDataCacheService::class)->clear();
             return response()->json([
                 'success' => true,
                 'message' => 'Extra Service deleted successfully.'

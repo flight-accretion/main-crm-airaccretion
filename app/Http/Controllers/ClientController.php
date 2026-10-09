@@ -951,7 +951,7 @@ if ($isSuperAdmin) {
         $products = Product::where('status', 1)->get();
         // Get staff based on logged-in user hierarchy
         $staff = $this->getUsersInHierarchy();
-        $countries = Country::all();
+        $countries = app(\App\Services\MasterDataCacheService::class)->countries();
         $cities = collect();
         $outreachAssignment = null;
         $repeatLead = $this->resolveManualRepeatLead($request);
@@ -2457,19 +2457,19 @@ $leadFollowUp = LeadFollowUp::create([
         $clients = $query->orderBy('created_at', 'desc')
             ->paginate($perPage)
             ->appends($request->query());
-        $countries = Country::all();
+        $countries = app(\App\Services\MasterDataCacheService::class)->countries();
         $cities = collect();
         if (old('country_id')) {
             $cities = City::where('country_id', old('country_id'))
                 ->where('status', 1)
                 ->get();
         }
-        return view('admin.pages.clients.index-client', compact('clients', 'countries'));
+        return view('admin.pages.clients.index-client', compact('clients', 'countries', 'cities'));
     }
 
     public function createClient()
     {
-        $countries = Country::all();
+        $countries = app(\App\Services\MasterDataCacheService::class)->countries();
         $cities = collect();
         if (old('country_id')) {
             $cities = City::where('country_id', old('country_id'))

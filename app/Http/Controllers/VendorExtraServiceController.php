@@ -103,6 +103,8 @@ class VendorExtraServiceController extends Controller
             'status' => 1,
         ]);
 
+        app(\App\Services\MasterDataCacheService::class)->clear();
+
         return response()->json([
             'success' => true,
             'existing' => false,
@@ -212,6 +214,7 @@ class VendorExtraServiceController extends Controller
                 });
 
             $extraService->delete();
+            app(\App\Services\MasterDataCacheService::class)->clear();
 
             DB::commit();
 

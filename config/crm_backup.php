@@ -32,6 +32,12 @@ return [
             false
         ),
 
+    'delete_local_after_upload' =>
+        env(
+            'CRM_BACKUP_DELETE_LOCAL_AFTER_UPLOAD',
+            true
+        ),
+
     /*
      * Optional executable override.
      *

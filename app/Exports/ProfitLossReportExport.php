@@ -7,7 +7,8 @@ use App\Models\LeadVendorPayment;
 use App\Models\PaymentAuditTrail;
 use App\Models\Service;
 use App\Models\User;
-use Maatwebsite\Excel\Concerns\FromCollection;
+use Maatwebsite\Excel\Concerns\FromGenerator;
+use App\Exports\Concerns\StreamsLeadGroups;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Concerns\WithStyles;
@@ -18,8 +19,10 @@ use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use Illuminate\Support\Collection;
 use Carbon\Carbon;
 
-class ProfitLossReportExport implements FromCollection, WithHeadings, WithMapping, WithStyles, WithEvents
+class ProfitLossReportExport implements FromGenerator, WithHeadings, WithMapping, WithStyles, WithEvents
 {
+    use StreamsLeadGroups;
+
     protected $filters;
 
     public function __construct($filters = [])
@@ -184,7 +187,7 @@ class ProfitLossReportExport implements FromCollection, WithHeadings, WithMappin
 
     //     return $profitLossData;
     // }
- public function collection()
+ private function exportQuery()
 {
     $query = LeadFollowup::with([
         'enquiry.client.country',
@@ -266,6 +269,16 @@ class ProfitLossReportExport implements FromCollection, WithHeadings, WithMappin
             $q->where('product_ids', 'like', '%' . $productId . '%');
         });
     }
+
+        return $query;
+    }
+
+    public function collection()
+    {
+        $query = $this->exportQuery();
+        if ($this->leadBatchIds !== null) {
+            $query->whereIn('lead_id', $this->leadBatchIds);
+        }
 
     $allData = $query->orderBy('created_at', 'desc')->get();
 

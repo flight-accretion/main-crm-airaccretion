@@ -3,7 +3,7 @@
 namespace App\Exports;
 
 use App\Models\LeadVendorPayment;
-use Maatwebsite\Excel\Concerns\FromCollection;
+use Maatwebsite\Excel\Concerns\FromQuery;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Concerns\WithStyles;
@@ -11,7 +11,7 @@ use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class VendorReportExport implements FromCollection, WithHeadings, WithMapping, WithStyles, WithEvents
+class VendorReportExport implements FromQuery, WithHeadings, WithMapping, WithStyles, WithEvents
 {
     protected $filters;
 
@@ -20,7 +20,7 @@ class VendorReportExport implements FromCollection, WithHeadings, WithMapping, W
         $this->filters = $filters;
     }
 
-    public function collection()
+    public function query()
     {
         $query = LeadVendorPayment::with([
             'vendor',
@@ -63,10 +63,16 @@ class VendorReportExport implements FromCollection, WithHeadings, WithMapping, W
             }
         }
 
-        $vendorPayments = $query->orderByDesc('created_at')->get();
-        $rows = collect();
+        return $query->orderByDesc('created_at');
+    }
 
-        foreach ($vendorPayments as $vp) {
+    public function collection()
+    {
+        return $this->query()->get()->map(fn ($payment) => $this->buildRow($payment));
+    }
+
+    private function buildRow($vp): array
+    {
             $lead = $vp->lead;
             $client = $lead->client ?? null;
             $clientName = $client->name ?? 'N/A';
@@ -148,7 +154,7 @@ class VendorReportExport implements FromCollection, WithHeadings, WithMapping, W
                 }
             } catch (\Exception $e) {}
 
-            $rows->push([
+            return [
                 'vendor_name' => $vp->vendor->name ?? 'N/A',
                 'booking_slip' => $bookingSlip,
                 'product' => $product,
@@ -167,10 +173,7 @@ class VendorReportExport implements FromCollection, WithHeadings, WithMapping, W
                 'service_date' => $serviceDate,
                 'booking_date' => $bookingDate,
                 'manager_name' => $managerName,
-            ]);
-        }
-
-        return $rows;
+            ];
     }
 
     public function headings(): array
@@ -200,6 +203,9 @@ class VendorReportExport implements FromCollection, WithHeadings, WithMapping, W
 
     public function map($row): array
     {
+        if ($row instanceof LeadVendorPayment) {
+            $row = $this->buildRow($row);
+        }
         static $i = 0; $i++;
         return [
             $i,

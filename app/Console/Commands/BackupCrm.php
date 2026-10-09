@@ -77,11 +77,17 @@ class BackupCrm extends Command
             . $timestamp;
 
 
-        $dbFile =
+        $dbSqlFile =
             $workDir
             . '/accretion_crm_database_'
             . $timestamp
             . '.sql';
+
+        $dbFile =
+            $workDir
+            . '/accretion_crm_database_'
+            . $timestamp
+            . '.zip';
 
 
         $codeFile =
@@ -118,18 +124,47 @@ class BackupCrm extends Command
 
 
             $this->createDatabaseDump(
-                $dbFile
+                $dbSqlFile
             );
 
 
             $this->assertValidFile(
-                $dbFile,
+                $dbSqlFile,
                 'Database SQL'
             );
 
 
             $this->info(
                 'Database dump created: '
+                . $this->humanSize(
+                    filesize($dbSqlFile)
+                )
+            );
+
+            $this->info(
+                'Creating database ZIP...'
+            );
+
+
+            $this->createSingleFileZip(
+                $dbSqlFile,
+                $dbFile
+            );
+
+
+            $this->assertValidFile(
+                $dbFile,
+                'Database ZIP'
+            );
+
+
+            @unlink(
+                $dbSqlFile
+            );
+
+
+            $this->info(
+                'Database ZIP created: '
                 . $this->humanSize(
                     filesize($dbFile)
                 )
@@ -211,7 +246,7 @@ class BackupCrm extends Command
                         $dbFile,
                         basename($dbFile),
                         $dbFolderId,
-                        'application/sql'
+                        'application/zip'
                     );
 
 
@@ -287,6 +322,13 @@ class BackupCrm extends Command
             if (
                 $completed
                 && is_dir($workDir)
+                && filter_var(
+                    config(
+                        'crm_backup.delete_local_after_upload',
+                        true
+                    ),
+                    FILTER_VALIDATE_BOOLEAN
+                )
             ) {
 
                 $this->deleteDirectory(
@@ -671,6 +713,53 @@ $process =
         if (!$zip->close()) {
             throw new RuntimeException(
                 'Unable to finalize CRM code ZIP.'
+            );
+        }
+    }
+
+
+    private function createSingleFileZip(
+        string $source,
+        string $target
+    ): void {
+
+        $zip =
+            new ZipArchive();
+
+
+        $result =
+            $zip->open(
+                $target,
+                ZipArchive::CREATE
+                | ZipArchive::OVERWRITE
+            );
+
+
+        if ($result !== true) {
+            throw new RuntimeException(
+                'Unable to create database ZIP.'
+            );
+        }
+
+
+        if (
+            !$zip->addFile(
+                $source,
+                basename($source)
+            )
+        ) {
+
+            $zip->close();
+
+            throw new RuntimeException(
+                'Unable to add database SQL to ZIP.'
+            );
+        }
+
+
+        if (!$zip->close()) {
+            throw new RuntimeException(
+                'Unable to finalize database ZIP.'
             );
         }
     }

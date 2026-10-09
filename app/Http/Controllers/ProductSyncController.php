@@ -15,7 +15,11 @@ class ProductSyncController extends Controller
     public function index()
     {
         // Show only active products that are not yet synced (sync_at = 0).
-        $products = Product::where('status', 1)->where('sync_at', 0)->get();
+        $products = Product::where('status', 1)
+            ->where('sync_at', 0)
+            ->orderBy('created_at')
+            ->limit(20)
+            ->get();
 
         return view('admin.pages.products.product-sync', compact('products'));
     }
@@ -38,7 +42,11 @@ class ProductSyncController extends Controller
             }
 
             // Only sync active products that have not been synced yet (sync_at = 0).
-            $products = Product::where('status', 1)->where('sync_at', 0)->get();
+            $products = Product::where('status', 1)
+                ->where('sync_at', 0)
+                ->orderBy('created_at')
+                ->limit(20)
+                ->get();
 
             if ($products->isEmpty()) {
                 return response()->json([

@@ -95,9 +95,9 @@ class Kernel extends ConsoleKernel
         );
         $schedule
         ->command(
-            'call-summary:process-pending'
+            'call-summary:process-pending --limit=25'
         )
-        ->everyMinute()
+        ->everyFiveMinutes()
         ->withoutOverlapping()
         ->appendOutputTo(
             storage_path(
@@ -173,8 +173,45 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/operations-ride-alerts.log'));
 
         $schedule->command('google-chat:ensure-subscription')->hourly()->withoutOverlapping();
-        $schedule->command('google-chat:retry-pending')->everyMinute()->withoutOverlapping();
+        $schedule->command('google-chat:retry-pending --limit=25')
+            ->everyFiveMinutes()
+            ->withoutOverlapping();
         $schedule->command('google-chat:reconcile')->hourly()->withoutOverlapping();
+
+        $schedule->command('queue:health')
+            ->everyFifteenMinutes()
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/queue-health.log'));
+
+        $schedule->command('queue:prune-failed --hours=72')
+            ->dailyAt('01:15')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/queue-prune-failed.log'));
+
+        $schedule->command('google-chat:prune-technical-logs --months=2')
+            ->dailyAt('02:15')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/google-chat-prune.log'));
+
+        $schedule->command('crm:prune-technical-data')
+            ->dailyAt('02:35')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/crm-prune-technical-data.log'));
+
+        $schedule->command('crm:prune-files')
+            ->dailyAt('02:45')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/crm-prune-files.log'));
+
+        $schedule->command('crm:prune-whatsapp-history')
+            ->dailyAt('02:40')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/crm-prune-whatsapp-history.log'));
+
+        $schedule->command('crm:storage-health')
+            ->dailyAt('03:00')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/crm-storage-health.log'));
 
             if (
         config(

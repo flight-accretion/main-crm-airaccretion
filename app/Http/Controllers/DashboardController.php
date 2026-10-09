@@ -205,17 +205,20 @@ class DashboardController extends Controller
             })
             ->get();
 
+        $refundsByFollowup = \App\Models\LeadRefund::whereIn('lead_followup_id', $allFollowupIdsFlat)
+            ->whereIn('status', [1, 2])->select('lead_followup_id')
+            ->selectRaw('SUM(refund_amount) AS total_refund')
+            ->groupBy('lead_followup_id')->pluck('total_refund', 'lead_followup_id');
+
         return (float) $allFollowups->groupBy('lead_id')->map(function ($group) {
             $qualifying = $group->filter(function ($followup) {
                 return in_array((int) $followup->status, LeadFollowup::salesAmountStatuses(), true);
             });
 
             return $qualifying->sortByDesc('created_at')->first();
-        })->filter()->sum(function ($followup) {
-            $allFollowupIdsForLead = LeadFollowup::where('lead_id', $followup->lead_id)->pluck('id');
-            $refund = \App\Models\LeadRefund::whereIn('lead_followup_id', $allFollowupIdsForLead)
-                ->whereIn('status', [1, 2])
-                ->sum('refund_amount');
+        })->filter()->sum(function ($followup) use ($allFollowupIdsByLead, $refundsByFollowup) {
+            $refund = $allFollowupIdsByLead->get($followup->lead_id, collect())
+                ->sum(fn ($id) => (float) $refundsByFollowup->get($id, 0));
 
             return SalesAmountCalculator::salesAmountForFollowup($followup, (float) $refund);
         });

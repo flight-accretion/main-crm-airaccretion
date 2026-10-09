@@ -575,6 +575,13 @@
                 hasMore: false,
                 total: 0,
                 isLoadingMore: false,
+                messages: [],
+                historyCursor: null,
+                hasOlderMessages: false,
+                hasLoadedHistory: false,
+                isLoadingHistory: false,
+                historyError: '',
+                messageRequestId: 0,
             };
 
             const escapeHtml = (value) => String(value ?? '')
@@ -858,55 +865,22 @@
                 return Boolean(payload.read_cleared);
             };
 
-            const loadMessages = async (
-                conversationId,
-                {
-                    silent = false,
-                } = {}
-            ) => {
-                const shouldStickToBottom =
-                    messagesEl.scrollHeight
-                    - messagesEl.scrollTop
-                    - messagesEl.clientHeight
-                    < 140;
-
-                if (!silent) {
-                    messagesEl.innerHTML = '<div class="wa-empty-state">Loading messages...</div>';
-                }
-
-                const response = await fetch(endpointFor(endpoints.messages, conversationId), {
-                    headers: {
-                        'Accept': 'application/json',
-                    },
-                });
-
-                if (!response.ok) {
-                    if (!silent) {
-                        messagesEl.innerHTML = '<div class="wa-empty-state">Unable to load messages.</div>';
-                    }
-
-                    return;
-                }
-
-                const payload = await response.json();
-
-                if (state.selectedId !== conversationId) {
-                    return;
-                }
-
-                const conversation = payload.conversation || {};
-                const messages = payload.messages || [];
-
-                chatNameEl.textContent = conversationLabel(conversation);
-                chatMetaEl.textContent = conversation.number || conversation.raw_phone || '-';
-                chatAgentEl.textContent = conversation.assigned_user_name || 'Unassigned';
-                setComposerEnabled(true);
-                setStatus('');
-
-                if (!messages.length) {
+            const renderMessages = () => {
+                const historyControl = state.hasOlderMessages ? `
+                    <div class="wa-show-more-wrap">
+                        <button type="button" class="ti-btn ti-btn-sm ti-btn-light" id="wa-load-older"
+                            ${state.isLoadingHistory ? 'disabled' : ''}>
+                            <i class="ri-history-line" aria-hidden="true"></i>
+                            ${state.isLoadingHistory ? 'Loading...' : 'Load older messages'}
+                        </button>
+                        <div role="status">${escapeHtml(state.historyError)}</div>
+                    </div>
+                ` : '';
+                if (!state.messages.length) {
                     messagesEl.innerHTML = '<div class="wa-empty-state">No messages yet.</div>';
-                } else {
-                    messagesEl.innerHTML = messages.map((message) => {
+                    return;
+                }
+                    messagesEl.innerHTML = historyControl + state.messages.map((message) => {
                         const outgoingClass = message.direction === 'outgoing'
                             ? ' is-outgoing'
                             : '';
@@ -926,7 +900,7 @@
                             : '';
 
                         return `
-                            <div class="wa-message-row${outgoingClass}">
+                            <div class="wa-message-row${outgoingClass}" data-message-id="${escapeHtml(message.id)}">
                                 <div class="wa-bubble">
                                     <div class="wa-bubble-body">${escapeHtml(message.body || '-')}</div>
                                     ${mediaPreview}
@@ -938,22 +912,118 @@
                             </div>
                         `;
                     }).join('');
+            };
 
-                    if (!silent || shouldStickToBottom) {
-                        messagesEl.scrollTop = messagesEl.scrollHeight;
-                    }
+            const loadMessages = async (
+                conversationId,
+                { silent = false, older = false } = {}
+            ) => {
+                if (state.isLoadingHistory || (older && !state.historyCursor)) {
+                    return;
+                }
+                const requestId = ++state.messageRequestId;
+                const previousHeight = messagesEl.scrollHeight;
+                const previousTop = messagesEl.scrollTop;
+                const shouldStickToBottom = previousHeight - previousTop - messagesEl.clientHeight < 140;
+                if (older) {
+                    state.isLoadingHistory = true;
+                    state.historyError = '';
+                    renderMessages();
+                } else if (!silent && !state.messages.length) {
+                    messagesEl.innerHTML = '<div class="wa-empty-state">Loading messages...</div>';
                 }
 
-                if (await markRead(conversationId)) {
-                    loadConversations({
-                        silent: true,
-                        preserveExisting: true,
-                    });
+                const url = new URL(endpointFor(endpoints.messages, conversationId), window.location.origin);
+                if (older) {
+                    url.searchParams.set('before_id', state.historyCursor);
+                }
+                try {
+                    const response = await fetch(url, { headers: { 'Accept': 'application/json' } });
+                    if (!response.ok) {
+                        throw new Error('Unable to load messages.');
+                    }
+                    const payload = await response.json();
+                    if (state.selectedId !== conversationId || requestId !== state.messageRequestId) {
+                        return;
+                    }
+
+                    const conversation = payload.conversation || {};
+                    const incoming = payload.messages || [];
+                    const meta = payload.meta || {};
+                    const hadHistory = state.hasLoadedHistory;
+                    const byId = new Map((older || hadHistory ? state.messages : [])
+                        .map((message) => [message.id, message]));
+                    incoming.forEach((message) => byId.set(message.id, message));
+                    state.messages = [...byId.values()]
+                        .filter((message) => !meta.retention_cutoff
+                            || message.sort_key.slice(0, 26) >= meta.retention_cutoff)
+                        .sort((left, right) => left.sort_key < right.sort_key ? -1 : (left.sort_key > right.sort_key ? 1 : 0));
+
+                    if (hadHistory && state.historyCursor
+                        && !state.messages.some((message) => message.id === state.historyCursor)) {
+                        state.historyCursor = null;
+                        state.hasOlderMessages = false;
+                    } else if (older || !hadHistory) {
+                        state.historyCursor = meta.next_before_id || null;
+                        state.hasOlderMessages = Boolean(meta.has_more);
+                    }
+                    if (older) {
+                        state.hasLoadedHistory = true;
+                    }
+                    state.isLoadingHistory = false;
+                    chatNameEl.textContent = conversationLabel(conversation);
+                    chatMetaEl.textContent = conversation.number || conversation.raw_phone || '-';
+                    chatAgentEl.textContent = conversation.assigned_user_name || 'Unassigned';
+                    setComposerEnabled(true);
+                    if (!silent) {
+                        setStatus('');
+                    }
+                    renderMessages();
+                    if (older) {
+                        messagesEl.scrollTop = previousTop + messagesEl.scrollHeight - previousHeight;
+                    } else if (!silent || shouldStickToBottom) {
+                        messagesEl.scrollTop = messagesEl.scrollHeight;
+                    } else {
+                        messagesEl.scrollTop = previousTop;
+                    }
+
+                    if (!older && await markRead(conversationId)) {
+                        loadConversations({ silent: true, preserveExisting: true });
+                    }
+                } catch (error) {
+                    if (state.selectedId !== conversationId || requestId !== state.messageRequestId) {
+                        return;
+                    }
+                    if (older) {
+                        state.isLoadingHistory = false;
+                        state.historyError = 'Unable to load older messages. Please retry.';
+                        renderMessages();
+                        messagesEl.scrollTop = previousTop;
+                    } else if (!silent) {
+                        setStatus('Unable to load messages.', 'error');
+                    }
+                } finally {
+                    if (state.selectedId === conversationId && requestId === state.messageRequestId) {
+                        state.isLoadingHistory = false;
+                    }
                 }
             };
 
+            messagesEl.addEventListener('click', (event) => {
+                if (event.target.closest('#wa-load-older')) {
+                    loadMessages(state.selectedId, { silent: true, older: true });
+                }
+            });
+
             const selectConversation = (conversationId) => {
+                state.messageRequestId++;
                 state.selectedId = conversationId;
+                state.messages = [];
+                state.historyCursor = null;
+                state.hasOlderMessages = false;
+                state.hasLoadedHistory = false;
+                state.isLoadingHistory = false;
+                state.historyError = '';
                 renderConversations();
                 loadMessages(conversationId);
             };

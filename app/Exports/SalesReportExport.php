@@ -10,7 +10,7 @@ use App\Models\Product;
 use App\Models\User;
 use App\Services\SalesAmountCalculator;
 use function App\Helpers\extractPhoneWithoutCountryCode;
-use Maatwebsite\Excel\Concerns\FromCollection;
+use Maatwebsite\Excel\Concerns\FromGenerator;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Concerns\WithStyles;
@@ -20,7 +20,7 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use Illuminate\Support\Collection;
 use Carbon\Carbon;
 
-class SalesReportExport implements FromCollection, WithHeadings, WithMapping, WithStyles, WithEvents
+class SalesReportExport implements FromGenerator, WithHeadings, WithMapping, WithStyles, WithEvents
 {
     protected $filters;
 
@@ -29,7 +29,9 @@ class SalesReportExport implements FromCollection, WithHeadings, WithMapping, Wi
         $this->filters = $filters;
     }
 
-    public function collection()
+    private $leadBatchIds;
+
+    private function exportQuery()
     {
         $statusArray = array_intersect_key(
             LeadFollowup::statusLabels(),
@@ -55,8 +57,8 @@ class SalesReportExport implements FromCollection, WithHeadings, WithMapping, Wi
             if (!empty($this->filters['year'])) {
                 $paidDateQuery->whereYear('paid_date', $this->filters['year']);
             }
-            $paidFollowupIds = $paidDateQuery->pluck('lead_followup_id')->unique();
-            $paidLeadIds = LeadFollowup::whereIn('id', $paidFollowupIds)->pluck('lead_id')->unique();
+            $paidFollowupIds = $paidDateQuery->select('lead_followup_id');
+            $paidLeadIds = LeadFollowup::whereIn('id', $paidFollowupIds)->select('lead_id');
             $query->whereIn('lead_id', $paidLeadIds);
         }
 
@@ -140,6 +142,43 @@ class SalesReportExport implements FromCollection, WithHeadings, WithMapping, Wi
             });
         }
 
+
+        return $query;
+    }
+
+    public function generator(): \Generator
+    {
+        // Chunk lead IDs rather than follow-ups to preserve grouped amounts.
+        $leadQuery = $this->exportQuery()->setEagerLoads([])
+            ->select('lead_id')->selectRaw('MAX(created_at) AS latest_created_at')
+            ->groupBy('lead_id')->orderByDesc('latest_created_at')->orderBy('lead_id');
+        try {
+            for ($page = 1; ; $page++) {
+                $ids = (clone $leadQuery)->forPage($page, 200)->pluck('lead_id');
+                if ($ids->isEmpty()) {
+                    break;
+                }
+                $this->leadBatchIds = $ids;
+                foreach ($this->collection() as $row) {
+                    yield $row;
+                }
+            }
+        } finally {
+            $this->leadBatchIds = null;
+        }
+    }
+
+    public function collection()
+    {
+        $statusArray = array_intersect_key(
+            LeadFollowup::statusLabels(),
+            array_flip(LeadFollowup::salesAmountStatuses())
+        );
+
+        $query = $this->exportQuery();
+        if ($this->leadBatchIds !== null) {
+            $query->whereIn('lead_id', $this->leadBatchIds);
+        }
         $allSalesData = $query->orderBy('created_at', 'desc')->get();
 
         // Get all services, extra services, and products for reference

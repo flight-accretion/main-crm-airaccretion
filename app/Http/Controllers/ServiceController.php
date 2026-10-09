@@ -59,10 +59,8 @@ public function index(Request $request)
     public function create()
     {
         $products = Product::where('status', 1)->get();
-       $extraServices = ExtraService::customerVisible()
-    ->where('status', 1)
-    ->orderBy('extra_service')
-    ->get();
+       $extraServices = app(\App\Services\MasterDataCacheService::class)->activeExtraServices()
+            ->whereIn('usage_scope', [ExtraService::SCOPE_CUSTOMER, ExtraService::SCOPE_BOTH])->values();
 
         return view('admin.pages.services.add-services', compact('products', 'extraServices'));
     }
@@ -200,6 +198,7 @@ public function index(Request $request)
             //     }
             // }
             DB::commit();
+            app(\App\Services\MasterDataCacheService::class)->clear();
 
             return redirect()->route('admin.services.create')
                 ->with('success', 'Service created successfully.');
@@ -213,10 +212,8 @@ public function index(Request $request)
     {
         $service->load('extraServices');
         $products = Product::where('status', 1)->get();
-        $extraServices = ExtraService::customerVisible()
-    ->where('status', 1)
-    ->orderBy('extra_service')
-    ->get();
+        $extraServices = app(\App\Services\MasterDataCacheService::class)->activeExtraServices()
+            ->whereIn('usage_scope', [ExtraService::SCOPE_CUSTOMER, ExtraService::SCOPE_BOTH])->values();
 
         return view('admin.pages.services.edit-services', compact('service', 'products', 'extraServices'));
     }
@@ -408,6 +405,7 @@ public function index(Request $request)
             // }
 
             DB::commit();
+            app(\App\Services\MasterDataCacheService::class)->clear();
 
             return redirect()->route('admin.services.edit', $service)
                 ->with('success', 'Service updated successfully.');
@@ -444,6 +442,7 @@ public function index(Request $request)
         }
         try {
             $service->delete();
+            app(\App\Services\MasterDataCacheService::class)->clear();
             return response()->json([
                 'success' => true,
                 'message' => 'Service deleted successfully.'
@@ -460,6 +459,7 @@ public function index(Request $request)
     {
         try {
             $service->update(['status' => !$service->status]);
+            app(\App\Services\MasterDataCacheService::class)->clear();
             return response()->json([
                 'success' => true,
                 'message' => 'Service status updated successfully.',

@@ -112,6 +112,7 @@ public function index(Request $request)
                     'status' => 1,
                 ]);
                 DB::commit();
+                app(\App\Services\MasterDataCacheService::class)->clear();
 
                 $message = 'Product created successfully.';
                 if (request()->ajax() || request()->wantsJson()) {
@@ -262,6 +263,7 @@ public function index(Request $request)
                 ]);
 
             DB::commit();
+            app(\App\Services\MasterDataCacheService::class)->clear();
             
             if (request()->ajax() || request()->wantsJson()) {
                 return response()->json([
@@ -301,6 +303,7 @@ public function index(Request $request)
             $product->update(['status' => $newStatus]);
             
             DB::commit();
+            app(\App\Services\MasterDataCacheService::class)->clear();
             
             return response()->json([
                 'success' => true,
@@ -393,6 +396,7 @@ public function index(Request $request)
         try {
             $product->delete();
             DB::commit();
+            app(\App\Services\MasterDataCacheService::class)->clear();
             return redirect()->route('admin.products.index')
                 ->with('success', 'Product deleted successfully.');
         } catch (\Exception $e) {

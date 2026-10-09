@@ -26,7 +26,7 @@
 
 @if(!empty($reportLimited))
 <div class="alert alert-warning mb-4">
-  Showing latest 2000 rows only. Please use filters or export for full report.
+  Showing latest {{ max(1, (int) config('crm.max_report_rows', 500)) }} leads only. Please use filters or export for full report.
 </div>
 @endif
 

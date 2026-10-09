@@ -61,6 +61,7 @@ class UserTypeController extends Controller
             'status' => $request->status,
             'parent_id' => $request->parent_id,
         ]);
+        app(\App\Services\MasterDataCacheService::class)->clear();
         return redirect()->route('admin.user-types.create')->with('success', 'User role created successfully.');
     }
 
@@ -142,6 +143,7 @@ class UserTypeController extends Controller
 
         $objUserType = UserType::findOrFail($id);
         $objUserType->update($request->only(['user_type', 'description', 'status', 'parent_id']));
+        app(\App\Services\MasterDataCacheService::class)->clear();
 
         if ($request->ajax() || $request->wantsJson()) {
             return response()->json([
@@ -159,6 +161,7 @@ class UserTypeController extends Controller
         $objUserType = UserType::findOrFail($id);
         $objUserType->status = $objUserType->status ? 0 : 1;
         $objUserType->save();
+        app(\App\Services\MasterDataCacheService::class)->clear();
 
         return redirect()->back()->with('success', 'Status updated successfully.');
     }

@@ -12,6 +12,20 @@ storage/framework/cache/*
 storage/framework/sessions/*
 storage/framework/views/*
 
+# Runtime data and credentials belong in persistent storage, not image layers.
+storage/app/**
+!storage/app/.gitignore
+!storage/app/public/
+!storage/app/public/.gitignore
+storage/*.key
+public/storage
+bootstrap/cache/*.php
+.aws/
+.codex/
+.agents/
+.idea/
+.vscode/
+
 tests/
 .dockerignore
 Dockerfile

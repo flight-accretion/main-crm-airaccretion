@@ -4,7 +4,8 @@ namespace App\Exports;
 
 use App\Models\LeadVendorPayment;
 use App\Models\PaymentAuditTrail;
-use Maatwebsite\Excel\Concerns\FromCollection;
+use Maatwebsite\Excel\Concerns\FromGenerator;
+use App\Exports\Concerns\StreamsLeadGroups;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Concerns\WithStyles;
@@ -13,8 +14,10 @@ use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use Illuminate\Support\Collection;
 
-class VendorPaymentsExport implements FromCollection, WithHeadings, WithMapping, WithStyles, WithEvents
+class VendorPaymentsExport implements FromGenerator, WithHeadings, WithMapping, WithStyles, WithEvents
 {
+    use StreamsLeadGroups;
+
     protected $filters;
 
     public function __construct($filters = [])
@@ -22,7 +25,7 @@ class VendorPaymentsExport implements FromCollection, WithHeadings, WithMapping,
         $this->filters = $filters;
     }
 
-    public function collection()
+    private function exportQuery()
     {
         // Build query with same filtering logic as controller
         $query = LeadVendorPayment::with([
@@ -72,6 +75,16 @@ class VendorPaymentsExport implements FromCollection, WithHeadings, WithMapping,
             } else {
                 $query->where('payment_status', $this->filters['status']);
             }
+        }
+
+        return $query;
+    }
+
+    public function collection()
+    {
+        $query = $this->exportQuery();
+        if ($this->leadBatchIds !== null) {
+            $query->whereIn('lead_id', $this->leadBatchIds);
         }
 
         $vendorPayments = $query->get();

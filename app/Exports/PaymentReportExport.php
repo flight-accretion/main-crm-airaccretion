@@ -5,7 +5,7 @@ namespace App\Exports;
 use App\Models\LeadFollowup;
 use App\Models\PaymentAuditTrail;
 use App\Models\Service;
-use Maatwebsite\Excel\Concerns\FromCollection;
+use Maatwebsite\Excel\Concerns\FromGenerator;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Concerns\WithStyles;
@@ -14,7 +14,7 @@ use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
-class PaymentReportExport implements FromCollection, WithHeadings, WithMapping, WithStyles, WithEvents
+class PaymentReportExport implements FromGenerator, WithHeadings, WithMapping, WithStyles, WithEvents
 {
     protected $filters;
     protected $servicesById;
@@ -24,7 +24,9 @@ class PaymentReportExport implements FromCollection, WithHeadings, WithMapping, 
         $this->filters = $filters;
     }
 
-    public function collection()
+    private $leadBatchIds;
+
+    private function exportQuery()
     {
  
         $serviceDate = $this->filters['service_date'] ?? null;
@@ -32,8 +34,6 @@ class PaymentReportExport implements FromCollection, WithHeadings, WithMapping, 
         $status = $this->filters['status'] ?? null;
         $fromDate = $this->filters['from_date'] ?? null;
         $toDate = $this->filters['to_date'] ?? null;
-        $this->servicesById = Service::select('id', 'service')->get()->keyBy('id');
- $exportData = collect();
          // Build query with same filtering logic as controller
          $query = LeadFollowup::with([
                 'enquiry.client.country',
@@ -57,9 +57,44 @@ class PaymentReportExport implements FromCollection, WithHeadings, WithMapping, 
             }
 
             // Apply status filter
-            if ($this->filters['status'] && $status != '') {
+            if (!empty($this->filters['status']) && $status != '') {
                 $query->where('status', intval($status));
             }
+
+
+        return $query;
+    }
+
+    public function generator(): \Generator
+    {
+        $leadQuery = $this->exportQuery()->setEagerLoads([])
+            ->select('lead_id')->selectRaw('MAX(created_at) AS latest_created_at')
+            ->groupBy('lead_id')->orderByDesc('latest_created_at')->orderBy('lead_id');
+        try {
+            for ($page = 1; ; $page++) {
+                $ids = (clone $leadQuery)->forPage($page, 200)->pluck('lead_id');
+                if ($ids->isEmpty()) {
+                    break;
+                }
+                $this->leadBatchIds = $ids;
+                foreach ($this->collection() as $row) {
+                    yield $row;
+                }
+            }
+        } finally {
+            $this->leadBatchIds = null;
+        }
+    }
+
+    public function collection()
+    {
+        $status = $this->filters['status'] ?? null;
+        $this->servicesById = Service::select('id', 'service')->get()->keyBy('id');
+        $exportData = collect();
+        $query = $this->exportQuery();
+        if ($this->leadBatchIds !== null) {
+            $query->whereIn('lead_id', $this->leadBatchIds);
+        }
 
             $allPayments = $query->orderBy('created_at', 'desc')->get();
             $followupIds = $allPayments->pluck('id')->filter()->unique()->values();

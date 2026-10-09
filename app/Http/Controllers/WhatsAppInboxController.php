@@ -7,6 +7,7 @@ use App\Models\WhatsAppConversation;
 use App\Models\WhatsAppMessage;
 use App\Services\WhatCrmOutboundMessageService;
 use App\Services\WhatsAppConversationVisibilityService;
+use App\Services\WhatsAppHistoryRetentionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -144,6 +145,7 @@ class WhatsAppInboxController extends Controller
     }
 
     public function messages(
+        Request $request,
         string $conversation,
         WhatsAppConversationVisibilityService $visibility
     ) {
@@ -157,6 +159,9 @@ class WhatsAppInboxController extends Controller
             403
         );
 
+        $validated = $request->validate(['before_id' => ['nullable', 'uuid']]);
+        $messageLimit = 50;
+
         $conversationModel = WhatsAppConversation::query()
             ->with([
                 'contact',
@@ -164,14 +169,24 @@ class WhatsAppInboxController extends Controller
                 'lead' => function ($leadQuery) {
                     $leadQuery->withCount('leadFollowups');
                 },
-                'messages' => function ($query) {
-                    $query
-                        ->with('sender')
-                        ->orderBy('message_at')
-                        ->orderBy('created_at');
-                },
             ])
             ->findOrFail($conversation);
+
+        $retention = app(WhatsAppHistoryRetentionService::class);
+        $cutoff = $retention->cutoff();
+        $query = $retention->retained($conversationModel->messages(), $cutoff)->with('sender');
+        if (!empty($validated['before_id'])) {
+            $anchor = (clone $query)->whereKey($validated['before_id'])->firstOrFail();
+            $query->whereRaw('(COALESCE(message_at, created_at), created_at, id) < (?, ?, ?)', [
+                $anchor->getRawOriginal('message_at') ?: $anchor->getRawOriginal('created_at'),
+                $anchor->getRawOriginal('created_at'),
+                $anchor->id,
+            ]);
+        }
+        $page = $query->orderByRaw('COALESCE(message_at, created_at) DESC')
+            ->orderByDesc('created_at')->orderByDesc('id')->limit($messageLimit + 1)->get();
+        $hasMore = $page->count() > $messageLimit;
+        $messages = $page->take($messageLimit)->reverse()->values();
 
         return response()->json([
             'conversation' =>
@@ -179,14 +194,21 @@ class WhatsAppInboxController extends Controller
                     $conversationModel
                 ),
             'read_cleared' => false,
+            'meta' => [
+                'limit' => $messageLimit,
+                'has_more' => $hasMore,
+                'next_before_id' => $hasMore ? optional($messages->first())->id : null,
+                'retention_cutoff' => $cutoff->copy()->utc()->format('Y-m-d H:i:s.u'),
+            ],
             'messages' =>
-                $conversationModel
-                    ->messages
+                $messages
                     ->map(function ($message) use (
                         $conversationModel
                     ) {
                         return [
                             'id' => $message->id,
+                            'sort_key' => ($message->message_at ?: $message->created_at)->copy()->utc()->format('Y-m-d H:i:s.u')
+                                . '|' . $message->created_at->copy()->utc()->format('Y-m-d H:i:s.u') . '|' . $message->id,
                             'direction' => $message->direction,
                             'sender_type' => $message->sender_type,
                             'sender_name' =>
@@ -408,6 +430,8 @@ class WhatsAppInboxController extends Controller
         );
 
         abort_unless($messageModel->google_drive_file_id, 404);
+        abort_unless(app(WhatsAppHistoryRetentionService::class)
+            ->retained(WhatsAppMessage::query())->whereKey($messageModel->id)->exists(), 404);
 
         try {
             $file = app(\App\Services\Review\GoogleDriveReviewMediaService::class)
@@ -449,6 +473,9 @@ class WhatsAppInboxController extends Controller
             ? (int) ($lead->lead_followups_count ?? 0)
             : 0;
 
+        $previewAt = $conversation->last_message_at;
+        $previewRetained = $previewAt && $previewAt->gte(app(WhatsAppHistoryRetentionService::class)->cutoff());
+
         return [
             'id' => $conversation->id,
             'contact_id' => $conversation->contact_id,
@@ -474,12 +501,12 @@ class WhatsAppInboxController extends Controller
                 $conversation->assigned_user_id,
             'assigned_user_name' =>
                 optional($conversation->assignedUser)->name,
-            'last_message' => $conversation->last_message,
+            'last_message' => $previewRetained ? $conversation->last_message : null,
             'last_message_at' =>
-                optional($conversation->last_message_at)
+                optional($previewRetained ? $previewAt : null)
                     ->format('d M Y, h:i A'),
             'last_message_human' =>
-                optional($conversation->last_message_at)
+                optional($previewRetained ? $previewAt : null)
                     ->diffForHumans(),
             'unread_count' => (int) $conversation->unread_count,
             'status' => $conversation->status,

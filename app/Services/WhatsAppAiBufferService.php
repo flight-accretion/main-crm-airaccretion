@@ -7,8 +7,8 @@ use App\Models\WhatsAppAiAgentSetting;
 use App\Models\WhatsAppAiReplyBatch;
 use App\Models\WhatsAppConversation;
 use App\Models\WhatsAppMessage;
+use App\Support\CrmDebugLog;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
 class WhatsAppAiBufferService
@@ -110,7 +110,7 @@ class WhatsAppAiBufferService
     ): ?WhatsAppAiReplyBatch {
         $this->lastStatus = $status;
 
-        Log::info(
+        CrmDebugLog::info(
             'WhatsApp AI buffer skipped',
             [
                 'reason' => $status,

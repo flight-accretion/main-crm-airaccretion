@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Log;
 class ProcessPendingCallSummaries extends Command
 {
     protected $signature =
-        'call-summary:process-pending';
+        'call-summary:process-pending {--limit=25}';
 
 
     protected $description =
@@ -48,7 +48,13 @@ class ProcessPendingCallSummaries extends Command
                     'created_at'
                 )
                 ->limit(
-                    100
+                    max(
+                        1,
+                        min(
+                            100,
+                            (int) $this->option('limit')
+                        )
+                    )
                 )
                 ->get();
 

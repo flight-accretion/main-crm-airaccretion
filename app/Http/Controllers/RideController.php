@@ -938,7 +938,7 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
             // 8 => 'Payment Approved',
             // 9 => 'Payment Rejected'
         ];
-        $products = Product::where('status', 1)->orderBy('product')->get();
+        $products = app(\App\Services\MasterDataCacheService::class)->activeProducts();
         return view('admin.pages.rides.upcoming-rides', compact('ridesData', 'salesReps', 'availableStatuses', 'currentFilters', 'products'));
     }
 
@@ -1745,8 +1745,8 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                 'product_id' => $productFilter,
                 'service_id' => $serviceFilter,
             ];
-            $products = Product::where('status', 1)->orderBy('product')->get();   // ADD
-            $services = Service::where('status', 1)->orderBy('service')->get();   // ADD
+            $products = app(\App\Services\MasterDataCacheService::class)->activeProducts();
+            $services = app(\App\Services\MasterDataCacheService::class)->activeServices();
 
             return view('admin.account.rides.ride-status', compact('ridesData', 'rideStatusPaginator', 'statusOptions', 'currentFilters', 'products', 'services')); // PASS products and services to view
         } catch (\Exception $e) {

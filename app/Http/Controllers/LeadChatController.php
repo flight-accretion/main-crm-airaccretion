@@ -57,6 +57,19 @@ class LeadChatController extends Controller
         );
 
 
+        $messageLimit =
+            max(
+                1,
+                min(
+                    200,
+                    (int) config(
+                        'crm.chat_page_size',
+                        50
+                    )
+                )
+            );
+
+
         $messages =
             LeadChatMessage::query()
 
@@ -85,7 +98,9 @@ class LeadChatController extends Controller
                     'created_at'
                 )
 
-                ->limit(200)
+                ->limit(
+                    $messageLimit
+                )
 
                 ->get()
 

@@ -10,7 +10,8 @@ use App\Models\Invoice;
 use App\Models\Voucher;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Maatwebsite\Excel\Concerns\FromCollection;
+use Maatwebsite\Excel\Concerns\FromGenerator;
+use App\Exports\Concerns\StreamsLeadGroups;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Concerns\WithStyles;
@@ -19,21 +20,22 @@ use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use Carbon\Carbon;
 
-class RideStatusExport implements FromCollection, WithHeadings, WithMapping, WithStyles, WithEvents
+class RideStatusExport implements FromGenerator, WithHeadings, WithMapping, WithStyles, WithEvents
 {
+    use StreamsLeadGroups;
+
     protected $filters;
     protected $exportData = [];
 
     public function __construct($filters = [])
     {
         $this->filters = $filters;
-        $this->prepareData();
     }
 
     /**
      * Prepare export data using the same logic as rideStatus() controller method
      */
-    private function prepareData()
+    private function exportQuery()
     {
         // Build base query (same as rideStatus controller)
         $ridesQuery = LeadRide::with([
@@ -134,6 +136,17 @@ class RideStatusExport implements FromCollection, WithHeadings, WithMapping, Wit
                 $q->where('service_ids', 'like', '%' . $serviceFilter . '%');
             });
         }
+
+        return $ridesQuery;
+    }
+
+    private function prepareData()
+    {
+        $ridesQuery = $this->exportQuery();
+        if ($this->leadBatchIds !== null) {
+            $ridesQuery->whereIn('lead_id', $this->leadBatchIds);
+        }
+        $statusFilter = !empty($this->filters['status']) ? $this->filters['status'] : null;
 
         // Get and group by lead_id (CRITICAL: group after query, not in DB)
         $rides = $ridesQuery->orderBy('created_at', 'desc')->get()->groupBy('lead_id');
@@ -285,6 +298,7 @@ class RideStatusExport implements FromCollection, WithHeadings, WithMapping, Wit
 
     public function collection()
     {
+        $this->prepareData();
         return collect($this->exportData);
     }
 

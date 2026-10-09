@@ -190,10 +190,13 @@ class PaymentReviewController extends Controller
                     ->get();
             }
 
+            $auditsByFollowup = PaymentAuditTrail::whereIn('lead_followup_id', $allPayments->pluck('id'))
+                ->orderBy('created_at', 'desc')->get()->groupBy('lead_followup_id');
+
             // Group by lead_id and process
             $mappedPayments = $allPayments
                 ->groupBy('lead_id')
-                ->map(function ($group) {
+                ->map(function ($group) use ($auditsByFollowup) {
                     // Get the latest followup entry
                     $latest = $group->sortByDesc('created_at')->first();
                     $client = $latest->enquiry->client ?? null;
@@ -201,9 +204,10 @@ class PaymentReviewController extends Controller
                     $totalAmount = (float) $latest->total_amount;
 
                     // Calculate received amount only from approved payments (audit trail status = 1)
-                    $approvedPayments = PaymentAuditTrail::whereIn('lead_followup_id', $group->pluck('id'))
-                        ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
-                        ->get();
+                    $groupAudits = $group->pluck('id')
+                        ->flatMap(fn ($id) => $auditsByFollowup->get($id, collect()));
+                    $approvedPayments = $groupAudits
+                        ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED);
 
                     $totalReceivedApproved = $approvedPayments->sum('paid_amount');
 
@@ -219,10 +223,9 @@ class PaymentReviewController extends Controller
                     // followup for that lead has been approved/rejected. If some remain
                     // unreviewed, the lead should stay visible.
                     $followupIds = $group->pluck('id')->toArray();
-                    $reviewedFollowupCount = PaymentAuditTrail::whereIn('lead_followup_id', $followupIds)
+                    $reviewedFollowupCount = $groupAudits
                         ->whereIn('payment_status', PaymentAuditTrail::FINAL_REVIEW_STATUSES)
-                        ->distinct()
-                        ->count('lead_followup_id');
+                        ->pluck('lead_followup_id')->unique()->count();
 
                     $allFollowupsReviewed = count($followupIds) > 0 && $reviewedFollowupCount >= count($followupIds);
 
@@ -235,9 +238,7 @@ class PaymentReviewController extends Controller
                     }
 
                     // Get latest audit trail
-                    $latestAudit = PaymentAuditTrail::where('lead_followup_id', $latest->id)
-                        ->orderBy('created_at', 'desc')
-                        ->first();
+                    $latestAudit = $auditsByFollowup->get($latest->id, collect())->first();
 
                     // Determine audit status: prefer latest audit. Do not infer approval from
                     // unreviewed followup receipts. If the approved payments already cover

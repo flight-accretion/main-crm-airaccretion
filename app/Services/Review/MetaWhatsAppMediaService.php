@@ -26,7 +26,9 @@ class MetaWhatsAppMediaService
             throw new \RuntimeException('Meta WhatsApp token is not configured.');
         }
 
-        $metadata = Http::withToken($token)
+        $metadata = Http::withOptions(['connect_timeout' => 10])
+            ->timeout(20)
+            ->withToken($token)
             ->acceptJson()
             ->get('https://graph.facebook.com/v18.0/' . $mediaId)
             ->throw()
@@ -38,7 +40,9 @@ class MetaWhatsAppMediaService
             throw new \RuntimeException('Meta media URL not found.');
         }
 
-        $response = Http::withToken($token)
+        $response = Http::withOptions(['connect_timeout' => 10])
+            ->timeout(30)
+            ->withToken($token)
             ->get($url)
             ->throw();
 

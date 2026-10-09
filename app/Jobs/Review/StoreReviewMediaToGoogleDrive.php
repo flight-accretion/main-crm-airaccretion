@@ -4,6 +4,7 @@ namespace App\Jobs\Review;
 
 use App\Models\ReviewConversation;
 use App\Models\WhatsAppMessage;
+use App\Services\WhatsAppHistoryRetentionService;
 use App\Services\Review\GoogleDriveReviewMediaService;
 use App\Services\Review\MetaWhatsAppMediaService;
 use Illuminate\Bus\Queueable;
@@ -32,7 +33,8 @@ class StoreReviewMediaToGoogleDrive implements ShouldQueue
         MetaWhatsAppMediaService $meta,
         GoogleDriveReviewMediaService $drive
     ): void {
-        $message = WhatsAppMessage::find($this->messageId);
+        $message = app(WhatsAppHistoryRetentionService::class)
+            ->retained(WhatsAppMessage::query())->find($this->messageId);
         $review = ReviewConversation::find($this->reviewId);
 
         if (!$message || !$review || $message->google_drive_file_id) {
@@ -55,7 +57,8 @@ class StoreReviewMediaToGoogleDrive implements ShouldQueue
             $media['mime_type']
         );
 
-        $message->update([
+        $updated = app(WhatsAppHistoryRetentionService::class)
+            ->retained(WhatsAppMessage::query())->whereKey($message->id)->update([
             'media_provider' => 'meta',
             'media_provider_id' => $media['provider_id'],
             'media_mime_type' => $media['mime_type'],
@@ -63,5 +66,8 @@ class StoreReviewMediaToGoogleDrive implements ShouldQueue
             'google_drive_file_id' => $stored['id'],
             'google_drive_view_url' => $stored['view_url'],
         ]);
+        if (!$updated) {
+            $drive->delete($stored['id']);
+        }
     }
 }

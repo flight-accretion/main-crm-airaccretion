@@ -2,7 +2,7 @@
 
 namespace App\Services\GoogleChat;
 
-use App\Models\{GoogleChatIdentity, Lead, LeadChatConversation, LeadChatMessage, User, UserType};
+use App\Models\{GoogleChatIdentity, Lead, LeadChatConversation, LeadChatMessage, LeadChatTask, User, UserType};
 use App\Services\LeadChat\LeadChatAccessService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -48,19 +48,73 @@ class LeadGoogleChatConnectionService
                 'google_thread_key' => $conversation->google_thread_key ?: 'lead-'.strtolower($lead->id),
                 'google_template_message_id' => $templateId, 'google_connection_status' => 'pending',
             ]);
-            $dates = $lead->ride_dates;
+            $taskTitle = $this->operationsTaskTitle($lead);
+            $task = LeadChatTask::create([
+                'conversation_id' => $conversation->id,
+                'lead_id' => $lead->id,
+                'title' => $taskTitle,
+                'description' => 'Operations task created from Google Chat connection.',
+                'priority' => LeadChatTask::PRIORITY_NORMAL,
+                'status' => LeadChatTask::STATUS_ACTIVE,
+                'assigned_role' => 'operations',
+                'assigned_user_id' => $operationsUser->id,
+                'created_by' => $actor->id,
+            ]);
+
             $message = LeadChatMessage::create([
                 'id' => $templateId, 'conversation_id' => $conversation->id, 'lead_id' => $lead->id,
-                'sender_user_id' => $actor->id, 'source' => 'crm', 'message_type' => 'text',
-                'body' => "Operations enquiry\nCustomer: ".($lead->client?->name ?: 'N/A')
-                    ."\nServices: ".(implode(', ', $lead->service_names) ?: 'N/A')
-                    ."\nTravel: ".($dates ? $dates['from_date'].' to '.$dates['to_date'] : 'N/A')
-                    ."\nPassengers: ".($lead->number_of_passengers ?? 'N/A')
-                    ."\nOperations: ".$operationsUser->name,
+                'sender_user_id' => $actor->id, 'source' => 'crm', 'message_type' => LeadChatMessage::TYPE_TASK,
+                'body' => $taskTitle, 'task_id' => $task->id,
                 'google_sync_status' => 'pending', 'google_sync_version' => 1,
             ]);
             $conversation->update(['last_message_at' => $message->created_at]);
             return $conversation->fresh();
         });
+    }
+
+    private function operationsTaskTitle(Lead $lead): string
+    {
+        $parts = [];
+
+        $customer = trim((string) ($lead->client?->name ?? ''));
+        if ($customer !== '') {
+            $parts[] = $customer;
+        }
+
+        $services = $lead->service_names ?? [];
+        $serviceText = is_array($services)
+            ? trim(implode(', ', array_filter($services)))
+            : trim((string) $services);
+
+        if ($serviceText !== '') {
+            $parts[] = $serviceText;
+        }
+
+        if (!empty($lead->number_of_passengers)) {
+            $parts[] = (int) $lead->number_of_passengers . ' People';
+        }
+
+        $occasion = trim((string) ($lead->occasion ?? ''));
+        if ($occasion !== '') {
+            $parts[] = $occasion;
+        }
+
+        $dates = $lead->ride_dates ?? null;
+        if (is_array($dates)) {
+            $from = trim((string) ($dates['from_date'] ?? ''));
+            $to = trim((string) ($dates['to_date'] ?? ''));
+
+            if ($from !== '' && $to !== '' && $from !== $to) {
+                $parts[] = $from . ' to ' . $to;
+            } elseif ($from !== '') {
+                $parts[] = $from;
+            } elseif ($to !== '') {
+                $parts[] = $to;
+            }
+        }
+
+        return !empty($parts)
+            ? implode(' / ', $parts)
+            : 'Operations task';
     }
 }

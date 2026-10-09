@@ -185,7 +185,6 @@
                                                 class="ti-form-select rounded-sm form-control-sm w-full" required>
                                                 <option value="">Select City</option>
                                                 @if (old('country_id'))
-                                                    @php $cities = \App\Models\City::where('country_id', old('country_id'))->get(); @endphp
                                                     @foreach ($cities as $city)
                                                         <option value="{{ $city->id }}"
                                                             {{ old('city', '') == $city->id ? 'selected' : '' }}>

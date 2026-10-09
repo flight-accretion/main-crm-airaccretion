@@ -178,6 +178,19 @@ class ReportController extends Controller
             }, collect());
     }
 
+    private function reportPageRows($query)
+    {
+        // Limit complete leads so older follow-ups still contribute to each total.
+        $leadIds = (clone $query)->setEagerLoads([])
+            ->select('lead_id')->selectRaw('MAX(created_at) AS latest_created_at')
+            ->groupBy('lead_id')->orderByDesc('latest_created_at')
+            ->limit(max(1, (int) config('crm.max_report_rows', 500)))
+            ->pluck('lead_id');
+
+        return $query->whereIn('lead_id', $leadIds)
+            ->orderBy('created_at', 'desc')->get();
+    }
+
     public function index(Request $request)
     {
 
@@ -281,7 +294,7 @@ class ReportController extends Controller
             });
         }
 
-        $allPayments = $query->orderBy('created_at', 'desc')->get();
+        $allPayments = $this->reportPageRows($query);
             $statusArray = LeadFollowup::statusLabels();
         // Group by lead_id and process
         $payments = $allPayments
@@ -800,9 +813,9 @@ class ReportController extends Controller
                 });
             }
 
-            $maxReportRows = 2000;
-            $allSalesData = $query->orderBy('created_at', 'desc')->limit($maxReportRows)->get();
-            $reportLimited = $allSalesData->count() >= $maxReportRows;
+            $maxReportRows = max(1, (int) config('crm.max_report_rows', 500));
+            $allSalesData = $this->reportPageRows($query);
+            $reportLimited = $allSalesData->pluck('lead_id')->unique()->count() >= $maxReportRows;
 
             // Get all services and products for reference
             $allServices = Service::all()->keyBy('id');
@@ -1088,7 +1101,8 @@ class ReportController extends Controller
                 }
             }
 
-            $vendorPayments = $query->orderByDesc('created_at')->get();
+            $vendorPayments = $query->orderByDesc('created_at')
+                ->limit(max(1, (int) config('crm.max_report_rows', 500)))->get();
 
             $rows = $vendorPayments->map(function ($vp) {
                 $lead = $vp->lead;
@@ -1419,7 +1433,7 @@ class ReportController extends Controller
         $parentTypeIds = \App\Models\UserType::whereNotNull('parent_id')->pluck('parent_id')->unique();
         $managers = User::whereIn('user_type_id', $parentTypeIds)->where('status', 1)->orderBy('name')->get();
 
-        $allData = $query->orderBy('created_at', 'desc')->get();
+        $allData = $this->reportPageRows($query);
 
         $allLeadIds = $allData->pluck('lead_id')->unique();
 
@@ -1656,35 +1670,35 @@ class ReportController extends Controller
             });
         }
 
-        $allData = $query->orderBy('created_at', 'desc')->get();
-
-        // Group by representative
-        $groupedByRep = $allData->groupBy(function ($f) {
-            return $f->enquiry && $f->enquiry->representative ? $f->enquiry->representative->id : 'no_rep';
-        });
+        // KPI counters need the full filtered scope, not a limited page of leads.
+        $rankedFollowups = (clone $query)->setEagerLoads([])->select('id')
+            ->selectRaw('ROW_NUMBER() OVER (PARTITION BY lead_id ORDER BY created_at DESC) AS row_number');
+        $latestFollowups = (clone $query)->whereIn('id', \Illuminate\Support\Facades\DB::query()
+            ->fromSub($rankedFollowups, 'ranked_followups')->select('id')->where('row_number', 1))
+            ->orderBy('created_at', 'desc')->orderBy('id')->lazy(500);
+        $groupedByRep = collect();
+        foreach ($latestFollowups as $followup) {
+            $representative = $followup->enquiry->representative ?? null;
+            $repId = $representative ? $representative->id : 'no_rep';
+            $counts = $groupedByRep->get($repId, [
+                'representative' => $representative,
+                'total_leads' => 0, 'active' => 0, 'cancelled' => 0, 'completed' => 0,
+            ]);
+            $counts['total_leads']++;
+            $counts['active'] += in_array($followup->status, [1]) ? 1 : 0;
+            $counts['cancelled'] += $followup->status == 2 ? 1 : 0;
+            $counts['completed'] += in_array($followup->status, [3, 4, 5, 7, 8]) ? 1 : 0;
+            $groupedByRep->put($repId, $counts);
+        }
 
         $kpiData = $groupedByRep->map(function ($group, $repId) use ($targetPeriod) {
-            $rep = null;
-            if ($repId !== 'no_rep') {
-                $rep = $group->first()->enquiry->representative ?? null;
-            }
+            $rep = $group['representative'];
             $repName = $rep ? $rep->name : 'N/A';
 
-            $totalLeads = $group->groupBy('lead_id')->count();
-            $activeCount = $group->groupBy('lead_id')->map(function ($leadGroup) {
-                $latest = $leadGroup->sortByDesc('created_at')->first();
-                return in_array($latest->status, [1]) ? 1 : 0;
-            })->sum();
-            $cancelledCount = $group->groupBy('lead_id')->map(function ($leadGroup) {
-                $latest = $leadGroup->sortByDesc('created_at')->first();
-                return $latest->status == 2 ? 1 : 0;
-            })->sum();
-
-            // Completed count - latest status in [3, 4, 5, 7, 8]
-            $completedCount = $group->groupBy('lead_id')->map(function ($leadGroup) {
-                $latest = $leadGroup->sortByDesc('created_at')->first();
-                return in_array($latest->status, [3, 4, 5, 7, 8]) ? 1 : 0;
-            })->sum();
+            $totalLeads = $group['total_leads'];
+            $activeCount = $group['active'];
+            $cancelledCount = $group['cancelled'];
+            $completedCount = $group['completed'];
 
             $conversionRate = 0;
             if ($totalLeads > 0) {

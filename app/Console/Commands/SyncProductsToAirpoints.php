@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use App\Models\Product;
+use App\Support\CrmDebugLog;
 use App\Support\SafeLogContext;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -27,7 +28,7 @@ class SyncProductsToAirpoints extends Command
     public function handle()
     {
         // Structured run logging
-        Log::info('airpoints.product_sync.started', ['timestamp' => now()->toDateTimeString()]);
+        CrmDebugLog::info('airpoints.product_sync.started', ['timestamp' => now()->toDateTimeString()]);
         $this->info('Starting product sync to Airpoints...');
 
         try {
@@ -39,13 +40,17 @@ class SyncProductsToAirpoints extends Command
                 return 1;
             }
 
-            $products = Product::where('status', 1)->where('sync_at', 0)->get();
+            $products = Product::where('status', 1)
+                ->where('sync_at', 0)
+                ->orderBy('created_at')
+                ->limit(20)
+                ->get();
 
-            Log::info('airpoints.product_sync.found_products', ['count' => $products->count()]);
+            CrmDebugLog::info('airpoints.product_sync.found_products', ['count' => $products->count()]);
 
             if ($products->isEmpty()) {
                 $this->info('No active unsynced products found.');
-                Log::info('airpoints.product_sync.nothing_to_sync');
+                CrmDebugLog::info('airpoints.product_sync.nothing_to_sync');
                 return 0;
             }
 
@@ -87,7 +92,7 @@ class SyncProductsToAirpoints extends Command
                         }
 
                         // Per-product success log
-                        Log::info('airpoints.product_sync.product_success', [
+                        CrmDebugLog::info('airpoints.product_sync.product_success', [
                             'product_id' => $product->id,
                             'product_name' => $product->product,
                             'endpoint' => $url,
@@ -132,7 +137,7 @@ class SyncProductsToAirpoints extends Command
             $summary = ['total' => $products->count(), 'created' => $created, 'existing' => $existing, 'failed' => $failed];
             $this->info('Product sync completed. Total: ' . $summary['total'] . ', created: ' . $summary['created'] . ', existing: ' . $summary['existing'] . ', failed: ' . $summary['failed']);
 
-            Log::info('airpoints.product_sync.completed', $summary + ['timestamp' => now()->toDateTimeString()]);
+            CrmDebugLog::info('airpoints.product_sync.completed', $summary + ['timestamp' => now()->toDateTimeString()]);
 
             return 0;
 
