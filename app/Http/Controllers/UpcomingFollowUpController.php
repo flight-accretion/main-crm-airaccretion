@@ -157,27 +157,47 @@ class UpcomingFollowUpController extends Controller
         
         // Combine all relevant follow-ups
         $allRelevantFollowups = $todayOpenFollowUps->merge($missedOpenFollowUps);
-        
+
         // For each lead, get only the latest follow-up entry and check if it should be shown
+        //
+        // PERFORMANCE FIX (2026-10-09): this used to issue one extra
+        // eager-loaded DB query per unique lead_id inside the foreach loop
+        // below (classic N+1). On this page that meant hundreds/thousands
+        // of extra queries per request as lead volume grew, which is what
+        // was causing "Maximum execution time of 30 seconds exceeded",
+        // the resulting 504 Gateway Timeout, and the sustained CPU spike
+        // on the app/db containers. Fetch the latest follow-up for every
+        // relevant lead_id in ONE batched query instead, then look it up
+        // from memory inside the loop.
+        $leadIds = $allRelevantFollowups
+            ->pluck('lead_id')
+            ->unique()
+            ->filter()
+            ->values();
+
+        $latestFollowupByLead = LeadFollowup::with(['enquiry', 'enquiry.representative', 'enquiry.latestAiScore'])
+            ->whereIn('lead_id', $leadIds)
+            ->orderByDesc('created_at')
+            ->orderByDesc('next_followup_date')
+            ->get()
+            ->groupBy('lead_id')
+            ->map(fn ($group) => $group->first());
+
         $latestPerLead = collect();
         $processedLeads = collect();
-        
+
         foreach ($allRelevantFollowups as $followup) {
             $leadId = $followup->lead_id;
-            
+
             // Skip if we already processed this lead
             if ($processedLeads->contains($leadId)) {
                 continue;
             }
-            
+
             // Get the latest actual activity first so a cancelled lead cannot be
             // reintroduced by an older active follow-up that was scheduled for today.
-            $latestFollowupForLead = LeadFollowup::with(['enquiry', 'enquiry.representative', 'enquiry.latestAiScore'])
-                ->where('lead_id', $leadId)
-                ->orderByDesc('created_at')
-                ->orderByDesc('next_followup_date')
-                ->first();
-            
+            $latestFollowupForLead = $latestFollowupByLead->get($leadId);
+
             if ($latestFollowupForLead) {
                 // If the latest follow-up is completed/cancelled, don't show this lead
                 if (LeadFollowup::hiddenFromTodayFollowups($latestFollowupForLead->status)) {
