@@ -35,7 +35,7 @@ class WhatsAppTemplateService
                 'connect_timeout' => (int) config('services.operations_ride_alert.connect_timeout', 10),
             ])
             ->timeout(30)
-            ->retry(2, 500, throw: false)
+            ->retry(2, 500, null, false)
             ->post($url, [
                 'sendTo' => $sendTo,
                 'templetName' => $templateName,
