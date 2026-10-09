@@ -43,6 +43,22 @@ class SendOperationRideAlert implements ShouldQueue
                 return null;
             }
 
+            $cutoff = now()->subHours(
+                max(
+                    1,
+                    (int) config('services.operations_ride_alert.max_age_hours', 24)
+                )
+            );
+
+            if ($row->due_at && $row->due_at->lt($cutoff)) {
+                $row->update([
+                    'status' => 'cancelled',
+                    'failure_reason' => 'Cancelled stale operation ride alert during queue processing.',
+                ]);
+
+                return null;
+            }
+
             $row->update([
                 'status' => 'processing',
                 'attempt_count' => $row->attempt_count + 1,

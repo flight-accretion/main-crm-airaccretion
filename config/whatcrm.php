@@ -53,13 +53,16 @@ return [
         env('WHATCRM_AI_AUTO_DISPATCH', true),
 
     'ai_process_limit' =>
-        (int) env('WHATCRM_AI_PROCESS_LIMIT', 25),
+        (int) env('WHATCRM_AI_PROCESS_LIMIT', 5),
 
     'ai_scheduler_watch_seconds' =>
-        (float) env('WHATCRM_AI_SCHEDULER_WATCH_SECONDS', 55),
+        (float) env('WHATCRM_AI_SCHEDULER_WATCH_SECONDS', 0),
 
     'ai_scheduler_sleep_seconds' =>
-        (float) env('WHATCRM_AI_SCHEDULER_SLEEP_SECONDS', 0.5),
+        (float) env('WHATCRM_AI_SCHEDULER_SLEEP_SECONDS', 2),
+
+    'ai_reply_max_age_minutes' =>
+        (int) env('WHATCRM_AI_REPLY_MAX_AGE_MINUTES', 30),
 
     'openai_responses_url' =>
         env(

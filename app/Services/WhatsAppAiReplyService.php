@@ -56,6 +56,8 @@ class WhatsAppAiReplyService
             ];
         }
 
+        $this->expireStalePendingBatches();
+
         $batches = WhatsAppAiReplyBatch::query()
             ->where('status', 'pending')
             ->where('process_after', '<=', now())
@@ -115,6 +117,16 @@ class WhatsAppAiReplyService
             ->first();
 
         if (!$batch) {
+            return false;
+        }
+
+        if ($this->isStaleBatch($batch)) {
+            $batch->update([
+                'status' => 'skipped',
+                'processed_at' => now(),
+                'error' => 'Skipped stale WhatsApp AI batch.',
+            ]);
+
             return false;
         }
 
@@ -378,6 +390,39 @@ class WhatsAppAiReplyService
         ]);
     }
 
+    private function expireStalePendingBatches(): void
+    {
+        $cutoff = now()->subMinutes(
+            max(
+                5,
+                (int) config('whatcrm.ai_reply_max_age_minutes', 30)
+            )
+        );
+
+        WhatsAppAiReplyBatch::query()
+            ->where('status', 'pending')
+            ->where('process_after', '<', $cutoff)
+            ->update([
+                'status' => 'skipped',
+                'processed_at' => now(),
+                'error' => 'Skipped stale WhatsApp AI batch before processing.',
+                'updated_at' => now(),
+            ]);
+    }
+
+    private function isStaleBatch(WhatsAppAiReplyBatch $batch): bool
+    {
+        $cutoff = now()->subMinutes(
+            max(
+                5,
+                (int) config('whatcrm.ai_reply_max_age_minutes', 30)
+            )
+        );
+
+        return $batch->process_after
+            && $batch->process_after->lt($cutoff);
+    }
+
     private function markAiResponseActivity(
         WhatsAppConversation $conversation
     ): void {
@@ -532,7 +577,7 @@ class WhatsAppAiReplyService
             $contextMessages
         );
         $guestCount = $this->guestCountFromAi($aiResult);
-        $occasion = $this->cleanText(
+        $occasion = $this->occasionText(
             $aiResult['occasion'] ?? null
         );
         $hydrationData = $this->hydrationData(
@@ -1016,6 +1061,21 @@ class WhatsAppAiReplyService
         }
 
         return preg_replace('/\s+/', ' ', $value) ?: null;
+    }
+
+    private function occasionText($value): ?string
+    {
+        $value = $this->cleanText($value);
+
+        if ($value === null) {
+            return null;
+        }
+
+        return Str::limit(
+            $value,
+            240,
+            ''
+        );
     }
 
     private function normalize($value): string

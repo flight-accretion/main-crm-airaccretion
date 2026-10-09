@@ -65,7 +65,7 @@ class RideAlertService
             );
 
             if ($notification && $notification->due_at->lte(now())) {
-                SendOperationRideAlert::dispatch($notification->id)->afterCommit();
+                $this->dispatchIfNotQueued($notification);
             }
         }
     }
@@ -139,7 +139,17 @@ class RideAlertService
             ];
 
             if ($existing) {
-                if ($existing->status === 'sent') {
+                if (
+                    in_array(
+                        $existing->status,
+                        [
+                            'sent',
+                            'queued',
+                            'processing',
+                        ],
+                        true
+                    )
+                ) {
                     return $existing;
                 }
 
@@ -185,5 +195,25 @@ class RideAlertService
                     ->first();
             }
         });
+    }
+
+    private function dispatchIfNotQueued(RideAlertNotification $notification): void
+    {
+        $queued = RideAlertNotification::query()
+            ->where('id', $notification->id)
+            ->whereIn('status', ['pending', 'failed'])
+            ->update([
+                'status' => 'queued',
+            ]);
+
+        if (!$queued) {
+            return;
+        }
+
+        SendOperationRideAlert::dispatch($notification->id)
+            ->afterCommit()
+            ->onQueue(
+                config('services.operations_ride_alert.queue', 'default')
+            );
     }
 }

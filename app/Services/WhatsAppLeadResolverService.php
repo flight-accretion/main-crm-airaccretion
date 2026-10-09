@@ -81,7 +81,7 @@ class WhatsAppLeadResolverService
             'product_ids' => $product ? [$product->id] : null,
             'number_of_passengers' => $this->guestCount($data),
             'description' => $this->description($data),
-            'occasion' => $data['occasion'] ?? null,
+            'occasion' => $this->occasion($data),
         ]);
 
         $this->sourceDataHydrator->hydrate(
@@ -327,8 +327,10 @@ class WhatsAppLeadResolverService
             }
         }
 
-        if (!empty($data['occasion'])) {
-            $values[] = 'Occasion: ' . $data['occasion'];
+        $occasion = $this->occasion($data);
+
+        if ($occasion) {
+            $values[] = 'Occasion: ' . $occasion;
         }
 
         if (!empty($data['body'])) {
@@ -336,6 +338,27 @@ class WhatsAppLeadResolverService
         }
 
         return implode(PHP_EOL, $values);
+    }
+
+    private function occasion(array $data): ?string
+    {
+        $occasion = trim(
+            (string) (
+                $data['occasion']
+                ?? $data['ocassion']
+                ?? ''
+            )
+        );
+
+        if ($occasion === '') {
+            return null;
+        }
+
+        return Str::limit(
+            $occasion,
+            240,
+            ''
+        );
     }
 
     private function digitsSql(string $column): string

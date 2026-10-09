@@ -300,9 +300,7 @@ class WhatsAppLeadService
                         ),
 
                     'occasion' =>
-                        $data['occasion']
-                            ?? $data['ocassion']
-                            ?? null,
+                        $this->occasion($data),
                 ]);
 
                 $this->sourceDataHydrator->hydrate(
@@ -1094,10 +1092,7 @@ class WhatsAppLeadService
             }
         }
 
-        $occasion =
-            $data['occasion']
-            ?? $data['ocassion']
-            ?? null;
+        $occasion = $this->occasion($data);
 
         if ($occasion) {
             $values[] =
@@ -1130,6 +1125,27 @@ class WhatsAppLeadService
         return implode(
             PHP_EOL,
             $values
+        );
+    }
+
+    private function occasion(array $data): ?string
+    {
+        $occasion = trim(
+            (string) (
+                $data['occasion']
+                ?? $data['ocassion']
+                ?? ''
+            )
+        );
+
+        if ($occasion === '') {
+            return null;
+        }
+
+        return Str::limit(
+            $occasion,
+            240,
+            ''
         );
     }
 }

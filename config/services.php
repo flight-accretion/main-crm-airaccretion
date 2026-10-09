@@ -117,6 +117,8 @@ return [
         'token' => env('OPERATIONS_WHATSAPP_TOKEN'),
         'days_before' => 3,
         'crm_url' => env('CRM_PUBLIC_URL', env('APP_URL')),
+        'queue' => env('OPERATIONS_RIDE_ALERT_QUEUE', 'default'),
+        'max_age_hours' => (int) env('OPERATIONS_RIDE_ALERT_MAX_AGE_HOURS', 24),
     ],
 
     'skyrack' => [

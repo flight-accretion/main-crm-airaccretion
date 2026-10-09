@@ -7,6 +7,7 @@ use App\Models\WhatsAppAiAgentSetting;
 use App\Models\WhatsAppAiReplyBatch;
 use App\Models\WhatsAppConversation;
 use App\Models\WhatsAppMessage;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
@@ -136,6 +137,16 @@ class WhatsAppAiBufferService
         if (!Schema::hasTable('jobs')) {
             return;
         }
+
+        /*
+         * A pending batch is updated while messages are still arriving.
+         * Keep only the latest delayed job for that batch so old timers do
+         * not create a large stale WhatsApp AI backlog.
+         */
+        DB::table('jobs')
+            ->where('payload', 'like', '%ProcessWhatsAppAiReply%')
+            ->where('payload', 'like', '%' . $batch->id . '%')
+            ->delete();
 
         ProcessWhatsAppAiReply::dispatch($batch->id)
             ->delay($batch->process_after)
