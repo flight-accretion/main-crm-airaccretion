@@ -125,9 +125,9 @@ class WebsiteCatalogAiNotesService
             */
 
             $response =
-                Http::connectTimeout(
-                    4
-                )
+                Http::withOptions([
+                    'connect_timeout' => 4,
+                ])
                 ->timeout(
                     8
                 )

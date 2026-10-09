@@ -31,7 +31,9 @@ class WhatsAppTemplateService
         $response = Http::acceptJson()
             ->asJson()
             ->withToken($apiKey)
-            ->connectTimeout(10)
+            ->withOptions([
+                'connect_timeout' => (int) config('services.operations_ride_alert.connect_timeout', 10),
+            ])
             ->timeout(30)
             ->retry(2, 500, throw: false)
             ->post($url, [

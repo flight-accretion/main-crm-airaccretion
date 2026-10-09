@@ -119,6 +119,7 @@ return [
         'crm_url' => env('CRM_PUBLIC_URL', env('APP_URL')),
         'queue' => env('OPERATIONS_RIDE_ALERT_QUEUE', 'default'),
         'max_age_hours' => (int) env('OPERATIONS_RIDE_ALERT_MAX_AGE_HOURS', 24),
+        'connect_timeout' => (int) env('OPERATIONS_WHATSAPP_CONNECT_TIMEOUT', 10),
     ],
 
     'skyrack' => [
