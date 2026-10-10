@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\WhatCrmMessageIngestionService;
+use App\Support\SafeLogContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
@@ -139,7 +140,7 @@ class WhatCrmMessageController extends Controller
                 'WhatCRM message webhook processing failed',
                 [
                     'error' => $exception->getMessage(),
-                    'payload' => $payload,
+                    'payload' => SafeLogContext::mask($payload),
                 ]
             );
 

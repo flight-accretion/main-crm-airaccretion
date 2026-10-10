@@ -12,7 +12,7 @@ use Illuminate\Support\Str;
 
 class SendRideReminders extends Command
 {
-    protected $signature = 'reminders:send-ride-reminders';
+    protected $signature = 'reminders:send-ride-reminders {--limit= : Maximum ride reminder jobs to queue in this run}';
 
     protected $description = 'Queue WhatsApp and email reminders 5 and 1 hour(s) before ride time';
 
@@ -22,9 +22,21 @@ class SendRideReminders extends Command
             'started_at' => now()->toDateTimeString(),
         ]);
 
+        $limit = max(
+            1,
+            min(
+                500,
+                (int) ($this->option('limit') ?: config('crm.ride_reminder_batch_size', 50))
+            )
+        );
+        $queued = 0;
         $now = Carbon::now();
 
         foreach ([5, 1] as $hoursBefore) {
+            if ($queued >= $limit) {
+                break;
+            }
+
             $target = $now->copy()->addHours($hoursBefore);
             $from = $target->copy()->subMinutes(1);
             $to = $target->copy()->addMinutes(4);
@@ -37,6 +49,8 @@ class SendRideReminders extends Command
 
             $rides = LeadRide::whereBetween('from_date', [$from, $to])
                 ->with('enquiry.client', 'enquiry.vouchers', 'serviceAddress')
+                ->orderBy('from_date')
+                ->limit($limit - $queued)
                 ->get();
 
             $this->debugLog('Ride query completed', [
@@ -45,6 +59,10 @@ class SendRideReminders extends Command
             ]);
 
             foreach ($rides as $ride) {
+                if ($queued >= $limit) {
+                    break 2;
+                }
+
                 try {
                     $lead = $ride->enquiry;
                     $client = $lead->client ?? null;
@@ -90,13 +108,13 @@ class SendRideReminders extends Command
                         ]);
                     }
 
-                    $this->queueReminder(
+                    $queued += $this->queueReminder(
                         $ride,
                         $hoursBefore,
                         'whatsapp',
                         $client->alternate_number ?: $client->contact_number
                     );
-                    $this->queueReminder($ride, $hoursBefore, 'email', $client->email);
+                    $queued += $this->queueReminder($ride, $hoursBefore, 'email', $client->email);
                 } catch (\Exception $e) {
                     Log::error('Error queueing ride reminder: ' . $e->getMessage(), [
                         'ride' => $ride->id ?? null,
@@ -105,17 +123,19 @@ class SendRideReminders extends Command
             }
         }
 
+        $this->info('Ride reminder jobs queued: ' . $queued);
+
         return 0;
     }
 
-    private function queueReminder(LeadRide $ride, int $hoursBefore, string $channel, ?string $recipient): void
+    private function queueReminder(LeadRide $ride, int $hoursBefore, string $channel, ?string $recipient): int
     {
         if (!$recipient) {
             Log::warning('Ride reminder skipped - recipient missing', [
                 'ride' => $ride->id,
                 'channel' => $channel,
             ]);
-            return;
+            return 0;
         }
 
         $log = RideReminderLog::firstOrCreate(
@@ -138,11 +158,11 @@ class SendRideReminders extends Command
                 'hours_before' => $hoursBefore,
                 'channel' => $channel,
             ]);
-            return;
+            return 0;
         }
 
         if (!$log->wasRecentlyCreated && $log->status !== RideReminderLog::STATUS_FAILED) {
-            return;
+            return 0;
         }
 
         if ($log->status === RideReminderLog::STATUS_FAILED) {
@@ -154,6 +174,8 @@ class SendRideReminders extends Command
         }
 
         SendRideReminderNotification::dispatch($log->id);
+
+        return 1;
     }
 
     private function debugLog(string $message, array $context = []): void

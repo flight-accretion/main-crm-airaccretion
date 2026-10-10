@@ -11,7 +11,11 @@ class SafeLogContext
         'access_token',
         'authorization',
         'payload',
+        'raw_payload',
         'body',
+        'message',
+        'text',
+        'summary',
         'response_body',
         'response',
         'trace',
@@ -26,6 +30,11 @@ class SafeLogContext
     }
 
     public static function httpFailure(array $context = []): array
+    {
+        return self::sanitize($context);
+    }
+
+    public static function mask(array $context): array
     {
         return self::sanitize($context);
     }
@@ -47,7 +56,7 @@ class SafeLogContext
             }
 
             if (is_string($value)) {
-                $safe[$key] = substr($value, 0, 500);
+                $safe[$key] = self::sanitizeString($normalizedKey, $value);
                 continue;
             }
 
@@ -55,5 +64,28 @@ class SafeLogContext
         }
 
         return $safe;
+    }
+
+    private static function sanitizeString(string $key, string $value): string
+    {
+        $trimmed = trim($value);
+
+        if ($trimmed === '') {
+            return '';
+        }
+
+        if (str_contains($key, 'phone') || str_contains($key, 'number')) {
+            $digits = preg_replace('/\D+/', '', $trimmed);
+
+            if ($digits && strlen($digits) >= 6) {
+                return str_repeat('*', max(0, strlen($digits) - 4)) . substr($digits, -4);
+            }
+        }
+
+        if (str_contains($key, 'email')) {
+            return preg_replace('/(^.).*(@.*$)/', '$1***$2', $trimmed) ?: '***';
+        }
+
+        return substr($trimmed, 0, 500);
     }
 }

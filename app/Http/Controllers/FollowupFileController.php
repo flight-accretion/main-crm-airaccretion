@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\LeadFollowup;
+use App\Models\UserType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\ResponseHeaderBag;
@@ -29,7 +30,23 @@ class FollowupFileController extends Controller
             abort(404, 'Follow-up file not found.');
         }
 
-        $representatives = getRepresentativeIds(auth()->user());
+        $user = auth()->user();
+        $userType = optional($user?->userType)->user_type;
+        $isPaymentReviewRole = in_array(
+            $userType,
+            array_merge(
+                UserType::ADMIN_ROLES,
+                UserType::ACCOUNTS_ROLES,
+                UserType::OPERATIONS_ROLES
+            ),
+            true
+        );
+        $isPaymentReceipt = (float) ($followup->received_amount ?? 0) > 0
+            && !empty($followup->file);
+
+        $representatives = ($isPaymentReviewRole && $isPaymentReceipt)
+            ? null
+            : getRepresentativeIds($user);
 
         if ($representatives !== null) {
             if ($representatives instanceof \Illuminate\Support\Collection) {

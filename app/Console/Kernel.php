@@ -15,8 +15,15 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
-    // Run ride reminders every 5 minutes to catch upcoming rides 5h and 1h ahead
-    $schedule->command('reminders:send-ride-reminders')->everyFiveMinutes()->withoutOverlapping();
+    $schedule->command('crm:scheduler-heartbeat')
+        ->everyFiveMinutes()
+        ->withoutOverlapping();
+
+    // Run ride reminders every 5 minutes to catch upcoming rides 5h and 1h ahead.
+    $schedule->command(
+        'reminders:send-ride-reminders --limit='
+        . max(1, (int) config('crm.ride_reminder_batch_size', 50))
+    )->everyFiveMinutes()->withoutOverlapping();
     // Run product sync to Airpoints every 15 days at midnight
     $schedule->command('airpoints:sync-products')->cron('0 0 */15 * *')->withoutOverlapping();
     //$schedule->command('reminders:extra-services')->dailyAt('10:00');
@@ -35,15 +42,23 @@ class Kernel extends ConsoleKernel
                  ->appendOutputTo(storage_path('logs/sales-update-cron.log'));
     }
 
-        // Booking Reminders - run daily at 10:30 AM for 5, 3, and 1 day reminders
-        $schedule->command('booking:send-update')
-            ->dailyAt('10:30')
+        // Booking reminders are queued in batches to avoid one large cron send spike.
+        $schedule->command(
+                'booking:send-update --limit='
+                . max(1, (int) config('crm.booking_reminder_batch_size', 100))
+            )
+            ->everyFiveMinutes()
+            ->between('10:20', '11:55')
             ->timezone('Asia/Kolkata')
             ->withoutOverlapping()
             ->appendOutputTo(storage_path('logs/booking-reminders.log'));
 
-        $schedule->command('reviews:send-reminders')
-            ->dailyAt('11:00')
+        $schedule->command(
+                'reviews:send-reminders --limit='
+                . max(1, (int) config('crm.review_reminder_batch_size', 100))
+            )
+            ->everyFiveMinutes()
+            ->between('11:00', '12:00')
             ->timezone('Asia/Kolkata')
             ->withoutOverlapping()
             ->appendOutputTo(storage_path('logs/review-reminders.log'));
@@ -212,6 +227,16 @@ class Kernel extends ConsoleKernel
             ->dailyAt('03:00')
             ->withoutOverlapping()
             ->appendOutputTo(storage_path('logs/crm-storage-health.log'));
+
+        $schedule->command('crm:scheduler-health')
+            ->everyFifteenMinutes()
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/crm-scheduler-health.log'));
+
+        $schedule->command('crm:production-safety-check')
+            ->dailyAt('03:15')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/crm-production-safety.log'));
 
             if (
         config(

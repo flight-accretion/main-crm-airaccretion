@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\CallSummaryIntegration;
 use App\Services\CallSummaryIntegrationService;
+use App\Support\SafeLogContext;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -497,7 +498,9 @@ class CallSummaryController extends Controller
                 ?? null,
 
             'phone_number' =>
-                $payload['phone_number']
+                SafeLogContext::mask([
+                    'phone_number' => $payload['phone_number'] ?? null,
+                ])['phone_number']
                 ?? null,
 
             'agent_name' =>
@@ -544,10 +547,12 @@ class CallSummaryController extends Controller
                     : null,
 
             'summary_preview' =>
-                $this->previewForLog(
-                    $payload['summary']
-                    ?? null
-                ),
+                config('crm.debug_logs')
+                    ? $this->previewForLog(
+                        $payload['summary']
+                        ?? null
+                    )
+                    : null,
 
             'followup_date_present' =>
                 array_key_exists(

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\WhatsAppLeadService;
+use App\Support\SafeLogContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
@@ -100,7 +101,9 @@ class WhatsAppLeadController extends Controller
                         $e->getMessage(),
 
                     'payload' =>
-                        $payload,
+                        SafeLogContext::mask(
+                            $payload
+                        ),
                 ]
             );
 

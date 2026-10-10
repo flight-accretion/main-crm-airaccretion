@@ -397,19 +397,29 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
             try {
                 $now = now();
 
-                DB::table('ride_reminder_logs')->insert([
-                    'id' => (string) Str::uuid(),
-                    'ride_id' => $ride->id,
-                    'lead_id' => $leadId,
-                    'hours_before' => (int) $days,
-                    'channel' => 'booking',
-                    'recipient' => $client->alternate_number ?: $client->contact_number ?: $client->email,
-                    'status' => 'sent',
-                    'error_message' => null,
-                    'sent_at' => $now,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ]);
+                $existingReminderLog = DB::table('ride_reminder_logs')
+                    ->where('ride_id', $ride->id)
+                    ->where('hours_before', (int) $days)
+                    ->where('channel', 'booking')
+                    ->first();
+
+                DB::table('ride_reminder_logs')->updateOrInsert(
+                    [
+                        'ride_id' => $ride->id,
+                        'hours_before' => (int) $days,
+                        'channel' => 'booking',
+                    ],
+                    [
+                        'id' => $existingReminderLog->id ?? (string) Str::uuid(),
+                        'lead_id' => $leadId,
+                        'recipient' => $client->alternate_number ?: $client->contact_number ?: $client->email,
+                        'status' => 'sent',
+                        'error_message' => null,
+                        'sent_at' => $now,
+                        'created_at' => $existingReminderLog->created_at ?? $now,
+                        'updated_at' => $now,
+                    ]
+                );
             } catch (\Exception $e) {
                 Log::warning('Booking reminder log insert failed', [
                     'lead_id' => $leadId,
@@ -426,6 +436,40 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                 'whatsapp_sent' => $whatsappSent,
                 'email_sent' => $emailSent,
             ]);
+
+            try {
+                $now = now();
+                $existingReminderLog = DB::table('ride_reminder_logs')
+                    ->where('ride_id', $ride->id)
+                    ->where('hours_before', (int) $days)
+                    ->where('channel', 'booking')
+                    ->first();
+
+                DB::table('ride_reminder_logs')->updateOrInsert(
+                    [
+                        'ride_id' => $ride->id,
+                        'hours_before' => (int) $days,
+                        'channel' => 'booking',
+                    ],
+                    [
+                        'id' => $existingReminderLog->id ?? (string) Str::uuid(),
+                        'lead_id' => $leadId,
+                        'recipient' => $client->alternate_number ?: $client->contact_number ?: $client->email,
+                        'status' => 'failed',
+                        'error_message' => 'All booking reminder channels failed.',
+                        'sent_at' => null,
+                        'created_at' => $existingReminderLog->created_at ?? $now,
+                        'updated_at' => $now,
+                    ]
+                );
+            } catch (\Exception $e) {
+                Log::warning('Booking reminder failed log update failed', [
+                    'lead_id' => $leadId,
+                    'ride_id' => $ride->id,
+                    'days' => $days,
+                    'error' => $e->getMessage(),
+                ]);
+            }
         }
 
         /*

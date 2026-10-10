@@ -17,4 +17,8 @@ return [
     'custom_log_retention_days' => (int) env('CRM_CUSTOM_LOG_RETENTION_DAYS', 14),
     'temp_file_retention_days' => (int) env('CRM_TEMP_FILE_RETENTION_DAYS', 7),
     'disk_warning_percent' => (int) env('CRM_DISK_WARNING_PERCENT', 85),
+    'scheduler_heartbeat_max_age_minutes' => (int) env('CRM_SCHEDULER_HEARTBEAT_MAX_AGE_MINUTES', 10),
+    'booking_reminder_batch_size' => (int) env('CRM_BOOKING_REMINDER_BATCH_SIZE', 100),
+    'review_reminder_batch_size' => (int) env('CRM_REVIEW_REMINDER_BATCH_SIZE', 100),
+    'ride_reminder_batch_size' => (int) env('CRM_RIDE_REMINDER_BATCH_SIZE', 50),
 ];
