@@ -2528,13 +2528,6 @@ if (!empty($oldVendorRefundsMap)) {
             $this->abortUnlessCanManageVoucher();
             $this->abortUnlessCanViewVoucher($voucher);
 
-            if ($this->voucherAlreadySentToCustomer($voucher) && !request()->boolean('force_resend')) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'This voucher has already been sent to the customer. Use force_resend=1 to send again.',
-                ], 409);
-            }
-
             // File name + storage path on public disk
             $storePath = 'vouchers/voucher-' . $voucher->id . '.pdf';
             $fullStoragePath = storage_path('app/public/' . $storePath);
@@ -2627,13 +2620,6 @@ if (!empty($oldVendorRefundsMap)) {
 
             $this->abortUnlessCanManageVoucher();
             $this->abortUnlessCanViewVoucher($voucher);
-
-            if ($this->voucherAlreadySentToCustomer($voucher) && !request()->boolean('force_resend')) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'This voucher has already been sent to the customer. Use force_resend=1 to send again.',
-                ], 409);
-            }
 
             // Compute pending amount from PaymentAuditTrail (approved payments)
             // Ensure we fetch the actual latest followup (most recently created)
