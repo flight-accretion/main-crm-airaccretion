@@ -7,6 +7,7 @@ use InvalidArgumentException;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use RuntimeException;
+use App\Support\WhatsAppPhoneNumber;
 
 class WhatCrmOutboundMessageService
 {
@@ -73,7 +74,13 @@ class WhatCrmOutboundMessageService
             );
         }
 
-        $toNumber = $this->formatOutboundPhone($rawNumber);
+        $toNumber = $this->formatOutboundPhone(
+            $rawNumber,
+            $data['country_code']
+                ?? $data['whatsapp_country_code']
+                ?? $data['contact_country_code']
+                ?? null
+        );
         $bodyValues = $this->templateBodyValues($data);
         $mediaUri = trim(
             (string) (
@@ -236,7 +243,13 @@ class WhatCrmOutboundMessageService
             );
         }
 
-        $toNumber = $this->formatOutboundPhone($rawNumber);
+        $toNumber = $this->formatOutboundPhone(
+            $rawNumber,
+            $data['country_code']
+                ?? $data['whatsapp_country_code']
+                ?? $data['contact_country_code']
+                ?? null
+        );
 
         $payload = $this->messagePayload(
             $toNumber,
@@ -605,29 +618,16 @@ class WhatCrmOutboundMessageService
         return $messageType;
     }
 
-    private function formatOutboundPhone(string $phone): string
+    private function formatOutboundPhone(
+        string $phone,
+        ?string $countryCode = null
+    ): string
     {
-        $digits = preg_replace('/\D+/', '', $phone);
-
-        if ($digits === '') {
-            throw new InvalidArgumentException(
-                'Customer WhatsApp number is invalid.'
-            );
-        }
-
-        if (strlen($digits) === 10) {
-            $digits =
-                trim(
-                    (string) config(
-                        'whatcrm.default_country_code',
-                        '91'
-                    ),
-                    '+'
-                )
-                . $digits;
-        }
-
-        return $digits;
+        return WhatsAppPhoneNumber::e164(
+            $phone,
+            $countryCode,
+            false
+        );
     }
 
     private function urlWithToken(

@@ -4,6 +4,7 @@ namespace App\Services\Operations;
 
 use App\Models\User;
 use App\Models\UserType;
+use App\Support\WhatsAppPhoneNumber;
 use Illuminate\Support\Collection;
 
 class OperationsRecipientService
@@ -25,18 +26,10 @@ class OperationsRecipientService
 
     public function normalizedNumber(string $number): string
     {
-        $digits = preg_replace('/\D+/', '', $number);
-
-        if (!$digits) {
+        try {
+            return WhatsAppPhoneNumber::e164($number);
+        } catch (\InvalidArgumentException) {
             return '';
         }
-
-        if (strlen($digits) === 10) {
-            $digits = '91' . $digits;
-        }
-
-        return strlen($digits) >= 11 && strlen($digits) <= 15
-            ? '+' . $digits
-            : '';
     }
 }

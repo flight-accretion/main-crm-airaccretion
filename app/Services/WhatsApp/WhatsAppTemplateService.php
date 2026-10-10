@@ -2,6 +2,7 @@
 
 namespace App\Services\WhatsApp;
 
+use App\Support\WhatsAppPhoneNumber;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -73,20 +74,10 @@ class WhatsAppTemplateService
 
     private function normalizeNumber(string $number): string
     {
-        $digits = preg_replace('/\D+/', '', $number);
-
-        if (!$digits) {
+        try {
+            return WhatsAppPhoneNumber::e164($number);
+        } catch (\InvalidArgumentException) {
             return '';
         }
-
-        if (strlen($digits) === 10) {
-            $digits = '91' . $digits;
-        }
-
-        if (strlen($digits) < 11 || strlen($digits) > 15) {
-            return '';
-        }
-
-        return '+' . $digits;
     }
 }

@@ -459,6 +459,10 @@ private function cleanBookingWhatsAppUrl(
             'number' =>
                 $customerNumber,
 
+            'country_code' =>
+                optional($lead->client)->whatsapp_country_code
+                ?: optional($lead->client)->contact_country_code,
+
             'name' =>
                 optional(
                     $lead->client

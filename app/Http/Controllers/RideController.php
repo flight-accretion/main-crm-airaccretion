@@ -27,6 +27,7 @@ use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\RideStatusExport;
 use Illuminate\Support\Facades\Schema;
 use App\Support\SafeUploadName;
+use App\Support\WhatsAppPhoneNumber;
 use App\Services\ActivityAuditService;
 
 use App\Models\VendorRefund;
@@ -232,16 +233,25 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
         $whatsappSent = false;
         $emailSent = false;
         try {
-            $interaktResp = $smc->sendWhatsAppMessage(3, $templateName, $message, $client->contact_number);
+            $customerCountryCode = $client->whatsapp_country_code
+                ?: $client->contact_country_code
+                ?: null;
+
+            $interaktResp = $smc->sendWhatsAppMessage(
+                3,
+                $templateName,
+                $message,
+                $client->contact_number,
+                null,
+                $customerCountryCode
+            );
             $interaktFailed = $this->interaktReminderFailed($interaktResp);
 
             if ($interaktFailed) {
-                $cleanedNumber = preg_replace('/^(\+91[-\s]?|91[-\s]?)/', '', $client->contact_number);
-                $countryCode = $client->whatsapp_country_code ?? '+91';
-                if (!str_starts_with($countryCode, '+')) {
-                    $countryCode = '+' . $countryCode;
-                }
-                $payloadNumber = $countryCode . '-' . $cleanedNumber;
+                $payloadNumber = WhatsAppPhoneNumber::e164(
+                    $client->contact_number,
+                    $customerCountryCode
+                );
                 try {
                     $whatsCrmResp = $smc->sendWhatsCrmRideReminderMessage($payloadNumber, $message);
                     $whatsappSent = $this->reminderWhatsAppSucceeded($whatsCrmResp);
@@ -258,12 +268,14 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                 Log::info('Interakt WhatsApp send result', ['ride' => $ride->id, 'lead' => $leadId, 'response' => $interaktResp]);
             }
         } catch (\Exception $e) {
-            $cleanedNumber = preg_replace('/^(\+91[-\s]?|91[-\s]?)/', '', $client->contact_number);
-            $countryCode = $client->whatsapp_country_code ?? '+91';
-            if (!str_starts_with($countryCode, '+')) {
-                $countryCode = '+' . $countryCode;
-            }
-            $payloadNumber = $countryCode . '-' . $cleanedNumber;
+            $customerCountryCode = $client->whatsapp_country_code
+                ?: $client->contact_country_code
+                ?: null;
+
+            $payloadNumber = WhatsAppPhoneNumber::e164(
+                $client->contact_number,
+                $customerCountryCode
+            );
             try {
                 $whatsCrmResp = $smc->sendWhatsCrmRideReminderMessage($payloadNumber, $message);
                 $whatsappSent = $this->reminderWhatsAppSucceeded($whatsCrmResp);
@@ -3613,6 +3625,15 @@ return [
             $customerWhatsApp = !empty($client->alternate_number)
                 ? $client->alternate_number
                 : $client->contact_number;
+
+            if (!empty($customerWhatsApp)) {
+                $customerWhatsApp = WhatsAppPhoneNumber::e164(
+                    $customerWhatsApp,
+                    $client->whatsapp_country_code
+                        ?: $client->contact_country_code
+                        ?: null
+                );
+            }
 
             // ── 8. Blade email data — CUSTOMER ───────────────────────────────────
             $customerEmailData = [

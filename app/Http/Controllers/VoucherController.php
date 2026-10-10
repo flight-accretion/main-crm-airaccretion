@@ -38,6 +38,7 @@ use Illuminate\Support\Facades\Validator;
 use App\Http\Controllers\SendMessageController;
 use App\Jobs\SendVoucherNotification;
 use App\Support\SafeUploadName;
+use App\Support\WhatsAppPhoneNumber;
 use App\Services\ActivityAuditService;
 
 class VoucherController extends Controller
@@ -2708,6 +2709,13 @@ if (!empty($oldVendorRefundsMap)) {
                 return response()->json(['success' => false, 'message' => 'Client WhatsApp number is not available'], 400);
             }
 
+            $whatsAppNumber = WhatsAppPhoneNumber::e164(
+                $whatsAppNumber,
+                $voucher->lead->client->whatsapp_country_code
+                    ?: $voucher->lead->client->contact_country_code
+                    ?: null
+            );
+
             $filePath = asset('storage/' . $storePath);
             $filename = 'voucher-' . $voucher->id . '.pdf';
 
@@ -2792,6 +2800,15 @@ if (!empty($oldVendorRefundsMap)) {
                 ? $voucher->lead->client->alternate_number
                 : $voucher->lead->client->contact_number;
 
+            if (!empty($whatsAppNumber)) {
+                $whatsAppNumber = WhatsAppPhoneNumber::e164(
+                    $whatsAppNumber,
+                    $voucher->lead->client->whatsapp_country_code
+                        ?: $voucher->lead->client->contact_country_code
+                        ?: null
+                );
+            }
+
             $this->debugLog('Resend registration link request', [
                 'voucher' => $voucher->id,
                 'email' => $recipientEmail,
@@ -2853,6 +2870,13 @@ if (!empty($oldVendorRefundsMap)) {
             if (empty($whatsAppNumber)) {
                 return response()->json(['success' => false, 'message' => 'Client WhatsApp number is not available'], 400);
             }
+
+            $whatsAppNumber = WhatsAppPhoneNumber::e164(
+                $whatsAppNumber,
+                $voucher->lead->client->whatsapp_country_code
+                    ?: $voucher->lead->client->contact_country_code
+                    ?: null
+            );
 
             // Send WhatsApp with Registration Link template via WhatsCRM
             // Body values expected by sendWhatsCrmRegistrationLinkMessage: [client_name, full_link]

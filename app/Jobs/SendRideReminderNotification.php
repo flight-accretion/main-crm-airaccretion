@@ -7,6 +7,7 @@ use App\Mail\VoucherMail;
 use App\Models\LeadRide;
 use App\Models\RideReminderLog;
 use App\Support\SafeLogContext;
+use App\Support\WhatsAppPhoneNumber;
 use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -70,14 +71,13 @@ class SendRideReminderNotification implements ShouldQueue
                     throw new \RuntimeException('Ride reminder WhatsApp recipient missing.');
                 }
 
-                $cleanedNumber = preg_replace('/^(\+91[-\s]?|91[-\s]?)/', '', $recipient);
-                $countryCode = $client->whatsapp_country_code ?? '+91';
-                if (!str_starts_with($countryCode, '+')) {
-                    $countryCode = '+' . $countryCode;
-                }
-
                 $sendMessageController->sendWhatsCrmRideReminderMessage(
-                    $countryCode . '-' . $cleanedNumber,
+                    WhatsAppPhoneNumber::e164(
+                        $recipient,
+                        $client->whatsapp_country_code
+                            ?: $client->contact_country_code
+                            ?: null
+                    ),
                     $bodyValues
                 );
             } elseif ($log->channel === 'email') {

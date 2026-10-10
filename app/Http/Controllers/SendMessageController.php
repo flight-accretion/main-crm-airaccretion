@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\WhatsAppPhoneNumber;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -10,12 +11,14 @@ class SendMessageController extends Controller
     // ═════════════════════════════════════════════════════════════════════════
     // WhatsApp via Interakt
     // ═════════════════════════════════════════════════════════════════════════
-    public function sendWhatsAppMessage($type, $template, $data, $whatsAppNumber, $filePath = null)
+    public function sendWhatsAppMessage($type, $template, $data, $whatsAppNumber, $filePath = null, ?string $countryCode = null)
     {
-        // Split number safely
-        $whatsAppNumber = explode('-', (string) $whatsAppNumber);
-        $code  = $whatsAppNumber[0] ?? '+91';
-        $phone = $whatsAppNumber[1] ?? $whatsAppNumber[0];
+        $phoneParts = WhatsAppPhoneNumber::interaktParts(
+            (string) $whatsAppNumber,
+            $countryCode
+        );
+        $code = $phoneParts['country_code'];
+        $phone = $phoneParts['phone_number'];
 
         $url   = "https://api.interakt.ai/v1/public/message/";
         $token = "dnhrUkcxNk5UWU9TWGRDRkRMbjZNVkkzVTI4UklfOTdFUGdBQW5YWUV3QTo=";
@@ -224,7 +227,7 @@ class SendMessageController extends Controller
         $apiUrl   = config('services.whatscrm.api_url');
         $apiToken = config('services.whatscrm.api_token');
 
-        $toNumber = '+' . preg_replace('/[^0-9]/', '', $toNumber);
+        $toNumber = WhatsAppPhoneNumber::e164($toNumber);
 
         $payload = [
             'sendTo'      => $toNumber,
@@ -364,7 +367,7 @@ class SendMessageController extends Controller
         $url           = "https://graph.facebook.com/v25.0/{$phoneNumberId}/messages";
 
         // Clean the recipient number — remove +, spaces, dashes
-        $toNumber = preg_replace('/[^0-9]/', '', $toNumber);
+        $toNumber = WhatsAppPhoneNumber::e164($toNumber, null, false);
 
         $payload = [
             'messaging_product' => 'whatsapp',
@@ -478,7 +481,7 @@ class SendMessageController extends Controller
         $url              = 'https://api.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/bulk/';
 
         // Clean the recipient number — remove +, spaces, dashes
-        $toNumber = preg_replace('/[^0-9]/', '', $toNumber);
+        $toNumber = WhatsAppPhoneNumber::e164($toNumber, null, false);
 
         // Build components mapping
         $components = [];
@@ -589,9 +592,9 @@ class SendMessageController extends Controller
         $apiToken = config('services.whatscrm.api_token'); // WHATSCRM_API_TOKEN
 
         // Digits only with country code e.g. 919405059038
-        //$toNumber = preg_replace('/[^0-9]/', '', $toNumber);
+        //$toNumber = WhatsAppPhoneNumber::e164($toNumber, null, false);
         // WhatsCRM expects + prefix e.g. +919405059038
-        $toNumber = '+' . preg_replace('/[^0-9]/', '', $toNumber);
+        $toNumber = WhatsAppPhoneNumber::e164($toNumber);
 
         // Pick template based on file extension (auto-detection for vendor payments)
         $ext      = strtolower(pathinfo($filename ?? '', PATHINFO_EXTENSION));
@@ -728,7 +731,7 @@ class SendMessageController extends Controller
             ];
         }
 
-        $toNumber = '+' . preg_replace('/[^0-9]/', '', $toNumber);
+        $toNumber = WhatsAppPhoneNumber::e164($toNumber);
 
         $ext = strtolower(pathinfo($filename ?? '', PATHINFO_EXTENSION));
         $isImage = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']);
@@ -846,7 +849,7 @@ class SendMessageController extends Controller
         $appId            = config('services.whatscrm_vouchers.app_id');             // WHATSCRM_VOUCHERS_APP_ID
 
         // WhatsCRM expects + prefix e.g. +919405059038
-        $toNumber = '+' . preg_replace('/[^0-9]/', '', $toNumber);
+        $toNumber = WhatsAppPhoneNumber::e164($toNumber);
 
         // Detect file type
         $ext      = strtolower(pathinfo($filename ?? '', PATHINFO_EXTENSION));
@@ -989,7 +992,7 @@ class SendMessageController extends Controller
         $apiToken = config('services.whatscrm_vouchers.api_token'); // WHATSCRM_API_TOKEN
 
         // WhatsCRM expects + prefix e.g. +919405059038
-        $toNumber = '+' . preg_replace('/[^0-9]/', '', $toNumber);
+        $toNumber = WhatsAppPhoneNumber::e164($toNumber);
 
         // Detect file type and select template accordingly
         $ext      = strtolower(pathinfo($filename ?? '', PATHINFO_EXTENSION));
@@ -1123,7 +1126,7 @@ class SendMessageController extends Controller
         $apiToken = config('services.whatscrm_vouchers.api_token'); // WHATSCRM_VOUCHERS_API_TOKEN
 
         // WhatsCRM expects + prefix e.g. +919405059038
-        $toNumber = '+' . preg_replace('/[^0-9]/', '', $toNumber);
+        $toNumber = WhatsAppPhoneNumber::e164($toNumber);
 
         $template = 'registration_link_final';
 
@@ -1245,7 +1248,7 @@ class SendMessageController extends Controller
         $apiToken = config('services.whatscrm_vouchers.api_token'); // WHATSCRM_API_TOKEN
 
         // WhatsCRM expects + prefix e.g. +919405059038
-        $toNumber = '+' . preg_replace('/[^0-9]/', '', $toNumber);
+        $toNumber = WhatsAppPhoneNumber::e164($toNumber);
 
         $template = config('services.whatscrm.booking_whatsapp_template', 'whatsapp_reminder');
 
