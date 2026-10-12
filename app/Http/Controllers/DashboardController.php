@@ -773,7 +773,10 @@ class DashboardController extends Controller
         $todayLeadIds = (clone $followUpQuery)
     ->where(function ($query) use ($currentDate) {
         $query->whereDate('next_followup_date', '=', $currentDate)
-            ->orWhereNull('next_followup_date');
+            ->orWhere(function ($query) {
+                $query->whereNull('next_followup_date')
+                    ->where('status', LeadFollowup::STATUS_ACTIVE);
+            });
     })
     ->whereNotIn('status', LeadFollowup::TODAY_FOLLOWUP_HIDDEN_STATUSES)
     ->pluck('lead_id')
@@ -803,7 +806,7 @@ class DashboardController extends Controller
             // Apply same rules as UpcomingFollowUpController
             foreach ($allFollowupsForLeads as $leadId => $latest) {
                 if (LeadFollowup::hiddenFromTodayFollowups($latest->status)) continue;
-                if (!$latest->next_followup_date) {
+                if (!$latest->next_followup_date && (int) $latest->status === LeadFollowup::STATUS_ACTIVE) {
     $latest->is_missed = false;
     $latestFollowups->push($latest);
     continue;
@@ -1180,7 +1183,10 @@ class DashboardController extends Controller
        $todayLeadIds = (clone $followUpQuery)
     ->where(function ($query) use ($currentDate) {
         $query->whereDate('next_followup_date', '=', $currentDate)
-            ->orWhereNull('next_followup_date');
+            ->orWhere(function ($query) {
+                $query->whereNull('next_followup_date')
+                    ->where('status', LeadFollowup::STATUS_ACTIVE);
+            });
     })
     ->whereNotIn('status', LeadFollowup::TODAY_FOLLOWUP_HIDDEN_STATUSES)
     ->pluck('lead_id')
@@ -1205,7 +1211,7 @@ class DashboardController extends Controller
 
             foreach ($allFollowupsForLeads as $latest) {
                 if (LeadFollowup::hiddenFromTodayFollowups($latest->status)) continue;
-               if (!$latest->next_followup_date) {
+               if (!$latest->next_followup_date && (int) $latest->status === LeadFollowup::STATUS_ACTIVE) {
     $latest->is_missed = false;
     $latestFollowups->push($latest);
     continue;
@@ -1402,7 +1408,10 @@ class DashboardController extends Controller
        $todayLeadIds = (clone $followUpQuery)
     ->where(function ($query) use ($currentDate) {
         $query->whereDate('next_followup_date', '=', $currentDate)
-            ->orWhereNull('next_followup_date');
+            ->orWhere(function ($query) {
+                $query->whereNull('next_followup_date')
+                    ->where('status', LeadFollowup::STATUS_ACTIVE);
+            });
     })
     ->whereNotIn('status', LeadFollowup::TODAY_FOLLOWUP_HIDDEN_STATUSES)
     ->pluck('lead_id')
@@ -1429,7 +1438,7 @@ class DashboardController extends Controller
             $latestPerLead = collect();
             foreach ($allFollowupsForLeads as $leadId => $latest) {
                 if (LeadFollowup::hiddenFromTodayFollowups($latest->status)) continue;
-                if (!$latest->next_followup_date) {
+                if (!$latest->next_followup_date && (int) $latest->status === LeadFollowup::STATUS_ACTIVE) {
     $latest->is_missed = false;
     $latestPerLead->push($latest);
     continue;

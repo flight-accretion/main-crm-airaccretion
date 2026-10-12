@@ -144,7 +144,10 @@ class UpcomingFollowUpController extends Controller
         $todayOpenQuery = (clone $baseQuery)
         ->where(function ($query) use ($fromDate) {
             $query->whereDate('next_followup_date', '=', $fromDate)
-                ->orWhereNull('next_followup_date');
+                ->orWhere(function ($query) {
+                    $query->whereNull('next_followup_date')
+                        ->where('status', LeadFollowup::STATUS_ACTIVE);
+                });
         })
         ->whereNotIn('status', LeadFollowup::TODAY_FOLLOWUP_HIDDEN_STATUSES);
         $todayOpenFollowUps = $todayOpenQuery->get();
@@ -206,7 +209,7 @@ class UpcomingFollowUpController extends Controller
                 }
                 
                 // If the latest follow-up is open, check if it should appear for the selected date or is missed
-               if (!$latestFollowupForLead->next_followup_date) {
+               if (!$latestFollowupForLead->next_followup_date && (int) $latestFollowupForLead->status === LeadFollowup::STATUS_ACTIVE) {
                 $latestFollowupForLead->is_missed = false;
                 $latestPerLead->push($latestFollowupForLead);
             } else {
