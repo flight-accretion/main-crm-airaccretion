@@ -612,14 +612,27 @@ $process =
         ];
 
 
-        $iterator =
-            new \RecursiveIteratorIterator(
-                new \RecursiveDirectoryIterator(
-                    $root,
-                    \FilesystemIterator::SKIP_DOTS
-                ),
-                \RecursiveIteratorIterator::LEAVES_ONLY
-            );
+        // Filter directories before recursion so excluded backup folders are never opened.
+        $files = new \RecursiveCallbackFilterIterator(
+            new \RecursiveDirectoryIterator($root, \FilesystemIterator::SKIP_DOTS),
+            function (\SplFileInfo $file) use ($root, $excludedPrefixes): bool {
+                if ($file->isLink()) {
+                    return false;
+                }
+
+                $relative = str_replace('\\', '/', substr($file->getPathname(), strlen($root) + 1));
+
+                foreach ($excludedPrefixes as $prefix) {
+                    if ($relative === rtrim($prefix, '/') || str_starts_with($relative, $prefix)) {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+        );
+
+        $iterator = new \RecursiveIteratorIterator($files, \RecursiveIteratorIterator::LEAVES_ONLY);
 
 
         foreach (
