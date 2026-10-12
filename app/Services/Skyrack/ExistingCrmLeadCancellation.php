@@ -106,13 +106,20 @@ class ExistingCrmLeadCancellation
             ->exists();
     }
 
-    public function cancel(Lead $lead, Authenticatable $actor, string $reason, ?string $remark): void
+    public function cancel(
+        Lead $lead,
+        Authenticatable $actor,
+        string $reason,
+        ?string $remark,
+        string $sourceLabel = 'Skyrack',
+        string $kpiSource = 'skyrack'
+    ): void
     {
         $latest = $this->latestFollowup($lead);
         $previousStatus = $latest?->status;
 
         $note = trim(implode(' ', array_filter([
-            'Lead cancelled from Skyrack.',
+            'Lead cancelled from ' . $sourceLabel . '.',
             'Reason: ' . $reason,
             $remark ? 'Remark: ' . $remark : null,
         ])));
@@ -142,7 +149,7 @@ class ExistingCrmLeadCancellation
                 $followup,
                 $previousStatus,
                 $actor,
-                'skyrack'
+                $kpiSource
             );
         }
     }

@@ -806,11 +806,14 @@ class DashboardController extends Controller
             // Apply same rules as UpcomingFollowUpController
             foreach ($allFollowupsForLeads as $leadId => $latest) {
                 if (LeadFollowup::hiddenFromTodayFollowups($latest->status)) continue;
-                if (!$latest->next_followup_date && (int) $latest->status === LeadFollowup::STATUS_ACTIVE) {
-    $latest->is_missed = false;
-    $latestFollowups->push($latest);
-    continue;
-}
+                if (!$latest->next_followup_date) {
+                    if ((int) $latest->status === LeadFollowup::STATUS_ACTIVE) {
+                        $latest->is_missed = false;
+                        $latestFollowups->push($latest);
+                    }
+
+                    continue;
+                }
 
                 $latestDate = $latest->next_followup_date->toDateString();
                 if ($latestDate === $currentDate) {
@@ -1211,11 +1214,14 @@ class DashboardController extends Controller
 
             foreach ($allFollowupsForLeads as $latest) {
                 if (LeadFollowup::hiddenFromTodayFollowups($latest->status)) continue;
-               if (!$latest->next_followup_date && (int) $latest->status === LeadFollowup::STATUS_ACTIVE) {
-    $latest->is_missed = false;
-    $latestFollowups->push($latest);
-    continue;
-}
+                if (!$latest->next_followup_date) {
+                    if ((int) $latest->status === LeadFollowup::STATUS_ACTIVE) {
+                        $latest->is_missed = false;
+                        $latestFollowups->push($latest);
+                    }
+
+                    continue;
+                }
 
                 $latestDate = $latest->next_followup_date->toDateString();
                 if ($latestDate === $currentDate) {
@@ -1438,11 +1444,14 @@ class DashboardController extends Controller
             $latestPerLead = collect();
             foreach ($allFollowupsForLeads as $leadId => $latest) {
                 if (LeadFollowup::hiddenFromTodayFollowups($latest->status)) continue;
-                if (!$latest->next_followup_date && (int) $latest->status === LeadFollowup::STATUS_ACTIVE) {
-    $latest->is_missed = false;
-    $latestPerLead->push($latest);
-    continue;
-}
+                if (!$latest->next_followup_date) {
+                    if ((int) $latest->status === LeadFollowup::STATUS_ACTIVE) {
+                        $latest->is_missed = false;
+                        $latestPerLead->push($latest);
+                    }
+
+                    continue;
+                }
                 $latestDate = $latest->next_followup_date->toDateString();
                 if ($latestDate === $currentDate) {
                     $latest->is_missed = false;

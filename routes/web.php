@@ -38,6 +38,7 @@ use App\Http\Controllers\IvrDtmfRuleController;
 use App\Http\Controllers\IvrAgentController;
 use App\Http\Controllers\WhatsAppInboxController;
 use App\Http\Controllers\WhatsAppAiAgentSettingController;
+use App\Http\Controllers\BulkLeadCancelController;
 use App\Http\Controllers\LeadTransferController;
 use App\Http\Controllers\LeadAllocationSettingController;
 use App\Http\Controllers\VendorExtraServiceController;
@@ -864,6 +865,13 @@ Route::post(
         [LeadTransferController::class, 'bulkStore']
     )
         ->name('admin.leads.transfer.bulk');
+
+    Route::post(
+        '/bulk-cancel',
+        BulkLeadCancelController::class
+    )
+        ->middleware('role:ADMIN_ROLES')
+        ->name('admin.leads.bulk-cancel');
 
     // Bulk own-lead transfer offer from Report
     Route::post(

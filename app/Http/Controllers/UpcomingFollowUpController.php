@@ -209,10 +209,16 @@ class UpcomingFollowUpController extends Controller
                 }
                 
                 // If the latest follow-up is open, check if it should appear for the selected date or is missed
-               if (!$latestFollowupForLead->next_followup_date && (int) $latestFollowupForLead->status === LeadFollowup::STATUS_ACTIVE) {
-                $latestFollowupForLead->is_missed = false;
-                $latestPerLead->push($latestFollowupForLead);
-            } else {
+                if (!$latestFollowupForLead->next_followup_date) {
+                    if ((int) $latestFollowupForLead->status === LeadFollowup::STATUS_ACTIVE) {
+                        $latestFollowupForLead->is_missed = false;
+                        $latestPerLead->push($latestFollowupForLead);
+                    }
+
+                    $processedLeads->push($leadId);
+                    continue;
+                }
+
                 $followupDate = $latestFollowupForLead->next_followup_date->toDateString();
                 $selectedDate = $fromDate->toDateString();
 
@@ -226,7 +232,6 @@ class UpcomingFollowUpController extends Controller
                     $latestFollowupForLead->is_missed = true;
                     $latestPerLead->push($latestFollowupForLead);
                 }
-            }
                         }
             
             $processedLeads->push($leadId);

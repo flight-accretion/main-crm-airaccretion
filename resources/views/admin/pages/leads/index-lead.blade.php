@@ -478,6 +478,17 @@
 
         Transfer Selected
     </button>
+
+    <button
+        type="button"
+        id="bulk-cancel-selected-leads"
+        class="ti-btn ti-btn-danger ti-btn-sm whitespace-nowrap"
+        style="width: fit-content;"
+    >
+        <i class="ri-close-circle-line"></i>
+
+        Bulk Cancel
+    </button>
 </div>
 
 @endif
@@ -1216,6 +1227,71 @@
 </div>
 
 @endif
+@if ($isSuperAdmin ?? false)
+
+<div
+    id="bulk-lead-cancel-modal"
+    class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
+>
+    <div class="bg-white dark:!bg-bodybg p-6 rounded-lg shadow-lg w-[90%] max-w-lg">
+        <div class="flex justify-between items-center mb-4">
+            <h5 class="text-xl font-semibold">Bulk Cancel Leads</h5>
+
+            <button
+                type="button"
+                id="close-bulk-lead-cancel-modal"
+                class="text-gray-500 hover:text-black"
+            >
+                <i class="bi bi-x"></i>
+            </button>
+        </div>
+
+        <form id="bulk-lead-cancel-form">
+            <div id="bulk-cancel-lead-inputs"></div>
+
+            <div class="mb-4 p-3 bg-gray-50 dark:bg-black/20 rounded">
+                <div id="bulk-cancel-summary" class="text-sm"></div>
+            </div>
+
+            <div class="mb-4">
+                <label for="bulk-cancel-reason" class="ti-form-label">
+                    Cancellation Reason
+                </label>
+                <textarea
+                    id="bulk-cancel-reason"
+                    name="reason"
+                    rows="4"
+                    class="ti-form-textarea"
+                    required
+                    minlength="3"
+                    maxlength="1000"
+                ></textarea>
+            </div>
+
+            <div id="bulk-cancel-result" class="hidden mb-4 text-sm"></div>
+
+            <div class="flex justify-end gap-3">
+                <button
+                    type="button"
+                    id="cancel-bulk-lead-cancel"
+                    class="ti-btn ti-btn-outline-secondary"
+                >
+                    Cancel
+                </button>
+
+                <button
+                    type="submit"
+                    id="confirm-bulk-lead-cancel"
+                    class="ti-btn ti-btn-danger"
+                >
+                    Cancel Selected Leads
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+@endif
 @endsection
 @push('scripts')
 @if ($isSuperAdmin ?? false)
@@ -1234,6 +1310,23 @@ $(document).ready(function () {
 
     const transferButton =
         $('#confirm-lead-direct-transfer');
+
+    const cancelModal =
+        $('#bulk-lead-cancel-modal');
+
+    const cancelInputsContainer =
+        $('#bulk-cancel-lead-inputs');
+
+    const cancelSummary =
+        $('#bulk-cancel-summary');
+
+    const cancelResult =
+        $('#bulk-cancel-result');
+
+    const cancelButton =
+        $('#confirm-bulk-lead-cancel');
+
+    let bulkCancelOperationId = null;
 
     function selectedCheckboxes() {
 
@@ -1362,6 +1455,118 @@ $(document).ready(function () {
         );
     }
 
+    function selectedLeads() {
+
+        const leads = [];
+
+        selectedCheckboxes()
+            .each(
+                function () {
+
+                    leads.push({
+                        id:
+                            $(this)
+                                .val(),
+
+                        clientName:
+                            $(this)
+                                .data(
+                                    'client-name'
+                                ),
+
+                        currentRepresentative:
+                            $(this)
+                                .data(
+                                    'current-representative'
+                                )
+                    });
+                }
+            );
+
+        return leads;
+    }
+
+    function randomUuid() {
+
+        if (
+            window.crypto
+            && typeof window.crypto.randomUUID === 'function'
+        ) {
+            return window.crypto.randomUUID();
+        }
+
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
+            .replace(
+                /[xy]/g,
+                function (char) {
+                    const value =
+                        Math.random() * 16 | 0;
+
+                    const uuidValue =
+                        char === 'x'
+                            ? value
+                            : (value & 0x3 | 0x8);
+
+                    return uuidValue.toString(16);
+                }
+            );
+    }
+
+    function openBulkCancelModal(leads) {
+
+        if (!leads.length) {
+            showToast(
+                'error',
+                'Please select at least one lead.'
+            );
+            return;
+        }
+
+        if (leads.length > 100) {
+            showToast(
+                'error',
+                'Please select at most 100 leads at a time.'
+            );
+            return;
+        }
+
+        bulkCancelOperationId =
+            randomUuid();
+
+        cancelInputsContainer.empty();
+        cancelResult
+            .addClass('hidden')
+            .empty();
+
+        leads.forEach(
+            function (lead) {
+                $('<input>', {
+                    type: 'hidden',
+                    name: 'lead_ids[]',
+                    value: lead.id
+                }).appendTo(
+                    cancelInputsContainer
+                );
+            }
+        );
+
+        cancelSummary.text(
+            leads.length +
+            ' lead(s) selected for cancellation.'
+        );
+
+        $('#bulk-cancel-reason')
+            .val('');
+
+        cancelButton
+            .prop('disabled', false)
+            .text('Cancel ' + leads.length + ' Lead(s)');
+
+        cancelModal.removeClass(
+            'hidden'
+        );
+    }
+
     /*
      * Select all leads displayed on THIS PAGE only.
      */
@@ -1431,34 +1636,18 @@ $(document).ready(function () {
             'click',
             function () {
 
-                const leads = [];
-
-                selectedCheckboxes()
-                    .each(
-                        function () {
-
-                            leads.push({
-                                id:
-                                    $(this)
-                                        .val(),
-
-                                clientName:
-                                    $(this)
-                                        .data(
-                                            'client-name'
-                                        ),
-
-                                currentRepresentative:
-                                    $(this)
-                                        .data(
-                                            'current-representative'
-                                        )
-                            });
-                        }
-                    );
-
                 openTransferModal(
-                    leads
+                    selectedLeads()
+                );
+            }
+        );
+
+    $('#bulk-cancel-selected-leads')
+        .on(
+            'click',
+            function () {
+                openBulkCancelModal(
+                    selectedLeads()
                 );
             }
         );
@@ -1484,6 +1673,25 @@ $(document).ready(function () {
             closeTransferModal
         );
 
+    function closeBulkCancelModal() {
+
+        cancelModal.addClass(
+            'hidden'
+        );
+
+        cancelInputsContainer.empty();
+        cancelResult
+            .addClass('hidden')
+            .empty();
+        bulkCancelOperationId = null;
+    }
+
+    $('#close-bulk-lead-cancel-modal, #cancel-bulk-lead-cancel')
+        .on(
+            'click',
+            closeBulkCancelModal
+        );
+
     /*
      * Protect against double submit.
      */
@@ -1500,6 +1708,122 @@ $(document).ready(function () {
                     .text(
                         'Transferring...'
                     );
+            }
+        );
+
+    $('#bulk-lead-cancel-form')
+        .on(
+            'submit',
+            function (event) {
+                event.preventDefault();
+
+                const leadIds =
+                    selectedLeads()
+                        .map(function (lead) {
+                            return lead.id;
+                        });
+
+                const reason =
+                    $('#bulk-cancel-reason')
+                        .val()
+                        .trim();
+
+                if (!reason || reason.length < 3) {
+                    showToast(
+                        'error',
+                        'Cancellation reason is required.'
+                    );
+                    return;
+                }
+
+                cancelButton
+                    .prop('disabled', true)
+                    .text('Cancelling...');
+
+                $.ajax({
+                    url: "{{ route('admin.leads.bulk-cancel') }}",
+                    type: 'POST',
+                    data: JSON.stringify({
+                        lead_ids: leadIds,
+                        reason: reason,
+                        operation_id: bulkCancelOperationId
+                    }),
+                    contentType: 'application/json',
+                    headers: {
+                        'X-CSRF-TOKEN': "{{ csrf_token() }}",
+                        'Accept': 'application/json'
+                    },
+                    success: function (response) {
+                        const counts =
+                            response.counts || {};
+
+                        const skipped =
+                            response.details
+                            && response.details.skipped
+                                ? response.details.skipped
+                                : [];
+
+                        const failed =
+                            response.details
+                            && response.details.failed
+                                ? response.details.failed
+                                : [];
+
+                        const messages = [
+                            'Cancelled: ' + (counts.cancelled || 0),
+                            'Skipped: ' + (counts.skipped || 0),
+                            'Failed: ' + (counts.failed || 0)
+                        ];
+
+                        const details =
+                            skipped
+                                .concat(failed)
+                                .slice(0, 5)
+                                .map(function (item) {
+                                    return item.reason;
+                                })
+                                .join(' | ');
+
+                        cancelResult
+                            .removeClass('hidden')
+                            .text(
+                                messages.join(', ')
+                                + (details ? '. ' + details : '')
+                            );
+
+                        showToast(
+                            (counts.cancelled || 0) > 0
+                                ? 'success'
+                                : 'error',
+                            messages.join(', ')
+                        );
+
+                        setTimeout(function () {
+                            location.reload();
+                        }, 1800);
+                    },
+                    error: function (xhr) {
+                        let errorMessage =
+                            'Bulk cancellation failed.';
+
+                        if (
+                            xhr.responseJSON
+                            && xhr.responseJSON.message
+                        ) {
+                            errorMessage =
+                                xhr.responseJSON.message;
+                        }
+
+                        showToast(
+                            'error',
+                            errorMessage
+                        );
+
+                        cancelButton
+                            .prop('disabled', false)
+                            .text('Cancel Selected Leads');
+                    }
+                });
             }
         );
 
