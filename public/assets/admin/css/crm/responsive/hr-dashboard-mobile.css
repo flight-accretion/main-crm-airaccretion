@@ -1,0 +1,83 @@
+@media (min-width: 1600px) {
+    .crm-hr-dashboard { padding: 30px 36px; }
+    .crm-hr-dashboard .hr-stat { padding: 18px; }
+}
+@media (max-width: 1200px) {
+    .crm-hr-dashboard .hr-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .crm-hr-dashboard .hr-columns { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+}
+@media (max-width: 767px) {
+    body.crm-hr-page .app-header .sidemenu-toggle { display: none !important; }
+    .crm-hr-dashboard { padding: 20px 14px calc(100px + env(safe-area-inset-bottom, 0px)); }
+    .crm-hr-dashboard .hr-heading { flex-direction: column; align-items: flex-start; gap: 16px; }
+    .crm-hr-dashboard h1 { font-size: 20px; }
+    .crm-hr-dashboard .hr-month-form { width: 100%; }
+    .crm-hr-dashboard .hr-custom-dates { width: 100%; }
+    .crm-hr-dashboard .hr-custom-dates input { width: 110px; }
+    .crm-hr-dashboard .hr-month-form input { flex: 1; min-width: 0; }
+    .crm-hr-dashboard .hr-month-form input, .crm-hr-dashboard .hr-apply { min-height: 44px; }
+    .crm-hr-dashboard .hr-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+    .crm-hr-dashboard .hr-stat { padding: 14px 12px; }
+    .crm-hr-dashboard .hr-stat strong { font-size: 23px; }
+    .crm-hr-dashboard .hr-columns { margin-bottom: 18px; gap: 18px; }
+    .crm-hr-dashboard .hr-section { padding: 16px 14px; }
+    .crm-hr-dashboard .hr-section-heading { flex-wrap: wrap; gap: 6px 12px; }
+    .crm-hr-dashboard .hr-section-heading h2 { font-size: 14px; }
+    .crm-hr-dashboard .hr-account-row { flex-wrap: wrap; gap: 8px; }
+    .crm-hr-dashboard .hr-tab { min-height: 44px; }
+    .crm-hr-dashboard .hr-table .hr-empty { text-align: left; }
+    .crm-hr-dashboard .hr-operations-table .hr-tag { font-size: 10px; padding-left: 3px; padding-right: 3px; }
+    .crm-hr-dashboard .hr-operations-table .hr-tag-red { padding: 0; background: transparent; }
+    .crm-hr-dashboard .hr-access { gap: 8px 20px; }
+    .crm-hr-dashboard .hr-access a { min-height: 44px; }
+    .crm-hr-dashboard .hr-mobile-nav {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        position: fixed;
+        inset: auto 0 0;
+        z-index: 90;
+        background: var(--hr-surface);
+        border-top: 1px solid var(--hr-border);
+        padding: 7px 4px calc(7px + env(safe-area-inset-bottom, 0px));
+    }
+    .crm-hr-dashboard .hr-mobile-nav :is(a, button) {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 4px;
+        min-height: 58px;
+        min-width: 0;
+        padding: 4px 2px;
+        border: 0;
+        background: transparent;
+        color: var(--hr-muted);
+        font-size: 10.5px;
+        text-align: center;
+        line-height: 1.25;
+    }
+    .crm-hr-dashboard .hr-mobile-nav i { font-size: 19px; line-height: 22px; }
+    .crm-hr-dashboard .hr-mobile-nav span { max-width: 100%; overflow-wrap: anywhere; }
+    .crm-hr-dashboard .hr-mobile-nav :is([aria-current], [aria-expanded='true']) { color: var(--hr-brand); font-weight: 600; }
+    .crm-hr-dashboard .hr-mobile-more:not([hidden]) {
+        display: grid;
+        position: fixed;
+        bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+        right: 12px;
+        left: 12px;
+        z-index: 91;
+        border: 1px solid var(--hr-border);
+        border-radius: 8px;
+        background: var(--hr-surface);
+        padding: 8px;
+        box-shadow: 0 4px 20px #1A1D2314;
+        max-height: min(65vh, 520px);
+        overflow-y: auto;
+    }
+    .crm-hr-dashboard .hr-mobile-more a { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 10px; color: var(--hr-secondary); }
+    .crm-hr-dashboard .hr-mobile-more a:hover { background: var(--hr-hover); }
+    .crm-hr-dashboard .hr-mobile-more summary { cursor: pointer; padding: 12px 10px; min-height: 44px; color: var(--hr-text); font-weight: 600; }
+    .crm-hr-dashboard .hr-mobile-more details > a { padding-left: 24px; }
+    .crm-hr-dashboard .hr-mobile-more details > details { margin-left: 14px; }
+    .crm-hr-dashboard .hr-mobile-more .side-menu__icon { font-size: 18px; flex-shrink: 0; }
+}

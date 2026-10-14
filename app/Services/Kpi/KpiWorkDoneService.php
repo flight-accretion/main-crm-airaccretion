@@ -260,17 +260,15 @@ class KpiWorkDoneService
             ->diff($cancelledLeadIds)
             ->values();
 
-        $activeLeadIds = $activeCandidateIds
-            ->filter(function ($leadId) {
-                $latest = LeadFollowup::query()
-                    ->where('lead_id', $leadId)
-                    ->latest('created_at')
-                    ->first();
-
-                return $latest
-                    && (int) $latest->status === self::ACTIVE;
+        $activeLeadIds = $activeCandidateIds->isEmpty() ? collect() : LeadFollowup::query()
+            ->whereIn('lead_id', $activeCandidateIds)
+            ->where('status', self::ACTIVE)
+            ->where('id', function ($query) {
+                $query->select('latest.id')->from('lead_followups as latest')
+                    ->whereColumn('latest.lead_id', 'lead_followups.lead_id')
+                    ->orderByDesc('latest.created_at')->limit(1);
             })
-            ->values();
+            ->pluck('lead_id')->unique()->values();
 
         $total = $completedLeadIds
             ->merge($cancelledLeadIds)

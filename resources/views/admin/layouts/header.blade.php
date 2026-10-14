@@ -776,14 +776,14 @@
                                 </ul>
                             </li>
                         @endif
-                        @if ($isHr)
+                        <!-- @if ($isHr)
                             <li class="slide {{ Route::is('admin.operations.vendor-followups.*') ? 'active' : '' }}">
                                 <a href="{{ route('admin.operations.vendor-followups.index') }}" class="side-menu__item">
                                     <i class="bx bx-task side-menu__icon"></i>
                                     <span class="side-menu__label">Vendor Follow-ups</span>
                                 </a>
                             </li>
-                        @endif
+                        @endif -->
 
                            @if ($userType === UserType::SUPER_ADMIN || $canAccess($userType, $adminRoles) || $canAccess($userType, $salesRoles) || $canAccess($userType, $operationsRoles))
                             <li class="slide {{ Route::is('admin.whatsapp.index') ? 'active' : '' }}">

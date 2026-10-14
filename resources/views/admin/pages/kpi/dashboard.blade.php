@@ -67,6 +67,10 @@
             action="{{ $filterAction ?? route('admin.kpi.index') }}"
             class="grid grid-cols-12 gap-4 items-end"
         >
+            @if(!empty($filter['user_id']))
+                <input type="hidden" name="user_id" value="{{ $filter['user_id'] }}">
+                <input type="hidden" name="department" value="{{ $department }}">
+            @endif
             @if($canSwitchDepartment ?? false)
                 <div class="xl:col-span-3 md:col-span-6 col-span-12">
 

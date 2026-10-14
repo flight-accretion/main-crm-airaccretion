@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Carbon\Carbon;
 use RuntimeException;
+use App\Support\EmailTextNormalizer;
 
 class EmailMailboxService
 {
@@ -302,110 +303,69 @@ class EmailMailboxService
         );
 
         if (!$structure) {
-            return trim(
-                imap_body(
+            return trim(EmailTextNormalizer::toUtf8((string) imap_body(
                     $this->connection,
                     $msgNo
-                )
-            );
+                )));
         }
+        return $this->bodyFromStructure($structure, function (string $number) use ($msgNo) {
+            return $number === ''
+                ? imap_body($this->connection, $msgNo)
+                : imap_fetchbody($this->connection, $msgNo, $number);
+        });
+    }
 
-        /*
-         * Single-part message.
-         */
-        if (empty($structure->parts)) {
-            $body = imap_body(
-                $this->connection,
-                $msgNo
-            );
-
-            $body = $this->decodeBody(
-                $body,
-                $structure->encoding ?? 0
-            );
-
-            return $this->cleanBody(
-                $body,
-                $structure->subtype ?? 'PLAIN'
-            );
-        }
-
-        $plain = null;
-        $html = null;
-
-        foreach (
-            $structure->parts
-            as $index => $part
-        ) {
-            $partNumber = (string) ($index + 1);
-
-            /*
-             * text/plain
-             */
-            if (
-                ($part->type ?? null) === 0
-                &&
-                strtoupper(
-                    $part->subtype ?? ''
-                ) === 'PLAIN'
-            ) {
-                $content = imap_fetchbody(
-                    $this->connection,
-                    $msgNo,
-                    $partNumber
+    private function bodyFromStructure(object $structure, callable $readPart): string
+    {
+        $parts = $this->textParts($structure);
+        // Prefer readable plain text at any nesting depth, then HTML; never parse attachments.
+        foreach (['PLAIN', 'HTML'] as $subtype) {
+            foreach ($parts as $part) {
+                if ($part['subtype'] !== $subtype) {
+                    continue;
+                }
+                $content = $readPart($part['number']);
+                $body = EmailTextNormalizer::toUtf8(
+                    $this->decodeBody((string) $content, $part['encoding']),
+                    $part['charset']
                 );
-
-                $plain = $this->decodeBody(
-                    $content,
-                    $part->encoding ?? 0
-                );
-
-                break;
-            }
-
-            /*
-             * text/html fallback
-             */
-            if (
-                ($part->type ?? null) === 0
-                &&
-                strtoupper(
-                    $part->subtype ?? ''
-                ) === 'HTML'
-            ) {
-                $content = imap_fetchbody(
-                    $this->connection,
-                    $msgNo,
-                    $partNumber
-                );
-
-                $html = $this->decodeBody(
-                    $content,
-                    $part->encoding ?? 0
-                );
+                $body = $this->cleanBody($body, $subtype);
+                if ($body !== '') {
+                    return $body;
+                }
             }
         }
+        return '';
+    }
 
-        if ($plain !== null) {
-            return $this->cleanBody(
-                $plain,
-                'PLAIN'
-            );
+    private function textParts(object $part, string $number = ''): array
+    {
+        if (strtoupper($part->disposition ?? '') === 'ATTACHMENT') {
+            return [];
         }
-
-        if ($html !== null) {
-            return $this->cleanBody(
-                $html,
-                'HTML'
-            );
+        $charset = null;
+        foreach (array_merge((array) ($part->parameters ?? []), (array) ($part->dparameters ?? [])) as $parameter) {
+            $attribute = strtolower($parameter->attribute ?? '');
+            if (in_array($attribute, ['filename', 'name'], true)) {
+                return [];
+            }
+            if ($attribute === 'charset') {
+                $charset = $parameter->value;
+            }
         }
-
-        return trim(
-            imap_body(
-                $this->connection,
-                $msgNo
-            )
-        );
+        if ((int) ($part->type ?? 0) === 1) {
+            $result = [];
+            foreach ($part->parts ?? [] as $index => $child) {
+                $path = $number === '' ? (string) ($index + 1) : $number . '.' . ($index + 1);
+                $result = array_merge($result, $this->textParts($child, $path));
+            }
+            return $result;
+        }
+        $subtype = strtoupper($part->subtype ?? 'PLAIN');
+        if ((int) ($part->type ?? 0) !== 0 || !in_array($subtype, ['PLAIN', 'HTML'], true)) {
+            return [];
+        }
+        return [['number' => $number, 'subtype' => $subtype, 'encoding' => (int) ($part->encoding ?? 0), 'charset' => $charset]];
     }
 
     private function decodeBody(
@@ -483,7 +443,7 @@ class EmailMailboxService
         $decoded = '';
 
         foreach ($parts as $part) {
-            $decoded .= $part->text;
+            $decoded .= EmailTextNormalizer::toUtf8($part->text, $part->charset ?? null);
         }
 
         return trim($decoded);

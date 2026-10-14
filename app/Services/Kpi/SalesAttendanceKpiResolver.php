@@ -50,10 +50,8 @@ $periodEnd =
                 ->whereBetween(
                     'attendance_date',
                     [
-                        [
     $periodStart->toDateString(),
     $periodEnd->toDateString(),
-]
                     ]
                 )
                 ->orderBy(

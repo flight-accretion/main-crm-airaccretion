@@ -50,6 +50,11 @@ public function index(
         ->allowedUsers($current, $department)
         ->values();
 
+    $scope->assertRequestedUserAllowed($current, $filter['user_id'], $department);
+    if ($filter['user_id']) {
+        $users = $users->where('id', $filter['user_id'])->values();
+    }
+
     if ($users->isEmpty()) {
         abort(
             403,
@@ -81,7 +86,7 @@ return view(
         'asOf' => $asOf,
         'department' => $department,
         'filter' => $filter,
-        'canSwitchDepartment' => $canSwitchDepartment,
+        'canSwitchDepartment' => $canSwitchDepartment && !$filter['user_id'],
     ]
 );
 }

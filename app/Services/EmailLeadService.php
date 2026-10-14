@@ -9,6 +9,7 @@ use App\Models\LeadAllocationLog;
 use App\Models\LeadAllocationSetting;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use App\Support\EmailTextNormalizer;
 
 class EmailLeadService
 {
@@ -26,6 +27,7 @@ class EmailLeadService
     public function process(
         array $email
     ): array {
+        $email = EmailTextNormalizer::normalize($email);
         /*
          * Absolute duplicate protection.
          */
@@ -58,9 +60,9 @@ class EmailLeadService
                 ? 'website form'
                 : 'email';
 
-        $parsed = $this->parser->parse(
+        $parsed = EmailTextNormalizer::normalize($this->parser->parse(
             $email['body']
-        );
+        ));
 
         return DB::transaction(
             function () use (
