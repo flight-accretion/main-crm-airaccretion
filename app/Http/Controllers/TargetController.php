@@ -5,6 +5,13 @@ namespace App\Http\Controllers;
 use App\Models\Target;
 use App\Models\User;
 use App\Models\UserType;
+use App\Models\Product;
+use App\Services\TargetAccessService;
+use App\Services\TargetIncentiveService;
+use App\Exports\TargetIncentiveExport;
+use Maatwebsite\Excel\Facades\Excel;
+use Maatwebsite\Excel\Excel as ExcelFormat;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -14,6 +21,12 @@ use Illuminate\Support\Str;
 
 class TargetController extends Controller
 {
+    private TargetIncentiveService $incentives;
+
+    public function __construct(TargetIncentiveService $incentives)
+    {
+        $this->incentives = $incentives;
+    }
     /**
      * Display a listing of targets
      */
@@ -80,7 +93,14 @@ class TargetController extends Controller
             $target->updateAchievedAmount();
         }
 
-        return view('admin.targets.index', compact('year', 'month', 'salesExecutiveId', 'assignableStaff', 'targets'));
+        $incentiveRows = $targets->mapWithKeys(fn ($target) => [$target->id => $this->incentives->forTarget($target)]);
+        $products = Product::orderBy('product')->get(['id', 'product']);
+        $access = new TargetAccessService();
+        $canConfigure = $access->canConfigure($user);
+        $canAssign = $access->canAssign($user);
+        $unassignedStaff = $assignableStaff->whereNotIn('id', $targets->pluck('sales_executive_id'))
+            ->filter(fn ($staff) => !$salesExecutiveId || $staff->id === $salesExecutiveId);
+        return view('admin.targets.index', compact('year', 'month', 'salesExecutiveId', 'assignableStaff', 'targets', 'incentiveRows', 'products', 'canConfigure', 'canAssign', 'unassignedStaff'));
     }
 
     /**
@@ -132,6 +152,8 @@ class TargetController extends Controller
 
         $this->abortUnlessCanAssignTargetTo($request->sales_executive_id);
 
+        $incentiveSettings = $this->incentiveSettings($request);
+
         // Check if target already exists for this user, year, and month
         $existingTarget = Target::where('sales_executive_id', $request->sales_executive_id)
             ->where('year', $request->year)
@@ -159,6 +181,7 @@ class TargetController extends Controller
             $target->target_amount = $request->target_amount;
             $target->description = $request->description;
             $target->status = $request->status ?? 'active';
+            $target->fill($incentiveSettings);
 
             $target->save();
 
@@ -198,6 +221,7 @@ class TargetController extends Controller
 
     public function edit(Request $request, $id)
     {
+        $this->abortUnlessCanConfigure();
         $target = Target::with(['salesExecutive', 'assignedBy'])->findOrFail($id);
         
         $user = Auth::user();
@@ -229,6 +253,7 @@ class TargetController extends Controller
      */
     public function update(Request $request, $id)
     {
+        $this->abortUnlessCanConfigure();
         $target = Target::findOrFail($id);
         
         $user = Auth::user();
@@ -251,14 +276,18 @@ class TargetController extends Controller
 
         $this->abortUnlessCanAssignTargetTo($request->sales_executive_id);
 
-        $target->update([
+        if (Target::where('sales_executive_id', $request->sales_executive_id)->where('year', $request->year)
+            ->where('month', $request->month)->where('id', '!=', $target->id)->exists()) {
+            throw ValidationException::withMessages(['sales_executive_id' => 'A target already exists for this employee and period.']);
+        }
+        $target->update(array_merge([
             'sales_executive_id' => $request->sales_executive_id,
             'year' => $request->year,
             'month' => $request->month,
             'target_amount' => $request->target_amount,
             'description' => $request->description,
             'status' => $request->status,
-        ]);
+        ], $this->incentiveSettings($request)));
 
         if ($request->ajax()) {
             return response()->json([
@@ -279,16 +308,15 @@ class TargetController extends Controller
         
         $user = Auth::user();
         $userType = $user->user_type_id;
-        // Only Super Admin users are allowed to delete targets
-        if (! $user || ! ($user instanceof User && $user->isSuperAdmin())) {
+        if (! $user || ! (new TargetAccessService())->canConfigure($user)) {
             if ($request->ajax()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Only Super Admin can delete targets.'
+                    'message' => 'Only HR and Super Admin can delete targets.'
                 ], 403);
             }
 
-            abort(403, 'Only Super Admin can delete targets.');
+            abort(403, 'Only HR and Super Admin can delete targets.');
         }
         
         $assignableStaff = $this->getAssignableStaff($user);
@@ -392,133 +420,92 @@ class TargetController extends Controller
         ]);
     }
 
-    private function isTargetAdminUser($user): bool
-{
-    $role = optional($user->userType)->user_type;
-
-    return in_array($role, [
-        \App\Models\UserType::SUPER_ADMIN,
-        \App\Models\UserType::ADMIN,
-        \App\Models\UserType::HR,
-    ], true);
-}
-
-private function isSalesManagerUser($user): bool
-{
-    $role = optional($user->userType)->user_type;
-
-    return in_array($role, [
-        \App\Models\UserType::SENIOR_SALES_MANAGER,
-        \App\Models\UserType::SALES_MANAGER,
-    ], true);
-}
-
-private function abortUnlessCanManageTargets(): void
-{
-    $user = auth()->user();
-
-    if (!$user) {
-        abort(403, 'Unauthorized.');
+    private function abortUnlessCanAssignTargetTo($userId): void
+    {
+        $user = auth()->user();
+        $access = new TargetAccessService();
+        abort_unless($user && $access->canAssign($user), 403, 'You are not allowed to assign targets.');
+        abort_unless($access->staff($user)->contains('id', $userId), 403, 'You are not allowed to assign target to this employee.');
     }
 
-    if ($this->isTargetAdminUser($user) || $this->isSalesManagerUser($user)) {
-        return;
+    private function getAssignableStaff($user = null)
+    {
+        $user = $user ?? auth()->user();
+        return $user ? (new TargetAccessService())->staff($user) : collect();
     }
 
-    abort(403, 'You are not allowed to manage targets.');
-}
-
-private function targetAssignableUserIds(): array
-{
-    $user = auth()->user();
-
-    if (!$user) {
-        return [];
+    private function abortUnlessCanConfigure(): void
+    {
+        abort_unless(auth()->user() && (new TargetAccessService())->canConfigure(auth()->user()), 403, 'Only HR and Super Admin can edit targets or incentive settings.');
     }
 
-    if ($this->isTargetAdminUser($user)) {
-        return \App\Models\User::whereHas('userType', function ($q) {
-            $q->whereIn('user_type', [
-                \App\Models\UserType::SENIOR_SALES_MANAGER,
-                \App\Models\UserType::SALES_MANAGER,
-                \App\Models\UserType::SALES_EXECUTIVE,
-            ]);
-        })
-        ->where('status', 1)
-        ->pluck('id')
-        ->map(fn ($id) => (string) $id)
-        ->toArray();
+    private function incentiveSettings(Request $request): array
+    {
+        $fields = ['incentive_enabled', 'incentive_multiplier', 'incentive_team_multiplier', 'incentive_basis', 'incentive_product_ids', 'incentive_all_products'];
+        if (!(new TargetAccessService())->canConfigure(auth()->user())) {
+            foreach ($fields as $field) abort_if($request->has($field), 403, 'Incentive configuration is restricted to HR and Super Admin.');
+            return [];
+        }
+        // A legacy update that omits incentive fields must not clear existing settings.
+        if (!$request->has('incentive_enabled')) return [];
+        $request->validate([
+            'incentive_enabled' => 'required|boolean',
+            'incentive_multiplier' => 'nullable|required_if:incentive_enabled,1|numeric|between:0,1|regex:/^\\d+(\\.\\d{1,8})?$/',
+            'incentive_team_multiplier' => 'nullable|numeric|between:0,1|regex:/^\\d+(\\.\\d{1,8})?$/',
+            'incentive_basis' => 'nullable|required_if:incentive_enabled,1|in:individual,team,company',
+            'incentive_all_products' => 'nullable|boolean',
+            'incentive_product_ids' => 'nullable|array',
+        ]);
+        $enabled = $request->boolean('incentive_enabled');
+        $basis = $request->input('incentive_basis');
+        $ids = $request->input('incentive_product_ids', []) ?? [];
+        $employee = User::with('userType')->findOrFail($request->sales_executive_id);
+        if ($enabled && in_array(optional($employee->userType)->user_type, UserType::OPERATIONS_ROLES, true) && $basis !== 'company') {
+            throw ValidationException::withMessages(['incentive_basis' => 'Operations incentives use company/product monthly sales only.']);
+        }
+        if ($enabled && $basis === 'team') {
+            if ($request->input('incentive_team_multiplier') === null) {
+                throw ValidationException::withMessages(['incentive_team_multiplier' => 'Enter the manager incentive multiplier for team sales.']);
+            }
+            if (!in_array(optional($employee->userType)->user_type, [UserType::SALES_MANAGER, UserType::SENIOR_SALES_MANAGER], true)) {
+                throw ValidationException::withMessages(['incentive_basis' => 'Team sales requires a Sales Manager.']);
+            }
+        }
+        if ($enabled && $basis === 'company' && !$request->boolean('incentive_all_products')) {
+            $request->validate(['incentive_product_ids' => 'required|array|min:1|max:500', 'incentive_product_ids.*' => 'required|uuid|distinct']);
+            if (Product::whereIn('id', $ids)->count() !== count($ids)) {
+                throw ValidationException::withMessages(['incentive_product_ids' => 'Select valid CRM products or All products.']);
+            }
+        }
+        return ['incentive_enabled' => $enabled, 'incentive_multiplier' => $enabled ? $request->incentive_multiplier : null,
+            'incentive_team_multiplier' => $enabled && $basis === 'team' ? $request->incentive_team_multiplier : null,
+            'incentive_basis' => $enabled ? $basis : null,
+            'incentive_product_ids' => $enabled && $basis === 'company' && !$request->boolean('incentive_all_products') ? array_values($ids) : null];
     }
 
-    if ($this->isSalesManagerUser($user)) {
-        return \App\Models\SalesExecutiveAssignment::getSalesExecutivesForManager($user->id)
-            ->pluck('id')
-            ->map(fn ($id) => (string) $id)
-            ->toArray();
+    public function downloadIncentive(Request $request)
+    {
+        $this->abortUnlessCanConfigure();
+        $input = $request->validate(['year' => 'required|integer|between:2020,2050', 'month' => 'required|integer|between:1,12', 'file_type' => 'required|in:excel,csv']);
+        $products = Product::pluck('product', 'id');
+        $targets = Target::with('salesExecutive.userType')->whereIn('sales_executive_id', $this->getAssignableStaff()->pluck('id'))
+            ->where('year', $input['year'])->where('month', $input['month'])->where('status', 'active')->where('incentive_enabled', true)->get();
+        $rows = $targets->map(function ($target) use ($products) {
+            $result = $this->incentives->forTarget($target);
+            $achieved = $this->incentives->ledger((int) $target->year, (int) $target->month)
+                ->where('owner', (string) $target->sales_executive_id)->sum('amount');
+            return [$target->salesExecutive->name ?? '', optional(optional($target->salesExecutive)->userType)->user_type ?? '',
+                (int) $target->year, (int) $target->month, (float) $target->target_amount, (float) $achieved,
+                ucfirst($target->incentive_basis), $target->incentive_basis === 'company' ? (collect($target->incentive_product_ids)->map(fn ($id) => $products[$id] ?? $id)->implode(', ') ?: 'All products') : '',
+                $result['sales_amount'], (float) $target->incentive_multiplier, $result['incentive'], $target->status,
+                $result['own_sales'] ?? null, $result['team_sales'] ?? null, $target->incentive_team_multiplier === null ? null : (float) $target->incentive_team_multiplier,
+                $result['own_incentive'] ?? null, $result['team_incentive'] ?? null];
+        });
+        $csv = $input['file_type'] === 'csv';
+        $content = Excel::raw(new TargetIncentiveExport($rows), $csv ? ExcelFormat::CSV : ExcelFormat::XLSX);
+        return response()->streamDownload(static function () use ($content) { echo $content; },
+            sprintf('incentives-%d-%02d.%s', $input['year'], $input['month'], $csv ? 'csv' : 'xlsx'),
+            ['Content-Type' => $csv ? 'text/csv; charset=UTF-8' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'Cache-Control' => 'private, no-store', 'X-Content-Type-Options' => 'nosniff']);
     }
-
-    return [];
-}
-
-private function abortUnlessCanAssignTargetTo($userId): void
-{
-    $this->abortUnlessCanManageTargets();
-
-    $allowedUserIds = $this->targetAssignableUserIds();
-
-    if (!in_array((string) $userId, $allowedUserIds, true)) {
-        abort(403, 'You are not allowed to assign target to this user.');
-    }
-}
-
-    /**
-     * Get sales executives based on user hierarchy
-     */
-    /**
-     * Get assignable staff (single list used for dropdown). Rules:
-     * - Admin/Super Admin: all Sales Managers + all Sales Executives
-     * - Sales Manager / Senior Sales Manager: all Sales Managers + executives assigned to current manager
-     * - Sales Executive: only themselves
-     */
-  private function getAssignableStaff()
-{
-    $user = auth()->user();
-
-    if (!$user) {
-        return collect();
-    }
-
-    $userType = optional($user->userType)->user_type;
-
-    if (in_array($userType, [
-        \App\Models\UserType::SUPER_ADMIN,
-        \App\Models\UserType::ADMIN,
-        \App\Models\UserType::HR,
-    ], true)) {
-        return \App\Models\User::with('userType')
-            ->where('status', 1)
-            ->whereHas('userType', function ($q) {
-                $q->whereIn('user_type', [
-                    \App\Models\UserType::SENIOR_SALES_MANAGER,
-                    \App\Models\UserType::SALES_MANAGER,
-                    \App\Models\UserType::SALES_EXECUTIVE,
-                ]);
-            })
-            ->orderBy('name')
-            ->get();
-    }
-
-    if (in_array($userType, [
-        \App\Models\UserType::SENIOR_SALES_MANAGER,
-        \App\Models\UserType::SALES_MANAGER,
-    ], true)) {
-        return \App\Models\SalesExecutiveAssignment::getSalesExecutivesForManager($user->id)
-            ->where('status', 1)
-            ->sortBy('name')
-            ->values();
-    }
-
-    return collect();
-}
-    
 }

@@ -61,9 +61,9 @@ class KpiDashboardMatrixTest extends KpiFeatureTestCase
         $this->actingAs($admin)
                ->get('/admin/kpi?department=sales')
                 ->assertOk()
-                ->assertSee('Retail Department')
-                ->assertSee('Scope of Work')
-                ->assertSee('Weightage')
+                ->assertSee('Retail Sales')
+                ->assertSee('Team summary')
+                ->assertSee('Metric detail')
                 ->assertSee('Daily Outreach')
                 ->assertSee('Lead Conversion Rate')
                 ->assertSee('Achieve Monthly Target')
@@ -71,7 +71,7 @@ class KpiDashboardMatrixTest extends KpiFeatureTestCase
                 ->assertSee('Follow-Up')
                 ->assertSee('Payment Collection')
                 ->assertSee('Attendance')
-                ->assertSee('Total Weightage')
+                ->assertSee('Weighted total')
                 ->assertSee('First Sales Executive')
                 ->assertSee('Second Sales Executive');
     }

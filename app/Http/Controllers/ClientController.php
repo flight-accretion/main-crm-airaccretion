@@ -36,6 +36,7 @@ use App\Services\LeadAllocationService;
 use App\Services\LeadAssignmentFollowupService;
 use App\Services\LeadAiCurrentFactsService;
 use App\Services\LeadSourceFollowupService;
+use App\Services\LeadListFilter;
 use App\Services\SalesAmountCalculator;
 use App\Support\PhoneNormalizer;
 use function App\Helpers\getRepresentativeIds;
@@ -532,6 +533,9 @@ class ClientController extends Controller
         $canFilterUnassignedLeads =
         $representatives === null;
 
+        $listFilter = app(LeadListFilter::class);
+        $leadAiScoringSetting = $listFilter->setting();
+
         // Pagination settings
         $perPage = $request->input('per_page', 10);
         $perPage = min($perPage, 100); // Cap max per page
@@ -549,7 +553,8 @@ class ClientController extends Controller
         $query = Lead::with([
             'client:id,name,company_name,gst_number,email,contact_number,country_id,city_id,status',
             'representative:id,name,email',
-            'rideSegments:id,lead_id,from_date,to_date,from_place,to_place'
+            'rideSegments:id,lead_id,from_date,to_date,from_place,to_place',
+            'latestAiScore' => fn ($score) => $score->orderByDesc('id'),
         ])
             ->select('leads.id', 'leads.client_id', 'leads.representative_user_id', 'leads.service_ids', 'leads.product_ids', 'leads.created_at', 'leads.updated_at');
 
@@ -565,44 +570,6 @@ class ClientController extends Controller
         if ($request->filled('to_date')) {
             $toDate = Carbon::parse($request->to_date)->endOfDay();
             $query->whereHas('rideSegments', fn($q) => $q->where('to_date', '<=', $toDate));
-        }
-
-        // Created Date filters
-        if ($request->filled('from_created_date')) {
-            $fromCreatedDate = Carbon::parse($request->from_created_date)->startOfDay();
-            $query->where('leads.created_at', '>=', $fromCreatedDate);
-        }
-        if ($request->filled('to_created_date')) {
-            $toCreatedDate = Carbon::parse($request->to_created_date)->endOfDay();
-            $query->where('leads.created_at', '<=', $toCreatedDate);
-        }
-
-        // Global Search - searches across multiple fields
-        if ($request->filled('search')) {
-            $searchTerm = $request->search;
-            $query->where(function ($q) use ($searchTerm) {
-                // Search in client table
-                $q->whereHas('client', function ($clientQuery) use ($searchTerm) {
-                    $clientQuery->where('name', 'like', '%' . $searchTerm . '%')
-                        ->orWhere('company_name', 'like', '%' . $searchTerm . '%')
-                        ->orWhere('gst_number', 'like', '%' . $searchTerm . '%')
-                        ->orWhere('email', 'like', '%' . $searchTerm . '%')
-                        ->orWhere('contact_number', 'like', '%' . $searchTerm . '%');
-                })
-                    // Search in representative name
-                    ->orWhereHas('representative', function ($repQuery) use ($searchTerm) {
-                        $repQuery->where('name', 'like', '%' . $searchTerm . '%');
-                    })
-                    // Search in ride segments
-                    ->orWhereHas('rideSegments', function ($rideQuery) use ($searchTerm) {
-                        $rideQuery->where('from_place', 'like', '%' . $searchTerm . '%')
-                            ->orWhere('to_place', 'like', '%' . $searchTerm . '%');
-                    })
-                    // Search in follow-up notes
-                    ->orWhereHas('leadFollowups', function ($followupQuery) use ($searchTerm) {
-                        $followupQuery->where('followup_note', 'like', '%' . $searchTerm . '%');
-                    });
-            });
         }
 
         // Client filters using JOIN for better performance
@@ -799,6 +766,20 @@ if (
             });
         }
 
+        // Count tabs within the same authorized, filtered scope, before selecting a tab.
+        $listFilter->apply($query, $request, $isSuperAdmin, $leadAiScoringSetting, false);
+        $leadQueueCounts = [];
+        foreach (['all', 'hot', 'queued', 'unassigned', 'no_followup'] as $queue) {
+            if ($queue === 'queued' && !$isSuperAdmin) {
+                $leadQueueCounts[$queue] = 0;
+                continue;
+            }
+            $countQuery = clone $query;
+            $listFilter->queue($countQuery, $queue, $leadAiScoringSetting);
+            $leadQueueCounts[$queue] = $countQuery->count();
+        }
+        $listFilter->queue($query, (string) $request->input('lead_queue', 'all'), $leadAiScoringSetting);
+
         // Order and paginate
         $leads = $query->orderBy('leads.created_at', 'desc')->paginate($perPage);
 
@@ -895,6 +876,7 @@ if ($isSuperAdmin) {
         $latestFollowups = LeadFollowup::whereIn('lead_id', $leadIds)
             ->select('id', 'lead_id', 'status', 'next_followup_date')
             ->orderBy('created_at', 'desc')
+            ->orderBy('id', 'desc')
             ->get()
             ->unique('lead_id')
             ->keyBy('lead_id');
@@ -941,6 +923,8 @@ if ($isSuperAdmin) {
             'latestFollowups',
             'isSuperAdmin',
             'queuedLeadCount',
+            'leadQueueCounts',
+            'leadAiScoringSetting',
             'transferRepresentatives'
         )
     );
@@ -5101,6 +5085,14 @@ $this->abortUnlessRepresentativeInScope($staff ? $staff->id : null);
                 $query->whereHas('rideSegments', fn($q) => $q->where('to_date', '<=', $toDate));
             }
 
+            $listFilter = app(LeadListFilter::class);
+            $setting = $listFilter->setting();
+            $isSuperAdmin = (bool) ($currentUser && $currentUser->isSuperAdmin());
+            $listFilter->apply($query, $request, $isSuperAdmin, $setting);
+            if ($isSuperAdmin && $request->filled('allocation_status')) {
+                $listFilter->queue($query, strtolower(trim((string) $request->input('allocation_status'))), $setting);
+            }
+
             $leads = $query->orderBy('created_at', 'desc')->get();
 
             // Apply service filtering (PHP-based), same as index
@@ -5334,6 +5326,8 @@ $this->abortUnlessRepresentativeInScope($staff ? $staff->id : null);
                 'Content-Disposition' => 'attachment; filename="' . $filename . '"',
                 'Cache-Control' => 'max-age=0',
             ]);
+        } catch (\Illuminate\Validation\ValidationException | \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $e) {
+            throw $e;
         } catch (\Exception $e) {
             Log::error('Leads export failed: ' . $e->getMessage());
             return back()->with('error', 'Failed to export leads: ' . $e->getMessage());

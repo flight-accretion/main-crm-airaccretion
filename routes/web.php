@@ -1478,6 +1478,7 @@ Route::post(
         Route::post('/', [TargetController::class, 'store'])->name('admin.targets.store');
 
         // AJAX Routes - Must be before parameterized routes
+        Route::get('/download-incentive', [TargetController::class, 'downloadIncentive'])->name('admin.targets.download-incentive');
         Route::get('/data/table', [TargetController::class, 'getTargetsData'])->name('admin.targets.data');
         Route::get('/data/sales-executives', [TargetController::class, 'getSalesExecutivesData'])->name('admin.targets.sales-executives');
 

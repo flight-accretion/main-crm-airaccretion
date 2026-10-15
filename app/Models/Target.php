@@ -22,14 +22,23 @@ class Target extends Model
         'target_amount',
         'achieved_amount',
         'description',
-        'status'
+        'status',
+        'incentive_enabled',
+        'incentive_multiplier',
+        'incentive_team_multiplier',
+        'incentive_basis',
+        'incentive_product_ids',
     ];
 
     protected $casts = [
         'target_amount' => 'decimal:2',
         'achieved_amount' => 'decimal:2',
         'year' => 'integer',
-        'month' => 'integer'
+        'month' => 'integer',
+        'incentive_enabled' => 'boolean',
+        'incentive_multiplier' => 'decimal:8',
+        'incentive_team_multiplier' => 'decimal:8',
+        'incentive_product_ids' => 'array',
     ];
 
     /**

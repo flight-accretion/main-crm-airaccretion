@@ -1783,7 +1783,7 @@
     border: 1px solid #fecaca;
     border-radius: 7px;
 
-    background: #fff7f7;
+    background: #fff;
 
     color: #ef4444;
 
