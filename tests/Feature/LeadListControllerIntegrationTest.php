@@ -252,6 +252,24 @@ class LeadListControllerIntegrationTest extends TestCase
         $this->assertSame(20,count($controller->search($this->request(['search'=>'987654'],'own'))->getData(true)['leads']));
     }
 
+    public function test_main_lead_download_route_is_only_for_hr_and_super_admin(): void
+    {
+        $route = app('router')->getRoutes()->getByName('admin.leads.export');
+        foreach (['super','hr','admin','operations','manager','own'] as $role) {
+            $allowed = true;
+            foreach ($route->gatherMiddleware() as $middleware) {
+                if (!str_starts_with($middleware, 'role:')) continue;
+                try {
+                    (new \App\Http\Middleware\RoleMiddleware())->handle($this->request([], $role), fn () => response('allowed'), ...explode(',', substr($middleware, 5)));
+                } catch (HttpExceptionInterface $error) {
+                    $this->assertSame(403, $error->getStatusCode());
+                    $allowed = false;
+                }
+            }
+            $this->assertSame(in_array($role, ['super','hr'], true), $allowed);
+        }
+    }
+
     public function test_hr_can_export_main_leads_but_dnp_and_mutations_remain_view_only(): void
     {
         $this->assertSame(['Customer b'],$this->exportNames(['lead_queue'=>'hot'],'hr'));

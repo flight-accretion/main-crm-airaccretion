@@ -1048,7 +1048,7 @@ Route::post(
     });
 
     Route::get('admin/leads/export', [ClientController::class, 'exportLeads'])
-        ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,HR')->name('admin.leads.export');
+        ->middleware('role:SUPER_ADMIN,HR')->name('admin.leads.export');
     Route::get('admin/leads/request-search', [LeadTransferController::class, 'search'])
         ->middleware(['role:SUPER_ADMIN,SALES_ROLES', 'throttle:30,1'])->name('admin.leads.request-search');
 

@@ -126,6 +126,8 @@ class HistoricPerformanceTest extends KpiFeatureTestCase
             $data['errors']=new \Illuminate\Support\ViewErrorBag();
             $html=\Illuminate\Support\Facades\Blade::render($source,$data);
             $this->assertSame(false,str_contains($html,'data-history-chart="target"'));
+            $this->assertSame(true,str_contains($html,'hp-single-chart'));
+            $this->assertSame(true,str_contains($html,'Not scored'));
             $this->assertSame(false,str_contains($html,'@selected'));
             $dir=getenv('CRM_HISTORY_CHECK_DIR');
             if($dir)file_put_contents($dir.'/history-no-target.html','<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;padding:24px;background:#f4f5f7;font:14px Arial}.crm-history{max-width:1300px;margin:auto}button,input,select{font:inherit}</style></head><body>'.$html.'</body></html>');
@@ -133,6 +135,9 @@ class HistoricPerformanceTest extends KpiFeatureTestCase
             $data=$controller->index($this->request($input))->getData();$data['errors']=new \Illuminate\Support\ViewErrorBag();
             $html=\Illuminate\Support\Facades\Blade::render($source,$data);
             $this->assertSame(true,str_contains($html,'data-history-chart="target"'));
+            $this->assertSame(true,str_contains($html,'Target vs achieved'));
+            $this->assertSame(true,str_contains($html,'hp-person-range'));
+            $this->assertSame(true,str_contains($html,'data-label="Achievement"'));
             if($dir)file_put_contents($dir.'/history.html','<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;padding:24px;background:#f4f5f7;font:14px Arial}.crm-history{max-width:1300px;margin:auto}button,input,select{font:inherit}</style></head><body>'.$html.'</body></html>');
             foreach(['xlsx','csv'] as $format) {
                 $response=$controller->download($this->request($input+['format'=>$format,'dataset'=>$format==='csv'?'kpi':'both']));

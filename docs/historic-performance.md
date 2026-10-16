@@ -13,6 +13,12 @@
 - Target graphs use explicit active monthly target records, not carry-forward assignments. Missing target months are labelled **Not assigned**, not zero. If no active target exists in the selected period, target statistics, chart and columns are hidden.
 - Achieved sales reuse `TargetIncentiveService`'s approved-payment, qualifying follow-up, net sales after GST/refund calculation. This is individual-owner target achievement as in Target Master, not incentive team/company sales bases. Historical target amounts remain live CRM amounts and may change when source records/refunds change.
 
+## Presentation
+
+The history page follows the approved light CRM preview: employee/date strip, accented summary tiles, side-by-side KPI and target charts on desktop, stacked charts and labelled monthly row cards on mobile. Target chart and statistics remain hidden for employees without assigned targets in the selected period. No preview names or sample amounts are used in the page.
+
+Unscored KPI months are visualized at zero with hollow markers and explicitly labelled as not scored; their underlying values remain null and are excluded from averages and exports. Assigned target bars are muted, achieved bars are blue (green at 100% or above). Missing target months use a dash rather than a zero target. Chart labels thin out for narrow screens and long ranges; pointer details retain each month's exact values. Completed months with neither score nor target are labelled Not scored in the table; export period/source fields are unchanged.
+
 ## Exports
 
 The download dialog supports employee, department scope, month range, Excel and CSV. Excel can include KPI and Target History as separate worksheets; CSV requires one dataset. All-employee exports include all eligible employees in the chosen department, including inactive staff. Target exports omit unassigned months. Numeric scores, INR amounts and achievement percentages remain numeric; missing values remain blank. Text cells use a literal string binder and formula-injection escaping. Both download routes independently enforce permissions and input validation.

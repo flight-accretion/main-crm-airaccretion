@@ -1,17 +1,18 @@
 @extends('admin.layouts.header')
 @section('content')
 <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/kpi/management-work.css') }}?v=1">
-<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/kpi/history.css') }}?v=1">
+<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/kpi/history.css') }}?v=2">
 @php
     $hasTarget = $rows->contains(fn ($row) => $row['target'] !== null);
     $scored = $rows->whereNotNull('score');
     $latest = $rows->last();
+    $targetRows = $rows->filter(fn ($row) => $row['target'] !== null);
     $money = fn ($value) => $value === null ? 'Not assigned' : "\u{20B9}" . number_format($value, 2);
     $statMoney = fn ($value) => "\u{20B9}" . ($value >= 100000 ? number_format($value/100000,1).'L' : number_format($value,0));
 @endphp
 <div class="crm-kpi-tool crm-history" data-kpi-tool>
     <div class="hp-page-heading">
-        <div><h1>Historic Performance</h1><p>KPI and target history</p></div>
+        <div><h1>Historic Performance</h1><p>KPI score and sales target history per employee</p></div>
         <button type="button" class="hp-button" data-open-history-download @if($employees->isEmpty()) disabled @endif><i class="ri-download-2-line" aria-hidden="true"></i> Download</button>
     </div>
     @if($errors->any())<div class="hp-error" role="alert">{{ $errors->first() }}</div>@endif
@@ -23,25 +24,27 @@
         <button class="hp-button hp-primary" type="submit">Apply Filters</button>
     </form>
     @if($selectedEmployee)
-        <div class="hp-person"><div><span class="hp-avatar">{{ mb_strtoupper(mb_substr($selectedEmployee->name,0,1)) }}</span><strong>{{ $selectedEmployee->name }}</strong><span>{{ $selectedEmployee->userType?->user_type }}</span></div><span>{{ $from->format('M Y') }} - {{ $to->format('M Y') }}</span></div>
+        <div class="hp-person"><div><span class="hp-avatar">{{ mb_strtoupper(mb_substr($selectedEmployee->name,0,1)) }}</span><strong>{{ $selectedEmployee->name }}</strong><span>{{ $selectedEmployee->userType?->user_type }}</span></div><div class="hp-person-range"><span class="hp-badge">{{ $from->format('M Y') }} - {{ $to->format('M Y') }}</span>@if($hasTarget)<span class="hp-badge hp-blue-badge">Targets {{ $targetRows->first()['label'] }} - {{ $targetRows->last()['label'] }}</span>@endif @if($scored->isNotEmpty())<span class="hp-badge hp-mtd">KPI scored from {{ $scored->first()['label'] }}</span>@endif</div></div>
         <div class="hp-stats {{ $hasTarget ? '' : 'hp-two-stats' }}">
-            <div class="hp-stat"><span>Average KPI</span><strong>{{ $scored->isEmpty() ? 'N/A' : number_format($scored->avg('score'),1).' / 5' }}</strong><small>Recorded months only</small></div>
+            <div class="hp-stat"><span>Average KPI</span><strong>{{ $scored->isEmpty() ? 'N/A' : number_format($scored->avg('score'),1).' / 5' }}</strong><small>Recorded months only &middot; {{ $scored->count() }} of {{ $rows->count() }}</small></div>
             <div class="hp-stat"><span>Latest KPI</span><strong>{{ $latest['score'] === null ? 'N/A' : $latest['score'].' / 5' }}</strong><small>{{ $latest['label'] }} &middot; {{ $latest['source'] }}</small></div>
             @if($hasTarget)
-                <div class="hp-stat"><span>Total target</span><strong>{{ $statMoney($rows->sum('target')) }}</strong><small>Assigned months in selected period</small></div>
+                <div class="hp-stat"><span>Total target</span><strong>{{ $statMoney($rows->sum('target')) }}</strong><small>{{ $targetRows->count() }} assigned months in period</small></div>
                 <div class="hp-stat"><span>Sales achieved</span><strong>{{ $statMoney($rows->sum('achieved')) }}</strong><small>{{ $rows->sum('target') > 0 ? number_format($rows->sum('achieved')/$rows->sum('target')*100,1).'% of target' : 'No positive target amount' }}</small></div>
             @endif
         </div>
-        <section class="hp-section"><div class="hp-section-heading"><div><h2>KPI history</h2><p>Monthly overall score</p></div><span class="hp-badge">Out of 5</span></div><div data-history-chart="kpi" class="hp-chart"></div><div class="hp-chart-foot"><span><b class="hp-dot"></b>Overall KPI</span><span>Missing months are not scored</span></div></section>
+        <div class="hp-charts {{ $hasTarget ? '' : 'hp-single-chart' }}">
+        <section class="hp-section"><div class="hp-section-heading"><h2>KPI score</h2><span class="hp-badge">Out of 5</span></div><div data-history-chart="kpi" class="hp-chart"></div><div class="hp-chart-foot"><span><b class="hp-dot"></b>Scored month</span><span><b class="hp-dot hp-unscored"></b>Not scored &middot; shown at 0</span></div></section>
         @if($hasTarget)
-            <section class="hp-section"><div class="hp-section-heading"><div><h2>Target history</h2><p>Monthly target and sales achieved</p></div><div class="hp-legend"><span><b class="hp-swatch hp-target"></b>Target</span><span><b class="hp-swatch hp-achieved"></b>Achieved</span></div></div><div data-history-chart="target" class="hp-chart"></div><p class="hp-chart-foot">Amounts in INR lakh</p></section>
+            <section class="hp-section"><div class="hp-section-heading"><h2>Target vs achieved</h2><span class="hp-badge">INR lakh</span></div><div data-history-chart="target" class="hp-chart"></div><div class="hp-chart-foot"><span><b class="hp-swatch hp-target"></b>Target</span><span><b class="hp-swatch hp-achieved"></b>Achieved <b class="hp-swatch hp-met"></b>&ge;100%</span><span>- = no target assigned</span></div></section>
         @endif
-        <section class="hp-section"><div class="hp-section-heading"><h2>Monthly breakdown</h2><span>{{ $rows->count() }} months</span></div>
+        </div>
+        <section class="hp-section hp-breakdown"><div class="hp-section-heading"><h2>Monthly breakdown</h2><span class="hp-badge">{{ $rows->count() }} months</span></div>
             <table class="hp-history-table"><thead><tr><th>Month</th><th>KPI score</th><th>Score source</th>@if($hasTarget)<th>Target</th><th>Achieved</th><th>Achievement</th>@endif<th>Period status</th></tr></thead><tbody>
             @foreach($rows->reverse() as $row)
-                <tr><td data-label="Month">{{ $row['label'] }}</td><td data-label="KPI score">{{ $row['score'] === null ? 'Not available' : $row['score'].' / 5' }}</td><td data-label="Score source"><span class="hp-badge {{ $row['source'] === 'Finalized' ? 'hp-finalized' : '' }}">{{ $row['source'] }}</span></td>
+                <tr class="{{ $row['score'] === null && $row['target'] === null ? 'hp-missing' : '' }}"><td data-label="Month">{{ $row['label'] }}</td><td data-label="KPI score">{{ $row['score'] === null ? 'Not available' : $row['score'].' / 5' }}</td><td data-label="Score source"><span class="hp-badge {{ $row['source'] === 'Finalized' ? 'hp-finalized' : '' }}">{{ $row['source'] }}</span></td>
                 @if($hasTarget)<td data-label="Target">{{ $money($row['target']) }}</td><td data-label="Achieved">{{ $row['achieved'] === null ? '-' : $money($row['achieved']) }}</td><td data-label="Achievement">{{ $row['achievement'] === null ? '-' : number_format($row['achievement'],1).'%' }}</td>@endif
-                <td data-label="Period status"><span class="hp-badge {{ $row['period_status'] === 'Month to date' ? 'hp-mtd' : '' }}">{{ $row['period_status'] }}</span></td></tr>
+                <td data-label="Period status"><span class="hp-badge {{ $row['period_status'] === 'Month to date' ? 'hp-mtd' : ($row['score'] === null && $row['target'] === null ? 'hp-not-scored' : 'hp-finalized') }}">{{ $row['period_status'] === 'Month to date' ? $row['period_status'] : ($row['score'] === null && $row['target'] === null ? 'Not scored' : $row['period_status']) }}</span></td></tr>
             @endforeach
             </tbody></table>
         </section>
@@ -68,5 +71,5 @@
 @endsection
 @push('scripts')
 <script src="{{ asset('assets/admin/js/crm/kpi-tools.js') }}?v=1" defer></script>
-<script src="{{ asset('assets/admin/js/crm/kpi-history.js') }}?v=1" defer></script>
+<script src="{{ asset('assets/admin/js/crm/kpi-history.js') }}?v=2" defer></script>
 @endpush

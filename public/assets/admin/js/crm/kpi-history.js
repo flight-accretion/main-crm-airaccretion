@@ -56,22 +56,31 @@
             let path = '', connected = false;
             rows.forEach((row, index) => {
                 const xx = x(index);
-                if (index % stride === 0) svg.appendChild(node('text', {x: xx, y: height-26, 'text-anchor': 'middle'}, row.label));
+                if (index % stride === 0 || (index === rows.length-1 && index % stride > 0 && index % stride >= stride/2)) svg.appendChild(node('text', {x: xx, y: height-26, 'text-anchor': 'middle'}, row.label.replace(/\d{4}$/, year => year.slice(-2))));
                 if (target && row.target !== null) {
                     const bar = Math.min(18, plotWidth / rows.length * 0.3);
                     [row.target, row.achieved].forEach((value, series) => {
-                        const rect = node('rect', {x: xx+(series ? 1 : -bar-1), y: y(value), width: bar, height: top+plotHeight-y(value), rx: 2, fill: series ? 'var(--hp-green)' : 'var(--hp-navy)'});
+                        if (value === null) return;
+                        const rect = node('rect', {x: xx+(series ? 1 : -bar-1), y: y(value), width: bar, height: Math.max(1,top+plotHeight-y(value)), rx: 2, fill: series ? (row.achievement >= 100 ? 'var(--hp-green)' : 'var(--hp-blue)') : 'var(--hp-navy)', opacity: series ? 1 : 0.22});
                         rect.appendChild(node('title', {}, row.label + ': ' + (series ? 'Achieved' : 'Target') + ' INR ' + Number(value).toLocaleString('en-IN')));
                         svg.appendChild(rect);
+                        if (series && row.achievement !== null && (plotWidth/rows.length >= 32 || index % stride === 0)) svg.appendChild(node('text', {x:xx+1+bar/2,y:Math.max(16,y(value)-6),'text-anchor':'middle',style:row.achievement>=100?'fill:var(--hp-green)':''}, Math.round(row.achievement)+'%'));
                     });
                 } else if (!target) {
-                    if (row.score === null) { connected = false; return; }
-                    path += (connected ? 'L' : 'M') + xx + ',' + y(row.score) + ' '; connected = true;
+                    path += (connected ? 'L' : 'M') + xx + ',' + y(row.score ?? 0) + ' '; connected = true;
+                } else {
+                    svg.appendChild(node('text', {x:xx,y:top+plotHeight+12,'text-anchor':'middle'}, '-'));
                 }
             });
             if (!target) {
-                svg.appendChild(node('path', {d: path, fill: 'none', stroke: 'var(--hp-blue)', 'stroke-width': 2.5}));
-                rows.forEach((row, index) => { if (row.score !== null) svg.appendChild(node('circle', {cx: x(index), cy: y(row.score), r: 4, fill: 'var(--hp-blue)'})); });
+                svg.appendChild(node('path', {d: path, fill: 'none', stroke: 'var(--hp-navy)', 'stroke-width': 2.5}));
+                rows.forEach((row, index) => {
+                    const missing = row.score === null;
+                    const dot = node('circle', {cx:x(index),cy:y(row.score ?? 0),r:missing?3.5:5,fill:missing?'var(--hp-surface)':'var(--hp-navy)',stroke:missing?'var(--hp-muted)':'var(--hp-surface)','stroke-width':1.5});
+                    dot.appendChild(node('title',{},row.label+': '+(missing?'Not scored':row.score+'/5')));
+                    svg.appendChild(dot);
+                    if (!missing && index % stride === 0) svg.appendChild(node('text',{x:x(index),y:y(row.score)-12,'text-anchor':'middle'},row.score));
+                });
             }
             svg.appendChild(node('text', {x: left+plotWidth/2, y: height-5, 'text-anchor': 'middle'}, 'Month'));
             const hit = node('rect', {x: left, y: top, width: plotWidth, height: plotHeight, fill: 'transparent'});

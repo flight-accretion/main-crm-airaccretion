@@ -197,7 +197,7 @@
 @php
     $listRole = optional(auth()->user()->userType)->user_type;
     $canWriteLeads = in_array($listRole, array_merge(\App\Models\UserType::ADMIN_ROLES, \App\Models\UserType::SALES_ROLES, \App\Models\UserType::OPERATIONS_ROLES), true);
-    $canDownloadLeads = $canWriteLeads || $listRole === \App\Models\UserType::HR;
+    $canDownloadLeads = in_array($listRole, [\App\Models\UserType::SUPER_ADMIN, \App\Models\UserType::HR], true);
     $canRequestLeads = $listRole === \App\Models\UserType::SUPER_ADMIN || in_array($listRole, \App\Models\UserType::SALES_ROLES, true);
     $dashboardRoute = $listRole === \App\Models\UserType::HR ? 'admin.hr.dashboard' : (in_array($listRole, \App\Models\UserType::OPERATIONS_ROLES, true) ? 'admin.operations.index' : 'admin.sales-dashboard');
 @endphp
