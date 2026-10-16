@@ -49,7 +49,7 @@
             <td data-label="Service">{{ implode(', ',$queueServiceNames[$lead?->id] ?? []) ?: 'N/A' }}</td>
             <td data-label="Created" data-order="{{ $lead?->created_at?->timestamp ?? 0 }}">{{ $lead?->created_at?->format('d M Y') ?? '-' }}</td>
             <td data-label="Service date" data-order="{{ $serviceDate?->timestamp ?? 0 }}">{{ $serviceDate?->format('d M Y') ?? '-' }}</td>
-            <td data-label="Action">@if($lead)<a class="ti-btn" href="{{ auth()->user()->userType->user_type === \App\Models\UserType::HR ? route('admin.clients.view',$lead->client_id) : route('admin.leads.follow-up.create',$lead->id) }}">Open</a>@endif</td>
+            <td data-label="Action" >@if($lead)<a class="ti-btn" target="_blank" href="{{ auth()->user()->userType->user_type === \App\Models\UserType::HR ? route('admin.clients.view',$lead->client_id) : route('admin.leads.follow-up.create',$lead->id) }}">Open</a>@endif</td>
         </tr>
     @endforeach
     </tbody></table>
