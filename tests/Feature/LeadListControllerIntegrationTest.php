@@ -19,11 +19,14 @@ use Tests\TestCase;
 class LeadListControllerIntegrationTest extends TestCase
 {
     private string $originalConnection;
+    private string $compiledViews;
     private array $users = [];
 
     protected function setUp(): void
     {
         parent::setUp();
+        $this->compiledViews=sys_get_temp_dir().'/crm-lead-render-'.\Illuminate\Support\Str::uuid();mkdir($this->compiledViews);
+        config(['view.compiled'=>$this->compiledViews]);app()->forgetInstance('blade.compiler');app('view.engine.resolver')->forget('blade');
         $this->originalConnection = DB::getDefaultConnection();
         config(['database.default'=>'lead_controller_testing','database.connections.lead_controller_testing'=>['driver'=>'sqlite','database'=>':memory:','prefix'=>''], 'cache.default'=>'array','session.driver'=>'array', 'logging.channels.single.path'=>sys_get_temp_dir().'/crm-lead-integration-test.log']);
         DB::purge('lead_controller_testing'); DB::setDefaultConnection('lead_controller_testing');
@@ -56,6 +59,7 @@ class LeadListControllerIntegrationTest extends TestCase
 
     protected function tearDown(): void
     {
+        (new \Illuminate\Filesystem\Filesystem())->deleteDirectory($this->compiledViews);
         Carbon::setTestNow();DB::disconnect('lead_controller_testing');DB::setDefaultConnection($this->originalConnection);config(['database.default'=>$this->originalConnection]);parent::tearDown();
     }
 
@@ -135,6 +139,22 @@ class LeadListControllerIntegrationTest extends TestCase
         $this->assertSame(false, str_contains($html, 'Customer a'));
     }
 
+    public function test_phone_cells_format_only_the_display_and_do_not_change_saved_data(): void
+    {
+        DB::table('clients')->where('id','a')->update(['contact_number'=>'9558235555']);
+        DB::table('clients')->where('id','b')->update(['contact_number'=>'+44 20 7946 0958']);
+        DB::table('clients')->where('id','c')->update(['contact_number'=>null]);
+        DB::table('clients')->where('id','d')->update(['contact_number'=>'N/A']);
+        $data=$this->data([],'hr');$data['canWriteLeads']=false;
+        $html=view('admin.pages.leads.partials.list-table',$data)->render();
+        $this->assertSame(true,str_contains($html,'href="tel:+919558235555"'));
+        $this->assertSame(true,str_contains($html,'+91 9558235555'));
+        $this->assertSame(true,str_contains($html,'+44 20 7946 0958'));
+        $this->assertSame(2,substr_count($html,'data-lead-phone='));
+        $this->assertSame('9558235555',DB::table('clients')->where('id','a')->value('contact_number'));
+        if(getenv('CRM_PHONE_PREVIEW_PATH'))file_put_contents(getenv('CRM_PHONE_PREVIEW_PATH'),$html);
+    }
+
     public function test_xlsx_uses_the_same_hot_filter_as_the_list_and_csv(): void
     {
         $response = app(ClientController::class)->exportLeads($this->request(['lead_queue' => 'hot']));
@@ -159,6 +179,119 @@ class LeadListControllerIntegrationTest extends TestCase
             $this->assertSame(2, substr_count($sheet, '<row '));
         } finally {
             @unlink($path);
+        }
+    }
+
+    private function createTransferTable(): void
+    {
+        Schema::create('lead_transfers', function (Blueprint $table) {
+            $table->string('id')->primary();
+            foreach (['lead_id','from_user_id','to_user_id','requested_by','status'] as $field) $table->string($field);
+            $table->text('reason')->nullable(); $table->timestamps();
+        });
+    }
+
+    public function test_request_popup_returns_only_limited_search_results_and_existing_actions(): void
+    {
+        $this->createTransferTable();
+        $controller = app(\App\Http\Controllers\LeadTransferController::class);
+        $response = $controller->search($this->request(['search'=>'customer'], 'own'));
+        $data = $response->getData(true);
+        $this->assertSame(4, count($data['leads']));
+        $this->assertSame(true, $response->headers->hasCacheControlDirective('no-store'));
+        $this->assertSame(true, $response->headers->hasCacheControlDirective('private'));
+        $rows = collect($data['leads'])->keyBy('id');
+        $this->assertSame('offer', $rows['a']['action']);
+        $this->assertSame('request', $rows['c']['action']);
+        $this->assertSame('claim', $rows['d']['action']);
+        $this->assertSame(route('admin.leads.transfer.claim','d'), $rows['d']['action_url']);
+        $this->assertSame('assign', $controller->search($this->request(['search'=>'Customer d']))->getData(true)['leads'][0]['action']);
+        $this->assertSame(['id','name','phone','products','service_date','owner','own','action','action_url'], array_keys($rows['c']));
+        $this->assertSame(0, count($controller->search($this->request(['search'=>'Does not exist'],'own'))->getData(true)['leads']));
+        $service = app(\App\Services\LeadTransferService::class);
+        $service->requestForSelf(\App\Models\Lead::findOrFail('c'),$this->users['own'],'Popup request');
+        $this->assertSame('outside', \App\Models\Lead::find('c')->representative_user_id);
+        $this->assertSame(1, $service->pendingActionCountFor($this->users['outside']));
+        $rows = collect($controller->search($this->request(['search'=>'Customer c'],'own'))->getData(true)['leads']);
+        $this->assertSame('pending', $rows->first()['action']);
+        $service->requestFromOwner(\App\Models\Lead::findOrFail('a'),$this->users['team'],$this->users['own'],'Offer');
+        $this->assertSame(1, $service->pendingActionCountFor($this->users['team']));
+        $this->assertSame(2, $service->pendingActionCountFor($this->users['super']));
+        $this->assertSame('assign', $controller->search($this->request(['search'=>'Customer b']))->getData(true)['leads'][0]['action']);
+        DB::table('clients')->where('id','a')->update(['contact_number'=>'+91 (888) 777-6655']);
+        $this->assertSame('a',$controller->search($this->request(['search'=>'888777'],'own'))->getData(true)['leads'][0]['id']);
+    }
+
+    public function test_request_popup_rejects_blank_wildcard_short_search_and_other_roles(): void
+    {
+        $controller = app(\App\Http\Controllers\LeadTransferController::class);
+        foreach (['','ab','   ','%%%','cus_','cus\\','12345'] as $term) {
+            try { $controller->search($this->request(['search'=>$term],'own')); }
+            catch (ValidationException $error) { continue; }
+            $this->assertSame('search rejected', 'search allowed');
+        }
+        foreach (['hr','admin','operations'] as $role) {
+            try { $controller->search($this->request(['search'=>'Customer'],$role)); }
+            catch (HttpExceptionInterface $error) { $this->assertSame(403,$error->getStatusCode()); continue; }
+            $this->assertSame('role denied','role allowed');
+        }
+    }
+
+    public function test_request_popup_caps_results_and_keeps_query_count_constant(): void
+    {
+        $this->createTransferTable();
+        $controller = app(\App\Http\Controllers\LeadTransferController::class);
+        $request = $this->request(['search'=>'customer'],'own'); $request->user()->load('userType');
+        DB::enableQueryLog(); DB::flushQueryLog(); $controller->search($request); $small = count(DB::getQueryLog());
+        for ($i=0;$i<25;$i++) {
+            $id='extra-'.$i; DB::table('clients')->insert(['id'=>$id,'name'=>'Customer '.$i,'contact_number'=>'9876543210']);
+            DB::table('leads')->insert(['id'=>$id,'client_id'=>$id,'representative_user_id'=>'outside','product_ids'=>'[]','created_at'=>now()]);
+        }
+        DB::flushQueryLog(); $data = $controller->search($request)->getData(true); $large = count(DB::getQueryLog()); DB::disableQueryLog();
+        $this->assertSame(20,count($data['leads'])); $this->assertSame($small,$large);
+        $this->assertSame(20,count($controller->search($this->request(['search'=>'987654'],'own'))->getData(true)['leads']));
+    }
+
+    public function test_hr_can_export_main_leads_but_dnp_and_mutations_remain_view_only(): void
+    {
+        $this->assertSame(['Customer b'],$this->exportNames(['lead_queue'=>'hot'],'hr'));
+        foreach (['admin.leads.export'=>true,'admin.leads.dnp'=>true,'admin.leads.dnp.export'=>false,'admin.leads.update'=>false,'admin.clients.follow-up.store'=>false,'admin.leads.request-search'=>false] as $name=>$allowed) {
+            $route=app('router')->getRoutes()->getByName($name); $request=$this->request([],'hr'); $passed=true;
+            foreach ($route->gatherMiddleware() as $middleware) {
+                if (!str_starts_with($middleware,'role:')) continue;
+                try { (new \App\Http\Middleware\RoleMiddleware())->handle($request,fn()=>response('allowed'),...explode(',',substr($middleware,5))); }
+                catch (HttpExceptionInterface $error) { $this->assertSame(403,$error->getStatusCode()); $passed=false; break; }
+            }
+            $this->assertSame($allowed,$passed);
+        }
+        $response=app(ClientController::class)->exportLeads($this->request(['lead_queue'=>'hot'],'hr'));
+        $this->assertSame(true,$response instanceof StreamedResponse);
+        ob_start(); $response->sendContent(); $bytes=ob_get_clean(); $this->assertSame('PK',substr($bytes,0,2));
+    }
+
+    public function test_actual_hr_views_show_download_but_no_dnp_write_or_request_controls(): void
+    {
+        $compiled = sys_get_temp_dir().'/crm-lead-views-'.\Illuminate\Support\Str::uuid();
+        mkdir($compiled);
+        config(['view.compiled'=>$compiled]);
+        app()->forgetInstance('blade.compiler');
+        try {
+        view()->getFinder()->prependLocation(base_path('tests/Fixtures/kpi/views'));
+        view()->share('errors',new \Illuminate\Support\ViewErrorBag());
+        $data=$this->data([],'hr');
+        $html=view('admin.pages.leads.index-lead',$data)->render();
+        $this->assertSame(true,str_contains($html,'id="leads-download"'));
+        $this->assertSame(false,str_contains($html,'id="leads-request"'));
+        DB::table('clients')->where('id','a')->update(['id'=>'client-a']);
+        DB::table('leads')->where('id','a')->update(['client_id'=>'client-a']);
+        $method=new \ReflectionMethod(ClientController::class,'dnpQueueView');
+        $method->setAccessible(true);
+        $html=$method->invoke(app(ClientController::class),\App\Models\Lead::with(['client','representative'])->get(),collect(),collect())->render();
+        $this->assertSame(false,str_contains($html,'id="export-dnp"'));
+        $this->assertSame(false,str_contains($html,'aria-label="Edit lead"'));
+        $this->assertSame(true,str_contains($html,route('admin.clients.view','client-a')));
+        } finally {
+            (new \Illuminate\Filesystem\Filesystem())->deleteDirectory($compiled);
         }
     }
 }

@@ -19,6 +19,7 @@ class AttendanceImport extends Model
         'original_filename',
         'stored_path',
         'file_type',
+        'file_hash',
         'status',
         'total_employees',
         'total_records',

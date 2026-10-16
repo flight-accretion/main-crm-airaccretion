@@ -34,6 +34,7 @@
     </header>
     @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
     @if($errors->any())<div class="alert alert-danger" role="alert">{{ $errors->first() }}</div>@endif
+    @include('admin.pages.kpi.partials.department-tabs')
     <section class="kpi-filters" aria-label="KPI filters">
         <form
             method="GET"
@@ -42,35 +43,8 @@
         >
             @if(!empty($filter['user_id']))
                 <input type="hidden" name="user_id" value="{{ $filter['user_id'] }}">
-                <input type="hidden" name="department" value="{{ $department }}">
             @endif
-            @if($canSwitchDepartment ?? false)
-                <div class="kpi-filter-field">
-
-                    <label class="ti-form-label">
-                        Department
-                    </label>
-
-                    <select
-                        name="department"
-                        class="form-control"
-                    >
-                        @foreach([
-                            'sales' => ' Sales',
-                            'operations' => 'Operations',
-                            'accounts' => 'Accounts',
-                        ] as $departmentKey => $departmentLabel)
-                            <option
-                                value="{{ $departmentKey }}"
-                                {{ ($department ?? 'sales') === $departmentKey ? 'selected' : '' }}
-                            >
-                                {{ $departmentLabel }}
-                            </option>
-                        @endforeach
-                    </select>
-
-                </div>
-            @endif
+            <input type="hidden" name="department" value="{{ $department }}">
 
             <div class="kpi-filter-field">
 

@@ -13,11 +13,16 @@
             $score = $enquiry->latestAiScore;
             $temperature = $score && $score->status === 'completed' ? $score->displayTemperature($leadAiScoringSetting) : null;
             $productNames = collect($enquiry->product_ids_array)->map(fn($id) => $products->firstWhere('id', $id)->product ?? null)->filter();
+            $phone = \App\Support\LeadPhonePresentation::forNumber(optional($enquiry->client)->contact_number);
         @endphp
         <tr class="lead-followup-hover-row {{ $isOverdue ? 'leads-overdue-row' : '' }}">
             @if($isSuperAdmin)<td class="leads-selection"><input type="checkbox" class="lead-transfer-checkbox" value="{{ $enquiry->id }}" data-client-name="{{ optional($enquiry->client)->name ?? 'N/A' }}" data-current-representative="{{ optional($enquiry->representative)->name ?? 'N/A' }}" aria-label="Select {{ optional($enquiry->client)->name ?? 'lead' }}"></td>@endif
             <td data-label="Name" class="leads-client" data-sort-value="{{ optional($enquiry->client)->name ?? '' }}"><strong>{{ optional($enquiry->client)->name ?? 'N/A' }}</strong><details class="leads-record-dates"><summary>Details</summary><span>Created: {{ optional($enquiry->created_at)->format('d-m-Y H:i') }}</span><span>Updated: {{ optional($enquiry->updated_at)->format('d-m-Y H:i') }}</span></details></td>
-            <td data-label="Phone" class="leads-phone">{{ optional($enquiry->client)->contact_number ?? 'N/A' }}</td>
+            <td data-label="Phone" class="leads-phone" data-sort-value="{{ $phone['copy'] ?? $phone['display'] }}">
+                @if($phone['dial'])
+                    <a class="leads-phone-link" href="{{ $phone['dial'] }}" data-lead-phone="{{ $phone['copy'] }}" title="{{ $phone['display'] }}">{{ $phone['display'] }}</a>
+                @else{{ $phone['display'] }}@endif
+            </td>
             <td data-label="Product"><strong>{{ $productNames->implode(', ') ?: 'N/A' }}</strong></td>
             <td data-label="Service date">@if($enquiry->rideSegments->count()) @php $firstSegment = $enquiry->rideSegments->first(); $lastSegment = $enquiry->rideSegments->last(); @endphp {{ \Carbon\Carbon::parse($firstSegment->from_date)->format('d M Y') }}@if($firstSegment->from_date != $lastSegment->to_date)<br>{{ \Carbon\Carbon::parse($lastSegment->to_date)->format('d M Y') }}@endif @else N/A @endif</td>
             <td data-label="Follow-up" data-sort-value="{{ $latest && $latest->next_followup_date ? $latest->next_followup_date->format('Y-m-d H:i:s') : '9999-12-31' }}"><span class="{{ $isOverdue ? 'leads-overdue' : '' }}">{{ $latest && $latest->next_followup_date ? $latest->next_followup_date->format('d M Y, H:i') : 'No follow-up date' }}</span>@include('admin.pages.leads.partials.list-history')</td>

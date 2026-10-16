@@ -19,6 +19,11 @@ class AttendanceShiftResolver
         $assignments =
             $this->assignmentsForUser($user);
 
+        return $this->policyForDate($date, $assignments);
+    }
+
+    private function policyForDate(Carbon $date, Collection $assignments, ?AttendanceShiftPolicy $default = null): AttendanceShiftPolicy
+    {
         $assignment =
             $assignments
                 ->filter(
@@ -73,7 +78,7 @@ class AttendanceShiftResolver
             return $firstAssignment->shiftPolicy;
         }
 
-        return $this->defaultPolicy();
+        return $default ?: $this->defaultPolicy();
     }
 
     public function resolveForDates(
@@ -106,20 +111,20 @@ class AttendanceShiftResolver
             return collect();
         }
 
+        $assignments = $this->assignmentsForUser($user);
+        $default = $this->defaultPolicy();
+
         return $normalizedDates
             ->mapWithKeys(
                 function (
                     Carbon $date
-                ) use ($user) {
+                ) use ($assignments, $default) {
                     $dateKey =
                         $date->toDateString();
 
                     return [
                         $dateKey =>
-                            $this->resolveForDate(
-                                $user,
-                                $date
-                            ),
+                            $this->policyForDate($date, $assignments, $default),
                     ];
                 }
             );

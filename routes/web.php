@@ -146,15 +146,17 @@ Route::middleware('auth')->group(function () {
         ->middleware('role:HR,SUPER_ADMIN')
         ->name('admin.hr.dashboard');
     Route::prefix('/admin/hr/operations-manual-kpi')
-        ->middleware('role:HR,SUPER_ADMIN')
+        ->middleware('role:HR,SUPER_ADMIN,OPERATIONS_ROLES')
         ->group(function () {
             Route::get('/', [OperationsManualKpiController::class, 'index'])
                 ->name('admin.hr.operations-manual-kpi.index');
             Route::post('/', [OperationsManualKpiController::class, 'store'])
                 ->name('admin.hr.operations-manual-kpi.store');
             Route::post('/{submission}/approve', [OperationsManualKpiController::class, 'approve'])
+                ->middleware('role:HR,SUPER_ADMIN')
                 ->name('admin.hr.operations-manual-kpi.approve');
             Route::post('/{submission}/reject', [OperationsManualKpiController::class, 'reject'])
+                ->middleware('role:HR,SUPER_ADMIN')
                 ->name('admin.hr.operations-manual-kpi.reject');
         });
 
@@ -413,6 +415,14 @@ Route::prefix('admin/chat-notifications')
 
 
     Route::prefix('admin/attendance')->group(function () {
+        Route::post('/calendar/weekoffs', [\App\Http\Controllers\AttendanceCalendarController::class, 'weekoffs'])
+            ->middleware('role:HR,SUPER_ADMIN')->name('admin.attendance.calendar.weekoffs');
+        Route::post('/calendar/holidays', [\App\Http\Controllers\AttendanceCalendarController::class, 'holidays'])
+            ->middleware('role:HR,SUPER_ADMIN')->name('admin.attendance.calendar.holidays');
+        Route::post('/calendar/swaps', [\App\Http\Controllers\AttendanceCalendarController::class, 'swaps'])
+            ->middleware('role:HR,SUPER_ADMIN')->name('admin.attendance.calendar.swaps');
+        Route::delete('/calendar/swaps/{swap}', [\App\Http\Controllers\AttendanceCalendarController::class, 'destroySwap'])
+            ->middleware('role:HR,SUPER_ADMIN')->name('admin.attendance.calendar.swaps.destroy');
         Route::get('/import', [AttendanceImportController::class, 'index'])
             ->middleware('role:ATTENDANCE_IMPORT_ROLES')
             ->name('admin.attendance.import.index');
@@ -428,6 +438,9 @@ Route::prefix('admin/chat-notifications')
         Route::post('/import/confirm', [AttendanceImportController::class, 'confirm'])
             ->middleware('role:ATTENDANCE_IMPORT_ROLES')
             ->name('admin.attendance.import.confirm');
+
+        Route::get('/import/{import}', [AttendanceImportController::class, 'show'])
+            ->middleware('role:ATTENDANCE_IMPORT_ROLES')->name('admin.attendance.import.show');
 
         Route::get('/settings', [AttendanceSettingsController::class, 'index'])
             ->middleware('role:ADMIN_ROLES,HR')
@@ -542,12 +555,17 @@ Route::prefix(
                 ->name('admin.kpi.work-done.details');
         });
 
+    Route::get('admin/kpi-history', [\App\Http\Controllers\HistoricPerformanceController::class, 'index'])
+        ->middleware('role:SUPER_ADMIN,HR')->name('admin.kpi.history.index');
+    Route::get('admin/kpi-history/download', [\App\Http\Controllers\HistoricPerformanceController::class, 'download'])
+        ->middleware('role:SUPER_ADMIN,HR')->name('admin.kpi.history.download');
+
     Route::get('admin/kpi-management', [KpiManagementController::class, 'index'])
         ->middleware('role:SUPER_ADMIN,HR')
         ->name('admin.kpi.manage');
 
     Route::prefix('admin/kpi-management')
-        ->middleware('role:SUPER_ADMIN')
+        ->middleware('role:SUPER_ADMIN,HR')
         ->group(function () {
             Route::post('/templates', [KpiManagementController::class, 'storeTemplate'])
                 ->name('admin.kpi.templates.store');
@@ -860,6 +878,11 @@ Route::post(
         ->name('admin.leads.transfers.index');
 
     // Bulk lead request from Sales Report
+    Route::post('/{lead}/claim', [LeadTransferController::class, 'claim'])
+        ->middleware('role:SALES_ROLES')
+        ->name('admin.leads.transfer.claim');
+
+    // Bulk lead request from Sales Report
     Route::post(
         '/transfers/bulk-request',
         [LeadTransferController::class, 'bulkStore']
@@ -940,9 +963,6 @@ Route::post('/import', [ClientController::class, 'importLeads'])
 Route::get('/import/sample', [ClientController::class, 'downloadSampleExcel'])
     ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')
     ->name('admin.leads.import.sample');
-        Route::get('/export', [ClientController::class, 'exportLeads'])
-            ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')
-            ->name('admin.leads.export');
 
         Route::post(
             '/{lead}/send-booking-confirmation-email',
@@ -1027,12 +1047,17 @@ Route::post(
             ->name('admin.leads.follow-up.store');
     });
 
+    Route::get('admin/leads/export', [ClientController::class, 'exportLeads'])
+        ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,HR')->name('admin.leads.export');
+    Route::get('admin/leads/request-search', [LeadTransferController::class, 'search'])
+        ->middleware(['role:SUPER_ADMIN,SALES_ROLES', 'throttle:30,1'])->name('admin.leads.request-search');
+
     // Airpoints integration routes
     Route::post('admin/airpoints/check-user-points', [ClientController::class, 'checkUserPoints'])
         ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')
         ->name('admin.airpoints.check-user-points');
 
-    Route::get('admin/dnp-leads', [ClientController::class, 'getDnpLeads'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.leads.dnp');
+    Route::get('admin/dnp-leads', [ClientController::class, 'getDnpLeads'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,HR')->name('admin.leads.dnp');
     Route::get('admin/dnp-leads/export', [ClientController::class, 'exportDnpLeads'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.leads.dnp.export');
 
     // Separate follow-ups group
@@ -1256,14 +1281,17 @@ Route::post(
         Route::put('/agents/{agent}', [IvrAgentController::class, 'update'])->name('agents.update');
     });
 
+    Route::get('admin/operations/work-details', [OperationsDashboardController::class, 'workDetails'])
+        ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES,HR')
+        ->name('admin.operations.work-details');
+
+    Route::get('admin/operations', [OperationsDashboardController::class, 'index'])
+        ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES,HR')
+        ->name('admin.operations.index');
+
     Route::prefix('admin/operations')
         ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES')
         ->group(function () {
-            Route::get(
-                '/',
-                [OperationsDashboardController::class, 'index']
-            )->name('admin.operations.index');
-
             Route::get(
                 '/queue/{type}',
                 [OperationsDashboardController::class, 'queue']
@@ -1479,6 +1507,7 @@ Route::post(
 
         // AJAX Routes - Must be before parameterized routes
         Route::get('/download-incentive', [TargetController::class, 'downloadIncentive'])->name('admin.targets.download-incentive');
+        Route::get('/incentives', [TargetController::class, 'incentives'])->middleware('role:SUPER_ADMIN,HR')->name('admin.targets.incentives');
         Route::get('/data/table', [TargetController::class, 'getTargetsData'])->name('admin.targets.data');
         Route::get('/data/sales-executives', [TargetController::class, 'getSalesExecutivesData'])->name('admin.targets.sales-executives');
 

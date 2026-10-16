@@ -12,6 +12,8 @@ use App\Models\KpiWorkingDay;
 use App\Models\User;
 use App\Models\UserType;
 use App\Services\Kpi\KpiTemplateAutomationService;
+use App\Services\Attendance\AttendanceCalendarService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
@@ -19,18 +21,35 @@ class KpiManagementController extends Controller
 {
     public function index(KpiTemplateAutomationService $automation)
     {
+        $templates = KpiTemplate::with('metrics')->orderBy('department')->orderBy('name')->get();
+        $users = User::with('userType')->where('status', 1)->orderBy('name')->get();
+        $assignments = KpiUserAssignment::with(['user', 'template'])->where('active', true)->get();
+        $definitions = $automation->definitions();
+        $coverage = [];
+        foreach ($definitions as $department => &$definition) {
+            $template = $templates->where('department', $department)->where('active', true)->sortByDesc('updated_at')->first();
+            if ($template) {
+                $definition['metrics'] = $template->metrics->where('active', true)->sortBy('sort_order')->map(function ($metric) {
+                    return $metric->toArray() + ['score_labels' => collect($metric->score_rules)->map(fn ($value) => (string) $value)->all()];
+                })->values()->all();
+                $definition['updated_at'] = $template->updated_at;
+            }
+            $roles = match ($department) {
+                'sales' => UserType::SALES_ROLES, 'operations' => UserType::OPERATIONS_ROLES,
+                'accounts' => UserType::ACCOUNTS_ROLES, default => [],
+            };
+            $eligibleIds = $users->filter(fn ($user) => in_array(optional($user->userType)->user_type, $roles, true))->pluck('id');
+            $assigned = $template ? $assignments->where('template_id', $template->id)->whereIn('user_id', $eligibleIds)
+                ->filter(fn ($assignment) => $assignment->effective_from && $assignment->effective_from->lte(now()->endOfDay())
+                    && (!$assignment->effective_to || $assignment->effective_to->gte(now()->startOfDay())))
+                ->pluck('user_id')->unique()->count() : 0;
+            $coverage[$department] = ['eligible_users' => $eligibleIds->count(), 'assigned_users' => $assigned];
+        }
+        unset($definition);
         return view('admin.pages.kpi.manage', [
-            'templates' => KpiTemplate::with('metrics')
-                ->orderBy('department')
-                ->orderBy('name')
-                ->get(),
-            'users' => User::with('userType')
-                ->where('status', 1)
-                ->orderBy('name')
-                ->get(),
-            'assignments' => KpiUserAssignment::with(['user', 'template'])
-                ->where('active', true)
-                ->get(),
+            'templates' => $templates,
+            'users' => $users,
+            'assignments' => $assignments,
             'teamMemberships' => KpiTeamMembership::with([
                 'manager.userType',
                 'member.userType',
@@ -38,8 +57,8 @@ class KpiManagementController extends Controller
                 ->where('active', true)
                 ->orderBy('department')
                 ->get(),
-            'defaultKpiDefinitions' => $automation->definitions(),
-            'defaultKpiCoverage' => $automation->coverage(),
+            'defaultKpiDefinitions' => $definitions,
+            'defaultKpiCoverage' => $coverage,
         ]);
     }
 
@@ -129,14 +148,16 @@ class KpiManagementController extends Controller
             'note' => 'nullable|string|max:255',
         ]);
 
-        KpiWorkingDay::updateOrCreate(
-            [
-                'work_date' => $data['work_date'],
-            ],
-            $data + [
-                'updated_by' => $request->user()->id,
-            ]
-        );
+        DB::transaction(function () use ($data, $request) {
+            $users = User::orderBy('id')->lockForUpdate()->get(['id']);
+            KpiWorkingDay::updateOrCreate(
+                ['work_date' => $data['work_date']],
+                $data + ['updated_by' => $request->user()->id]
+            );
+
+            $calendar = new AttendanceCalendarService();
+            foreach ($users as $user) $calendar->assertApprovedSwapsCompatible($user);
+        });
 
         return back()->with('success', 'Working calendar updated.');
     }
@@ -150,15 +171,15 @@ class KpiManagementController extends Controller
             'note' => 'nullable|string|max:255',
         ]);
 
-        KpiUserNonWorkingDay::updateOrCreate(
-            [
-                'user_id' => $data['user_id'],
-                'work_date' => $data['work_date'],
-            ],
-            $data + [
-                'approved_by' => $request->user()->id,
-            ]
-        );
+        DB::transaction(function () use ($data, $request) {
+            $user = User::whereKey($data['user_id'])->lockForUpdate()->firstOrFail();
+            KpiUserNonWorkingDay::updateOrCreate(
+                ['user_id' => $data['user_id'], 'work_date' => $data['work_date']],
+                $data + ['approved_by' => $request->user()->id]
+            );
+
+            (new AttendanceCalendarService())->assertApprovedSwapsCompatible($user);
+        });
 
         return back()->with('success', 'Employee non-working day saved.');
     }

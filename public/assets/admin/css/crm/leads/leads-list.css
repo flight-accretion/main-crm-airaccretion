@@ -48,7 +48,7 @@
 .crm-leads-list .leads-table td { border-top:1px solid #EEF0F3; padding:14px 9px; overflow-wrap:anywhere; vertical-align:top; }
 .crm-leads-list .leads-table th.leads-selection, .crm-leads-list .leads-table td.leads-selection { width:30px; }
 .crm-leads-list .leads-table th.leads-col-name { width:11%; }
-.crm-leads-list .leads-table th.leads-col-phone { width:12%; }
+.crm-leads-list .leads-table th.leads-col-phone { width:140px; }
 .crm-leads-list .leads-table th.leads-col-product { width:12%; }
 .crm-leads-list .leads-table th.leads-col-service-date { width:9%; }
 .crm-leads-list .leads-table th.leads-col-followup { width:13%; }
@@ -87,4 +87,11 @@
 .dark .crm-leads-list .leads-table th { background:#242832; }
 .dark .crm-leads-list .leads-table td { border-color:#2E333D; }
 .dark .crm-leads-list .leads-overdue-row { background:#291F24; }
+.crm-leads-list .leads-phone-link { color:var(--leads-text); text-decoration:none; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+.crm-leads-list .leads-phone-link:hover, .crm-leads-list .leads-phone-link:focus-visible { color:var(--leads-brand); text-decoration:underline; text-underline-offset:3px; }
+.dark .crm-leads-list .leads-phone-link:hover, .dark .crm-leads-list .leads-phone-link:focus-visible { color:#86B4FF; }
+.crm-leads-list .leads-phone-feedback { position:fixed; right:20px; bottom:24px; max-width:min(360px,calc(100% - 40px)); padding:12px 16px; border:1px solid var(--leads-border); border-radius:6px; background:var(--leads-surface); color:var(--leads-text); box-shadow:0 4px 14px #0002; font-size:13px; z-index:120; }
+.crm-leads-list .leads-phone-feedback[hidden] { display:none; }
+.leads-clipboard-input { position:fixed; left:-10000px; top:0; width:1px; height:1px; }
+@media(max-width:767px) { .crm-leads-list .leads-phone-feedback { bottom:100px; } }
 @media(max-width:1200px) { .crm-leads-list { padding:18px; } .crm-leads-list .leads-filter-grid { grid-template-columns:repeat(4,minmax(0,1fr)); } .crm-leads-list .leads-search { grid-column:1/-1; } }

@@ -31,9 +31,9 @@ class AttendanceImportTemplateDownloadTest extends AttendanceFeatureTestCase
 
         $content = $response->streamedContent();
 
-        $this->assertStringContainsString('Paycode:-', $content);
-        $this->assertStringContainsString('Date,Day,In,Out,Status', $content);
-        $this->assertStringContainsString('2026-09-01,Tuesday,10:30,19:30,P', $content);
+        $this->assertStringNotContainsString('Paycode:-', $content);
+        $this->assertStringContainsString('Date,Day,Name,In,Out,Status', $content);
+        $this->assertStringContainsString('01/09/2026,Tuesday,"Amit Sharma",10:30,19:30,P', $content);
     }
 
     public function test_hr_can_download_attendance_import_excel_template(): void

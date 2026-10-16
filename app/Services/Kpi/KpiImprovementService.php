@@ -11,6 +11,15 @@ class KpiImprovementService
         int $score,
         array $resolved
     ): array {
+        if (in_array($metric->code, ['attendance', 'operations_attendance'], true)
+            && !empty($resolved['evidence']['is_provisional'])) {
+            return [
+                'next_score' => $score < 5 ? $score + 1 : null,
+                'next_threshold' => $score < 5 ? $this->threshold($metric, $score + 1) : null,
+                'gap_value' => 0,
+                'improvement_line' => 'Attendance is provisional. Ask HR to complete missing attendance and review ignored status rows before finalizing this score.',
+            ];
+        }
         if ($score >= 5) {
             return [
                 'next_score' => null,
@@ -30,7 +39,7 @@ class KpiImprovementService
             'response_time' => $this->responseTime($nextScore, $threshold, $resolved),
             'followup_sla' => $this->followupSla($nextScore, $threshold, $resolved),
             'payment_collection' => $this->paymentCollection($nextScore, $threshold, $resolved),
-            'attendance' => $this->attendance($nextScore, $threshold, $resolved),
+            'attendance', 'operations_attendance' => $this->attendance($nextScore, $threshold, $resolved),
             default => $this->generic($metric, $nextScore, $threshold, $resolved),
         };
     }
@@ -212,7 +221,7 @@ class KpiImprovementService
         $evidence = $resolved['evidence'] ?? [];
         $eligible = (int) ($evidence['eligible_scheduled_days'] ?? 0);
         $current = (float) (
-            $evidence['punctuality_percent']
+            $evidence['attendance_percent']
             ?? $resolved['achievement_percent']
             ?? 0
         );
@@ -231,7 +240,7 @@ class KpiImprovementService
             'next_threshold' => $threshold,
             'gap_value' => round(max(0, $threshold - $current), 2),
             'improvement_line' => sprintf(
-                'Current punctuality is %s%%. Maintain punctual attendance on the remaining scheduled working days to move toward %s%% and %d/5.',
+                'Current attendance is %s%%. Attend remaining scheduled working days to move toward %s%% and %d/5. P and MIS count as present; HR-approved swaps adjust the calendar.',
                 $this->number($current),
                 $this->number($threshold),
                 $nextScore

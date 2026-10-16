@@ -5011,7 +5011,7 @@ $this->abortUnlessRepresentativeInScope($staff ? $staff->id : null);
                         $services = Service::all()->where('status', 1);
                         $staff = $this->getUsersInHierarchy();
 
-                        return view('admin.pages.leads.dnp-leads', compact('dnpLeads', 'services', 'staff'));
+                        return $this->dnpQueueView($dnpLeads, $services, $staff);
                     }
                 } else {
                     // No representative scope, just filter by selection
@@ -6249,7 +6249,7 @@ public function destroyLead(Lead $lead)
                         $services = Service::all()->where('status', 1);
                         $staff = $this->getUsersInHierarchy();
 
-                        return view('admin.pages.leads.dnp-leads', compact('dnpLeads', 'services', 'staff'));
+                        return $this->dnpQueueView($dnpLeads, $services, $staff);
                     }
                 } else {
                     // No representative scope, just filter by selection
@@ -6269,7 +6269,17 @@ public function destroyLead(Lead $lead)
         $services = Service::all()->where('status', 1);
         $staff = $this->getUsersInHierarchy();
 
-        return view('admin.pages.leads.dnp-leads', compact('dnpLeads', 'services', 'staff'));
+        return $this->dnpQueueView($dnpLeads, $services, $staff);
+    }
+
+    private function dnpQueueView($dnpLeads, $services, $staff)
+    {
+        $leads = new \Illuminate\Database\Eloquent\Collection($dnpLeads->all());
+        $leads->loadMissing(['client', 'representative', 'leadFollowups']);
+        $presentation = app(\App\Services\LeadQueuePresentationService::class);
+        $queueSummary = $presentation->dnp($leads);
+        $queueServiceNames = $presentation->serviceNames($leads);
+        return view('admin.pages.leads.dnp-leads', compact('dnpLeads', 'services', 'staff', 'queueSummary', 'queueServiceNames'));
     }
 
     /**

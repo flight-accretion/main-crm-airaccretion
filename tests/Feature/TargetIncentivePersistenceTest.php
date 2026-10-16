@@ -55,6 +55,13 @@ class TargetIncentivePersistenceTest extends TestCase
         $this->assertEquals(['0.00200000','company',[$this->product]],[$target->incentive_multiplier,$target->incentive_basis,$target->incentive_product_ids]);
     }
 
+    public function test_incentive_download_rejects_a_person_outside_active_employee_scope(): void
+    {
+        $controller = new TargetController(new TargetIncentiveService());
+        $this->expectException(HttpException::class);
+        $controller->downloadIncentive(Request::create('/','GET',['year'=>2026,'month'=>10,'file_type'=>'csv','person_id'=>(string)Str::uuid()]));
+    }
+
     public function test_team_has_separate_manager_rates_and_does_not_update_members(): void
     {
         DB::table('sales_executive_assignments')->insert(['id'=>(string)Str::uuid(),'manager_id'=>$this->staff['manager']->id,'sales_executive_id'=>$this->staff['sales']->id,'status'=>1]);

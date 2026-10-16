@@ -177,6 +177,19 @@ class AttendanceImportController extends Controller
         return $this->downloadSampleExcel();
     }
 
+    public function show(Request $request, AttendanceImport $import)
+    {
+        $response = $this->index($request);
+        return $response->with([
+            'selectedImport' => $import->load('uploadedBy:id,name'),
+            'selectedRecords' => AttendanceRecord::query()
+                ->with('user:id,name')
+                ->where('source_import_id', $import->id)
+                ->orderBy('attendance_date')->orderBy('user_id')
+                ->paginate(50, ['*'], 'records_page')->withQueryString(),
+        ]);
+    }
+
     public function preview(
         Request $request,
         AttendanceImportParser $parser
@@ -241,6 +254,9 @@ class AttendanceImportController extends Controller
                 'excel_file'
             );
 
+        $fileHash = hash_file('sha256', $file->getRealPath());
+        $this->rejectCompletedDuplicate($fileHash, $fromDate->toDateString(), $toDate->toDateString());
+
         $extension =
             strtolower(
                 (string)
@@ -296,6 +312,8 @@ class AttendanceImportController extends Controller
 
                     'stored_path' =>
                         $storedPath,
+
+                    'file_hash' => $fileHash,
 
                     'file_type' =>
                         $extension,
@@ -358,6 +376,8 @@ class AttendanceImportController extends Controller
                     'import_id' =>
                         $import->id,
 
+                    'filename' => $import->original_filename,
+
                     'from_date' =>
                         $fromDate->toDateString(),
 
@@ -389,8 +409,10 @@ class AttendanceImportController extends Controller
                             ]
                         ),
 
-                    'employees' =>
-                        $employees,
+                    'employees' => array_map(function ($employee) {
+                        unset($employee['records']);
+                        return $employee;
+                    }, $employees),
 
                     'rows' =>
                         $parsed[
@@ -445,8 +467,7 @@ class AttendanceImportController extends Controller
                 withMessages([
                     'excel_file' =>
                         'Unable to read attendance file: '
-                        . $e
-                            ->getMessage(),
+                        . 'Please check the file format and try again.',
                 ]);
         }
     }
@@ -526,6 +547,11 @@ class AttendanceImportController extends Controller
                     $import->to_date
                 )->endOfDay()
             );
+
+        $fileHash = hash_file('sha256', Storage::disk('local')->path($import->stored_path));
+        if ($import->file_hash && !hash_equals($import->file_hash, $fileHash)) {
+            throw ValidationException::withMessages(['excel_file' => 'The uploaded file has changed. Please preview it again.']);
+        }
 
         $resolvedMappings =
             $this->resolveMappings(
@@ -624,9 +650,18 @@ class AttendanceImportController extends Controller
                 $resolvedMappings,
                 $usersById,
                 $shiftResolver,
+                $fileHash,
                 &$created,
                 &$updated
             ) {
+
+                $this->lockImportFileRange($fileHash, $import->from_date->toDateString(), $import->to_date->toDateString());
+                $locked = AttendanceImport::query()->whereKey($import->id)->lockForUpdate()->firstOrFail();
+                if ($locked->status !== 'previewed') {
+                    throw ValidationException::withMessages(['import_id' => 'This import has already been confirmed.']);
+                }
+                $this->rejectCompletedDuplicate($fileHash, $import->from_date->toDateString(), $import->to_date->toDateString());
+                $import->file_hash = $fileHash;
 
                 foreach (
                     $parsed[
@@ -635,16 +670,10 @@ class AttendanceImportController extends Controller
                     as $employee
                 ) {
 
-                    $paycode =
-                        (string)
-                        $employee[
-                            'paycode'
-                        ];
+                    $paycode = $employee['paycode'];
+                    $mappingKey = $employee['mapping_key'] ?? (string) $paycode;
 
-                        $userId =
-                            $resolvedMappings[
-                                $paycode
-                            ];
+                    $userId = $resolvedMappings[$mappingKey];
 
                     $user =
                         $usersById
@@ -652,31 +681,25 @@ class AttendanceImportController extends Controller
                                 $userId
                             );
 
+                    $policiesByDate = $shiftResolver->resolveForDates(
+                        $user,
+                        collect($employee['records'])->pluck('attendance_date')
+                    );
+
                     /*
                      * Remember Paycode mapping
                      * for next upload.
                      */
-                    AttendanceUserMapping::
-                        updateOrCreate(
+                    if ($paycode !== null) {
+                        AttendanceUserMapping::updateOrCreate(
+                            ['paycode' => $paycode],
                             [
-                                'paycode' =>
-                                    $paycode,
-                            ],
-                            [
-                                'user_id' =>
-                                    $userId,
-
-                                'employee_name' =>
-                                    $employee[
-                                        'file_name'
-                                    ],
-
-                                'updated_by' =>
-                                    $request
-                                        ->user()
-                                        ->id,
+                                'user_id' => $userId,
+                                'employee_name' => $employee['file_name'],
+                                'updated_by' => $request->user()->id,
                             ]
                         );
+                    }
 
                     foreach (
                         $employee[
@@ -708,16 +731,7 @@ class AttendanceImportController extends Controller
                                 )
                                 ->exists();
 
-                        $policy =
-                            $shiftResolver
-                                ->resolveForDate(
-                                    $user,
-                                    Carbon::parse(
-                                        $record[
-                                            'attendance_date'
-                                        ]
-                                    )
-                                );
+                        $policy = $policiesByDate->get($record['attendance_date']);
 
                         AttendanceRecord::
                             updateOrCreate(
@@ -732,8 +746,10 @@ class AttendanceImportController extends Controller
                                 ],
                                 array_merge(
                                     [
-                                    'paycode' =>
-                                        $paycode,
+                                    'paycode' => $paycode ?? AttendanceRecord::query()
+                                        ->where('user_id', $userId)
+                                        ->where('attendance_date', $record['attendance_date'])
+                                        ->value('paycode'),
 
                                     'day_name' =>
                                         $record[
@@ -845,6 +861,7 @@ class AttendanceImportController extends Controller
                 ->pluck(
                     'paycode'
                 )
+                ->filter(fn ($value) => $value !== null)
                 ->map(
                     fn ($value) =>
                         (string)
@@ -908,7 +925,7 @@ class AttendanceImportController extends Controller
                     $matchType =
                         'unmatched';
 
-                    $saved =
+                    $saved = $employee['paycode'] === null ? null :
                         $storedMappings
                             ->get(
                                 $paycode
@@ -965,6 +982,7 @@ class AttendanceImportController extends Controller
                     return array_merge(
                         $employee,
                         [
+                            'mapping_key' => $employee['mapping_key'] ?? $paycode,
                             'user_id' =>
                                 $selectedUserId,
 
@@ -990,38 +1008,13 @@ class AttendanceImportController extends Controller
             as $employee
         ) {
 
-            $paycode =
-                (string)
-                $employee[
-                    'paycode'
-                ];
+            $paycode = $employee['mapping_key'] ?? (string) $employee['paycode'];
 
             $userId =
                 $postedMappings[
                     $paycode
                 ]
                 ?? null;
-
-            /*
-             * Existing Paycode mapping
-             * can be used as fallback.
-             */
-            if (!$userId) {
-
-                $saved =
-                    AttendanceUserMapping::
-                        query()
-                        ->where(
-                            'paycode',
-                            $paycode
-                        )
-                        ->value(
-                            'user_id'
-                        );
-
-                $userId =
-                    $saved ?: null;
-            }
 
             if (!$userId) {
 
@@ -1053,6 +1046,45 @@ class AttendanceImportController extends Controller
         }
 
         return $resolved;
+    }
+
+    private function rejectCompletedDuplicate(string $hash, string $from, string $to): void
+    {
+        // Older imports predate file hashes. Backfill only this range's readable files.
+        $legacy = AttendanceImport::query()->whereNull('file_hash')->where('status', 'completed')
+            ->whereDate('from_date', $from)->whereDate('to_date', $to)->select('id', 'stored_path')->cursor();
+        foreach ($legacy as $import) {
+            if (!$import->stored_path || !Storage::disk('local')->exists($import->stored_path)) continue;
+            try {
+                $legacyHash = hash_file('sha256', Storage::disk('local')->path($import->stored_path));
+            } catch (\Throwable $error) {
+                continue;
+            }
+            if ($legacyHash !== false) {
+                AttendanceImport::query()->whereKey($import->id)->whereNull('file_hash')->update(['file_hash' => $legacyHash]);
+            }
+        }
+        if (AttendanceImport::query()->where('file_hash', $hash)
+            ->whereDate('from_date', $from)->whereDate('to_date', $to)
+            ->where('status', 'completed')->exists()) {
+            throw ValidationException::withMessages([
+                'excel_file' => 'This exact attendance file and selected date range have already been imported.',
+            ]);
+        }
+    }
+
+    private function lockImportFileRange(string $hash, string $from, string $to): void
+    {
+        // Different preview IDs for the same bytes/range must share a transaction lock.
+        if (DB::connection()->getDriverName() === 'pgsql') {
+            $lock = substr(hash('sha256', $hash . '|' . $from . '|' . $to), 0, 16);
+            $keys = array_values(unpack('N2', hex2bin($lock)));
+            $keys = array_map(fn ($key) => $key > 2147483647 ? $key - 4294967296 : $key, $keys);
+            DB::select('SELECT pg_advisory_xact_lock(?, ?)', $keys);
+        } elseif (DB::connection()->getDriverName() !== 'sqlite') {
+            // A shared row serializes confirmations on other row-locking database engines.
+            User::query()->orderBy('id')->lockForUpdate()->firstOrFail();
+        }
     }
 
     private function normalizeName(
@@ -1181,14 +1213,14 @@ class AttendanceImportController extends Controller
             }
         }
 
-        foreach (['A2', 'B2', 'C2', 'D2', 'E2'] as $cell) {
+        foreach (['A1', 'B1', 'C1', 'D1', 'E1', 'F1'] as $cell) {
             $sheet->getStyle($cell)->getFont()->setBold(true);
             $sheet->getStyle($cell)->getFill()
                 ->setFillType(Fill::FILL_SOLID)
                 ->getStartColor()->setRGB('E2E8F0');
         }
 
-        foreach (range('A', 'G') as $column) {
+        foreach (range('A', 'F') as $column) {
             $sheet->getColumnDimension($column)->setAutoSize(true);
         }
 
@@ -1227,43 +1259,10 @@ class AttendanceImportController extends Controller
     private function sampleRows(): array
     {
         return [
-            [
-                'Paycode:-',
-                '',
-                '',
-                'E001',
-                'Amit Sharma',
-                'Department:-',
-                'Sales',
-            ],
-            [
-                'Date',
-                'Day',
-                'In',
-                'Out',
-                'Status',
-            ],
-            [
-                '2026-09-01',
-                'Tuesday',
-                '10:30',
-                '19:30',
-                'P',
-            ],
-            [
-                '2026-09-02',
-                'Wednesday',
-                '10:42',
-                '19:35',
-                'P',
-            ],
-            [
-                '2026-09-03',
-                'Thursday',
-                '',
-                '',
-                'A',
-            ],
+            ['Date', 'Day', 'Name', 'In', 'Out', 'Status'],
+            ['01/09/2026', 'Tuesday', 'Amit Sharma', '10:30', '19:30', 'P'],
+            ['02/09/2026', 'Wednesday', 'Amit Sharma', '10:42', '', 'MIS'],
+            ['03/09/2026', 'Thursday', 'Amit Sharma', '', '', 'A'],
         ];
     }
 
@@ -1272,12 +1271,12 @@ class AttendanceImportController extends Controller
         return [
             'ATTENDANCE IMPORT FORMAT',
             '',
-            '1. Keep one employee block per employee.',
-            '2. Employee block starts with Paycode:-. Put paycode in column D and employee name in column E.',
-            '3. Required attendance headers are Date, Day, In, Out, Status.',
-            '4. Date formats supported: YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY, MM/DD/YYYY.',
+            '1. Use exactly Date, Day, Name, In, Out, Status in the Attendance Data sheet.',
+            '2. Repeat the employee name on every row. Different employees may share the same sheet.',
+            '3. Native Bio Manager monthly and daily employee blocks are also supported.',
+            '4. Date formats supported: DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD.',
             '5. Time formats supported: HH:MM, HH:MM:SS, h:mm AM/PM.',
-            '6. Status examples: P for present, A for absent, WO for weekly off, HLD for holiday.',
+            '6. All status values are retained. MIS means Miss punch; WO and HLD rows are retained too.',
             '7. Upload screen From Date and To Date decide which rows are imported.',
         ];
     }

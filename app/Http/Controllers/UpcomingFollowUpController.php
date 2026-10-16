@@ -21,6 +21,8 @@ class UpcomingFollowUpController extends Controller
 {
     public function index(Request $request): View
     {
+        $request->validate(['from_date' => 'nullable|date', 'product_id' => 'nullable|string|max:64',
+            'representative_user_id' => 'nullable|uuid', 'lead_score_temperature' => 'nullable|in:hot,neutral,cold']);
         $currentUser = auth()->user();
         $representatives = getRepresentativeIds($currentUser);
 
@@ -91,7 +93,7 @@ class UpcomingFollowUpController extends Controller
 
             $products = Product::where('status', 1)->get();
             $arrFollowUps = collect();
-            return view('admin.pages.follow-ups.index-upcoming-follow-up', compact('fromDate', 'arrFollowUps', 'products', 'assignedExecutives', 'leadAiScoringSetting'));
+            return $this->queueView($fromDate, $arrFollowUps, $products, $assignedExecutives, $leadAiScoringSetting);
         }
 
         // if ($effectiveReps) {
@@ -305,7 +307,17 @@ class UpcomingFollowUpController extends Controller
 
         $products = Product::where('status', 1)->get();
 
-        return view('admin.pages.follow-ups.index-upcoming-follow-up', compact('fromDate', 'arrFollowUps', 'products', 'assignedExecutives', 'leadAiScoringSetting'));
+        return $this->queueView($fromDate, $arrFollowUps, $products, $assignedExecutives, $leadAiScoringSetting);
+    }
+
+    private function queueView($fromDate, $arrFollowUps, $products, $assignedExecutives, $leadAiScoringSetting): View
+    {
+        $leads = new \Illuminate\Database\Eloquent\Collection($arrFollowUps->pluck('enquiry')->filter()->unique('id')->values()->all());
+        $leads->loadMissing(['client', 'rideSegments', 'leadFollowups']);
+        $presentation = app(\App\Services\LeadQueuePresentationService::class);
+        $queueSummary = $presentation->followups($arrFollowUps, $fromDate, $leadAiScoringSetting);
+        $queueServiceNames = $presentation->serviceNames($leads);
+        return view('admin.pages.follow-ups.index-upcoming-follow-up', compact('fromDate', 'arrFollowUps', 'products', 'assignedExecutives', 'leadAiScoringSetting', 'queueSummary', 'queueServiceNames'));
     }
 
     private function followupMatchesProduct(LeadFollowup $followup, string $productId, array $serviceIdsForProduct): bool

@@ -6,14 +6,22 @@ use App\Models\AttendanceShiftPolicy;
 use App\Models\AttendanceUserShiftAssignment;
 use App\Models\User;
 use App\Services\Attendance\AttendancePolicyAssignmentService;
+use App\Services\Attendance\AttendanceCalendarService;
+use App\Models\UserType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class AttendanceSettingsController extends Controller
 {
-    public function index()
+    public function index(?Request $request = null)
     {
+        $request = $request ?: request();
+        $calendarFilters = $request->validate([
+            'year' => 'nullable|integer|between:2000,2100',
+            'month' => 'nullable|integer|between:1,12',
+            'calendar_user_id' => 'nullable|uuid|exists:users,id',
+        ]);
         $policies =
             AttendanceShiftPolicy::query()
                 ->withCount(
@@ -79,9 +87,40 @@ class AttendanceSettingsController extends Controller
                     'user_id'
                 );
 
+        $year = (int) ($calendarFilters['year'] ?? now()->year);
+        $month = (int) ($calendarFilters['month'] ?? now()->month);
+        $selectedUser = $users->firstWhere('id', $calendarFilters['calendar_user_id'] ?? null) ?: $users->first();
+        $calendarService = app(AttendanceCalendarService::class);
+        $monthPolicy = $calendarService->month($year, $month);
+        $calendar = [
+            'year' => $year, 'month' => $month, 'selectedUser' => $selectedUser,
+            'holidays' => $monthPolicy->dates ?? [], 'holiday_mode' => $monthPolicy->mode ?? 'additional',
+            'schedules' => $selectedUser ? $calendarService->schedules($selectedUser) : collect(),
+            'summary' => $selectedUser ? $calendarService->summary($selectedUser, $year, $month) : null,
+            'swaps' => collect(), 'audit' => collect(),
+        ];
+        if (\Illuminate\Support\Facades\Schema::hasTable('attendance_week_off_swaps')) {
+            $calendar['swaps'] = $selectedUser ? DB::table('attendance_week_off_swaps')
+                ->where('user_id', $selectedUser->id)->where(function ($query) use ($year, $month) {
+                    $query->whereYear('worked_date', $year)->whereMonth('worked_date', $month)
+                        ->orWhere(function ($query) use ($year, $month) {
+                            $query->whereYear('off_date', $year)->whereMonth('off_date', $month);
+                        });
+                })->orderByDesc('worked_date')->limit(100)->get() : collect();
+            $calendar['audit'] = DB::table('attendance_calendar_audits as audit')
+                ->leftJoin('users as actor', 'actor.id', '=', 'audit.actor_id')
+                ->leftJoin('users as employee', 'employee.id', '=', 'audit.user_id')
+                ->orderByDesc('audit.created_at')->limit(50)
+                ->get(['audit.*', 'actor.name as actor_name', 'employee.name as employee_name']);
+        }
+        $canManageCalendar = in_array(optional(optional(auth()->user())->userType)->user_type,
+            [UserType::HR, UserType::SUPER_ADMIN], true);
+
         return view(
             'admin.pages.attendance.settings',
             [
+                'calendar' => $calendar,
+                'canManageCalendar' => $canManageCalendar,
                 'policies' =>
                     $policies,
 

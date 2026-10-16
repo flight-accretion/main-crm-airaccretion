@@ -17,6 +17,7 @@
     <link rel="stylesheet" href="/assets/admin/css/style.css?v=1.4">
     <link rel="stylesheet" href="/assets/admin/css/responsive.css?v=1.1">
     <link rel="stylesheet" href="/assets/admin/css/custom.css?v=2.4">
+    <link rel="stylesheet" href="/assets/admin/css/crm/navigation.css?v=3">
 
     <!-- Simplebar Css -->
     <link rel="stylesheet" href="/assets/admin/libs/simplebar/simplebar.min.css">
@@ -643,6 +644,7 @@
                     <img src="/assets/admin/images/brand-logos/desktop-white.png" alt="logo"
                         class="desktop-white">
                     <img src="/assets/admin/images/brand-logos/toggle-white.png" alt="logo" class="toggle-white">
+                    <span class="crm-sidebar-brand">Accretion Aviation<small>TEAM WORKSPACE</small></span>
                 </a>
             </div>
             <!-- End::main-sidebar-header -->
@@ -708,6 +710,15 @@
                             </li>
                         @endif
                         <!-- End::slide -->
+
+                        @if ($isHr)
+                            <li class="slide {{ Route::is('admin.operations.index') ? 'active' : '' }}" data-operations-overview-link>
+                                <a href="{{ route('admin.operations.index') }}" class="side-menu__item">
+                                    <i class="bx bx-task side-menu__icon"></i>
+                                    <span class="side-menu__label">Operations Work Done</span>
+                                </a>
+                            </li>
+                        @endif
 
                         @if (!$isHr && ($userType === UserType::SUPER_ADMIN || $canAccess($userType, $adminRoles) || $canAccess($userType, $operationsRoles)))
                             <li class="slide has-sub {{ Route::is('admin.operations.*') || Route::is('admin.refunds.*') || Route::is('admin.operations.vendor-refunds.*') ? 'active open' : '' }}">
@@ -1152,6 +1163,11 @@
                                         <a href="{{ route('admin.targets.index') }}" class="side-menu__item">View
                                             Targets</a>
                                     </li>
+                                    @if ($userType === \App\Models\UserType::SUPER_ADMIN || $isHr)
+                                        <li class="slide {{ Route::is('admin.targets.incentives') ? 'active' : '' }}">
+                                            <a href="{{ route('admin.targets.incentives') }}" class="side-menu__item">Incentive</a>
+                                        </li>
+                                    @endif
                                 </ul>
                             </li>
                         @endif
@@ -1444,7 +1460,6 @@
        @if (
     $canAccess($userType, $salesRoles)
     || $canAccess($userType, $adminRoles)
-    || $isHr
 )
                 <li class="slide {{
                     Route::is('admin.kpi.outreach.*')
@@ -1482,6 +1497,12 @@
             @endif
 
 
+            @if ($userType === \App\Models\UserType::SUPER_ADMIN || $isHr)
+                <li class="slide {{ Route::is('admin.kpi.history.*') ? 'active' : '' }}">
+                    <a href="{{ route('admin.kpi.history.index') }}" class="side-menu__item">Historic Performance</a>
+                </li>
+            @endif
+
             <!-- KPI Management - Super Admin only -->
             @if ($userType === \App\Models\UserType::SUPER_ADMIN || $isHr)
                 <li class="slide {{
@@ -1505,7 +1526,7 @@
                 </li>
             @endif
 
-            @if ($userType === \App\Models\UserType::SUPER_ADMIN || $isHr)
+            @if ($userType === \App\Models\UserType::SUPER_ADMIN || $isHr || in_array($userType, \App\Models\UserType::OPERATIONS_ROLES, true))
                 <li class="slide {{ Route::is('admin.hr.operations-manual-kpi.*') ? 'active' : '' }}">
                     <a
                         href="{{ route('admin.hr.operations-manual-kpi.index') }}"
@@ -1521,12 +1542,14 @@
 @endif
 <!-- End KPI Section -->
 
+                        @if(!$isHr)
                         <li class="slide {{ Route::is('admin.report') ? 'active' : '' }}">
                             <a href="{{ route('admin.report') }}" class="side-menu__item">
                                 <i class="bx bx-task side-menu__icon"></i>
                                 <span class="side-menu__label">Reports</span>
                             </a>
                         </li>
+                        @endif
                          
                         <!-- @if($canAccess($userType, $adminRoles) || $canAccess($userType, $accountRoles) || $canAccess($userType, $salesRoles))
                             <li class="slide has-sub {{ Route::is('admin.report.sales') || Route::is('admin.report.vendor') || Route::is('admin.report.profit-loss') ? 'open active' : '' }}">
@@ -1691,6 +1714,7 @@
 
         </aside>
         <!-- End::app-sidebar -->
+        <script src="{{ asset('assets/admin/js/crm/navigation.js') }}?v=1"></script>
 
 
         <div class="content main-index">
@@ -1996,6 +2020,10 @@
                     badge.dataset.currentCount = String(count);
                     badge.textContent = count;
                     badge.style.display = count > 0 ? '' : 'none';
+                    document.querySelectorAll('[data-lead-transfer-count]').forEach(function (item) {
+                        item.textContent = count;
+                        item.hidden = count === 0;
+                    });
                 }
 
                 function playLeadTransferNotificationSound() {

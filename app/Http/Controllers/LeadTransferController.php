@@ -14,6 +14,77 @@ use function App\Helpers\getRepresentativeIds;
 
 class LeadTransferController extends Controller
 {
+    public function search(Request $request)
+    {
+        $actor = $request->user();
+        $role = optional($actor->userType)->user_type;
+        $isSuperAdmin = $role === UserType::SUPER_ADMIN;
+        abort_unless((int) $actor->status === 1 && ($isSuperAdmin || in_array($role, UserType::SALES_ROLES, true)), 403);
+        $input = $request->validate(['search' => 'required|string|min:3|max:100']);
+        $term = trim($input['search']);
+        // Name prefixes and meaningful phone fragments only; no wildcard browsing.
+        if (mb_strlen($term) < 3 || preg_match('/[%_\\\\]/u', $term)) {
+            throw ValidationException::withMessages(['search' => 'Enter at least 3 characters without wildcard symbols.']);
+        }
+        $phone = preg_replace('/[\s()+-]/', '', $term);
+        $isPhone = ctype_digit($phone);
+        if ($isPhone && strlen($phone) < 6) {
+            throw ValidationException::withMessages(['search' => 'Enter at least 6 digits of the phone number.']);
+        }
+        $leads = Lead::query()->select(['id', 'client_id', 'representative_user_id', 'product_ids'])
+            ->with(['client:id,name,contact_number', 'representative:id,name',
+                'rideSegments:id,lead_id,from_date', 'pendingTransfers:id,lead_id,requested_by'])
+            ->whereHas('client', function ($query) use ($term, $phone, $isPhone) {
+                if ($isPhone) $query->whereRaw("REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(contact_number, ' ', ''), '+', ''), '-', ''), '(', ''), ')', '') LIKE ?", ['%' . $phone . '%']);
+                else $query->whereRaw('LOWER(name) LIKE ?', [mb_strtolower($term) . '%']);
+            })->orderByDesc('created_at')->limit(20)->get();
+        $productIds = $leads->flatMap(fn ($lead) => $lead->product_ids_array)->unique()->values();
+        $products = \App\Models\Product::whereIn('id', $productIds)->pluck('product', 'id');
+        $rows = $leads->map(function ($lead) use ($actor, $isSuperAdmin, $products) {
+            $own = (string) $lead->representative_user_id === (string) $actor->id;
+            $pending = $lead->pendingTransfers->first();
+            $action = $pending ? 'pending' : (empty($lead->representative_user_id) ? ($isSuperAdmin ? 'assign' : 'claim') : ($isSuperAdmin ? 'assign' : ($own ? 'offer' : 'request')));
+            return ['id' => $lead->id, 'name' => optional($lead->client)->name ?? 'N/A',
+                'phone' => optional($lead->client)->contact_number ?? 'N/A',
+                'products' => collect($lead->product_ids_array)->map(fn ($id) => $products[$id] ?? null)->filter()->implode(', ') ?: 'N/A',
+                'service_date' => optional($lead->rideSegments->sortBy('from_date')->first())->from_date,
+                'owner' => optional($lead->representative)->name ?? 'Unassigned', 'own' => $own, 'action' => $action,
+                'action_url' => $action === 'request' ? route('admin.leads.transfer.store', $lead->id)
+                    : ($action === 'offer' ? route('admin.leads.transfer.offer-bulk')
+                    : ($action === 'assign' ? route('admin.leads.transfer.direct-assign')
+                    : ($action === 'claim' ? route('admin.leads.transfer.claim', $lead->id) : null)))];
+        });
+        $recipients = User::where('status', 1)->where('id', '!=', $actor->id)
+            ->whereHas('userType', fn ($query) => $query->whereIn('user_type', UserType::SALES_ROLES))
+            ->orderBy('name')->get(['id', 'name']);
+        return response()->json(['leads' => $rows, 'recipients' => $recipients->map->only(['id', 'name']), 'limit' => 20])
+            ->header('Cache-Control', 'private, no-store');
+    }
+
+    public function claim(Request $request, Lead $lead, LeadTransferService $service, LeadAllocationService $allocationService)
+    {
+        $actor = $request->user();
+        abort_unless($actor && (int) $actor->status === 1
+            && in_array(optional($actor->userType)->user_type, UserType::SALES_ROLES, true), 403);
+        try {
+            // The recipient is always the authenticated actor, never a posted user ID.
+            $result = $service->claimUnassigned($lead, $actor);
+        } catch (ValidationException $error) {
+            return back()->withErrors($error->errors());
+        }
+
+        $warning = false;
+        if ($result['was_queued'] ?? false) {
+            try {
+                $allocationService->finalizeManualQueuedAssignment($lead->fresh(), $actor, $result['queue_reason'] ?? null);
+            } catch (\Throwable $error) {
+                $warning = true;
+                \Log::error('Self-assigned queued lead handoff failed', ['lead_id' => $lead->id, 'user_id' => $actor->id, 'error' => $error->getMessage()]);
+            }
+        }
+        return back()->with('success', 'Lead assigned to you successfully.' . ($warning ? ' Source handoff notification needs review.' : ''));
+    }
+
     /**
      * Transfer Leads page.
      */

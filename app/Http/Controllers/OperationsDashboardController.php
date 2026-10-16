@@ -18,68 +18,43 @@ class OperationsDashboardController extends Controller
 {
     public function index(Request $request)
     {
-        $filters = $this->filters($request);
-        $open = OperationCase::query()->whereNull('completed_at');
-        $activity = OperationCaseActivity::with(['operationCase.lead.client', 'user']);
-
-        $this->applyCaseFilters(
-            $open,
-            $filters,
-            'opened_at'
-        );
-
-        if (!empty($filters['type'])) {
-            $activity->whereHas('operationCase', function ($query) use ($filters) {
-                $query->where('type', $filters['type']);
-            });
-        }
-
-        if (!empty($filters['status'])) {
-            $activity->where(function ($query) use ($filters) {
-                $query
-                    ->where('to_status', $filters['status'])
-                    ->orWhere('from_status', $filters['status']);
-            });
-        }
-
-        if (!empty($filters['operations_user_id'])) {
-            $activity->where('user_id', $filters['operations_user_id']);
-        }
-
-        if (!empty($filters['from_date'])) {
-            $activity->whereDate('created_at', '>=', $filters['from_date']);
-        }
-
-        if (!empty($filters['to_date'])) {
-            $activity->whereDate('created_at', '<=', $filters['to_date']);
-        }
-
-        if (!empty($filters['search'])) {
-            $search = trim((string) $filters['search']);
-
-            $activity->where(function ($query) use ($search) {
-                $query
-                    ->where('action', 'like', "%{$search}%")
-                    ->orWhereHas('operationCase.lead.client', function ($clientQuery) use ($search) {
-                        $clientQuery->where('name', 'like', "%{$search}%");
-                    });
-            });
-        }
-
-        return view('admin.pages.operations.dashboard', [
-            'customerCallCount' => (clone $open)->where('type', 'customer_call')->count(),
-            'reviewCount' => (clone $open)->where('type', 'review')->count(),
-            'rescheduleCount' => (clone $open)->where('type', 'reschedule')->count(),
-            'refundCount' => (clone $open)->where('type', 'refund')->count(),
-            'recentActivity' => $activity
-                ->latest()
-                ->paginate($filters['per_page'])
-                ->withQueryString(),
+        $filters = $this->workFilters($request);
+        $types = $this->visibleCaseTypes();
+        $data = app(\App\Services\Operations\OperationsWorkSummaryService::class)->dashboard($filters, $types);
+        return view('admin.pages.operations.dashboard', $data + [
             'filters' => $filters,
             'operationUsers' => $this->operationUsers(),
-            'caseTypes' => $this->visibleCaseTypes(),
+            'caseTypes' => $types,
             'caseStatuses' => $this->caseStatuses(),
         ]);
+    }
+
+    public function workDetails(Request $request)
+    {
+        $selection = $request->validate([
+            'work_status' => 'nullable|in:completed,in_progress,pending,total',
+            'work_type' => 'nullable|in:' . implode(',', $this->visibleCaseTypes()),
+            'page' => 'nullable|integer|min:1|max:1000000',
+        ]);
+        $filters = $this->workFilters($request);
+        $status = $selection['work_status'] ?? 'total';
+        $type = $selection['work_type'] ?? null;
+        $rows = app(\App\Services\Operations\OperationsWorkSummaryService::class)
+            ->details($filters, $this->visibleCaseTypes(), $status, $type);
+        $title = ($type ? ucwords(str_replace('_', ' ', $type)) . ' - ' : '')
+            . ($status === 'total' ? 'All cases worked' : ucwords(str_replace('_', ' ', $status)));
+        return response()->json([
+            'success' => true, 'title' => $title, 'total' => $rows->total(),
+            'html' => view('admin.pages.operations.partials.work-details', compact('rows'))->render(),
+        ])->header('Cache-Control', 'private, no-store');
+    }
+
+    private function workFilters(Request $request): array
+    {
+        if (!$request->has('date_filter') && !$request->filled('from_date') && !$request->filled('to_date')) {
+            $request->merge(['date_filter' => 'today']);
+        }
+        return $this->filters($request);
     }
 
    public function queue(Request $request, string $type)

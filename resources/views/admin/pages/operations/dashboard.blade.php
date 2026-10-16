@@ -1,248 +1,60 @@
 @extends('admin.layouts.header')
-
 @section('content')
-    @php
-        $filters = $filters ?? [];
-        $operationUsers = $operationUsers ?? collect();
-        $caseTypes = $caseTypes ?? [];
-        $caseStatuses = $caseStatuses ?? [];
-    @endphp
-
-    <div class="container-fluid">
-        <div class="mb-6">
-            <h4 class="font-semibold text-lg">Operations Overview</h4>
-            <p class="text-sm text-gray-500">
-                Operations work status only. CRM lead, payment and ride status remain unchanged.
-            </p>
+<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/kpi/management-work.css') }}?v=1">
+<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/operations-tools.css') }}?v=3">
+<div class="crm-kpi-tool crm-ops-tool crm-ops-work" data-kpi-tool data-work-details-url="{{ route('admin.operations.work-details') }}" data-work-filters="{{ json_encode(array_merge($filters,['date_filter'=>$filters['date_filter'] ?? ''])) }}">
+    <header class="page-header"><h3>Operations Work Done</h3><p>{{ $filters['from_date'] ? \Carbon\Carbon::parse($filters['from_date'])->format('d M Y') : 'All dates' }}@if($filters['to_date'] && $filters['to_date'] !== $filters['from_date']) - {{ \Carbon\Carbon::parse($filters['to_date'])->format('d M Y') }}@endif</p></header>
+    @if($errors->any())<div role="alert">@foreach($errors->all() as $error)<p>{{ $error }}</p>@endforeach</div>@endif
+    <form method="GET" action="{{ route('admin.operations.index') }}" class="kt-filter op-work-filter">
+        <div><label for="ops-work-date">Date</label><select id="ops-work-date" name="date_filter">
+            @foreach(['today'=>'Today','yesterday'=>'Yesterday','monthly'=>'This month','custom'=>'Custom dates',''=>'All dates'] as $value=>$label)<option value="{{ $value }}" {{ (string)$filters['date_filter'] === (string)$value ? 'selected' : '' }}>{{ $label }}</option>@endforeach
+        </select></div>
+        <div><label for="ops-work-from">From date</label><input id="ops-work-from" type="date" name="from_date" value="{{ $filters['from_date'] }}"></div>
+        <div><label for="ops-work-to">To date</label><input id="ops-work-to" type="date" name="to_date" value="{{ $filters['to_date'] }}"></div>
+        <div><label for="ops-work-user">Operations employee</label><select id="ops-work-user" name="operations_user_id"><option value="">All employees</option>@foreach($operationUsers as $user)<option value="{{ $user->id }}" {{ $filters['operations_user_id'] === $user->id ? 'selected' : '' }}>{{ $user->name }}</option>@endforeach</select></div>
+        <div class="op-actions"><a class="ti-btn" href="{{ route('admin.operations.index') }}" aria-label="Reset filters" title="Reset filters"><i class="ri-refresh-line"></i></a><button class="ti-btn ti-btn-primary">Filter</button></div>
+    </form>
+     <section class="op-section">
+        <header class="op-section-head"><h2>Per-employee breakdown</h2><small>Unique cases per employee</small></header>
+        <table aria-label="Operations work by employee"><thead><tr><th>Employee</th><th>Completed</th><th>In progress</th><th>Pending</th><th>Total</th></tr></thead><tbody>
+        @forelse($breakdown as $row)
+            <tr><td data-label="Employee">{{ $row['name'] }}</td>@foreach(['completed'=>'Completed','in_progress'=>'In progress','pending'=>'Pending','total'=>'Total'] as $key=>$label)<td data-label="{{ $label }}">{{ $row[$key] }}</td>@endforeach</tr>
+        @empty<tr><td colspan="5" class="op-empty">No employee work recorded.</td></tr>@endforelse
+        </tbody></table>
+    </section>
+    <section class="op-section">
+        <header class="op-section-head"><h2>Cases worked</h2><small>Current status</small></header>
+        <div class="op-work-stats">
+        @foreach(['completed'=>'Completed','in_progress'=>'In progress','pending'=>'Pending','total'=>'Total'] as $key=>$label)
+            <button type="button" class="op-work-stat op-work-{{ $key }}" data-work-summary="{{ $key }}" data-work-select="{{ $key }}" aria-controls="operations-work-details" aria-pressed="false"><strong>{{ number_format($summary[$key]) }}</strong><span>{{ $label }}</span></button>
+        @endforeach
         </div>
-
-        <div class="grid grid-cols-12 gap-4 mb-6">
-            @foreach([
-                ['customer_call', 'Customer Calls', $customerCallCount],
-                ['review', 'Review', $reviewCount],
-                ['reschedule', 'Reschedule', $rescheduleCount],
-                ['refund', 'Refund', $refundCount],
-            ] as [$type, $label, $count])
-                <div class="xl:col-span-3 md:col-span-6 col-span-12">
-                    <a
-                        href="{{ route('admin.operations.queue', $type) }}"
-                        class="box block"
-                        data-overview-count-type="{{ $type }}"
-                        data-overview-count-value="{{ $count }}"
-                    >
-                        <div class="box-body">
-                            <div class="text-sm text-gray-500">{{ $label }}</div>
-                            <div class="text-3xl font-semibold">{{ $count }}</div>
-                            <small>Pending</small>
-                        </div>
-                    </a>
-                </div>
-            @endforeach
+        @if($summary['total'] > 0)
+        <div class="wd-composition" aria-label="Operations case composition">
+            <div class="wd-bar">@foreach(['completed','in_progress','pending'] as $key)<span class="op-work-fill-{{ $key }}" style="width:{{ 100*$summary[$key]/$summary['total'] }}%"></span>@endforeach</div>
+            <div class="wd-legend">@foreach(['completed'=>'Completed','in_progress'=>'In progress','pending'=>'Pending'] as $key=>$label)<span>{{ round(100*$summary[$key]/$summary['total'],1) }}% {{ $label }}</span>@endforeach</div>
         </div>
-
-        <div class="box mb-4">
-            <div class="box-body">
-                <form
-                    method="GET"
-                    action="{{ route('admin.operations.index') }}"
-                    class="grid grid-cols-12 gap-3 items-end"
-                >
-                    <div class="xl:col-span-2 md:col-span-4 col-span-12">
-                        <label class="ti-form-label">Date Filter</label>
-                        <select name="date_filter" class="form-control">
-                            <option value="">All Dates</option>
-                            @foreach([
-                                'today' => 'Today',
-                                'yesterday' => 'Yesterday',
-                                'monthly' => 'This Month',
-                                'custom' => 'Custom Date',
-                            ] as $value => $label)
-                                <option
-                                    value="{{ $value }}"
-                                    {{ ($filters['date_filter'] ?? '') === $value ? 'selected' : '' }}
-                                >
-                                    {{ $label }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-
-                    <div class="xl:col-span-2 md:col-span-4 col-span-12">
-                        <label class="ti-form-label">From Date</label>
-                        <input
-                            type="date"
-                            name="from_date"
-                            value="{{ $filters['from_date'] ?? '' }}"
-                            class="form-control"
-                        >
-                    </div>
-
-                    <div class="xl:col-span-2 md:col-span-4 col-span-12">
-                        <label class="ti-form-label">To Date</label>
-                        <input
-                            type="date"
-                            name="to_date"
-                            value="{{ $filters['to_date'] ?? '' }}"
-                            class="form-control"
-                        >
-                    </div>
-
-                    <div class="xl:col-span-2 md:col-span-4 col-span-12">
-                        <label class="ti-form-label">Type</label>
-                        <select name="type" class="form-control">
-                            <option value="">All Types</option>
-                            @foreach($caseTypes as $caseType)
-                                <option
-                                    value="{{ $caseType }}"
-                                    {{ ($filters['type'] ?? '') === $caseType ? 'selected' : '' }}
-                                >
-                                    {{ ucfirst(str_replace('_', ' ', $caseType)) }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-
-                    <div class="xl:col-span-2 md:col-span-4 col-span-12">
-                        <label class="ti-form-label">Status</label>
-                        <select name="status" class="form-control">
-                            <option value="">All Status</option>
-                            @foreach($caseStatuses as $status)
-                                <option
-                                    value="{{ $status }}"
-                                    {{ ($filters['status'] ?? '') === $status ? 'selected' : '' }}
-                                >
-                                    {{ ucfirst(str_replace('_', ' ', $status)) }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-
-                    <div class="xl:col-span-2 md:col-span-4 col-span-12">
-                        <label class="ti-form-label">Operations User</label>
-                        <select name="operations_user_id" class="form-control">
-                            <option value="">All Users</option>
-                            @foreach($operationUsers as $user)
-                                <option
-                                    value="{{ $user->id }}"
-                                    {{ ($filters['operations_user_id'] ?? '') === $user->id ? 'selected' : '' }}
-                                >
-                                    {{ $user->name }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-
-                    <div class="xl:col-span-2 md:col-span-4 col-span-12">
-                        <label class="ti-form-label">Search</label>
-                        <input
-                            type="text"
-                            name="search"
-                            value="{{ $filters['search'] ?? '' }}"
-                            class="form-control"
-                            placeholder="Customer or action"
-                        >
-                    </div>
-
-                    <div class="xl:col-span-1 md:col-span-2 col-span-6">
-                        <label class="ti-form-label">Rows</label>
-                        <select name="per_page" class="form-control">
-                            @foreach([10, 25, 50, 100] as $size)
-                                <option
-                                    value="{{ $size }}"
-                                    {{ (int) ($filters['per_page'] ?? 25) === $size ? 'selected' : '' }}
-                                >
-                                    {{ $size }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-
-                    <div class="xl:col-span-1 md:col-span-2 col-span-6 flex gap-2">
-                        <button class="ti-btn ti-btn-primary w-full" style="width: auto;">Filter</button>
-                        <a
-                            href="{{ route('admin.operations.index') }}"
-                            class="ti-btn ti-btn-light"
-                            title="Reset"
-                        >
-                            <i class="ri-refresh-line"></i>
-                        </a>
-                    </div>
-                </form>
-            </div>
+        @else<p class="op-empty" role="status">No employee work recorded for this period.</p>@endif
+    </section>
+    <section class="op-section">
+        <h2>Work by category</h2>
+        <div class="op-work-categories">
+        @foreach($typeSummary as $type=>$counts)
+            <article class="op-work-category"><h2>{{ ucwords(str_replace('_',' ',$type)) }}</h2><button type="button" class="op-category-total" data-work-select="total" data-work-category="{{ $type }}" aria-label="{{ ucwords(str_replace('_',' ',$type)) }} cases worked" aria-controls="operations-work-details" aria-pressed="false"><strong>{{ $counts['total'] }}</strong><small>Cases worked</small></button>
+                <dl>@foreach(['completed'=>'Completed','in_progress'=>'In progress','pending'=>'Pending'] as $key=>$label)<div><dt>{{ $label }}</dt><dd><button type="button" class="op-category-count" data-work-select="{{ $key }}" data-work-category="{{ $type }}" aria-label="{{ ucwords(str_replace('_',' ',$type)) }} - {{ $label }}" aria-controls="operations-work-details" aria-pressed="false">{{ $counts[$key] }}</button></dd></div>@endforeach</dl>
+            </article>
+        @endforeach
         </div>
-
-        <div class="box">
-            <div class="box-header">
-                <h5 class="box-title">Recent Activity</h5>
-            </div>
-            <div class="box-body">
-                <div class="table-responsive">
-                    <table
-                        id="operations-activity-table"
-                        class="table display nowrap operations-activity-datatable whitespace-nowrap min-w-full"
-                        width="100%"
-                    >
-                        <thead>
-                            <tr>
-                                <th>Time</th>
-                                <th>Type</th>
-                                <th>Action</th>
-                                <th>User</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse($recentActivity as $activity)
-                                <tr>
-                                    <td>{{ optional($activity->created_at)->format('d M Y h:i A') }}</td>
-                                    <td>{{ ucwords(str_replace('_', ' ', optional($activity->operationCase)->type ?? '-')) }}</td>
-                                    <td>{{ ucwords(str_replace('_', ' ', $activity->action)) }}</td>
-                                    <td>{{ optional($activity->user)->name ?? 'System' }}</td>
-                                    <td>
-                                        {{ $activity->from_status ? ucwords(str_replace('_', ' ', $activity->from_status)) . ' -> ' : '' }}
-                                        {{ ucwords(str_replace('_', ' ', $activity->to_status ?? '-')) }}
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="5" class="text-center">No activity yet.</td>
-                                </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-
-                @if(method_exists($recentActivity, 'links'))
-                    <div class="mt-4">
-                        {{ $recentActivity->links() }}
-                    </div>
-                @endif
-            </div>
-        </div>
-    </div>
+    </section>
+    <section class="op-section op-work-details" id="operations-work-details" hidden aria-labelledby="operations-work-details-title">
+        <header class="op-section-head"><h2 id="operations-work-details-title" tabindex="-1">Case details</h2><button type="button" class="ti-btn" data-close-work-details aria-label="Close case details" title="Close case details"><i class="ri-close-line"></i></button></header>
+        <div data-work-details-body aria-live="polite"></div>
+    </section>
+   
+    @include('admin.pages.kpi.partials.tool-mobile-nav')
+</div>
 @endsection
-
 @push('scripts')
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            const table = $('#operations-activity-table');
-
-            if ($.fn.DataTable && table.length && !$.fn.DataTable.isDataTable(table[0])) {
-                if (table.find('tbody td[colspan]').length) {
-                    return;
-                }
-
-                table.DataTable({
-                    paging: false,
-                    searching: false,
-                    info: false,
-                    lengthChange: false,
-                    responsive: false,
-                    scrollX: true,
-                    autoWidth: false,
-                    ordering: true
-                });
-            }
-        });
-    </script>
+<script src="{{ asset('assets/admin/js/crm/kpi-tools.js') }}?v=1"></script>
+<script src="{{ asset('assets/admin/js/crm/operations-work.js') }}?v=2"></script>
 @endpush

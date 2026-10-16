@@ -39,7 +39,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     page.querySelector('#target-assign')?.addEventListener('click',()=>showCreate());
     page.querySelectorAll('[data-assign-person]').forEach(button=>button.onclick=()=>showCreate(button.dataset.assignPerson));
-    page.querySelectorAll('[data-open]').forEach(button=>button.onclick=()=>page.querySelector('#'+button.dataset.open)?.showModal());
+    page.querySelectorAll('[data-open]').forEach(button=>button.onclick=()=>{
+        const modal=page.querySelector('#'+button.dataset.open);
+        if(button.dataset.open==='target-export')modal?.querySelector('form').reset();
+        modal?.showModal();
+    });
+    page.querySelectorAll('[data-download-person]').forEach(button=>button.onclick=()=>{
+        const modal=page.querySelector('#target-export');if(!modal)return;
+        modal.querySelector('form').reset();modal.querySelector('[name=person_id]').value=button.dataset.downloadPerson;modal.showModal();
+    });
+    page.querySelector('[data-incentive-page-size]')?.addEventListener('change',event=>event.target.form.requestSubmit());
     page.querySelectorAll('[data-close]').forEach(button=>button.onclick=()=>button.closest('dialog').close());
     if(form){
         form.addEventListener('change',syncSettings);form.addEventListener('input',syncSettings);
@@ -90,7 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
             for(const [label,next,disabled] of [['Previous',currentPage-1,currentPage===1],['Next',currentPage+1,currentPage===pages]]){const button=document.createElement('button');button.type='button';button.textContent=label;button.disabled=disabled;button.onclick=()=>{currentPage=next;renderRows();};pagination.append(button);}
         }
     }
-    search.oninput=()=>{currentPage=1;renderRows();};size.onchange=()=>{currentPage=1;renderRows();};renderRows();
+    if(search&&size){search.oninput=()=>{currentPage=1;renderRows();};size.onchange=()=>{currentPage=1;renderRows();};renderRows();}
     page.querySelectorAll('[data-sort-column]').forEach(button=>button.onclick=()=>{const column=Number(button.dataset.sortColumn);sortDirection=sortColumn===column?-sortDirection:1;sortColumn=column;currentPage=1;page.querySelectorAll('th[aria-sort]').forEach(th=>th.setAttribute('aria-sort','none'));button.closest('th').setAttribute('aria-sort',sortDirection===1?'ascending':'descending');renderRows();});
     const nav=page.querySelector('.target-mobile-nav'),more=page.querySelector('#target-mobile-more'),toggle=page.querySelector('#target-more-toggle');
     const sidebar=document.querySelector('.app-sidebar .main-menu'),links=sidebar?[...sidebar.querySelectorAll('a[href]')]:[];

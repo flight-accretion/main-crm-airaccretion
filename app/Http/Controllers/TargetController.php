@@ -8,7 +8,9 @@ use App\Models\UserType;
 use App\Models\Product;
 use App\Services\TargetAccessService;
 use App\Services\TargetIncentiveService;
-use App\Exports\TargetIncentiveExport;
+use App\Exports\TargetIncentiveSalesExport;
+use App\Exports\TargetIncentiveWorkbookExport;
+use App\Services\TargetIncentiveReportService;
 use Maatwebsite\Excel\Facades\Excel;
 use Maatwebsite\Excel\Excel as ExcelFormat;
 use Illuminate\Validation\ValidationException;
@@ -483,26 +485,71 @@ class TargetController extends Controller
             'incentive_product_ids' => $enabled && $basis === 'company' && !$request->boolean('incentive_all_products') ? array_values($ids) : null];
     }
 
+    public function incentives(Request $request)
+    {
+        $this->abortUnlessCanConfigure();
+        $input = $request->validate([
+            'year' => 'nullable|integer|between:2020,' . now()->year,
+            'month' => 'nullable|integer|between:1,12',
+            'person_id' => 'nullable|uuid', 'search' => 'nullable|string|max:150',
+            'per_page' => 'nullable|in:10,25,50,100', 'page' => 'nullable|integer|min:1|max:100000',
+        ]);
+        $year = (int) ($input['year'] ?? now()->year);
+        $month = (int) ($input['month'] ?? now()->month);
+        $salesExecutiveId = $input['person_id'] ?? null;
+        $search = trim($input['search'] ?? '');
+        $perPage = (int) ($input['per_page'] ?? 25);
+        $assignableStaff = $this->getAssignableStaff();
+        if ($salesExecutiveId) abort_unless($assignableStaff->contains('id', $salesExecutiveId), 403);
+        $staff = $assignableStaff->filter(function ($person) use ($salesExecutiveId, $search) {
+            return (!$salesExecutiveId || $person->id === $salesExecutiveId)
+                && ($search === '' || mb_stripos($person->name . ' ' . optional($person->userType)->user_type, $search) !== false);
+        })->values();
+        $page = (int) ($input['page'] ?? 1);
+        $pagination = new \Illuminate\Pagination\LengthAwarePaginator($staff->forPage($page, $perPage)->values(), $staff->count(), $perPage, $page,
+            ['path' => $request->url(), 'query' => $request->query()]);
+        $targets = Target::whereIn('sales_executive_id', $pagination->getCollection()->pluck('id'))
+            ->where('year', $year)->where('month', $month)->where('status', 'active')->get();
+        if ($targets->groupBy('sales_executive_id')->contains(fn ($items) => $items->count() > 1)) {
+            throw ValidationException::withMessages(['person_id' => 'Resolve duplicate active targets for this month before viewing incentives.']);
+        }
+        $managers = $targets->where('incentive_enabled', true)->where('incentive_basis', 'team')->pluck('sales_executive_id');
+        if ($managers->isNotEmpty()) $this->incentives->primeTeams($managers);
+        $ledger = $pagination->count() ? $this->incentives->ledger($year, $month) : collect();
+        $ownSales = $ledger->groupBy('owner')->map(fn ($sales) => (float) $sales->sum('amount'));
+        $targets = $targets->keyBy('sales_executive_id');
+        $rows = $pagination->getCollection()->map(function ($person) use ($targets, $ledger, $ownSales) {
+            $target = $targets->get($person->id);
+            $achieved = round((float) $ownSales->get($person->id, 0), 2);
+            $amount = $target ? (float) $target->target_amount : null;
+            $result = $target && $target->incentive_enabled ? $this->incentives->calculate($target, $ledger) : null;
+            return ['id' => $person->id, 'name' => $person->name, 'role' => optional($person->userType)->user_type,
+                'target' => $amount, 'achieved' => $achieved,
+                'achievement' => $amount > 0 ? round($achieved / $amount * 100, 2) : null,
+                'incentive' => $result['incentive'] ?? null,
+                'basis' => $result ? ucfirst($target->incentive_basis) : 'Not configured'];
+        });
+        return view('admin.targets.incentives', compact('year', 'month', 'salesExecutiveId', 'search', 'perPage', 'assignableStaff', 'rows', 'pagination'));
+    }
+
     public function downloadIncentive(Request $request)
     {
         $this->abortUnlessCanConfigure();
-        $input = $request->validate(['year' => 'required|integer|between:2020,2050', 'month' => 'required|integer|between:1,12', 'file_type' => 'required|in:excel,csv']);
-        $products = Product::pluck('product', 'id');
-        $targets = Target::with('salesExecutive.userType')->whereIn('sales_executive_id', $this->getAssignableStaff()->pluck('id'))
-            ->where('year', $input['year'])->where('month', $input['month'])->where('status', 'active')->where('incentive_enabled', true)->get();
-        $rows = $targets->map(function ($target) use ($products) {
-            $result = $this->incentives->forTarget($target);
-            $achieved = $this->incentives->ledger((int) $target->year, (int) $target->month)
-                ->where('owner', (string) $target->sales_executive_id)->sum('amount');
-            return [$target->salesExecutive->name ?? '', optional(optional($target->salesExecutive)->userType)->user_type ?? '',
-                (int) $target->year, (int) $target->month, (float) $target->target_amount, (float) $achieved,
-                ucfirst($target->incentive_basis), $target->incentive_basis === 'company' ? (collect($target->incentive_product_ids)->map(fn ($id) => $products[$id] ?? $id)->implode(', ') ?: 'All products') : '',
-                $result['sales_amount'], (float) $target->incentive_multiplier, $result['incentive'], $target->status,
-                $result['own_sales'] ?? null, $result['team_sales'] ?? null, $target->incentive_team_multiplier === null ? null : (float) $target->incentive_team_multiplier,
-                $result['own_incentive'] ?? null, $result['team_incentive'] ?? null];
-        });
+        $input = $request->validate(['year' => 'required|integer|between:2020,2050', 'month' => 'required|integer|between:1,12', 'file_type' => 'required|in:excel,csv', 'person_id' => 'nullable|uuid']);
+        $staff = $this->getAssignableStaff();
+        $staffIds = $staff->pluck('id');
+        if (!empty($input['person_id'])) {
+            abort_unless($staffIds->contains($input['person_id']), 403);
+            $staffIds = collect([$input['person_id']]);
+            $staff = $staff->where('id', $input['person_id'])->values();
+        }
+        $targets = Target::query()->whereIn('sales_executive_id', $staffIds)
+            ->where('year', $input['year'])->where('month', $input['month'])->where('status', 'active')->get();
+        $rows = (new TargetIncentiveReportService($this->incentives))->build($staff, $targets,
+            (int) $input['year'], (int) $input['month'], !empty($input['person_id']));
         $csv = $input['file_type'] === 'csv';
-        $content = Excel::raw(new TargetIncentiveExport($rows), $csv ? ExcelFormat::CSV : ExcelFormat::XLSX);
+        $export = $csv ? new TargetIncentiveSalesExport($rows['detail'], false) : new TargetIncentiveWorkbookExport($rows['detail'], $rows['summary']);
+        $content = Excel::raw($export, $csv ? ExcelFormat::CSV : ExcelFormat::XLSX);
         return response()->streamDownload(static function () use ($content) { echo $content; },
             sprintf('incentives-%d-%02d.%s', $input['year'], $input['month'], $csv ? 'csv' : 'xlsx'),
             ['Content-Type' => $csv ? 'text/csv; charset=UTF-8' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

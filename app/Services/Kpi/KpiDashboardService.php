@@ -11,6 +11,8 @@ use Carbon\Carbon;
 
 class KpiDashboardService
 {
+    private const ATTENDANCE_DESCRIPTION = 'Presence on scheduled working days, excluding holidays and approved weekly offs. P and MIS count as present.';
+
     public function __construct(
         private KpiMetricResolverRegistry $registry,
         private KpiScoreService $scores,
@@ -20,7 +22,8 @@ class KpiDashboardService
     public function forUser(
     User $user,
     Carbon $asOf,
-    ?Carbon $from = null
+    ?Carbon $from = null,
+    ?array $historyTarget = null
 ): array
     {
         $assignment = KpiUserAssignment::query()
@@ -51,7 +54,9 @@ class KpiDashboardService
         foreach ($template->metrics->where('active', true) as $metric) {
             if ($metric->measurement_type === 'automatic') {
 
-    $resolved = $this->registry
+    $resolved = $historyTarget !== null && $metric->source_key === 'sales_target'
+        ? $historyTarget
+        : $this->registry
         ->resolver((string) $metric->source_key)
    ->resolve(
     $user,
@@ -127,7 +132,9 @@ class KpiDashboardService
                 'id' => $metric->id,
                 'code' => $metric->code,
                 'name' => $metric->name,
-                'description' => $metric->description,
+                'description' => in_array($metric->code, ['attendance', 'operations_attendance'], true)
+                    ? self::ATTENDANCE_DESCRIPTION
+                    : $metric->description,
                 'score' => $score,
                 'weightage' => (float) $metric->weightage,
                 'actual_value' => $resolved['actual_value'] ?? null,
@@ -139,7 +146,7 @@ class KpiDashboardService
                 'rating_labels' => $this->ratingLabels($metric->code, (array) $metric->score_rules),
                 'direction' => $metric->direction,
                 'display_actual' =>
-    $this->hasNoEligibleData(
+    !in_array($metric->code, ['attendance', 'operations_attendance'], true) && $this->hasNoEligibleData(
         (string) $metric->code,
         $resolved
     )
@@ -456,7 +463,8 @@ private function matrixMetric(
             (string) $metric->name,
 
         'description' =>
-            $metric->description,
+            in_array($metric->code, ['attendance', 'operations_attendance'], true)
+                ? self::ATTENDANCE_DESCRIPTION : $metric->description,
 
         /*
          * Minimum valid KPI rating.
@@ -783,7 +791,7 @@ private function emptyImprovementLine(
     'Convert eligible partial-payment customers to full payment to improve this KPI score.',
 
         'attendance' =>
-            'Maintain punctual attendance on scheduled working days to improve this KPI score.',
+            'Attend scheduled working days; P and MIS count as present. Resolve missing attendance imports with HR.',
 
         'operations_service_timeliness' =>
             'Reply to each assigned Sales query within 10 minutes.',
@@ -801,7 +809,7 @@ private function emptyImprovementLine(
             'Send the customer voucher within 15 minutes of confirmed payment.',
 
         'operations_attendance' =>
-            'Maintain punctual attendance on scheduled working days.',
+            'Attend scheduled working days; P and MIS count as present.',
 
         default =>
             'Improve the current KPI result to reach the next score.',
@@ -900,10 +908,7 @@ private function emptyImprovementLine(
                 (int) ($resolved['actual_value'] ?? 0),
                 (int) ($evidence['eligible_payment_customers'] ?? 0)
             ),
-            'attendance' => sprintf(
-                '%.2f%% punctuality',
-                (float) ($resolved['achievement_percent'] ?? $resolved['actual_value'] ?? 0)
-            ),
+            'attendance' => $this->attendanceDisplay($resolved),
             'operations_service_timeliness' => sprintf(
                 '%d / %d within %d min = %.2f%%',
                 (int) ($evidence['within_sla'] ?? 0),
@@ -994,10 +999,7 @@ private function emptyImprovementLine(
                 (int) ($evidence['eligible_vouchers'] ?? 0),
                 (int) ($evidence['target_minutes'] ?? 15)
             ),
-            'operations_attendance' => sprintf(
-                '%.2f%% punctuality',
-                (float) ($resolved['achievement_percent'] ?? $resolved['actual_value'] ?? 0)
-            ),
+            'operations_attendance' => $this->attendanceDisplay($resolved),
             'operations_alternate_options',
             'operations_ivr_software',
             'operations_training',
@@ -1009,6 +1011,19 @@ private function emptyImprovementLine(
                 ? (string) $resolved['actual_value']
                 : '-',
         };
+    }
+
+    private function attendanceDisplay(array $resolved): string
+    {
+        $evidence = $resolved['evidence'] ?? [];
+        return sprintf('%d / %d present = %.2f%%; %d working days in month; %d MIS%s',
+            (int) ($evidence['present_days'] ?? 0),
+            (int) ($evidence['eligible_scheduled_days'] ?? 0),
+            (float) ($resolved['achievement_percent'] ?? 0),
+            (int) ($evidence['monthly_working_days'] ?? 0),
+            (int) ($evidence['miss_punch_days'] ?? 0),
+            !empty($evidence['is_provisional']) ? sprintf(' - Provisional: %d missing, %d ignored',
+                (int) ($evidence['missing_uploaded_days'] ?? 0), (int) ($evidence['ignored_status_days'] ?? 0)) : '');
     }
 
     private function ratingLabels(string $code, array $rules): array

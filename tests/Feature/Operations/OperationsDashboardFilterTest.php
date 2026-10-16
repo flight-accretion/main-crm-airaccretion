@@ -295,7 +295,7 @@ class OperationsDashboardFilterTest extends TestCase
         $response->assertSee('name="operations_user_id"', false);
     }
 
-    public function test_overview_quick_date_filter_scopes_dashboard_counts_and_activity(): void
+    public function test_overview_quick_date_filter_scopes_work_summary(): void
     {
         $viewer = $this->user('Overview Viewer', UserType::OPERATIONS_EXECUTIVE);
         $assignee = $this->user('Overview Ops', UserType::OPERATIONS_EXECUTIVE);
@@ -346,15 +346,16 @@ class OperationsDashboardFilterTest extends TestCase
             ]));
 
         $response->assertOk();
-        $response->assertSee('Overview');
+        $response->assertSee('Operations Work Done');
         $response->assertSee('name="date_filter"', false);
         $response->assertSee('value="today"', false);
         $response->assertSee('value="yesterday"', false);
         $response->assertSee('value="monthly"', false);
         $response->assertSee('value="custom"', false);
-        $response->assertSee('data-overview-count-type="customer_call"', false);
-        $response->assertSee('data-overview-count-value="1"', false);
-        $response->assertSee('Followup Saved');
+        $response->assertViewHas('summary', fn ($summary) => $summary['total'] === 1 && $summary['pending'] === 1);
+        $response->assertSee('Overview Ops');
+        $response->assertDontSee('Recent Activity');
+        $response->assertDontSee('operations-activity-table');
         $response->assertDontSee('Yesterday Customer');
         $response->assertDontSee('22 Sep 2026 09:30 AM');
     }

@@ -1,309 +1,64 @@
 @extends('admin.layouts.header')
 @section('content')
-<!-- Page Header -->
-<div class="block justify-between page-header md:flex">
-
-</div>
-
-<!-- Form -->
-<div class="grid grid-cols-12 gap-6">
-    <div class="col-span-12">
-        <div class="box">
-            <div class="box-header">
-                <div class="box-title">
-                    Today's Follow-up
-                </div>
-                <button type="button" class="ti-btn ti-btn-sm ti-btn-outline-primary" id="toggle-filters">
-                    <i class="ti ti-chevron-up" id="filter-icon"></i>
-                </button>
-            </div>
-
-            <div class="box-body" id="filter-section">
-                <form class="ti-custom-validation" id="filter-form" method="GET"
-                    action="{{ route('admin.upcoming-follow-up.index') }}" novalidate>
-                    @csrf
-                    @if (session('success'))
-                    <div class="alert alert-success mb-4">
-                        {{ session('success') }}
-                    </div>
-                    @endif
-
-                    @if (session('error'))
-                    <div class="alert alert-danger mb-4">
-                        {{ session('error') }}
-                    </div>
-                    @endif
-
-                    @if (isset($objFollowUp))
-                    @method('POST')
-                    @endif
-                    <div class="grid grid-cols-12 sm:gap-6 flex items-center">
-                        <div class="xl:col-span-2 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                            <label for="from-date" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Next
-                                Follow-up
-                                Date</label>
-                            <input type="date" name="from_date" class="ti-form-input rounded-sm form-control-sm"
-                                id="from-date" value="{{ $fromDate->format('Y-m-d') ?? request('from_date') }}">
-                        </div>
-                        <div class="xl:col-span-2 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                            <label for="product_id" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Product</label>
-                            <select class="js-example-basic-single w-full form-control-sm" name="product_id"
-                                id="product_id">
-                                <option value="">All Products</option>
-                                @foreach ($products as $product)
-                                <option value="{{ $product->id }}" {{ old('product_id')==$product->id ||
-                                    request('product_id') == $product->id ? 'selected' : '' }}>
-                                    {{ $product->product }}
-                                </option>
-                                @endforeach
-                            </select>
-                            @error('product_id')
-                            <span class="text-red-500 text-xs">{{ $message }}</span>
-                            @enderror
-                        </div>
-                        <div class="xl:col-span-2 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                            <label for="lead_score_temperature"
-                                class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Lead Score</label>
-                            <select class="js-example-basic-single w-full form-control-sm"
-                                name="lead_score_temperature" id="lead_score_temperature">
-                                <option value="">All Scores</option>
-                                <option value="hot" {{ request('lead_score_temperature') == 'hot' ? 'selected' : '' }}>
-                                    Hot
-                                </option>
-                                <option value="neutral" {{ request('lead_score_temperature') == 'neutral' ? 'selected' : '' }}>
-                                    Neutral
-                                </option>
-                                <option value="cold" {{ request('lead_score_temperature') == 'cold' ? 'selected' : '' }}>
-                                    Cold
-                                </option>
-                            </select>
-                        </div>
-                        @if(!in_array(Auth::user()->userType->user_type, [\App\Models\UserType::SALES_EXECUTIVE]))
-                        <div class="xl:col-span-2 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                            <label for="representative_user_id"
-                                class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Staff</label>
-                            <select name="representative_user_id" id="representative_user_id"
-                                class="js-example-basic-single w-full form-control-sm">
-                                <option value="">Team (All)</option>
-                                @if(in_array(Auth::user()->userType->user_type, [\App\Models\UserType::SALES_MANAGER,
-                                \App\Models\UserType::SENIOR_SALES_MANAGER]))
-                                <option value="{{ Auth::id() }}" {{ request('representative_user_id')==Auth::id()
-                                    ? 'selected' : '' }}>{{ Auth::user()->name }} (You)</option>
-                                @endif
-                                @foreach(($assignedExecutives ?? collect()) as $exec)
-                                @php $typeLabel = $exec->userType->user_type ?? ''; @endphp
-                                <option value="{{ $exec->id }}" {{ request('representative_user_id')==$exec->id ?
-                                    'selected' : '' }}>{{ $exec->name }} @if($typeLabel) ({{ $typeLabel }}) @endif
-                                </option>
-                                @endforeach
-                            </select>
-                        </div>
-                        @endif
-
-                        <div class="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">&nbsp;</label>
-                            <div class="flex gap-2">
-                                <button type="submit" class="ti-btn bg-theme ti-btn-primary-full !py-1 !px-2">
-                                    Apply Filters
-                                </button>
-                                <button type="button" class="ti-btn ti-btn-outline-secondary !py-1 !px-2"
-                                    onclick="clearFilters()">
-                                    <i class="ri-refresh-line"></i>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </form>
-            </div>
-        </div>
+<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/kpi/management-work.css') }}?v=1">
+<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/lead-queues.css') }}?v=1">
+<div class="crm-kpi-tool crm-lead-queue" data-kpi-tool data-lead-queue>
+    <header class="lq-heading"><div><h3>Today's Follow-up</h3><p>{{ $fromDate->format('d M Y') }}</p></div><button type="button" class="ti-btn" data-export-followups><i class="ri-download-line"></i> Export</button></header>
+    @if(session('success'))<p role="status">{{ session('success') }}</p>@endif
+    @if(session('error'))<p role="alert">{{ session('error') }}</p>@endif
+    @if($errors->any())<div role="alert">@foreach($errors->all() as $error)<p>{{ $error }}</p>@endforeach</div>@endif
+    <div class="lq-stats">
+        @foreach([['total','Total follow-ups'],['hot','HOT leads'],['no_date','No follow-up date'],['overdue','Overdue follow-ups']] as [$key,$label])
+            <div class="lq-stat lq-{{ $key }}"><strong>{{ number_format($queueSummary[$key]) }}</strong><span>{{ $label }}</span></div>
+        @endforeach
     </div>
+    <form method="GET" action="{{ route('admin.upcoming-follow-up.index') }}" id="filter-form" class="lq-filters">
+        <div><label for="from-date">Next follow-up date</label><input id="from-date" type="date" name="from_date" value="{{ $fromDate->format('Y-m-d') }}"></div>
+        <div><label for="product_id">Product</label><select id="product_id" name="product_id"><option value="">All products</option>@foreach($products as $product)<option value="{{ $product->id }}" {{ request('product_id') == $product->id ? 'selected' : '' }}>{{ $product->product }}</option>@endforeach</select></div>
+        <div><label for="lead_score_temperature">Lead score</label><select id="lead_score_temperature" name="lead_score_temperature"><option value="">All scores</option>@foreach(['hot','neutral','cold'] as $temperature)<option value="{{ $temperature }}" {{ request('lead_score_temperature') === $temperature ? 'selected' : '' }}>{{ ucfirst($temperature) }}</option>@endforeach</select></div>
+        @if(auth()->user()->userType->user_type !== \App\Models\UserType::SALES_EXECUTIVE)
+        <div><label for="representative_user_id">Staff</label><select id="representative_user_id" name="representative_user_id"><option value="">Team (All)</option>
+        @if(in_array(auth()->user()->userType->user_type, [\App\Models\UserType::SALES_MANAGER,\App\Models\UserType::SENIOR_SALES_MANAGER],true))<option value="{{ auth()->id() }}" {{ request('representative_user_id') === auth()->id() ? 'selected' : '' }}>{{ auth()->user()->name }} (You)</option>@endif
+        @foreach($assignedExecutives as $person)<option value="{{ $person->id }}" {{ request('representative_user_id') === $person->id ? 'selected' : '' }}>{{ $person->name }}</option>@endforeach</select></div>@endif
+        <div class="lq-filter-actions"><a class="ti-btn" href="{{ route('admin.upcoming-follow-up.index') }}" title="Reset filters" aria-label="Reset filters"><i class="ri-refresh-line"></i></a><button class="ti-btn ti-btn-primary">Apply Filters</button></div>
+    </form>
+    <nav class="lq-tabs" aria-label="Follow-up filter">
+        @foreach(['all'=>'All follow-ups','today'=>'Selected date','overdue'=>'Overdue','no_date'=>'No follow-up date'] as $key=>$label)<button type="button" data-queue-tab="{{ $key }}" aria-pressed="{{ $key === 'all' ? 'true' : 'false' }}">{{ $label }} <span>{{ $queueSummary[$key === 'all' ? 'total' : $key] }}</span></button>@endforeach
+    </nav>
+    <section class="lq-list"><header class="lq-heading"><h2>Follow-ups</h2><small>{{ number_format($queueSummary['total']) }} leads</small></header>
+    @include('admin.pages.leads.partials.queue-table-controls')
+    <table data-queue-table id="followUpTable"><thead><tr>
+        @foreach(['#','Lead score','Lead','Phone','Representative','Next follow-up','Service','Created','Service date','Action'] as $heading)<th scope="col">@if($heading !== 'Action')<button type="button" data-queue-sort="{{ $loop->index }}">{{ $heading }} <i class="ri-arrow-up-down-line" aria-hidden="true"></i></button>@else{{ $heading }}@endif</th>@endforeach
+    </tr></thead><tbody>
+    @foreach($arrFollowUps as $row)
+        @php
+            $lead=$row->enquiry;
+            $score=$lead?->latestAiScore;
+            $temperature=$score ? strtolower((string)$score->displayTemperature($leadAiScoringSetting)) : '';
+            $bucket=!$row->next_followup_date ? 'no_date' : ($row->next_followup_date->toDateString() === $fromDate->toDateString() ? 'today' : 'overdue');
+            $serviceDate=$lead?->rideSegments->first()?->from_date;
+        @endphp
+        <tr data-queue-row data-id="{{ $lead?->id }}" data-bucket="{{ $bucket }}" class="{{ $bucket === 'overdue' ? 'lq-overdue-row' : '' }}">
+            <td data-label="#">{{ $loop->iteration }}</td>
+            <td data-label="Lead score" data-order="{{ $score?->score ?? -1 }}">
+            @if($score && $score->status === 'completed' && $temperature)<span class="lq-pill lq-score-{{ $temperature }}">{{ strtoupper($temperature) }} {{ $score->score }}</span>
+            @elseif($score && in_array($score->status,['pending','processing'],true))<span class="lq-pill">Analysing</span>
+            @elseif($score && $score->status === 'failed')<span class="lq-pill lq-score-hot">Failed</span>@else - @endif</td>
+            <td data-label="Lead"><strong>{{ $lead?->client?->name ?? '-' }}</strong></td><td data-label="Phone">{{ $lead?->client?->contact_number ?? '-' }}</td><td data-label="Representative">{{ $lead?->representative?->name ?? 'Unassigned' }}</td>
+            <td data-label="Next follow-up" data-order="{{ $row->next_followup_date?->timestamp ?? 0 }}"><span class="lq-pill {{ $bucket === 'overdue' ? 'lq-score-hot' : 'lq-scheduled' }}">{{ $row->next_followup_date ? ($bucket === 'today' ? $row->next_followup_date->format('H:i') : $row->next_followup_date->format('d M Y, H:i')) : 'Not set' }}</span></td>
+            <td data-label="Service">{{ implode(', ',$queueServiceNames[$lead?->id] ?? []) ?: 'N/A' }}</td>
+            <td data-label="Created" data-order="{{ $lead?->created_at?->timestamp ?? 0 }}">{{ $lead?->created_at?->format('d M Y') ?? '-' }}</td>
+            <td data-label="Service date" data-order="{{ $serviceDate?->timestamp ?? 0 }}">{{ $serviceDate?->format('d M Y') ?? '-' }}</td>
+            <td data-label="Action">@if($lead)<a class="ti-btn" href="{{ auth()->user()->userType->user_type === \App\Models\UserType::HR ? route('admin.clients.view',$lead->client_id) : route('admin.leads.follow-up.create',$lead->id) }}">Open</a>@endif</td>
+        </tr>
+    @endforeach
+    </tbody></table>
+    @include('admin.pages.leads.partials.queue-table-footer')
+    </section>
+    @include('admin.pages.kpi.partials.tool-mobile-nav')
 </div>
-
-<!-- Table -->
-<div class="grid grid-cols-12 gap-6">
-    <div class="xl:col-span-12 col-span-12">
-        <div class="box custom-box">
-            <div class="box-body">
-                <div class="table-responsive">
-                    <table id="followUpTable" class="table display responsive nowrap table-datatable" width="100%">
-                        <thead class="bg-primary text-white">
-                            <tr class="border-b border-defaultborder">
-
-                                <th>Sr.No</th>
-                                <th>Lead Score</th>
-                                <th>Name</th>
-                                <!-- <th>Email</th> -->
-                                <th>Phone</th>
-                                <th>Representative</th>
-                                <th>Next Follow-up</th>
-                                <th>Service</th>
-                                <th>Created Date</th>
-                                <th>Service Date</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse($arrFollowUps as $intKey => $obj)
-                            {{-- If follow-up is missed (scheduled earlier but not done), highlight in yellow --}}
-                            <tr class="border-b border-defaultborder" @if(!empty($obj->is_missed) && $obj->is_missed)
-                                style="background-color: #fded57ff;" @endif>
-                                <td class="text-center">{{ $intKey + 1 }}</td>
-                                <td class="text-center">
-                                    @php
-                                        $leadAiScore = $obj->enquiry->latestAiScore ?? null;
-                                        $leadScoreTemperature = strtolower((string) (
-                                            $leadAiScore
-                                                ? $leadAiScore->displayTemperature($leadAiScoringSetting ?? null)
-                                                : ''
-                                        ));
-                                        $leadScoreValue = $leadAiScore->score ?? null;
-                                        $leadScoreClass = match ($leadScoreTemperature) {
-                                            'hot' => 'bg-danger/10 text-danger',
-                                            'neutral' => 'bg-warning/10 text-warning',
-                                            'cold' => 'bg-info/10 text-info',
-                                            default => 'bg-black/10 text-gray-600',
-                                        };
-                                    @endphp
-
-                                    @if($leadAiScore && $leadAiScore->status === 'completed' && $leadScoreTemperature)
-                                        <span class="badge {{ $leadScoreClass }}">
-                                            {{ strtoupper($leadScoreTemperature) }}
-                                            @if($leadScoreValue !== null)
-                                                {{ $leadScoreValue }}
-                                            @endif
-                                        </span>
-                                    @elseif($leadAiScore && in_array($leadAiScore->status, ['pending', 'processing'], true))
-                                        <span class="badge bg-warning/10 text-warning">Analysing</span>
-                                    @elseif($leadAiScore && $leadAiScore->status === 'failed')
-                                        <span class="badge bg-danger/10 text-danger">Failed</span>
-                                    @else
-                                        <span class="text-muted">-</span>
-                                    @endif
-                                </td>
-                                <td>{{ $obj->enquiry->client->name }}</td>
-                                <!-- <td>{{ $obj->enquiry->client->email }}</td> -->
-                                <td>{{ $obj->enquiry->client->contact_number }}</td>
-                                <td>{{ $obj->enquiry->representative->name ?? '--' }}</td>
-                                <td class="text-center"
-                                    data-order="{{ $obj->next_followup_date ? $obj->next_followup_date->format('Y-m-d H:i:s') : '' }}">
-                                    {{ $obj->next_followup_date ? $obj->next_followup_date->format('d-M, Y H:i') : '--'
-                                    }}
-                                </td>
-                                <td>
-                                    @php
-                                    $serviceNames = $obj->enquiry->service_names ?? [];
-                                    @endphp
-
-                                    @if (!empty($serviceNames) && is_array($serviceNames))
-                                    {{ Str::limit(implode(', ', $serviceNames), 50) }}
-                                    @else
-                                    N/A
-                                    @endif
-                                </td>
-
-                                <td class="text-center"
-                                    data-order="{{ $obj->enquiry->created_at ? $obj->enquiry->created_at->format('Y-m-d H:i:s') : '0000-00-00 00:00:00' }}">
-                                    {{ $obj->enquiry->created_at ? $obj->enquiry->created_at->format('d-M, Y') : '--' }}
-                                </td>
-                                <td class="text-center"
-                                    data-order="{{ $obj->enquiry->rideSegments->first()?->from_date ? $obj->enquiry->rideSegments->first()->from_date->format('Y-m-d H:i:s') : '0000-00-00 00:00:00' }}">
-                                    {{ $obj->enquiry->rideSegments->first()?->from_date ?
-                                    $obj->enquiry->rideSegments->first()->from_date->format('d-M, Y ') : '--' }}
-                                </td>
-                                <td>
-                                    <div class="hstack flex gap-3 text-[.9375rem]">
-                                        <a aria-label="anchor"
-                                            href="{{ route('admin.leads.follow-up.create', $obj->enquiry->id) }}"
-                                            class="ti-btn ti-btn-icon ti-btn-sm ti-btn-primary-full"
-                                            title="View Lead"><i class="ri-eye-line"></i></a>
-
-                                        {{-- <a aria-label="anchor"
-                                            href="{{ route('admin.leads.edit', $obj->enquiry->id) }}"
-                                            class="ti-btn ti-btn-icon ti-btn-sm ti-btn-info-full" title="Edit Lead"><i
-                                                class="ri-edit-line"></i></a>
-                                        </a> --}}
-                                    </div>
-                                </td>
-                            </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Custom Modal -->
-<div id="custom-delete-alert" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-    <div class="alert custom-alert1 alert-primary !bg-white dark:!bg-bodybg w-[90%] max-w-md">
-        <button type="button" class="btn-close ms-auto" id="close-alert">
-            <i class="bi bi-x"></i>
-        </button>
-        <div class="text-center px-[3rem] pb-0">
-            <h5 class="text-xl font-semibold mb-2 text-gray-800">Are you sure?</h5>
-            <p class="mb-4 text-gray-600" id="modal-message">Confirm action</p>
-            <form method="POST" id="confirm-delete-form" action="{{ route('admin.upcoming-follow-up.toggle') }}">
-                @csrf
-                <input type="hidden" name="id" id="id-to-toggle">
-                <div>
-                    <button type="button" class="ti-btn ti-btn-outline-danger px-4 py-1"
-                        id="decline-delete">Decline</button>
-                    <button type="submit" class="ti-btn bg-primary text-white px-4 py-1">Yes, Confirm</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-@stop
+@endsection
 @push('scripts')
-<!-- Script -->
-<script>
-    document.querySelectorAll('.open-delete-modal').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const id = this.dataset.id;
-                const title = this.dataset.title;
-                const status = this.dataset.status;
-
-                document.getElementById('id-to-toggle').value = id;
-                document.getElementById('modal-message').textContent =
-                    status == 1 ? `You want to deactivate "${title}"?` : `You want to activate "${title}"?`;
-
-                document.getElementById('custom-delete-alert').classList.remove('hidden');
-            });
-        });
-
-        document.getElementById('close-alert').addEventListener('click', () => {
-            document.getElementById('custom-delete-alert').classList.add('hidden');
-        });
-
-        document.getElementById('decline-delete').addEventListener('click', () => {
-            document.getElementById('custom-delete-alert').classList.add('hidden');
-        });
-
-        function clearFilters() {
-            $('#filter-form')[0].reset();
-            window.location.href = "{{ route('admin.upcoming-follow-up.index') }}";
-        }
-
-        // Toggle filters
-        $(document).ready(function() {
-            const filterSection = $('#filter-section');
-            const icon = $('#filter-icon');
-
-            // Initially hide filter section and set icon to down
-            filterSection.hide();
-            icon.removeClass('ti-chevron-up').addClass('ti-chevron-down');
-
-            $('#toggle-filters').on('click', function() {
-                if (filterSection.is(':visible')) {
-                    filterSection.slideUp();
-                    icon.removeClass('ti-chevron-up').addClass('ti-chevron-down');
-                } else {
-                    filterSection.slideDown();
-                    icon.removeClass('ti-chevron-down').addClass('ti-chevron-up');
-                }
-            });
-        });
-</script>
+<script src="{{ asset('assets/admin/js/crm/kpi-tools.js') }}?v=1"></script>
+<script src="{{ asset('assets/admin/js/crm/lead-queues.js') }}?v=1"></script>
 @endpush

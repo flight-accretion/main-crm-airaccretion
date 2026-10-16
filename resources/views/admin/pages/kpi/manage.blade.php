@@ -1,6 +1,8 @@
 @extends('admin.layouts.header')
 
 @section('content')
+<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/kpi/management-work.css') }}?v=1">
+<div class="crm-kpi-management crm-kpi-tool" data-kpi-tool>
 <div class="block justify-between page-header md:flex">
     <div>
         <h3 class="text-[1.125rem] font-semibold">KPI Management</h3>
@@ -18,14 +20,8 @@
 @php
     $defaultKpiDefinitions = $defaultKpiDefinitions ?? [];
     $defaultKpiCoverage = $defaultKpiCoverage ?? [];
-    $isHrKpiViewer = optional(auth()->user()->userType)->user_type === \App\Models\UserType::HR;
 @endphp
 
-@if($isHrKpiViewer)
-    <div class="alert alert-info">
-        HR can review KPI configuration here. Template, assignment, calendar and manual KPI edits remain Super Admin actions.
-    </div>
-@endif
 
 @if(!empty($defaultKpiDefinitions))
     <div class="box mb-6">
@@ -44,17 +40,18 @@
                     $metrics = collect($definition['metrics'] ?? []);
                 @endphp
 
-                <div class="border rounded p-4 mb-5">
+                <div class="km-department">
                     <div class="flex flex-wrap justify-between gap-3 mb-4">
                         <div>
                             <h6 class="font-semibold mb-1">
                                 {{ $definition['department_label'] ?? ucfirst($departmentKey) }} Department KPI
                             </h6>
-                            <div class="text-sm text-gray-500">
+                            <div class="km-pill {{ ($coverage['assigned_users'] ?? 0) < ($coverage['eligible_users'] ?? 0) ? 'km-amber' : 'km-green' }}">
                                 {{ $coverage['assigned_users'] ?? 0 }} / {{ $coverage['eligible_users'] ?? 0 }} eligible users assigned.
                             </div>
+                            <a href="#km-assignment" class="km-link" data-assign-department="{{ $departmentKey }}">Assign users</a>
+                            @if(!empty($definition['updated_at']))<small>Template updated {{ $definition['updated_at']->format('d M Y, H:i') }}</small>@endif
                         </div>
-                        @unless($isHrKpiViewer)
                             <form method="POST" action="{{ route('admin.kpi.automation.sync') }}">
                                 @csrf
                                 <input type="hidden" name="department" value="{{ $departmentKey }}">
@@ -62,50 +59,18 @@
                                     Sync {{ ucfirst($departmentKey) }} KPI
                                 </button>
                             </form>
-                        @endunless
                     </div>
 
-                    <div class="overflow-x-auto">
-                        <table class="table whitespace-nowrap min-w-full">
-                            <thead>
-                                <tr>
-                                    <th>Scope of Work</th>
-                                    <th class="text-center">Weightage</th>
-                                    <th class="text-center">5</th>
-                                    <th class="text-center">4</th>
-                                    <th class="text-center">3</th>
-                                    <th class="text-center">2</th>
-                                    <th class="text-center">1</th>
-                                    <th>Automation</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach($metrics as $metric)
-                                    <tr>
-                                        <td>
-                                            <div class="font-semibold">{{ $metric['name'] ?? '-' }}</div>
-                                            <div class="text-xs text-gray-500">{{ $metric['description'] ?? '' }}</div>
-                                        </td>
-                                        <td class="text-center">{{ (float) ($metric['weightage'] ?? 0) }}</td>
-                                        @foreach([5, 4, 3, 2, 1] as $score)
-                                            <td class="text-center">
-                                                {{ $metric['score_labels'][$score] ?? $metric['score_rules'][$score] ?? '-' }}
-                                            </td>
-                                        @endforeach
-                                        <td>
-                                            {{ ($metric['measurement_type'] ?? '') === 'automatic'
-                                                ? 'Auto: ' . ($metric['source_key'] ?? '-')
-                                                : 'Manual entry' }}
-                                        </td>
-                                    </tr>
-                                @endforeach
-                                <tr class="font-semibold">
-                                    <td>Total Weightage</td>
-                                    <td class="text-center">{{ (float) $metrics->sum(fn ($metric) => (float) ($metric['weightage'] ?? 0)) }}</td>
-                                    <td colspan="6"></td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    <div class="km-metrics">
+                        @foreach($metrics as $metric)
+                            <div class="km-metric">
+                                <div><strong>{{ $metric['name'] ?? '-' }}</strong><p>{{ in_array($metric['code'] ?? '', ['attendance', 'operations_attendance'], true) ? 'Presence on working days; P and MIS count as present. Holidays and approved offs are excluded.' : ($metric['description'] ?? '') }}</p></div>
+                                <div class="km-weight"><strong>{{ (float) ($metric['weightage'] ?? 0) }}</strong><progress max="100" value="{{ (float) ($metric['weightage'] ?? 0) }}" aria-label="Metric weight"></progress></div>
+                                <div class="km-bands">@foreach([5,4,3,2,1] as $score)<span><b>{{ $score }}/5</b> {{ $metric['score_labels'][$score] ?? $metric['score_rules'][$score] ?? '-' }}</span>@endforeach</div>
+                                @if(($metric['measurement_type'] ?? '') === 'automatic')<span class="km-pill km-blue">Auto · {{ $metric['source_key'] ?? '-' }}</span>@else<a class="km-pill km-amber" href="#km-manual">Manual entry</a>@endif
+                            </div>
+                        @endforeach
+                        <div class="km-total"><strong>Total weightage</strong><strong>{{ (float) $metrics->sum(fn ($metric) => (float) ($metric['weightage'] ?? 0)) }}</strong><span>{{ $metrics->count() }} metrics · {{ $metrics->where('measurement_type', 'automatic')->count() }} automatic · {{ $metrics->where('measurement_type', '!=', 'automatic')->count() }} manual</span></div>
                     </div>
                 </div>
             @endforeach
@@ -113,7 +78,7 @@
     </div>
 @endif
 
-@unless($isHrKpiViewer)
+<details class="km-editor km-configuration" id="km-configuration"><summary>Manage templates, assignments, calendar and manual values</summary>
 <div class="grid grid-cols-12 gap-6">
     <div class="xl:col-span-6 col-span-12">
         <div class="box">
@@ -155,7 +120,7 @@
 
     <div class="xl:col-span-6 col-span-12">
         <div class="box">
-            <div class="box-header"><h5 class="box-title">Assign Template</h5></div>
+            <div class="box-header" id="km-assignment"><h5 class="box-title">Assign Template</h5></div>
             <div class="box-body">
                 <form method="POST" action="{{ route('admin.kpi.assignments.store') }}" class="grid grid-cols-12 gap-4">
                     @csrf
@@ -171,7 +136,7 @@
                         <label class="ti-form-label">Template</label>
                         <select class="ti-form-select" name="template_id" required>
                             @foreach($templates as $template)
-                                <option value="{{ $template->id }}">{{ $template->name }}</option>
+                                <option value="{{ $template->id }}" data-department="{{ $template->department }}">{{ $template->name }}</option>
                             @endforeach
                         </select>
                     </div>
@@ -293,7 +258,7 @@
 
     <div class="xl:col-span-6 col-span-12">
         <div class="box">
-            <div class="box-header"><h5 class="box-title">Manual KPI Value</h5></div>
+            <div class="box-header" id="km-manual"><h5 class="box-title">Manual KPI Value</h5></div>
             <div class="box-body">
                 <form method="POST" action="{{ route('admin.kpi.manual-values.store') }}" class="grid grid-cols-12 gap-4">
                     @csrf
@@ -421,10 +386,10 @@
         </div>
     </div>
 </div>
-@endunless
 
+</details>
 <div class="box mt-6">
-    <div class="box-header"><h5 class="box-title">Active Templates</h5></div>
+    <div class="box-header"><h5 class="box-title">Templates</h5></div>
     <div class="box-body overflow-x-auto">
         <table class="table whitespace-nowrap min-w-full">
             <thead>
@@ -433,19 +398,28 @@
                     <th>Department</th>
                     <th>Metrics</th>
                     <th>Working Days</th>
+                    <th>Status</th><th>Action</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach($templates as $template)
                     <tr>
-                        <td>{{ $template->name }}</td>
-                        <td>{{ ucfirst($template->department) }}</td>
-                        <td>{{ $template->metrics->count() }}</td>
-                        <td>{{ $template->working_days_per_month }}</td>
+                        <td data-label="Template">{{ $template->name }}</td>
+                        <td data-label="Department">{{ ucfirst($template->department) }}</td>
+                        <td data-label="Metrics">{{ $template->metrics->where('active', true)->count() }}</td>
+                        <td data-label="Working days">{{ $template->working_days_per_month }}</td>
+                        <td data-label="Status">{{ $template->active ? 'Active' : 'Inactive' }}</td>
+                        <td data-label="Action"><a href="#km-template-{{ $template->id }}" data-open-template="{{ $template->id }}">View / Edit</a></td>
                     </tr>
                 @endforeach
             </tbody>
         </table>
     </div>
 </div>
+@include('admin.pages.kpi.partials.management-editors')
+@include('admin.pages.kpi.partials.tool-mobile-nav')
+</div>
 @endsection
+@push('scripts')
+<script src="{{ asset('assets/admin/js/crm/kpi-tools.js') }}?v=1" defer></script>
+@endpush

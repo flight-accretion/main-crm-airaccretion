@@ -23,13 +23,16 @@ use Carbon\Carbon;
 class SalesReportExport implements FromGenerator, WithHeadings, WithMapping, WithStyles, WithEvents
 {
     protected $filters;
+    private ?Collection $requestedLeadIds;
 
-    public function __construct($filters = [])
+    public function __construct($filters = [], ?Collection $leadIds = null)
     {
         $this->filters = $filters;
+        $this->requestedLeadIds = $leadIds;
     }
 
     private $leadBatchIds;
+    private $referenceData;
 
     private function exportQuery()
     {
@@ -148,6 +151,17 @@ class SalesReportExport implements FromGenerator, WithHeadings, WithMapping, Wit
 
     public function generator(): \Generator
     {
+        if ($this->requestedLeadIds !== null) {
+            try {
+                foreach ($this->requestedLeadIds->unique()->chunk(200) as $ids) {
+                    $this->leadBatchIds = $ids;
+                    foreach ($this->collection() as $row) yield $row;
+                }
+            } finally {
+                $this->leadBatchIds = null;
+            }
+            return;
+        }
         // Chunk lead IDs rather than follow-ups to preserve grouped amounts.
         $leadQuery = $this->exportQuery()->setEagerLoads([])
             ->select('lead_id')->selectRaw('MAX(created_at) AS latest_created_at')
@@ -178,13 +192,15 @@ class SalesReportExport implements FromGenerator, WithHeadings, WithMapping, Wit
         $query = $this->exportQuery();
         if ($this->leadBatchIds !== null) {
             $query->whereIn('lead_id', $this->leadBatchIds);
+        } elseif ($this->requestedLeadIds !== null) {
+            $query->whereIn('lead_id', $this->requestedLeadIds);
         }
-        $allSalesData = $query->orderBy('created_at', 'desc')->get();
+        $allSalesData = $query->orderBy('created_at', 'desc')->orderBy('id', 'desc')->get();
 
         // Get all services, extra services, and products for reference
-        $allServices = Service::all()->keyBy('id');
-        $allExtraServices = ExtraService::all()->keyBy('id');
-        $allProducts = Product::all()->keyBy('id');
+        [$allServices, $allExtraServices, $allProducts] = $this->referenceData ??= [
+            Service::all()->keyBy('id'), ExtraService::all()->keyBy('id'), Product::all()->keyBy('id'),
+        ];
         $leadIds = $allSalesData->pluck('lead_id')->filter()->unique()->values();
         $followupIdsByLead = LeadFollowup::whereIn('lead_id', $leadIds)
             ->get(['id', 'lead_id'])
@@ -326,6 +342,7 @@ class SalesReportExport implements FromGenerator, WithHeadings, WithMapping, Wit
             }
 
             return (object) [
+                'lead_id' => (string) $latest->lead_id,
                 'client_name' => $client->name ?? 'N/A',
                 'email' => $client->email ?? 'N/A',
                 'contact' => extractPhoneWithoutCountryCode($client->contact_number ?? ''),

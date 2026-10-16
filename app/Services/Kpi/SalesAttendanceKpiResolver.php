@@ -6,13 +6,15 @@ use App\Models\AttendanceRecord;
 use App\Models\KpiMetric;
 use App\Models\User;
 use App\Services\Attendance\AttendanceShiftResolver;
+use App\Services\Attendance\AttendanceCalendarService;
 use Carbon\Carbon;
 
 class SalesAttendanceKpiResolver implements KpiMetricResolverInterface
 {
     public function __construct(
         private KpiWorkingDayService $workingDays,
-        private AttendanceShiftResolver $shiftResolver
+        private AttendanceShiftResolver $shiftResolver,
+        private AttendanceCalendarService $calendar
     ) {}
 
   public function resolve(
@@ -32,6 +34,8 @@ $periodEnd =
         ->copy()
         ->endOfDay();
 
+        $observedEnd = $periodEnd->copy()->min(now()->endOfDay());
+
 
         /*
          * Always read consolidated
@@ -47,30 +51,15 @@ $periodEnd =
                     'user_id',
                     $user->id
                 )
-                ->whereBetween(
-                    'attendance_date',
-                    [
-    $periodStart->toDateString(),
-    $periodEnd->toDateString(),
-                    ]
-                )
+                ->whereDate('attendance_date', '>=', $periodStart->toDateString())
+                ->whereDate('attendance_date', '<=', $observedEnd->toDateString())
                 ->orderBy(
                     'attendance_date'
                 )
                 ->get();
 
 
-        if (
-            $records->isEmpty()
-        ) {
-            return $this
-                ->emptyResult(
-                    $metric
-                );
-        }
-
-
-        $latestRecordDate =
+        $latestRecordDate = $records->isEmpty() ? null :
             Carbon::parse(
                 $records->max(
                     'attendance_date'
@@ -88,19 +77,9 @@ $periodEnd =
          *
          * Coverage ends on 17 Sep.
          */
-        $coverageDate =
-            $latestRecordDate
-                ->lt(
-                    $asOf
-                        ->copy()
-                        ->startOfDay()
-                )
-
-                ? $latestRecordDate
-
-                : $asOf
-                    ->copy()
-                    ->startOfDay();
+        $coverageDate = $latestRecordDate
+            ? $latestRecordDate->copy()->min($observedEnd->copy()->startOfDay())
+            : null;
 
 
         $recordByDate =
@@ -115,53 +94,25 @@ $periodEnd =
                 );
 
 
-        /*
-         * Uses your existing KPI working day
-         * and employee non-working-day logic.
-         */
-     $scheduledDates =
-    $this
-        ->workingDays
-        ->workingDates(
-            $user,
-            $asOf->year,
-            $asOf->month,
-            $workingDaysPerMonth
-        )
-        ->filter(
-            fn (Carbon $date) =>
-                $date->gte($periodStart)
-                && $date->lte($coverageDate)
-        )
-        ->values();
+        // Attendance uses actual dated calendars; other KPI working-day rules are unchanged.
+        $scheduledDates = collect();
+        $monthlyWorkingDays = 0;
+        $end = $observedEnd;
+        for ($month = $periodStart->copy()->startOfMonth(); $month->lte($periodEnd); $month->addMonth()) {
+            $summary = $this->calendar->summary($user, $month->year, $month->month);
+            $monthlyWorkingDays += $summary['working_days'];
+            $scheduledDates = $scheduledDates->merge($summary['dates']);
+        }
+        $scheduledDates = $scheduledDates->filter(fn (Carbon $date) => $date->gte($periodStart) && $date->lte($end))->values();
 
-
-        $nonScheduledStatuses =
-            array_map(
-                fn ($value) =>
-                    strtoupper(
-                        trim(
-                            (string)
-                            $value
-                        )
-                    ),
-
-                (array)
-                config(
-                    'kpi.attendance.non_scheduled_statuses',
-                    [
-                        'WO',
-                        'HLD',
-                    ]
-                )
-            );
 
         $shiftPoliciesByDate =
             $this
                 ->shiftResolver
                 ->resolveForDates(
                     $user,
-                    $scheduledDates
+                    $scheduledDates->filter(fn ($date) => $recordByDate->has($date->toDateString())
+                        && in_array(strtoupper(trim((string) $recordByDate->get($date->toDateString())->raw_status)), ['A', 'P', 'MIS'], true))
                 );
 
         $shiftPolicyBreakdown = [];
@@ -173,6 +124,10 @@ $periodEnd =
         $punctual = 0;
         $late = 0;
         $absent = 0;
+        $present = 0;
+        $missPunch = 0;
+        $ignoredStatusDays = 0;
+        $punctualityUnknown = 0;
 
         $missingUploadedDays = 0;
         $nonScheduledRows = 0;
@@ -226,15 +181,10 @@ $periodEnd =
              * Weekly Off / Holiday
              * does not enter denominator.
              */
-            if (
-                in_array(
-                    $status,
-                    $nonScheduledStatuses,
-                    true
-                )
-            ) {
+            if (!in_array($status, ['A', 'P', 'MIS'], true)) {
 
                 $nonScheduledRows++;
+                $ignoredStatusDays++;
 
                 continue;
             }
@@ -305,8 +255,6 @@ $periodEnd =
              */
             if (
                 $status === 'A'
-                ||
-                !$record->in_time
             ) {
 
                 $absent++;
@@ -316,6 +264,13 @@ $periodEnd =
                     'absent_days'
                 ]++;
 
+                continue;
+            }
+
+            $present++;
+            if ($status === 'MIS') $missPunch++;
+            if (!$record->in_time) {
+                $punctualityUnknown++;
                 continue;
             }
 
@@ -404,30 +359,30 @@ $periodEnd =
 
                 : 0.0;
 
+        $attendance = $eligible > 0 ? round($present / $eligible * 100, 4) : 0.0;
+        $scheduledKeys = $scheduledDates->map->toDateString()->flip();
+        $offDayWorked = $records->filter(fn ($record) => !$scheduledKeys->has($record->attendance_date->toDateString())
+            && in_array(strtoupper(trim((string) $record->raw_status)), ['P', 'MIS'], true))->count();
+
 
         return [
             /*
              * Actual value itself is
-             * punctuality percentage.
+             * presence percentage. Punctuality remains separate evidence.
              */
             'actual_value' =>
                 round(
-                    $punctuality,
+                    $attendance,
                     4
                 ),
 
-            'target_value' =>
-                (float) (
-                    $metric
-                        ->target_value
-                    ?: 95
-                ),
+            'target_value' => 100.0,
 
             /*
              * IMPORTANT:
              *
              * KPI rating table is based
-             * directly on punctuality %:
+             * directly on presence %:
              *
              * 100 -> 5
              * 90  -> 4
@@ -438,11 +393,22 @@ $periodEnd =
              */
             'achievement_percent' =>
                 round(
-                    $punctuality,
+                    $attendance,
                     4
                 ),
 
             'evidence' => [
+
+                'attendance_basis' => 'presence',
+                'present_days' => $present,
+                'miss_punch_days' => $missPunch,
+                'ignored_status_days' => $ignoredStatusDays,
+                'punctuality_unknown_days' => $punctualityUnknown,
+                'off_day_worked' => $offDayWorked,
+                'monthly_working_days' => $monthlyWorkingDays,
+                'working_days_elapsed' => $scheduledDates->count(),
+                'attendance_percent' => $attendance,
+                'is_provisional' => $missingUploadedDays > 0 || $ignoredStatusDays > 0,
 
                 'eligible_scheduled_days' =>
                     $eligible,
@@ -464,11 +430,11 @@ $periodEnd =
 
                 'latest_attendance_date' =>
                     $latestRecordDate
-                        ->toDateString(),
+                        ?->toDateString(),
 
                 'attendance_coverage_through' =>
                     $coverageDate
-                        ->toDateString(),
+                        ?->toDateString(),
 
                 'shift_start' =>
                     $lastShiftStart,

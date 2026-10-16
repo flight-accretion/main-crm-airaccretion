@@ -119,7 +119,7 @@ class HrDashboardDataService
         if (in_array($status, array_merge(['WO', 'W/O', 'OFF', 'HOLIDAY', 'H', 'HLD'], config('kpi.attendance.non_scheduled_statuses', [])), true)) {
             return ['label' => in_array($status, ['H', 'HLD', 'HOLIDAY'], true) ? 'Holiday' : 'Weekly off', 'tone' => 'neutral'];
         }
-        if ($record->in_time || in_array($status, ['P', 'PRESENT'], true)) {
+        if ($record->in_time || in_array($status, ['P', 'PRESENT', 'MIS'], true)) {
             return ['label' => 'Present', 'tone' => 'green'];
         }
         return ['label' => $status !== '' ? $status : 'Not Available', 'tone' => 'neutral'];

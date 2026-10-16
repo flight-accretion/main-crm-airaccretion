@@ -192,18 +192,20 @@
         }
     }
 </style>
-<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/leads/leads-list.css') }}?v=3">
+<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/leads/leads-list.css') }}?v=4">
 <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/responsive/leads-list-mobile.css') }}?v=1">
 @php
     $listRole = optional(auth()->user()->userType)->user_type;
     $canWriteLeads = in_array($listRole, array_merge(\App\Models\UserType::ADMIN_ROLES, \App\Models\UserType::SALES_ROLES, \App\Models\UserType::OPERATIONS_ROLES), true);
+    $canDownloadLeads = $canWriteLeads || $listRole === \App\Models\UserType::HR;
+    $canRequestLeads = $listRole === \App\Models\UserType::SUPER_ADMIN || in_array($listRole, \App\Models\UserType::SALES_ROLES, true);
     $dashboardRoute = $listRole === \App\Models\UserType::HR ? 'admin.hr.dashboard' : (in_array($listRole, \App\Models\UserType::OPERATIONS_ROLES, true) ? 'admin.operations.index' : 'admin.sales-dashboard');
 @endphp
 <div class="crm-leads-list">
     <header class="leads-heading"><div><h1>Leads</h1></div><div class="leads-heading-actions">
+        @if($canDownloadLeads)<button type="button" class="leads-button" data-lead-dialog-open="leads-download"><i class="ri-download-2-line" aria-hidden="true"></i>Download</button>@endif
+        @if($canRequestLeads)<button type="button" class="leads-button" data-lead-dialog-open="leads-request"><i class="ri-user-shared-line" aria-hidden="true"></i>Request lead</button>@endif
         @if($canWriteLeads)
-            <button type="button" class="leads-button export-excel-btn" title="Export to Excel"><i class="ri-file-excel-line" aria-hidden="true"></i>Excel</button>
-            <button type="button" class="leads-button export-csv-btn" title="Export to CSV"><i class="ri-download-2-line" aria-hidden="true"></i>CSV</button>
             <a class="leads-button leads-primary" href="{{ route('admin.clients.create') }}"><i class="ri-add-line" aria-hidden="true"></i>Add lead</a>
         @endif
     </div></header>
@@ -275,7 +277,9 @@
         <button type="button" id="leads-more-toggle" aria-expanded="false" aria-controls="leads-mobile-more"><i class="ri-apps-line" aria-hidden="true"></i><span>More</span></button>
     </nav>
 </div>
-<script src="{{ asset('assets/admin/js/crm/leads-list.js') }}?v=1" defer></script>
+@include('admin.pages.leads.partials.download-request-dialogs')
+<script src="{{ asset('assets/admin/js/crm/leads-list.js') }}?v=2" defer></script>
+<script src="{{ asset('assets/admin/js/crm/leads-dialogs.js') }}?v=2" defer></script>
 
 <!-- Confirm Followup Modal -->
 <div id="confirm-followup-modal"
@@ -1335,6 +1339,7 @@ $(document).ready(function () {
                 return params.toString() ? exportPath + '?' + params.toString() : exportPath;
             }
 
+            window.buildLeadsExportUrl = buildExportUrl;
             $(document).on('click', '.export-excel-btn', function(e) {
                 e.preventDefault();
                 const url = buildExportUrl(false);

@@ -4,6 +4,7 @@ namespace App\Services\Kpi;
 
 use App\Models\KpiActivityEvent;
 use App\Models\KpiOutreachAssignment;
+use App\Models\KpiUserAssignment;
 use App\Models\Lead;
 use App\Models\LeadFollowup;
 use App\Models\SalesExecutiveAssignment;
@@ -26,7 +27,8 @@ class KpiWorkDoneService
 
     public function dashboard(
         User $actor,
-        array $filters
+        array $filters,
+        bool $includeBreakdown = false
     ): array {
         $users = $this->allowedUsers($actor);
 
@@ -82,6 +84,7 @@ class KpiWorkDoneService
 
         return [
             'summary' => $summary,
+            'breakdown' => $includeBreakdown ? $this->breakdown($users->whereIn('id', $userIds)->values(), $filters, $leadWindow) : [],
             'users' => $users,
             'selected_user_id' => $selectedUserId,
             'lead_history_available' =>
@@ -156,6 +159,52 @@ class KpiWorkDoneService
             },
             'rows' => $rows,
         ];
+    }
+
+    private function breakdown(Collection $users, array $filters, array $window): array
+    {
+        $userIds = $users->pluck('id')->all();
+        $events = $window['available'] ? KpiActivityEvent::query()->where('department', 'sales')
+            ->where('entity_type', 'lead')->whereIn('event_type', ['note_added', 'status_changed'])
+            ->whereIn('user_id', $userIds)->whereBetween('occurred_at', [$window['from'], $window['to']])
+            ->get(['user_id', 'entity_id', 'event_type', 'new_value'])->groupBy('user_id') : collect();
+        $candidateIds = $events->flatten(1)->where('event_type', 'note_added')->pluck('entity_id')->unique();
+        $activeIds = $candidateIds->isEmpty() ? collect() : LeadFollowup::query()
+            ->whereIn('lead_id', $candidateIds)->where('status', self::ACTIVE)
+            ->where('id', function ($query) {
+                $query->select('latest.id')->from('lead_followups as latest')
+                    ->whereColumn('latest.lead_id', 'lead_followups.lead_id')
+                    ->orderByDesc('latest.created_at')->limit(1);
+            })->pluck('lead_id')->unique();
+        $outreach = KpiOutreachAssignment::query()->whereIn('user_id', $userIds)
+            ->whereNotNull('completed_at')->whereBetween('completed_at', [$filters['from'], $filters['to']])
+            ->selectRaw('user_id, COUNT(*) as total, SUM(CASE WHEN completion_type = ? THEN 1 ELSE 0 END) as dnp', ['dnp'])
+            ->groupBy('user_id')->get()->keyBy('user_id');
+        $asOf = $filters['to']->copy()->min(now())->toDateString();
+        $assignments = KpiUserAssignment::with('template.metrics')->whereIn('user_id', $userIds)->where('active', true)
+            ->whereDate('effective_from', '<=', $asOf)->where(function ($query) use ($asOf) {
+                $query->whereNull('effective_to')->orWhereDate('effective_to', '>=', $asOf);
+            })->orderByDesc('effective_from')->get()->unique('user_id')->keyBy('user_id');
+        return $users->map(function ($user) use ($events, $activeIds, $outreach, $window, $assignments) {
+            $rows = $events->get($user->id, collect());
+            $notes = $rows->where('event_type', 'note_added')->pluck('entity_id')->unique();
+            $completed = $rows->where('event_type', 'status_changed')->whereIn('new_value', ['3', '4'])->pluck('entity_id')->unique();
+            $cancelled = $rows->where('event_type', 'status_changed')->where('new_value', '2')->pluck('entity_id')
+                ->unique()->intersect($notes)->diff($completed);
+            $active = $notes->intersect($activeIds)->diff($completed)->diff($cancelled);
+            $total = $completed->merge($cancelled)->merge($active)->unique()->count();
+            $template = optional($assignments->get($user->id))->template;
+            $metric = $template && $template->active ? $template->metrics->where('active', true)->firstWhere('source_key', 'sales_outreach') : null;
+            $target = $metric && (float) $metric->target_value > 0 ? (int) round($metric->target_value) : null;
+            return ['user' => $user,
+                'completed' => $window['available'] ? $completed->count() : null,
+                'cancelled' => $window['available'] ? $cancelled->count() : null,
+                'active' => $window['available'] ? $active->count() : null,
+                'total' => $window['available'] ? $total : null,
+                'outreach_completed' => (int) optional($outreach->get($user->id))->total,
+                'outreach_dnp' => (int) optional($outreach->get($user->id))->dnp,
+                'outreach_target' => $target];
+        })->all();
     }
 
     /*

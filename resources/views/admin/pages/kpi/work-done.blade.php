@@ -1,6 +1,8 @@
 @extends('admin.layouts.header')
 
 @section('content')
+<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/kpi/management-work.css') }}?v=1">
+<div class="crm-work-done crm-kpi-tool" data-kpi-tool>
 
 <div class="block justify-between page-header md:flex">
     <div>
@@ -20,7 +22,7 @@
         <form
             method="GET"
             action="{{ route('admin.kpi.work-done.index') }}"
-            class="grid grid-cols-12 gap-4 items-end"
+            class="kt-filter"
         >
 
             <div class="xl:col-span-3 md:col-span-6 col-span-12">
@@ -227,6 +229,13 @@
 
 @endif
 
+@if(($leadHistoryAvailable ?? true) && ($summary['total'] ?? 0) > 0)
+<div class="wd-composition" aria-label="Lead work composition">
+    <div class="wd-bar">@foreach(['completed','active','cancelled'] as $category)<span class="wd-{{ $category }}" style="width:{{ 100 * ($summary[$category] ?? 0) / $summary['total'] }}%"></span>@endforeach</div>
+    <div class="wd-legend">@foreach(['completed','active','cancelled'] as $category)<span>{{ round(100 * ($summary[$category] ?? 0) / $summary['total']) }}% {{ $category }}</span>@endforeach</div>
+</div>
+@endif
+
 
 {{-- SECTION 2 --}}
 <div class="mt-6 mb-3">
@@ -253,6 +262,7 @@
                 <h2 class="text-2xl font-semibold">
                     {{ (int) $summary['outreach_completed'] }}
                 </h2>
+                <small>Employee targets from KPI Management</small>
 
             </div>
         </button>
@@ -284,6 +294,15 @@
 
 </div>
 
+
+<section class="wd-breakdown">
+    <h2>Per-executive breakdown</h2>
+    <div class="kt-table-wrap"><table class="kt-table"><thead><tr><th>Executive</th><th>Outreach done</th><th>Outreach DNP</th><th>Leads worked</th><th>Completed</th><th>Active</th><th>Cancelled</th></tr></thead><tbody>
+    @forelse(($breakdown ?? []) as $person)
+        <tr><td data-label="Executive"><strong>{{ $person['user']->name }}</strong></td><td data-label="Outreach done">{{ $person['outreach_completed'] }}@if($person['outreach_target'])@if($filters['from_date'] === $filters['to_date'])<progress max="{{ $person['outreach_target'] }}" value="{{ min($person['outreach_completed'], $person['outreach_target']) }}" aria-label="Outreach against daily target"></progress>@endif<small>Daily target {{ $person['outreach_target'] }}</small>@else<small>Target not configured</small>@endif</td><td data-label="Outreach DNP">{{ $person['outreach_dnp'] }}</td>@foreach(['total'=>'Leads worked','completed'=>'Completed','active'=>'Active','cancelled'=>'Cancelled'] as $key=>$label)<td data-label="{{ $label }}">{{ $person[$key] ?? 'N/A' }}</td>@endforeach</tr>
+    @empty<tr><td colspan="7">No employees in this scope.</td></tr>@endforelse
+    </tbody></table></div>
+</section>
 
 {{-- Details --}}
 <div
@@ -320,6 +339,7 @@
 
 <script>
 function initializeKpiDetailTable(root) {
+    if (window.innerWidth < 768) return;
     if (!window.jQuery || !$.fn.DataTable) {
         return;
     }
@@ -475,4 +495,9 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 
+@include('admin.pages.kpi.partials.tool-mobile-nav')
+</div>
 @endsection
+@push('scripts')
+<script src="{{ asset('assets/admin/js/crm/kpi-tools.js') }}?v=1" defer></script>
+@endpush

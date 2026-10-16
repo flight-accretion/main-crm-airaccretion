@@ -16,11 +16,13 @@ class KpiWorkDoneController extends Controller
 
         $result = $service->dashboard(
             $request->user(),
-            $filters
+            $filters,
+            true
         );
 
         return view('admin.pages.kpi.work-done', [
             'summary' => $result['summary'],
+            'breakdown' => $result['breakdown'],
             'users' => $result['users'],
             'selectedUserId' => $result['selected_user_id'],
             'filters' => $filters,

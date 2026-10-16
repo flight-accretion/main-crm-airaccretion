@@ -2,6 +2,40 @@ document.addEventListener('DOMContentLoaded', () => {
     const page = document.querySelector('.crm-leads-list');
     if (!page) return;
     document.body.classList.add('crm-leads-page');
+    const mobilePhoneView = window.matchMedia('(max-width:767px)');
+    const phoneFeedback = document.createElement('div');
+    phoneFeedback.className = 'leads-phone-feedback'; phoneFeedback.hidden = true;
+    phoneFeedback.setAttribute('role','status'); phoneFeedback.setAttribute('aria-live','polite'); page.append(phoneFeedback);
+    let phoneFeedbackTimer;
+    const setPhoneLabels = () => page.querySelectorAll('[data-lead-phone]').forEach(link => {
+        const label = `${mobilePhoneView.matches ? 'Call' : 'Copy'} ${link.textContent.trim()}`;
+        link.title = label; link.setAttribute('aria-label',label);
+    });
+    setPhoneLabels(); mobilePhoneView.addEventListener('change',setPhoneLabels);
+    const fallbackCopyPhone = text => {
+        const previous = document.activeElement;
+        const input = document.createElement('textarea'); input.value = text; input.readOnly = true;
+        input.className = 'leads-clipboard-input'; document.body.append(input);
+        input.select();
+        try { return document.execCommand('copy'); }
+        finally { input.remove(); previous?.focus({preventScroll:true}); }
+    };
+    page.addEventListener('click',async event => {
+        const link = event.target.closest('[data-lead-phone]');
+        if (!link || mobilePhoneView.matches) return;
+        event.preventDefault();
+        let copied = false;
+        try {
+            if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(link.dataset.leadPhone); copied = true; }
+        } catch (_) { /* Use the copy fallback when browser clipboard permission is denied. */ }
+        if (!copied) {
+            try { copied = fallbackCopyPhone(link.dataset.leadPhone); } catch (_) { copied = false; }
+        }
+        clearTimeout(phoneFeedbackTimer);
+        phoneFeedback.textContent = copied ? 'Phone number copied.' : 'Could not copy. Please select and copy the number.';
+        phoneFeedback.hidden = false;
+        phoneFeedbackTimer = setTimeout(()=>{phoneFeedback.hidden=true;},copied?2200:5000);
+    });
     const panels = [...page.querySelectorAll('[data-date-panel]')];
     const tabs = [...page.querySelectorAll('[data-date-kind]')];
     function selectDate(kind) {

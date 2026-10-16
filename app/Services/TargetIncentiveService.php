@@ -29,14 +29,7 @@ class TargetIncentiveService
         }
         $basis = $target->incentive_basis;
         $owner = (string) $target->sales_executive_id;
-        $team = $basis === 'team' ? $this->team($owner) : [$owner];
-        $productIds = $target->incentive_product_ids ?? [];
-        $amount = $ledger->filter(function ($sale) use ($basis, $team, $productIds) {
-            if ($basis === 'company') {
-                return !$productIds || (bool) array_intersect($productIds, $sale['products']);
-            }
-            return in_array($sale['owner'], $team, true);
-        })->sum('amount');
+        $amount = $this->eligibleSales($target, $ledger)->sum('amount');
 
         if ($basis === 'team') {
             $ownSales = $ledger->where('owner', $owner)->sum('amount');
@@ -47,6 +40,29 @@ class TargetIncentiveService
                 'own_incentive' => $ownIncentive, 'team_incentive' => $teamIncentive, 'incentive' => round($ownIncentive + $teamIncentive, 2)];
         }
         return ['sales_amount' => round($amount, 2), 'incentive' => round($amount * (float) $target->incentive_multiplier, 2)];
+    }
+
+    public function eligibleSales(Target $target, Collection $ledger): Collection
+    {
+        $basis = $target->incentive_basis;
+        $team = $basis === 'team' ? $this->team((string) $target->sales_executive_id) : [(string) $target->sales_executive_id];
+        $productIds = $target->incentive_product_ids ?? [];
+        return $ledger->filter(function ($sale) use ($basis, $team, $productIds) {
+            if ($basis === 'company') {
+                return !$productIds || (bool) array_intersect($productIds, $sale['products']);
+            }
+            return in_array($sale['owner'], $team, true);
+        });
+    }
+
+    public function primeTeams(Collection $managerIds): void
+    {
+        $assignments = SalesExecutiveAssignment::active()->whereIn('manager_id', $managerIds)
+            ->get(['manager_id', 'sales_executive_id'])->groupBy('manager_id');
+        foreach ($managerIds as $manager) {
+            $this->teams[(string) $manager] = $assignments->get($manager, collect())->pluck('sales_executive_id')
+                ->push($manager)->map(fn ($id) => (string) $id)->unique()->values()->all();
+        }
     }
 
     protected function team(string $manager): array

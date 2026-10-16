@@ -49,6 +49,108 @@ class LeadTransferServiceTest extends TestCase
         parent::tearDown();
     }
 
+    public function test_sales_roles_can_claim_unassigned_leads_with_audit_and_followup(): void
+    {
+        foreach (UserType::SALES_ROLES as $role) {
+            $actor = $this->createUser($role, $role);
+            $lead = $this->createLead();
+            $result = app(LeadTransferService::class)->claimUnassigned($lead, $actor);
+            $this->assertTrue($result['changed']);
+            $this->assertSame($actor->id, $lead->fresh()->representative_user_id);
+            $this->assertDatabaseHas('lead_audit_trail', ['lead_id'=>$lead->id,'new_value'=>$actor->id,'changed_by'=>$actor->id]);
+            $this->assertDatabaseHas('lead_followups', ['lead_id'=>$lead->id,'followed_by'=>$actor->id,'status'=>1]);
+        }
+    }
+
+    public function test_claim_rechecks_current_owner_and_repeated_claims_do_not_write_notes(): void
+    {
+        $actor = $this->createUser('Claimant', UserType::SALES_EXECUTIVE);
+        $other = $this->createUser('New owner', UserType::SALES_EXECUTIVE);
+        $stale = $this->createLead();
+        Lead::whereKey($stale->id)->update(['representative_user_id'=>$other->id]);
+        try { app(LeadTransferService::class)->claimUnassigned($stale,$actor); $this->fail('Stale claim should fail.'); }
+        catch (ValidationException $error) { $this->assertStringContainsString('already been assigned',$error->errors()['transfer'][0]); }
+        $this->assertSame($other->id,$stale->fresh()->representative_user_id);
+        $this->assertSame(0,LeadFollowup::count());
+        $lead=$this->createLead();app(LeadTransferService::class)->claimUnassigned($lead,$actor);
+        try { app(LeadTransferService::class)->claimUnassigned($lead,$actor); $this->fail('Duplicate claim should fail.'); }
+        catch (ValidationException $error) { $this->assertStringContainsString('already been assigned',$error->errors()['transfer'][0]); }
+        $this->assertSame(1,LeadFollowup::count());
+    }
+
+    public function test_claim_blocks_inactive_non_sales_and_pending_transfer(): void
+    {
+        $lead=$this->createLead();
+        foreach ([UserType::HR,UserType::ADMIN,UserType::SUPER_ADMIN,UserType::OPERATIONS_EXECUTIVE] as $role) {
+            $actor=$this->createUser($role,$role);
+            try { app(LeadTransferService::class)->claimUnassigned($lead,$actor);$this->fail('Non-sales claim should fail.'); }
+            catch(ValidationException $error){$this->assertStringContainsString('active Sales',$error->errors()['transfer'][0]);}
+        }
+        $actor=$this->createUser('Inactive sales',UserType::SALES_EXECUTIVE);$actor->update(['status'=>0]);
+        try{app(LeadTransferService::class)->claimUnassigned($lead,$actor);$this->fail('Inactive claim should fail.');}
+        catch(ValidationException $error){$this->assertStringContainsString('active Sales',$error->errors()['transfer'][0]);}
+        $actor->update(['status'=>1]);
+        $pending=LeadTransfer::create(['lead_id'=>$lead->id,'from_user_id'=>$actor->id,'to_user_id'=>$actor->id,'requested_by'=>$actor->id,'status'=>'pending']);
+        try{app(LeadTransferService::class)->claimUnassigned($lead,$actor);$this->fail('Pending transfer claim should fail.');}
+        catch(ValidationException $error){$this->assertStringContainsString('pending transfer',$error->errors()['transfer'][0]);}
+        $this->assertSame(null,$lead->fresh()->representative_user_id);
+        $this->assertSame('pending',$pending->fresh()->status);$this->assertSame(0,LeadFollowup::count());
+    }
+
+    public function test_claim_endpoint_ignores_posted_recipient_and_finalizes_queue_source(): void
+    {
+        $actor=$this->createUser('Claimant',UserType::SALES_EXECUTIVE);
+        $other=$this->createUser('Forged recipient',UserType::SALES_EXECUTIVE);
+        $lead=$this->createLead();
+        $queue=LeadAllocationQueue::create(['lead_id'=>$lead->id,'status'=>'queued','reason'=>'whatsapp_new_lead','attempt_count'=>1,'queued_at'=>now()]);
+        $allocation=new class extends \App\Services\LeadAllocationService {
+            public array $calls=[];
+            public function __construct() {}
+            public function finalizeManualQueuedAssignment(Lead $lead,User $salesperson,?string $queueReason=null):void {$this->calls[]=[$lead->id,$salesperson->id,$queueReason];}
+        };
+        $request=\Illuminate\Http\Request::create('/claim','POST',['representative_user_id'=>$other->id]);
+        $request->setLaravelSession(app('session.store'));app()->instance('request',$request);$request->setUserResolver(fn()=>$actor);
+        $response=app(\App\Http\Controllers\LeadTransferController::class)->claim($request,$lead,app(LeadTransferService::class),$allocation);
+        $this->assertSame(302,$response->getStatusCode());
+        $this->assertSame($actor->id,$lead->fresh()->representative_user_id);
+        $this->assertSame('assigned',$queue->fresh()->status);$this->assertSame($actor->id,$queue->fresh()->assigned_to);
+        $this->assertSame([[$lead->id,$actor->id,'whatsapp_new_lead']],$allocation->calls);
+        $this->assertDatabaseHas('lead_allocation_logs',['lead_id'=>$lead->id,'salesperson_id'=>$actor->id,'result'=>'success']);
+    }
+
+    public function test_claim_route_and_controller_only_allow_sales_roles(): void
+    {
+        $route=app('router')->getRoutes()->getByName('admin.leads.transfer.claim');
+        $lead=$this->createLead();
+        foreach(array_merge(UserType::SALES_ROLES,[UserType::HR,UserType::SUPER_ADMIN,UserType::ADMIN,UserType::OPERATIONS_EXECUTIVE]) as $role){
+            $actor=$this->createUser($role,$role);
+            $request=\Illuminate\Http\Request::create('/claim','POST');$request->setUserResolver(fn()=>$actor);
+            $allowed=true;
+            foreach($route->gatherMiddleware() as $middleware){
+                if(!str_starts_with($middleware,'role:'))continue;
+                try{(new \App\Http\Middleware\RoleMiddleware())->handle($request,fn()=>response('ok'),...explode(',',substr($middleware,5)));}
+                catch(\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $error){$this->assertSame(403,$error->getStatusCode());$allowed=false;}
+            }
+            $this->assertSame(in_array($role,UserType::SALES_ROLES,true),$allowed);
+            if(!$allowed){
+                try{app(\App\Http\Controllers\LeadTransferController::class)->claim($request,$lead,app(LeadTransferService::class),app(\App\Services\LeadAllocationService::class));$this->fail('Controller should deny non-sales.');}
+                catch(\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $error){$this->assertSame(403,$error->getStatusCode());}
+            }
+        }
+        $this->assertSame(null,$lead->fresh()->representative_user_id);
+    }
+
+    public function test_claim_rolls_back_ownership_queue_and_audit_if_followup_cannot_be_saved(): void
+    {
+        $actor=$this->createUser('Claimant',UserType::SALES_EXECUTIVE);$lead=$this->createLead();
+        $queue=LeadAllocationQueue::create(['lead_id'=>$lead->id,'status'=>'queued','reason'=>'whatsapp_new_lead','attempt_count'=>1,'queued_at'=>now()]);
+        DB::unprepared("CREATE TRIGGER reject_claim_followup BEFORE INSERT ON lead_followups BEGIN SELECT RAISE(ABORT, 'test failure'); END");
+        try{app(LeadTransferService::class)->claimUnassigned($lead,$actor);$this->fail('Claim should roll back.');}
+        catch(\Illuminate\Database\QueryException $error){$this->assertStringContainsString('test failure',$error->getMessage());}
+        $this->assertSame(null,$lead->fresh()->representative_user_id);$this->assertSame('queued',$queue->fresh()->status);
+        $this->assertSame(0,LeadAuditTrail::count());$this->assertSame(0,LeadFollowup::count());$this->assertSame(0,LeadAllocationLog::count());
+    }
+
     public function test_stale_accept_cancels_pending_request_before_returning_error(): void
     {
         $oldOwner = $this->createUser('Pallavi Singh', UserType::SALES_MANAGER);

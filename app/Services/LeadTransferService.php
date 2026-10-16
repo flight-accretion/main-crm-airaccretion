@@ -478,6 +478,23 @@ class LeadTransferService
  * Returns information needed by the caller to complete
  * queued lead source handoff.
  */
+public function claimUnassigned(Lead $lead, User $actor): array
+{
+    if (!$this->isSalesUser($actor) || (int) $actor->status !== 1) {
+        throw ValidationException::withMessages(['transfer' => 'Only active Sales users can assign an unassigned lead to themselves.']);
+    }
+
+    return DB::transaction(function () use ($lead, $actor) {
+        $result = $this->applyDirectAssignment($lead, $actor, $actor, true);
+        LeadFollowup::create([
+            'id' => (string) Str::uuid(), 'lead_id' => $lead->id,
+            'next_followup_date' => now(), 'followed_by' => $actor->id, 'status' => 1,
+            'followup_note' => 'Unassigned lead assigned to self by ' . $actor->name . '.',
+        ]);
+        return $result;
+    });
+}
+
 public function directAssign(
     Lead $lead,
     User $toUser,
@@ -510,11 +527,17 @@ public function directAssign(
         ]);
     }
 
+    return $this->applyDirectAssignment($lead, $toUser, $actor);
+}
+
+private function applyDirectAssignment(Lead $lead, User $toUser, User $actor, bool $onlyUnassigned = false): array
+{
     return DB::transaction(
         function () use (
             $lead,
             $toUser,
-            $actor
+            $actor,
+            $onlyUnassigned
         ) {
 
             /*
@@ -526,6 +549,15 @@ public function directAssign(
                 )
                 ->lockForUpdate()
                 ->firstOrFail();
+
+            if ($onlyUnassigned) {
+                if (!empty($lockedLead->representative_user_id)) {
+                    throw ValidationException::withMessages(['transfer' => 'This lead has already been assigned. Search again to see its current owner.']);
+                }
+                if (LeadTransfer::where('lead_id', $lockedLead->id)->where('status', 'pending')->lockForUpdate()->first()) {
+                    throw ValidationException::withMessages(['transfer' => 'This lead has a pending transfer and cannot be assigned to yourself.']);
+                }
+            }
 
             /*
              * Nothing to change.
@@ -649,7 +681,7 @@ public function directAssign(
                             'success',
 
                         'details' =>
-                            'Assigned manually by Super Admin from lead queue',
+                            $onlyUnassigned ? 'Unassigned lead claimed by ' . $actor->name : 'Assigned manually by Super Admin from lead queue',
                     ]);
                 }
 
