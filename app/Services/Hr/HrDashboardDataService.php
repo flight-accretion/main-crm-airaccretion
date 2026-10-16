@@ -11,7 +11,6 @@ use App\Services\Kpi\KpiDataScopeService;
 use App\Services\Kpi\KpiWorkDoneService;
 use Carbon\Carbon;
 use Illuminate\Pagination\LengthAwarePaginator;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Http\Request;
 
 class HrDashboardDataService
@@ -42,9 +41,8 @@ class HrDashboardDataService
                 ? $this->operationsWork($visible->pluck('id')->all(), $from, $to)
                 : [];
             $rows = $visible->map(function (User $user) use ($actor, $department, $filter, $attendance, $operations) {
-                // Cache only bounded, authorized employee calculations; never cache authorization.
-                $key = 'hr-dashboard:v2:' . $department . ':' . $user->id . ':' . $filter['from']->toDateString() . ':' . $filter['to']->toDateString();
-                $calculated = Cache::remember($key, 60, function () use ($actor, $user, $department, $filter) {
+                // Use the same current records as the detail pages on every request.
+                $calculated = (function () use ($actor, $user, $department, $filter) {
                     $kpi = $this->kpi->forUser($user, $filter['to'], $filter['from']);
                     $weakest = collect($kpi['metrics'])->sort(function ($a, $b) {
                         return ($a['score'] <=> $b['score']) ?: ($b['weightage'] <=> $a['weightage']);
@@ -61,12 +59,14 @@ class HrDashboardDataService
                         $result['work'] = [
                             'completed' => $work['lead_history_available'] ? $work['summary']['completed'] : null,
                             'active' => $work['lead_history_available'] ? $work['summary']['active'] : null,
+                            'cancelled' => $work['lead_history_available'] ? $work['summary']['cancelled'] : null,
+                            'total' => $work['lead_history_available'] ? $work['summary']['total'] : null,
                             'outreach' => $work['summary']['outreach_completed'],
                             'notice' => $work['lead_history_notice'],
                         ];
                     }
                     return $result;
-                });
+                })();
                 return array_merge($calculated, [
                     'user' => $user,
                     'attendance' => $attendance['users'][$user->id] ?? ['label' => 'Not Available', 'tone' => 'neutral'],

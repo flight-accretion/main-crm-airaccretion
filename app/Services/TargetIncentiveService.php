@@ -76,8 +76,13 @@ class TargetIncentiveService
         $key = "$year-$month";
         if (isset($this->ledgers[$key])) return $this->ledgers[$key];
         $from = Carbon::create($year, $month, 1)->startOfDay();
+        return $this->ledgers[$key] = $this->ledgerForPeriod($from, $from->copy()->endOfMonth());
+    }
+
+    public function ledgerForPeriod(Carbon $from, Carbon $to): Collection
+    {
         $paidFollowups = PaymentAuditTrail::where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
-            ->where('paid_date', '>=', $from->toDateString())->where('paid_date', '<', $from->copy()->addMonth()->toDateString())
+            ->where('paid_date', '>=', $from->toDateString())->where('paid_date', '<', $to->copy()->addDay()->startOfDay()->toDateString())
             ->select('lead_followup_id');
         $paidLeads = LeadFollowup::whereIn('id', $paidFollowups)->select('lead_id');
         $ledger = collect();
@@ -100,6 +105,6 @@ class TargetIncentiveService
                         'amount' => SalesAmountCalculator::salesAmountForFollowup($followup, (float) $refunds->get($lead->id, 0))]);
                 }
             });
-        return $this->ledgers[$key] = $ledger;
+        return $ledger;
     }
 }

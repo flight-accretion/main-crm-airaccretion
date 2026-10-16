@@ -131,11 +131,12 @@ class KpiWorkDoneService
             ];
         }
 
-        $ids = $this->leadIdsByCategory(
+        $window = $this->leadActivityWindow($filters['from'], $filters['to']);
+        $ids = $window['available'] ? $this->leadIdsByCategory(
             $userIds,
-            $filters['from'],
-            $filters['to']
-        );
+            $window['from'],
+            $window['to']
+        ) : $this->emptyBuckets();
 
         $leadIds = $ids[$type] ?? [];
 

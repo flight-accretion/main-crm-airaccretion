@@ -54,7 +54,8 @@ class SalesResponseTimeKpiResolver implements KpiMetricResolverInterface
             $responseAt = $this->communications->firstResponseAt(
                 $lead,
                 $user,
-                $createdAt
+                $createdAt,
+                $asOf->copy()->endOfDay()
             );
 
             if (!$responseAt) {

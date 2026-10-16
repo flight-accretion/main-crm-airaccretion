@@ -188,6 +188,9 @@ class HrDashboardDynamicTest extends KpiFeatureTestCase
         $this->assertSame(4, $row['score']);
         $this->assertSame('Training', $row['weakest']);
         $this->assertSame('On track', $row['status']);
+        DB::table('kpi_manual_values')->where('metric_id', $metric)->update(['rating' => 5]);
+        $updated = $this->dashboard($hr)['departmentRows']['operations'][0];
+        $this->assertSame(5, $updated['score']);
     }
 
     public function test_sales_user_cannot_read_hr_dashboard_data(): void
@@ -208,9 +211,13 @@ class HrDashboardDynamicTest extends KpiFeatureTestCase
             $this->followup($lead, 1, '2026-09-17 09:00:00');
         }
         $this->followup($cancelled, 2, '2026-09-17 11:00:00');
+        $this->insertKpiEvent($sales, $cancelled, 'status_changed', '2026-09-17 11:00:00', 'hr-cancelled');
+        DB::table('kpi_activity_events')->where('event_key', 'test:hr-cancelled')->update(['new_value'=>'2']);
         $row = $this->dashboard($hr)['departmentRows']['sales'][0];
         $this->assertSame(1, $row['work']['active']);
         $this->assertSame(0, $row['work']['completed']);
+        $this->assertSame(1, $row['work']['cancelled']);
+        $this->assertSame(2, $row['work']['total']);
     }
 
     public function test_unavailable_sales_history_does_not_display_fabricated_zero(): void
@@ -221,6 +228,8 @@ class HrDashboardDynamicTest extends KpiFeatureTestCase
         $row = $this->dashboard($hr, ['preset' => 'custom', 'from_date' => '2026-09-10', 'to_date' => '2026-09-10'])['departmentRows']['sales'][0];
         $this->assertNull($row['work']['active']);
         $this->assertNull($row['work']['completed']);
+        $this->assertNull($row['work']['cancelled']);
+        $this->assertNull($row['work']['total']);
         $this->assertSame(0, $row['work']['outreach']);
     }
 

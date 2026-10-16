@@ -51,6 +51,11 @@ class HrDashboardController extends Controller
         $month = $period->format('Y-m');
         $sameMonth = $from->format('Y-m') === $month;
         $dynamic = $dashboard->forDashboard($request->user(), $request, $filter);
+        $salesIds = app(\App\Services\Kpi\KpiDataScopeService::class)->allowedUsers($request->user(), 'sales')->pluck('id');
+        $salesAchieved = $sameMonth ? app(\App\Services\TargetIncentiveService::class)
+            ->ledgerForPeriod($from, $to)->whereIn('owner', $salesIds)->sum('amount') : 0;
+        $salesTarget = $sameMonth ? app(\App\Services\TargetResolverService::class)
+            ->amountForUsers($salesIds->all(), $period->year, $period->month) : 0;
 
         return view('admin.pages.hr.dashboard', array_merge($dynamic, [
             'filter' => $filter,
@@ -75,14 +80,8 @@ class HrDashboardController extends Controller
                 ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
                 ->whereBetween('paid_date', [$from, $to])
                 ->sum('paid_amount'),
-            'salesTarget' => (float) Target::query()
-                ->where('year', $period->year)
-                ->where('month', $period->month)
-                ->sum('target_amount'),
-            'salesAchieved' => (float) Target::query()
-                ->where('year', $period->year)
-                ->where('month', $period->month)
-                ->sum('achieved_amount'),
+            'salesTarget' => (float) $salesTarget,
+            'salesAchieved' => (float) $salesAchieved,
         ]));
     }
 

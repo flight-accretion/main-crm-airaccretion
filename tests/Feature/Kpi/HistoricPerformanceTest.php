@@ -48,6 +48,25 @@ class HistoricPerformanceTest extends KpiFeatureTestCase
         $this->assertSame(2, count($rows));
     }
 
+    public function test_live_target_uses_selected_period_not_carried_target_month_and_never_writes(): void
+    {
+        $target = Target::create(['id'=>'carry-test','sales_executive_id'=>$this->employee->id,'year'=>2026,'month'=>7,'target_amount'=>1000,'achieved_amount'=>77,'status'=>'active']);
+        $owner = $this->employee->id;
+        app()->instance(\App\Services\TargetIncentiveService::class, new class($owner) extends \App\Services\TargetIncentiveService {
+            public function __construct(private string $owner) {}
+            public function ledgerForPeriod(Carbon $from, Carbon $to): \Illuminate\Support\Collection
+            {
+                if ($from->toDateString() !== '2026-09-01' || $to->toDateString() !== '2026-09-17') throw new \RuntimeException('Wrong selected sales period');
+                return collect([['owner'=>$this->owner,'amount'=>600],['owner'=>'other','amount'=>900]]);
+            }
+        });
+        $result = app(\App\Services\Kpi\SalesTargetKpiResolver::class)->resolve($this->employee, new \App\Models\KpiMetric(), Carbon::parse('2026-09-17'), 22, Carbon::parse('2026-09-01'));
+        $this->assertSame(600.0, $result['actual_value']);
+        $this->assertSame(1000.0, $result['target_value']);
+        $this->assertSame(60.0, $result['achievement_percent']);
+        $this->assertSame(77.0, (float) $target->fresh()->achieved_amount);
+    }
+
     public function test_targets_use_real_net_sales_without_modifying_target_records(): void
     {
         $target = Target::create(['id'=>'historic-target','sales_executive_id'=>$this->employee->id,'year'=>2026,'month'=>7,'target_amount'=>1000,'achieved_amount'=>77,'status'=>'active']);
@@ -61,6 +80,43 @@ class HistoricPerformanceTest extends KpiFeatureTestCase
         $this->assertSame(1000.0, $rows[0]['target']); $this->assertSame(600.0, $rows[0]['achieved']);
         $this->assertSame(60.0, $rows[0]['achievement']); $this->assertSame(null, $rows[1]['target']);
         $this->assertSame(77.0, (float) $target->fresh()->achieved_amount);
+    }
+
+    public function test_period_sales_refresh_after_payment_approval_and_exclude_other_dates(): void
+    {
+        $lead = $this->createLeadFor($this->employee);
+        DB::table('lead_followups')->insert(['id'=>'live-sale','lead_id'=>$lead,'status'=>3,'total_amount'=>1000,'created_at'=>'2026-09-10']);
+        DB::table('payment_audit_trail')->insert(['id'=>'live-payment','lead_followup_id'=>'live-sale','paid_amount'=>1000,'paid_date'=>'2026-09-10','payment_status'=>0]);
+        $service = app(\App\Services\TargetIncentiveService::class);
+        $from = Carbon::parse('2026-09-01'); $to = Carbon::parse('2026-09-17');
+        $this->assertSame(0, $service->ledgerForPeriod($from,$to)->count());
+        DB::table('payment_audit_trail')->where('id','live-payment')->update(['payment_status'=>1]);
+        $this->assertSame(1, $service->ledgerForPeriod($from,$to)->count());
+        $this->assertSame(0, $service->ledgerForPeriod(Carbon::parse('2026-09-11'),$to)->count());
+        DB::table('payment_audit_trail')->where('id','live-payment')->update(['paid_date'=>'2026-09-18']);
+        $this->assertSame(0, $service->ledgerForPeriod($from,$to)->count());
+    }
+
+    public function test_conversion_and_response_exclude_activity_after_selected_end(): void
+    {
+        $leadId = $this->createLeadFor($this->employee, 'Period Customer', '2026-09-10 10:00:00');
+        $lead = \App\Models\Lead::findOrFail($leadId);
+        Schema::create('call_summary_integrations', function (Blueprint $table) {
+            $table->string('id'); $table->string('lead_id'); $table->string('agent_user_id');
+            $table->string('direction'); $table->timestamp('call_start_at');
+        });
+        DB::table('call_summary_integrations')->insert(['id'=>'later-call','lead_id'=>$leadId,'agent_user_id'=>$this->employee->id,'direction'=>'outgoing','call_start_at'=>'2026-09-18 10:00:00']);
+        $communication = app(\App\Services\Kpi\SalesKpiCommunicationService::class);
+        $this->assertSame(null, $communication->firstResponseAt($lead,$this->employee,Carbon::parse('2026-09-10'),Carbon::parse('2026-09-17')->endOfDay()));
+        $this->assertSame('2026-09-18', $communication->firstResponseAt($lead,$this->employee,Carbon::parse('2026-09-10'))->toDateString());
+        DB::table('lead_followups')->insert(['id'=>'converted','lead_id'=>$leadId,'status'=>3,'created_at'=>'2026-09-18']);
+        DB::table('payment_audit_trail')->insert(['id'=>'conversion-payment','lead_followup_id'=>'converted','paid_amount'=>1000,'paid_date'=>'2026-09-18','payment_status'=>1]);
+        $resolver=app(\App\Services\Kpi\SalesLeadConversionKpiResolver::class);
+        $result=$resolver->resolve($this->employee,new \App\Models\KpiMetric(),Carbon::parse('2026-09-17'),22,Carbon::parse('2026-09-01'));
+        $this->assertSame(0,$result['actual_value']);
+        DB::table('payment_audit_trail')->where('id','conversion-payment')->update(['paid_date'=>'2026-09-16']);
+        $result=$resolver->resolve($this->employee,new \App\Models\KpiMetric(),Carbon::parse('2026-09-17'),22,Carbon::parse('2026-09-01'));
+        $this->assertSame(1,$result['actual_value']);
     }
 
     public function test_only_hr_and_super_admin_can_open_or_export(): void

@@ -62,7 +62,8 @@ $periodEnd = $asOf->copy()->endOfDay();
             $activityAt = $this->communications->firstResponseAt(
                 $lead,
                 $user,
-                $dueAt
+                $dueAt,
+                $periodEnd
             );
 
             if (

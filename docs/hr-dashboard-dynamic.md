@@ -39,15 +39,16 @@ No migrations or new dependencies are required.
 ## Performance and Verification
 
 - Ten employees per department page; all active employees remain accessible.
-- Employee KPI/Sales work calculations cached for 60 seconds after scope checks.
-  Attendance and Operations counts are read fresh; no automatic refresh loop.
+- KPI and Sales work now recalculate on every authorized request, matching the
+  detail pages. The previous 60-second cross-request cache was removed after a
+  regression reproduced an approved value changing while HR retained the old score.
+  Attendance and Operations counts are also read fresh; no automatic refresh loop.
 - Thirteen new regression cases plus three existing attendance shift-policy
   cases passed through an isolated SQLite/controller harness. PHPUnit was not
   installed in this checkout, so the full PHPUnit suite was not run.
-- Read-only local PostgreSQL check passed. Latest run: cold calculation 535
-  queries / 1.25 seconds; cached repeat 25 queries / 0.14 seconds. These are local
-  observations, not production capacity or CPU guarantees. Existing KPI resolvers
-  still have a high cold query count that should be monitored under concurrency.
+- Previous cached timing figures no longer describe the current uncached path.
+  Existing KPI resolvers have a high cold query count that should be monitored
+  under concurrency; ten-person pagination still bounds each department page.
 - Actual HR Blade fixture passed browser checks at 1440, 1024, 390, and 320 pixels:
   date controls, tabs, person new tab, mobile navigation, no page overflow or JS errors.
 - PHP syntax and Git whitespace checks passed.

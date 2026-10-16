@@ -34,10 +34,11 @@ class SalesLeadConversionKpiResolver implements KpiMetricResolverInterface
         $bookedLeadIds = $totalLeads > 0
             ? LeadFollowup::query()
                 ->whereIn('lead_id', $leadIds)
-                ->whereHas('paymentAuditTrail', function ($query) {
+                ->whereHas('paymentAuditTrail', function ($query) use ($asOf) {
                     $query
                         ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
                         ->where('paid_amount', '>', 0);
+                    $query->where('paid_date', '<', $asOf->copy()->addDay()->startOfDay()->toDateString());
                 })
                 ->pluck('lead_id')
                 ->unique()

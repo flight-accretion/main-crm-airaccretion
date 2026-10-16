@@ -17,7 +17,7 @@
     <link rel="stylesheet" href="/assets/admin/css/style.css?v=1.4">
     <link rel="stylesheet" href="/assets/admin/css/responsive.css?v=1.1">
     <link rel="stylesheet" href="/assets/admin/css/custom.css?v=2.4">
-    <link rel="stylesheet" href="/assets/admin/css/crm/navigation.css?v=3">
+    <link rel="stylesheet" href="/assets/admin/css/crm/navigation.css?v=4">
 
     <!-- Simplebar Css -->
     <link rel="stylesheet" href="/assets/admin/libs/simplebar/simplebar.min.css">

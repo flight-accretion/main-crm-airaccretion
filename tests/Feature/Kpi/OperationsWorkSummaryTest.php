@@ -94,6 +94,17 @@ class OperationsWorkSummaryTest extends KpiFeatureTestCase
         $this->assertSame($first,$measure());
     }
 
+    public function test_new_crm_activity_is_visible_on_next_summary_and_card_request(): void
+    {
+        $controller=app(\App\Http\Controllers\OperationsDashboardController::class);
+        $before=$controller->index($this->request())->getData()['summary']['total'];
+        $this->event($this->case('review','completed'),$this->ops);
+        $after=$controller->index($this->request())->getData()['summary'];
+        $this->assertSame($before+1,$after['total']);
+        $details=$controller->workDetails($this->request(['work_status'=>'total']))->getData(true);
+        $this->assertSame($after['total'],$details['total']);
+    }
+
     public function test_card_details_match_unique_summary_and_selected_employee(): void
     {
         $controller=app(\App\Http\Controllers\OperationsDashboardController::class);

@@ -4,7 +4,9 @@
 .crm-sidebar .main-sidebar-header{position:relative!important;inset:auto!important;flex:0 0 72px;width:100%!important;min-height:72px}
 .crm-sidebar #sidebar-scroll{flex:1 1 auto;min-height:0;height:auto!important;max-height:100%;margin-top:0!important;overflow:auto;overscroll-behavior-y:contain}
 @media(min-width:992px){.crm-sidebar .main-sidebar-header{display:flex!important}}
-.crm-sidebar .side-menu__label{color:inherit!important;opacity:1!important}
+.crm-sidebar .side-menu__label{color:inherit!important;opacity:1!important;white-space:normal!important;overflow-wrap:anywhere;line-height:inherit!important;font-size:inherit!important}
+.crm-sidebar .crm-nav-leaf{min-width:0;width:100%}
+.crm-sidebar .crm-nav-leaf>.side-menu__item{width:100%;max-width:100%;min-width:0;height:auto}
 .crm-sidebar .crm-nav-group>summary{width:100%;position:relative;gap:9px!important}
 .crm-sidebar .crm-nav-group>summary>.side-menu__angle:last-child{position:static!important;inset:auto!important;float:none!important;flex:0 0 16px;width:16px;height:18px;line-height:18px;margin:0 0 0 auto!important;color:inherit!important}
 .crm-sidebar .crm-nav-children .crm-nav-group>summary>i:first-child:not(.side-menu__angle){display:none}

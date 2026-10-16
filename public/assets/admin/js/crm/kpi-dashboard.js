@@ -47,7 +47,11 @@ document.addEventListener('DOMContentLoaded', () => {
     search.addEventListener('input', () => { currentPage = 1; render(); });
     size.addEventListener('change', () => { currentPage = 1; render(); });
     const preset = dashboard.querySelector('#kpi-date-type');
-    function customDates() { dashboard.querySelectorAll('.kpi-custom-date-field').forEach(field => field.style.display = preset.value === 'custom' ? '' : 'none'); }
+    function customDates() { dashboard.querySelectorAll('.kpi-custom-date-field').forEach(field => {
+        const custom = preset.value === 'custom';
+        field.style.display = custom ? '' : 'none';
+        field.querySelectorAll('input').forEach(input => input.disabled = !custom);
+    }); }
     preset.addEventListener('change',customDates); customDates();
     dashboard.querySelectorAll('.js-kpi-score').forEach(button => {
         try {

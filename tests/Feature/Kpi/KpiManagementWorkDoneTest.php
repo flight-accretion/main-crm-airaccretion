@@ -67,6 +67,28 @@ class KpiManagementWorkDoneTest extends KpiFeatureTestCase
         $data = app(KpiWorkDoneService::class)->dashboard($user, ['from' => Carbon::parse('2026-09-01'), 'to' => Carbon::parse('2026-09-02'), 'user_id' => null], true);
         $this->assertSame(null, $data['breakdown'][0]['total']);
         $this->assertSame(0, $data['breakdown'][0]['outreach_completed']);
+        $lead = $this->createLeadFor($user);
+        $this->insertKpiEvent($user, $lead, 'status_changed', '2026-09-01 12:00:00', 'pre-cutover');
+        DB::table('kpi_activity_events')->where('event_key', 'test:pre-cutover')->update(['new_value'=>'3']);
+        $details = app(KpiWorkDoneService::class)->details($user, 'completed', ['from'=>Carbon::parse('2026-09-01'),'to'=>Carbon::parse('2026-09-02'),'user_id'=>null]);
+        $this->assertSame(0, $details['rows']->count());
+    }
+
+    public function test_outreach_uses_actual_calendar_across_all_selected_months(): void
+    {
+        $user = $this->createUserWithRole('Calendar Sales', UserType::SALES_EXECUTIVE);
+        $metric = new \App\Models\KpiMetric(); $metric->target_value = 50;
+        $result = app(\App\Services\Kpi\SalesOutreachKpiResolver::class)->resolve($user, $metric, Carbon::parse('2026-09-17'), 22, Carbon::parse('2026-08-01'));
+        // August has 26 non-Sundays; September 1-17 has 15.
+        $this->assertSame(41, $result['evidence']['period_working_days']);
+        $this->assertSame(2050, $result['target_value']);
+        $display = new \ReflectionMethod(\App\Services\Kpi\KpiDashboardService::class, 'displayActual');
+        $display->setAccessible(true);
+        $text = $display->invoke(app(\App\Services\Kpi\KpiDashboardService::class), 'daily_outreach', [
+            'actual_value'=>2, 'target_value'=>50,
+            'evidence'=>['mtd_completed'=>111,'period_completed'=>2,'expected_to_date'=>50],
+        ]);
+        $this->assertSame('2 / 50 expected in selected period', $text);
     }
 
     public function test_hr_management_and_work_done_render_with_real_controller_data(): void

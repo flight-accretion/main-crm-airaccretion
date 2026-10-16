@@ -879,8 +879,8 @@ private function emptyImprovementLine(
 
         return match ($code) {
             'daily_outreach' => sprintf(
-                '%d / %d expected MTD',
-                (int) ($evidence['mtd_completed'] ?? $resolved['actual_value'] ?? 0),
+                '%d / %d expected in selected period',
+                (int) ($evidence['period_completed'] ?? $resolved['actual_value'] ?? 0),
                 (int) ($evidence['expected_to_date'] ?? $resolved['target_value'] ?? 0)
             ),
             'lead_conversion' => sprintf(

@@ -40,8 +40,13 @@ class SalesTargetKpiResolver implements KpiMetricResolverInterface
             ];
         }
 
-        $achieved = (float) $target->updateAchievedAmount();
-        $targetAmount = (float) $target->target_amount;
+        $start = ($from ?: $asOf->copy()->startOfMonth())->copy()->startOfDay();
+        $achieved = (float) app(\App\Services\TargetIncentiveService::class)
+            ->ledgerForPeriod($start, $asOf)->where('owner', (string) $user->id)->sum('amount');
+        $targetAmount = 0.0;
+        for ($month = $start->copy()->startOfMonth(); $month->lte($asOf); $month->addMonth()) {
+            $targetAmount += (float) ($this->targets->targetForUser($user->id, $month->year, $month->month)?->target_amount ?? 0);
+        }
         $achievement = $targetAmount > 0
             ? ($achieved / $targetAmount) * 100
             : 0.0;

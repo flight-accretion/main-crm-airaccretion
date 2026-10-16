@@ -103,6 +103,7 @@
                 <input
                     type="date"
                     name="from_date"
+                    @if(($filter['preset'] ?? 'this_month') !== 'custom') disabled @endif
                     class="form-control"
                     value="{{ request('from_date', $filter['from']->toDateString()) }}"
                 >
@@ -122,6 +123,7 @@
                 <input
                     type="date"
                     name="to_date"
+                    @if(($filter['preset'] ?? 'this_month') !== 'custom') disabled @endif
                     class="form-control"
                     value="{{ request('to_date', $filter['to']->toDateString()) }}"
                 >
@@ -176,5 +178,5 @@
 @if($showOperationsManualEntry ?? false)
     @include('admin.pages.kpi.partials.operations-manual-entry-modal')
 @endif
-<script src="{{ asset('assets/admin/js/crm/kpi-dashboard.js') }}?v=1" defer></script>
+<script src="{{ asset('assets/admin/js/crm/kpi-dashboard.js') }}?v=2" defer></script>
 @endsection

@@ -20,11 +20,11 @@ class SalesOutreachKpiResolver implements KpiMetricResolverInterface
         int $workingDaysPerMonth,
         ?Carbon $from = null
     ): array {
-        $stats = $this->workingDays->stats(
-            $user,
-            $asOf,
-            $workingDaysPerMonth
-        );
+        $calendar = app(\App\Services\Attendance\AttendanceCalendarService::class);
+        $monthDates = $calendar->summary($user, $asOf->year, $asOf->month)['dates'];
+        $elapsed = $monthDates->filter(fn (Carbon $date) => $date->lte($asOf))->count();
+        $stats = ['dates' => $monthDates, 'working_days_total' => $monthDates->count(),
+            'working_days_elapsed' => $elapsed, 'working_days_remaining' => $monthDates->count() - $elapsed];
 
         $dailyTarget = max(
             0,
@@ -116,8 +116,12 @@ class SalesOutreachKpiResolver implements KpiMetricResolverInterface
         |--------------------------------------------------------------------------
         */
 
+        $periodDates = collect();
+        for ($month = $periodStart->copy()->startOfMonth(); $month->lte($periodEnd); $month->addMonth()) {
+            $periodDates = $periodDates->merge($calendar->summary($user, $month->year, $month->month)['dates']);
+        }
         $periodWorkingDays =
-            $stats['dates']
+            $periodDates
                 ->filter(
                     function (Carbon $date) use (
                         $periodStart,

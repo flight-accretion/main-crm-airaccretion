@@ -127,7 +127,7 @@
                 </div>
                 <div class="hr-target-summary">
                     <div><span>Monthly target</span><strong>{{ $targetAvailable ? 'Rs. ' . number_format($salesTarget, 2) : 'N/A' }}</strong></div>
-                    <div><span>Monthly achieved</span><strong>{{ $targetAvailable ? 'Rs. ' . number_format($salesAchieved, 2) : 'N/A' }}</strong></div>
+                    <div><span>Selected-period sales</span><strong>{{ $targetAvailable ? 'Rs. ' . number_format($salesAchieved, 2) : 'N/A' }}</strong></div>
                 </div>
             </section>
         </div>
@@ -145,8 +145,10 @@
                             <thead><tr>
                                 <th scope="col">Person</th>
                                 @if($department === 'sales')
-                                    <th scope="col" class="hr-num">Completed lead work</th>
+                                    <th scope="col" class="hr-num">Total</th>
+                                    <th scope="col" class="hr-num">Completed</th>
                                     <th scope="col" class="hr-num">Active</th>
+                                    <th scope="col" class="hr-num">Cancel</th>
                                     <th scope="col" class="hr-num">Outreach done</th>
                                 @endif
                                 @if($department === 'operations')
@@ -161,7 +163,7 @@
                                     <tr>
                                         <td>{{ $row['user']->name }}</td>
                                         @if($department === 'sales')
-                                            @foreach(['completed', 'active', 'outreach'] as $metric)
+                                            @foreach(['total', 'completed', 'active', 'cancelled', 'outreach'] as $metric)
                                                 <td class="hr-num">{{ $row['work'][$metric] ?? 'N/A' }}</td>
                                             @endforeach
                                         @endif
@@ -173,10 +175,10 @@
                                         <td><span class="hr-tag hr-tag-{{ $row['attendance']['tone'] }}">{{ $row['attendance']['label'] }}</span></td>
                                     </tr>
                                     @if($row['work']['notice'])
-                                        <tr><td colspan="5" class="hr-meta">{{ $row['work']['notice'] }}</td></tr>
+                                        <tr><td colspan="{{ $department === 'sales' ? 7 : 5 }}" class="hr-meta">{{ $row['work']['notice'] }}</td></tr>
                                     @endif
                                 @empty
-                                    <tr><td colspan="5" class="hr-empty">No active {{ strtolower($departmentLabel) }} employees</td></tr>
+                                    <tr><td colspan="{{ $department === 'sales' ? 7 : 5 }}" class="hr-empty">No active {{ strtolower($departmentLabel) }} employees</td></tr>
                                 @endforelse
                             </tbody>
                         </table>

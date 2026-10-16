@@ -13,13 +13,15 @@ class SalesKpiCommunicationService
     public function firstResponseAt(
         Lead $lead,
         User $user,
-        Carbon $after
+        Carbon $after,
+        ?Carbon $until = null
     ): ?Carbon {
         $callAt = CallSummaryIntegration::query()
             ->where('lead_id', $lead->id)
             ->where('agent_user_id', $user->id)
             ->where('direction', 'outgoing')
             ->where('call_start_at', '>=', $after)
+            ->when($until, fn ($query) => $query->where('call_start_at', '<=', $until))
             ->orderBy('call_start_at')
             ->value('call_start_at');
 
@@ -34,6 +36,7 @@ class SalesKpiCommunicationService
                 ->where('direction', 'outgoing')
                 ->where('sender_user_id', $user->id)
                 ->where('message_at', '>=', $after)
+                ->when($until, fn ($query) => $query->where('message_at', '<=', $until))
                 ->orderBy('message_at')
                 ->value('message_at');
         }
