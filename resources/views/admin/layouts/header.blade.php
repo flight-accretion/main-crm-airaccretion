@@ -644,7 +644,9 @@
                     <img src="/assets/admin/images/brand-logos/desktop-white.png" alt="logo"
                         class="desktop-white">
                     <img src="/assets/admin/images/brand-logos/toggle-white.png" alt="logo" class="toggle-white">
-                    <span class="crm-sidebar-brand">Accretion Aviation<small>TEAM WORKSPACE</small></span>
+                    <span class="crm-sidebar-brand">Accretion Aviation
+                        <!-- <small>TEAM WORKSPACE</small> -->
+                    </span>
                 </a>
             </div>
             <!-- End::main-sidebar-header -->

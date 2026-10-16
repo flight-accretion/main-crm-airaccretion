@@ -81,6 +81,7 @@
                             <a
                                 href="{{ route('admin.leads.view', $lead->id) }}"
                                 class="ti-btn ti-btn-sm ti-btn-primary"
+                                style="width: auto;"
                             >
                                 View Lead
                             </a>
