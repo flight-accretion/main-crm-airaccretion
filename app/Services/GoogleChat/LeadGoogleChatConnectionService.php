@@ -67,6 +67,10 @@ class LeadGoogleChatConnectionService
                 'body' => $taskTitle, 'task_id' => $task->id,
                 'google_sync_status' => 'pending', 'google_sync_version' => 1,
             ]);
+            $message->setRelation('lead', $lead)->setRelation('sender', $actor)
+                ->setRelation('conversation', $conversation)->setRelation('task', $task);
+            $preview = app(GoogleChatBridgeService::class)->outboundText($message);
+            LeadChatMessage::withoutEvents(fn () => $message->update(['body' => $preview]));
             $conversation->update(['last_message_at' => $message->created_at]);
             return $conversation->fresh();
         });
@@ -81,7 +85,7 @@ class LeadGoogleChatConnectionService
             $parts[] = $customer;
         }
 
-        $services = $lead->service_names ?? [];
+        $services = $lead->product_names ?? [];
         $serviceText = is_array($services)
             ? trim(implode(', ', array_filter($services)))
             : trim((string) $services);
@@ -97,20 +101,6 @@ class LeadGoogleChatConnectionService
         $occasion = trim((string) ($lead->occasion ?? ''));
         if ($occasion !== '') {
             $parts[] = $occasion;
-        }
-
-        $dates = $lead->ride_dates ?? null;
-        if (is_array($dates)) {
-            $from = trim((string) ($dates['from_date'] ?? ''));
-            $to = trim((string) ($dates['to_date'] ?? ''));
-
-            if ($from !== '' && $to !== '' && $from !== $to) {
-                $parts[] = $from . ' to ' . $to;
-            } elseif ($from !== '') {
-                $parts[] = $from;
-            } elseif ($to !== '') {
-                $parts[] = $to;
-            }
         }
 
         return !empty($parts)

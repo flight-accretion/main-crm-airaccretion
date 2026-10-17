@@ -1102,7 +1102,7 @@
             message.task;
 
 
-        if (!task) {
+        if (!task || message.type !== 'task') {
             return '';
         }
 
@@ -1202,6 +1202,11 @@
 
 
                 <div class="mt-3">
+
+                    <button type="button" class="lead-chat-task-reply ti-btn ti-btn-sm ti-btn-light"
+                        data-message-id="${escapeHtml(message.id)}" style="width:auto;">
+                        <i class="ri-reply-line" aria-hidden="true"></i> Send message
+                    </button>
 
                     ${
                         active
@@ -1596,7 +1601,7 @@
 
 
                                         ${
-                                            message.type !== 'task'
+                                            message.body && (message.type !== 'task' || message.body !== message.task?.title)
 
                                             ? `
 
@@ -2635,6 +2640,12 @@
     messagesEl.addEventListener(
         'click',
         async function (event) {
+                const taskReply = event.target.closest('.lead-chat-task-reply');
+                if (taskReply) {
+                    const taskMessage = messages.find(message => message.id === taskReply.dataset.messageId);
+                    if (taskMessage) { setReply(taskMessage); input.focus(); }
+                    return;
+                }
 
             try {
                 const googleRetry = event.target.closest('.lead-chat-google-retry');
@@ -2962,6 +2973,10 @@
     |--------------------------------------------------------------------------
     */
 
+    document.addEventListener('lead-chat-connected', () => {
+        lastSignature = '';
+        loadMessages();
+    });
     loadMessages();
 
 

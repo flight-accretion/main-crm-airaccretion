@@ -20,5 +20,7 @@ class GoogleChatUiTest extends GoogleChatTestCase
         $this->assertStringContainsString('lead-chat-send', $html);
         $this->assertStringContainsString('google_sync_status', $html);
         $this->assertStringContainsString('Retry Google delivery', $html);
+        $this->assertStringContainsString('lead-chat-task-reply', $html);
+        $this->assertStringContainsString('lead-chat-connected', $html);
     }
 }

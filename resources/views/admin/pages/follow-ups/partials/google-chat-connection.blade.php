@@ -74,6 +74,7 @@
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || 'Google Chat connection failed.');
             render(data.connection);
+            document.dispatchEvent(new CustomEvent('lead-chat-connected'));
         } catch (e) { error.textContent = e.message; }
         finally {button.disabled = !configured;}
     });

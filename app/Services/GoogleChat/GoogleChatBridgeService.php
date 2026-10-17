@@ -434,6 +434,12 @@ class GoogleChatBridgeService
     }
 
 
+    public function outboundText(LeadChatMessage $message): string
+    {
+        $message->loadMissing(['lead.client', 'sender.userType', 'conversation', 'task', 'attachments']);
+        return $this->formatMessage($message);
+    }
+
     private function formatMessage(
         LeadChatMessage $message
     ): string {
@@ -469,7 +475,7 @@ class GoogleChatBridgeService
 
         $serviceNames =
             $lead
-                ?->service_names
+                ?->product_names
             ??
             [];
 
@@ -516,7 +522,7 @@ class GoogleChatBridgeService
                 .
                 "Lead: {$customer}\n"
                 .
-                "Service: {$services}\n"
+                "Product: {$services}\n"
                 .
                 "Created by: {$sender} · {$role}\n\n"
                 .
@@ -538,6 +544,11 @@ class GoogleChatBridgeService
                     'normal'
                 );
 
+
+            $travel = $this->travelDetails($lead);
+            if ($travel !== '') {
+                $text .= "\n\n" . $travel;
+            }
 
             if (
                 $task?->due_at
@@ -616,7 +627,7 @@ class GoogleChatBridgeService
 
                 .
 
-                "Service: {$services}\n"
+                "Product: {$services}\n"
 
                 .
 
@@ -667,6 +678,27 @@ class GoogleChatBridgeService
             );
     }
 
+
+    private function travelDetails(?\App\Models\Lead $lead): string
+    {
+        if (!$lead) return '';
+        $journeys = [];
+        foreach ($lead->rideSegments as $segment) {
+            $from = $segment->from_date;
+            $to = $segment->to_date;
+            $date = $from?->format('d M Y, h:i A') ?? $to?->format('d M Y, h:i A') ?? 'Date not set';
+            if ($from && $to && !$from->equalTo($to)) {
+                $date .= ' to ' . $to->format('d M Y, h:i A');
+            }
+            $origin = trim((string) $segment->from_place);
+            $destination = trim((string) $segment->to_place);
+            $route = ($origin !== '' || $destination !== '')
+                ? "\n" . ($origin ?: 'Not specified') . ' -> ' . ($destination ?: 'Not specified')
+                : '';
+            $journeys[] = 'Travel ' . (count($journeys) + 1) . ":\n" . $date . $route;
+        }
+        return implode("\n\n", $journeys);
+    }
 
     private function withCrmLink(
         string $text,

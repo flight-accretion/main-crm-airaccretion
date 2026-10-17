@@ -376,6 +376,8 @@ public function store(
 
                             'reply_to_message_id' =>
                                 $replyTo?->id,
+
+                            'task_id' => $replyTo?->task_id,
                         ]);
 
 
@@ -1581,6 +1583,13 @@ public function store(
         ===
         'google_chat';
 
+    $displayBody = $message->body ?? '';
+    if (!$message->deleted_at && $message->message_type === LeadChatMessage::TYPE_TASK
+        && $message->conversation?->google_template_message_id === $message->id
+        && $displayBody === $message->task?->title) {
+        $displayBody = app(\App\Services\GoogleChat\GoogleChatBridgeService::class)->outboundText($message);
+    }
+
 
     $senderName =
         $isGoogleMessage
@@ -1703,9 +1712,7 @@ public function store(
                 ? 'This message was deleted.'
 
                 : (
-                    $message->body
-                    ??
-                    ''
+                    $displayBody
                 ),
 
 

@@ -43,7 +43,9 @@ class GoogleChatConnectionTest extends GoogleChatTestCase
         $this->assertSame($first->id, $second->id);
         $this->assertSame($first->google_template_message_id, $second->google_template_message_id);
         $this->assertSame(1, LeadChatMessage::count());
-        $this->assertStringContainsString('Passengers: 3', LeadChatMessage::first()->body);
+        $this->assertStringContainsString('3 People', LeadChatMessage::first()->body);
+        $this->assertStringContainsString('Product: N/A', LeadChatMessage::first()->body);
+        $this->assertStringNotContainsString('Service:', LeadChatMessage::first()->body);
         $this->assertSame($actor->id, DB::table('leads')->value('representative_user_id'));
     }
 
@@ -70,12 +72,44 @@ class GoogleChatConnectionTest extends GoogleChatTestCase
         $this->assertSame($manager->id, LeadChatMessage::first()->sender_user_id);
     }
 
+    public function test_connection_uses_all_crm_products_and_keeps_full_auto_message(): void
+    {
+        [$lead, $actor, $ops] = $this->fixture();
+        \Illuminate\Support\Facades\Schema::create('products', function ($table) {
+            $table->string('id'); $table->string('product');
+        });
+        DB::table('products')->insert([['id'=>'p1','product'=>'Yacht Goa'],['id'=>'p2','product'=>'Plane Ride']]);
+        $lead->product_ids = json_encode(['p1','p2']);
+        app(LeadGoogleChatConnectionService::class)->connect($lead, $actor, $ops, 'spaces/one');
+        $message = LeadChatMessage::with('task')->firstOrFail();
+        $this->assertStringContainsString('Product: Yacht Goa, Plane Ride', $message->body);
+        $this->assertStringNotContainsString('Service:', $message->body);
+        $this->assertStringContainsString('Yacht Goa, Plane Ride', $message->task->title);
+        $this->assertSame($actor->id, $message->sender_user_id);
+    }
+
     public function test_cross_lead_access_is_denied(): void
     {
         [$lead, $actor, $ops] = $this->fixture();
         $lead->representative_user_id = (string) Str::uuid();
         $this->expectException(HttpException::class);
         app(LeadGoogleChatConnectionService::class)->connect($lead, $actor, $ops, 'spaces/one');
+    }
+
+    public function test_each_travel_row_has_its_own_date_time_and_route(): void
+    {
+        [$lead, $actor, $ops] = $this->fixture();
+        $lead->setRelation('rideSegments', collect([
+            new \App\Models\LeadRide(['from_date'=>'2026-10-26 16:00:00','to_date'=>'2026-10-26 16:00:00','from_place'=>'Bagdogra','to_place'=>'Gangtok']),
+            new \App\Models\LeadRide(['from_date'=>'2026-10-28 12:00:00','to_date'=>'2026-10-28 13:00:00','from_place'=>'Gangtok','to_place'=>'Bagdogra']),
+            new \App\Models\LeadRide(['from_place'=>'Mumbai','to_place'=>'Mumbai']),
+        ]));
+        app(LeadGoogleChatConnectionService::class)->connect($lead, $actor, $ops, 'spaces/one');
+        $body = LeadChatMessage::firstOrFail()->body;
+        $this->assertStringContainsString("Travel 1:\n26 Oct 2026, 04:00 PM\nBagdogra -> Gangtok", $body);
+        $this->assertStringContainsString("Travel 2:\n28 Oct 2026, 12:00 PM to 28 Oct 2026, 01:00 PM\nGangtok -> Bagdogra", $body);
+        $this->assertStringContainsString("Travel 3:\nDate not set\nMumbai -> Mumbai", $body);
+        $this->assertStringNotContainsString('2026-10-26 16:00:00 to 2026-10-28', $body);
     }
 
     public function test_nonallowlisted_space_is_rejected(): void
