@@ -1,61 +1,35 @@
 @extends('admin.layouts.header')
-
 @section('content')
-    <div class="block justify-between page-header md:flex">
-        <div>
-            <h3 class="!text-defaulttextcolor dark:!text-defaulttextcolor/70 text-[1.125rem] font-semibold">Create Vendor Follow-up</h3>
-            <p class="text-[0.75rem] text-gray-500 mt-1">Lead: {{ optional($lead->client)->name ?? $lead->id }}</p>
-        </div>
-        <a href="{{ route('admin.operations.vendor-followups.index') }}" class="ti-btn ti-btn-light mt-3 md:mt-0">Back</a>
-    </div>
-
-    @if ($errors->any())
-        <div class="alert alert-danger mb-4">{{ $errors->first() }}</div>
-    @endif
-
-    <div class="box custom-box">
-        <div class="box-body">
-            <form method="POST" action="{{ route('admin.operations.vendor-followups.store', $lead) }}" class="grid grid-cols-12 gap-4">
+<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/vendor-followups.css') }}">
+<div class="vf-page">
+    <header class="vf-heading"><div><h1>Add Vendor Follow-up</h1><p>{{ $lead->client?->name ?: 'Customer' }}</p></div><div class="vf-actions"><a class="vf-button" href="{{ route('admin.operations.vendor-followups.index') }}"><i class="ri-arrow-left-line" aria-hidden="true"></i> Back to queue</a><button type="submit" form="vendor-followup-form" class="vf-button vf-primary">Create follow-up</button></div></header>
+    @if($errors->any())<div class="vf-notice vf-red" role="alert">@foreach($errors->all() as $error)<p>{{ $error }}</p>@endforeach</div>@endif
+    <div class="vf-create-layout"><main>
+        <section class="vf-section"><h2>Case this follow-up belongs to</h2><div class="vf-lead-context"><strong>{{ $lead->client?->name ?: 'Not recorded' }}</strong><a href="{{ route('admin.leads.view', $lead->id) }}" target="_blank" rel="noopener">View lead <i class="ri-external-link-line" aria-hidden="true"></i></a><p>{{ $lead->client?->contact_number ?: 'Phone not recorded' }}</p><p>{{ implode(' / ', $interestNames) ?: 'Product / service not recorded' }}</p>@foreach($lead->rideSegments as $segment)<p>{{ $segment->from_place }}@if($segment->to_place) &rarr; {{ $segment->to_place }}@endif &middot; {{ $segment->from_date?->format('d M Y · H:i') ?: 'No date / TBA' }}</p>@endforeach</div></section>
+        <section class="vf-section"><h2>Follow-up details</h2>
+            <form id="vendor-followup-form" method="POST" action="{{ route('admin.operations.vendor-followups.store', $lead) }}" data-today="{{ now()->toDateString() }}">
                 @csrf
-                <div class="md:col-span-6 col-span-12">
-                    <label class="ti-form-label">Vendor</label>
-                    <select name="vendor_id" class="ti-form-select" required>
-                        <option value="">Select vendor</option>
-                        @foreach ($vendors as $vendor)
-                            <option value="{{ $vendor->id }}" @selected(old('vendor_id') === $vendor->id)>{{ $vendor->name }}</option>
-                        @endforeach
-                    </select>
+                <div class="vf-form-grid">
+                    <div><label>Vendor <span aria-hidden="true">*</span><select name="vendor_id" required><option value="">Select vendor</option>@foreach($vendors as $vendor)<option value="{{ $vendor->id }}" data-phone="{{ $vendor->contact_number }}" {{ old('vendor_id') === $vendor->id ? 'selected' : '' }}>{{ $vendor->name }}</option>@endforeach</select></label><div class="vf-vendor-contact" id="vf-vendor-contact" hidden><strong data-vendor-name></strong><small data-vendor-phone></small></div></div>
+                    <label>Assigned to<select name="assigned_to"><option value="">Me - {{ auth()->user()->name }}</option>@foreach($operationUsers as $user)<option value="{{ $user->id }}" {{ old('assigned_to') === $user->id ? 'selected' : '' }}>{{ $user->name }}</option>@endforeach</select></label>
+                    <label class="vf-full">Purpose<input type="text" name="purpose" value="{{ old('purpose', 'Confirm Ride Date & Time') }}" maxlength="255"></label>
+                    <label>Tentative ride date &amp; time<input type="datetime-local" name="tentative_ride_at" value="{{ old('tentative_ride_at', $tentativeRideAt?->format('Y-m-d\TH:i')) }}"></label>
+                    <div><label>Follow-up date <span aria-hidden="true">*</span><input type="date" name="followup_date" required min="{{ now()->toDateString() }}" value="{{ old('followup_date', $suggestedFollowupDate->toDateString()) }}"></label><div class="vf-quick-dates" role="group" aria-label="Follow-up date">@foreach([0 => 'Today', 1 => 'Tomorrow', 3 => '+3 days', 7 => '+7 days'] as $offset => $label)<button type="button" data-date-offset="{{ $offset }}" aria-pressed="false">{{ $label }}</button>@endforeach</div></div>
+                    <label class="vf-full">Remarks<textarea name="remarks" maxlength="5000" rows="5">{{ old('remarks') }}</textarea></label>
                 </div>
-                <div class="md:col-span-6 col-span-12">
-                    <label class="ti-form-label">Assigned To</label>
-                    <select name="assigned_to" class="ti-form-select">
-                        <option value="">Me</option>
-                        @foreach ($operationUsers as $user)
-                            <option value="{{ $user->id }}" @selected(old('assigned_to') === $user->id)>{{ $user->name }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div class="md:col-span-6 col-span-12">
-                    <label class="ti-form-label">Purpose</label>
-                    <input type="text" name="purpose" class="ti-form-input" value="{{ old('purpose', 'Confirm Ride Date & Time') }}" maxlength="255">
-                </div>
-                <div class="md:col-span-3 col-span-12">
-                    <label class="ti-form-label">Tentative Ride</label>
-                    <input type="datetime-local" name="tentative_ride_at" class="ti-form-input" value="{{ old('tentative_ride_at', $tentativeRideAt ? $tentativeRideAt->format('Y-m-d\TH:i') : '') }}">
-                </div>
-                <div class="md:col-span-3 col-span-12">
-                    <label class="ti-form-label">Follow-up Date</label>
-                    <input type="date" name="followup_date" class="ti-form-input" min="{{ now()->toDateString() }}" value="{{ old('followup_date', $suggestedFollowupDate->toDateString()) }}" required>
-                </div>
-                <div class="col-span-12">
-                    <label class="ti-form-label">Remarks</label>
-                    <textarea name="remarks" class="ti-form-input" rows="4" maxlength="5000">{{ old('remarks') }}</textarea>
-                </div>
-                <div class="col-span-12 flex gap-2">
-                    <button type="submit" class="ti-btn ti-btn-primary">Create Follow-up</button>
-                    <a href="{{ route('admin.operations.vendor-followups.index') }}" class="ti-btn ti-btn-light">Cancel</a>
-                </div>
+                <footer class="vf-form-footer"><a class="vf-button" href="{{ route('admin.operations.vendor-followups.index') }}">Close</a><button class="vf-button vf-primary" type="submit">Create follow-up</button></footer>
             </form>
-        </div>
-    </div>
+        </section>
+    </main><aside class="vf-preview" aria-label="Follow-up preview"><h2>Queue preview</h2><dl>
+        <div><dt>Client</dt><dd>{{ $lead->client?->name ?: 'Not recorded' }}</dd></div>
+        <div><dt>Vendor</dt><dd data-vf-preview="vendor_id">Not selected</dd></div>
+        <div><dt>Purpose</dt><dd data-vf-preview="purpose"></dd></div>
+        <div><dt>Remarks</dt><dd data-vf-preview="remarks"></dd></div>
+        <div><dt>Tentative ride</dt><dd data-vf-preview="tentative_ride_at"></dd></div>
+        <div><dt>Due</dt><dd data-vf-preview="followup_date"></dd></div>
+        <div><dt>Assigned</dt><dd data-vf-preview="assigned_to"></dd></div>
+        <div><dt>Status</dt><dd><span class="vf-badge">Pending</span></dd></div>
+    </dl></aside></div>
+</div>
+<script src="{{ asset('assets/admin/js/vendor-followups.js') }}" defer></script>
 @endsection

@@ -71,11 +71,11 @@ class WhatsAppInboxLiveRefreshViewTest extends TestCase
             $source
         );
         $this->assertStringContainsString(
-            'lead_followup_url',
+            'lead_view_url',
             $source
         );
         $this->assertStringContainsString(
-            'wa-view-lead',
+            'wa-open-lead',
             $source
         );
         $this->assertStringContainsString(

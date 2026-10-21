@@ -104,6 +104,23 @@ class HrDashboardDataService
         return ['summary' => $summary, 'users' => $users];
     }
 
+    public function incentiveSummary(Carbon $period): array
+    {
+        $targets = \App\Models\Target::where('year', $period->year)->where('month', $period->month)
+            ->where('status', 'active')->whereHas('salesExecutive', fn ($query) => $query->where('status', 1))->get();
+        if ($targets->groupBy('sales_executive_id')->contains(fn ($items) => $items->count() > 1)) {
+            return ['amount'=>null, 'configured'=>0, 'earning'=>0, 'error'=>'Resolve duplicate active targets'];
+        }
+        $targets = $targets->filter(fn ($target) => $target->incentive_enabled);
+        $service = app(\App\Services\TargetIncentiveService::class);
+        $service->primeTeams($targets->where('incentive_basis', 'team')->pluck('sales_executive_id'));
+        $end = $period->isSameMonth(now()) ? now() : $period->copy()->endOfMonth();
+        $ledger = $targets->isEmpty() ? collect() : $service->ledgerForPeriod($period->copy()->startOfMonth(), $end);
+        $amounts = $targets->map(fn ($target) => $service->calculate($target, $ledger)['incentive']);
+        return ['amount'=>round($amounts->sum(), 2), 'configured'=>$targets->count(),
+            'earning'=>$amounts->filter(fn ($amount) => $amount > 0)->count(), 'error'=>null];
+    }
+
     private function attendanceStatus(AttendanceRecord $record): array
     {
         $status = strtoupper(trim((string) $record->raw_status));

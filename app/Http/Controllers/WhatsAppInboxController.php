@@ -66,14 +66,6 @@ class WhatsAppInboxController extends Controller
             );
         }
 
-        if ($request->query('status') === 'unread') {
-            $query->where('unread_count', '>', 0);
-        }
-
-        if ($request->query('status') === 'read') {
-            $query->where('unread_count', 0);
-        }
-
         if ($request->filled('agent_id')) {
             $allowedAgentIds = $visibility
                 ->agentFilterUsers($user)
@@ -96,6 +88,17 @@ class WhatsAppInboxController extends Controller
             }
         }
 
+        $summary = [
+            'unread_chats' => (clone $query)->where('unread_count', '>', 0)->count(),
+            'unread_messages' => (int) (clone $query)->sum('unread_count'),
+            'on_case' => (clone $query)->whereHas('lead.operationCases', fn($case) => $case->whereNull('completed_at'))->count(),
+            'old_unread' => (clone $query)->where('unread_count', '>', 0)->where('last_message_at', '<', now()->subDay())->count(),
+        ] + app(\App\Services\WhatsApp\WhatsAppResponseTimeService::class)
+            ->summary($visibility->visibleConversationsQuery($user), (string) $user->id);
+        if ($request->query('status') === 'unread') $query->where('unread_count', '>', 0);
+        if ($request->query('status') === 'read') $query->where('unread_count', 0);
+        if ($request->query('status') === 'on_case') $query->whereHas('lead.operationCases', fn($case) => $case->whereNull('completed_at'));
+
         $limit = min(
             100,
             max(1, (int) $request->query('limit', 50))
@@ -114,6 +117,7 @@ class WhatsAppInboxController extends Controller
                 'assignedUser',
                 'lead' => function ($leadQuery) {
                     $leadQuery->withCount('leadFollowups');
+                    $leadQuery->withCount(['operationCases as open_cases_count' => fn($case) => $case->whereNull('completed_at')]);
                 },
             ])
             ->orderByDesc('last_message_at')
@@ -125,6 +129,7 @@ class WhatsAppInboxController extends Controller
         $nextOffset = $offset + $conversations->count();
 
         return response()->json([
+            'summary' => $summary,
             'data' =>
                 $conversations->map(function ($conversation) {
                     return $this->conversationPayload(
@@ -168,6 +173,7 @@ class WhatsAppInboxController extends Controller
                 'assignedUser',
                 'lead' => function ($leadQuery) {
                     $leadQuery->withCount('leadFollowups');
+                    $leadQuery->withCount(['operationCases as open_cases_count' => fn($case) => $case->whereNull('completed_at')]);
                 },
             ])
             ->findOrFail($conversation);
@@ -480,6 +486,8 @@ class WhatsAppInboxController extends Controller
             'id' => $conversation->id,
             'contact_id' => $conversation->contact_id,
             'lead_id' => $conversation->lead_id,
+            'lead_view_url' => $lead ? route('admin.leads.view', $lead->id) : null,
+            'on_case' => $lead ? (int) ($lead->open_cases_count ?? 0) > 0 : false,
             'lead_followup_url' =>
                 $lead
                     ? route(

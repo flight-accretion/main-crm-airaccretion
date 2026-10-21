@@ -5890,7 +5890,9 @@ $this->abortUnlessRepresentativeInScope($staff ? $staff->id : null);
             ->value('name');
 
         // Also build client payment history from PaymentAuditTrail (so receipts/files are available to the view)
+        $canViewAccountsActivity = \App\Support\LeadDetailAccess::canViewAccountsActivity(auth()->user());
         $clientPaymentHistory = [];
+        if ($canViewAccountsActivity) {
         try {
             $clientPaymentHistory = \App\Models\PaymentAuditTrail::with(['leadFollowup.followedBy'])
                 ->whereHas('leadFollowup', function ($query) use ($lead) {
@@ -5935,8 +5937,11 @@ $this->abortUnlessRepresentativeInScope($staff ? $staff->id : null);
         } catch (\Exception $e) {
             Log::warning('Could not load client payment history for lead view: ' . $e->getMessage());
         }
+        } else {
+            $followups->each(fn ($followup) => $followup->setRelation('paymentAuditTrail', collect()));
+        }
 
-        $auditTimeline = ActivityAudit::where('lead_id', $lead->id)
+        $auditTimeline = $canViewAccountsActivity ? ActivityAudit::where('lead_id', $lead->id)
             ->whereIn('module', [
                 'payment',
                 'vendor_payment',
@@ -5945,7 +5950,7 @@ $this->abortUnlessRepresentativeInScope($staff ? $staff->id : null);
                 'invoice',
             ])
             ->latest()
-            ->get();
+            ->get() : collect();
 
         return view('admin.pages.leads.view-lead', compact(
             'client',

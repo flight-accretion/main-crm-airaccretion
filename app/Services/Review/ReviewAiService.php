@@ -17,6 +17,12 @@ class ReviewAiService
     public function process(ReviewConversation $review, string $message): array
     {
         $agent = $this->agent($review);
+        return app(\App\Services\Ai\AiAgentTelemetry::class)->run($agent->id, 'review',
+            fn () => $this->processTracked($review, $message, $agent));
+    }
+
+    private function processTracked(ReviewConversation $review, string $message, AiAgent $agent): array
+    {
         $profile = $agent->modelProfile;
 
         if (!$profile) {

@@ -23,7 +23,16 @@ class LeadRefund extends Model
         'status',
         'refund_invoice_id',
         'remarks',
+        'approval_status',
+        'approval_decided_by',
+        'approval_decided_at',
+        'approval_note',
     ];
+
+    protected static function booted(): void
+    {
+        static::creating(fn (self $refund) => \App\Support\RefundApproval::markPendingOnCreate($refund));
+    }
 
     protected $casts = [
         'id' => 'string',
@@ -33,6 +42,7 @@ class LeadRefund extends Model
         'refund_date' => 'datetime',
         'refund_invoice_id' => 'string',
         'remarks' => 'string',
+        'approval_decided_at' => 'datetime',
     ];
     /**
      * Get the lead follow-up associated with the refund.

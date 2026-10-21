@@ -20,13 +20,23 @@ class LeadRide extends Model
         'to_place',
         'service_address_id',
         'is_tba',
-        'total_time'
+        'total_time',
+        'booking_resource_key',
     ];
 
     protected $casts = [
         'from_date' => 'datetime',
         'to_date' => 'datetime',
     ];
+
+    public function save(array $options = [])
+    {
+        if (!config('operations.booking_conflict_checks', false) || !$this->getAttribute('booking_resource_key') || (!$this->isDirty(['from_date', 'to_date', 'is_tba', 'booking_resource_key']) && $this->exists)) {
+            return parent::save($options);
+        }
+        return app(\App\Services\Operations\BookingConflictService::class)
+            ->protectSave($this, fn() => parent::save($options));
+    }
      public function enquiry()
     {
         return $this->belongsTo(Lead::class, 'lead_id');

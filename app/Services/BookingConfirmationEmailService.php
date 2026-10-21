@@ -1084,7 +1084,8 @@ public function previewForLead(
     'cc_emails' =>
         $this->bookingConfirmationCcEmails(
             $variables,
-            $customerEmail
+            $customerEmail,
+            $actor?->email
         ),
 
     'total_amount_numeric' =>
@@ -1104,12 +1105,13 @@ public function previewForLead(
 ];
     }
 
-    private function bookingConfirmationCcEmails(array $variables, string $customerEmail): array
+    private function bookingConfirmationCcEmails(array $variables, string $customerEmail, ?string $senderEmail = null): array
 {
     $emails = [
         $variables['agent_email'] ?? null,
         $variables['manager_email'] ?? null,
         $variables['sales_email'] ?? null,
+        $senderEmail,
     ];
 
     return collect($emails)

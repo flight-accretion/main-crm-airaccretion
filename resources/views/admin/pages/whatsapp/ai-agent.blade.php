@@ -2,7 +2,11 @@
 
 @section('content')
 
+<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/ai-agent.css') }}">
+<div class="ai-agent-page">
+
 @php
+    $aiHealth = $aiHealth ?? app(\App\Services\Ai\AiAgentTelemetry::class)->summary();
     /*
      * =========================================================
      * AGENT COLLECTIONS FOR FEATURE SELECTION
@@ -46,7 +50,7 @@
 {{-- ==========================================================
      PAGE HEADER
      ========================================================== --}}
-<div class="block justify-between page-header md:flex">
+<div class="block justify-between page-header md:flex ai-agent-heading">
 
     <div>
 
@@ -61,12 +65,22 @@
         </h3>
 
         <p class="text-xs text-gray-500 mt-1">
-            Manage reusable AI Models, AI Agents,
-            WhatsApp AI and Lead Scoring AI.
+            WhatsApp auto-reply agents and their model profiles
         </p>
 
     </div>
 
+    <div class="ai-heading-actions">
+        <button type="button" class="ti-btn ti-btn-outline-primary" data-ai-create="add-ai-model-button"><i class="ri-add-line" aria-hidden="true"></i> Model profile</button>
+        <button type="button" class="ti-btn ti-btn-primary-full" data-ai-create="add-ai-agent-button"><i class="ri-add-line" aria-hidden="true"></i> Agent</button>
+    </div>
+</div>
+
+<div class="ai-agent-health" id="ai-agent-health">
+    <div class="ai-health-stat ai-health-green"><strong>{{ $aiAgents->where('enabled', true)->count() }} <small>/ {{ $aiAgents->count() }}</small></strong><span>Agents enabled</span><small>{{ $aiAgents->where('enabled', false)->count() }} paused</small></div>
+    <div class="ai-health-stat ai-health-brand"><strong>{{ $aiHealth['handled'] ?? '--' }}</strong><span>AI responses this week</span><small>{{ $aiHealth['available'] ? 'Successful AI requests' : 'Tracking setup required' }}</small></div>
+    <div class="ai-health-stat ai-health-amber"><strong>{{ $aiHealth['handoffs'] ?? '--' }}</strong><span>Human handover requests</span><small>This week</small></div>
+    <div class="ai-health-stat ai-health-red"><strong>{{ $aiHealth['failures'] ?? '--' }}</strong><span>Failures in last 24h</span><small>AI request failures</small></div>
 </div>
 
 
@@ -125,11 +139,13 @@
 {{-- ==========================================================
      TAB NAVIGATION
      ========================================================== --}}
-<div class="box mb-5">
+<div class="box mb-5 ai-agent-navigation">
 
     <div class="box-body">
 
         <div class="flex gap-2 flex-wrap">
+
+            <button type="button" class="ai-settings-tab ti-btn ti-btn-primary-full" data-target="ai-overview">Overview</button>
 
             <button
                 type="button"
@@ -182,7 +198,7 @@
      ========================================================== --}}
 <div
     id="ai-models-settings"
-    class="ai-settings-panel"
+    class="ai-settings-panel ai-models-panel"
 >
 
     <div class="box">
@@ -194,12 +210,11 @@
             <div>
 
                 <div class="box-title">
-                    AI Models
+                    Model profiles
                 </div>
 
                 <p class="text-xs text-gray-500 mt-1">
-                    Store reusable provider, model and API-key
-                    configurations.
+                    {{ $aiModelProfiles->count() }} configured
                 </p>
 
             </div>
@@ -530,7 +545,7 @@
      ========================================================== --}}
 <div
     id="ai-agents-settings"
-    class="ai-settings-panel hidden"
+    class="ai-settings-panel ai-agents-panel hidden"
 >
 
     <div class="box">
@@ -542,12 +557,11 @@
             <div>
 
                 <div class="box-title">
-                    AI Agents
+                    Agents
                 </div>
 
                 <p class="text-xs text-gray-500 mt-1">
-                    Create reusable agents containing their
-                    business prompt and selected AI Model Profile.
+                    {{ $aiAgents->count() }} configured
                 </p>
 
             </div>
@@ -584,11 +598,11 @@
                             </th>
 
                             <th>
-                                Model Profile
+                                Agent Prompt
                             </th>
 
                             <th>
-                                Provider
+                                Model
                             </th>
 
                             <th>
@@ -599,6 +613,11 @@
                                 Used By
                             </th>
 
+                            <th>
+                                Last run
+                            </th>
+                            <th>Handled 7d</th>
+                            <th>Handed to human</th>
                             <th>
                                 Actions
                             </th>
@@ -672,16 +691,7 @@
                                 </td>
 
 
-                                <td>
-
-                                    {{
-                                        optional(
-                                            $agent->modelProfile
-                                        )->name
-                                        ?? 'Not configured'
-                                    }}
-
-                                </td>
+                                <td data-label="Agent Prompt"><div class="ai-prompt-preview" title="{{ $agent->prompt }}">{{ $agent->prompt }}</div></td>
 
 
                                 <td>
@@ -694,11 +704,7 @@
                                             class="badge bg-primary/10 text-primary"
                                         >
                                             {{
-                                                strtoupper(
-                                                    $agent
-                                                        ->modelProfile
-                                                        ->provider
-                                                )
+                                                $agent->modelProfile->model
                                             }}
                                         </span>
 
@@ -728,7 +734,7 @@
                                         <span
                                             class="badge bg-danger/10 text-danger"
                                         >
-                                            Inactive
+                                            Paused
                                         </span>
 
                                     @endif
@@ -753,6 +759,10 @@
                                 </td>
 
 
+                                @php($agentHealth = $aiHealth['agents']->get($agent->id))
+                                <td data-label="Last run">{{ $agentHealth?->last_run ? \Carbon\Carbon::parse($agentHealth->last_run)->diffForHumans() : 'No recorded runs' }}</td>
+                                <td data-label="Handled this week">{{ $aiHealth['available'] ? ($agentHealth?->handled ?? 0) : '--' }}</td>
+                                <td data-label="Human handover requests">{{ $aiHealth['available'] ? ($agentHealth?->handoffs ?? 0) : '--' }}</td>
                                 <td>
 
                                     <div
@@ -2197,6 +2207,7 @@
 </div>
 </div>
 
+</div>
 @endsection
 
 
@@ -2235,6 +2246,19 @@ document.addEventListener(
                 '.ai-settings-tab'
             );
 
+        document.querySelectorAll('[data-ai-create]').forEach(button => {
+            button.addEventListener('click', () => document.getElementById(button.dataset.aiCreate)?.click());
+        });
+        document.querySelectorAll('.ai-models-panel table, .ai-agents-panel table').forEach(table => {
+            const headings = [...table.querySelectorAll('thead th')].map(th => th.textContent.trim());
+            table.querySelectorAll('tbody tr').forEach(row => {
+                [...row.children].forEach((cell, index) => {
+                    if (cell.colSpan === 1) cell.dataset.label = headings[index];
+                    else cell.colSpan = headings.length;
+                });
+            });
+        });
+
 
         const panels =
             document.querySelectorAll(
@@ -2246,6 +2270,8 @@ document.addEventListener(
             target
         ) {
 
+            const overview = target === 'ai-overview';
+
             panels.forEach(
                 function (
                     panel
@@ -2253,9 +2279,7 @@ document.addEventListener(
 
                     panel
                         .classList
-                        .add(
-                            'hidden'
-                        );
+                        .toggle('hidden', !(overview && ['ai-agents-settings', 'ai-models-settings'].includes(panel.id)));
 
                 }
             );
@@ -2265,6 +2289,8 @@ document.addEventListener(
                 function (
                     item
                 ) {
+
+                    item.setAttribute('aria-pressed', String(item.dataset.target === target));
 
                     item
                         .classList
@@ -2288,12 +2314,12 @@ document.addEventListener(
                 );
 
 
-            if (!panel) {
+            if (!panel && !overview) {
                 return;
             }
 
 
-            panel
+            if (panel) panel
                 .classList
                 .remove(
                     'hidden'
@@ -2385,9 +2411,7 @@ document.addEventListener(
         if (
             savedTab
             &&
-            document.getElementById(
-                savedTab
-            )
+            (savedTab === 'ai-overview' || document.getElementById(savedTab))
         ) {
 
             activateTab(
@@ -2397,7 +2421,7 @@ document.addEventListener(
         } else {
 
             activateTab(
-                'ai-models-settings'
+                'ai-overview'
             );
 
         }

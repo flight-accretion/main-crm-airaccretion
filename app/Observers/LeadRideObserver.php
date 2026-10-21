@@ -18,6 +18,9 @@ class LeadRideObserver
 
     public function updated(LeadRide $ride): void
     {
+        if ($ride->wasChanged(['from_date', 'is_tba'])) {
+            app(\App\Services\Operations\RescheduleTrackingService::class)->reconcileRide($ride);
+        }
         $this->queue($ride, 'ride_updated');
         $previousRideDate = $ride->wasChanged('from_date')
             && $ride->getOriginal('from_date')

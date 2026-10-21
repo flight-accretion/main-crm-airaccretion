@@ -71,6 +71,10 @@ class OperationsActivityService
             ]);
 
             $nextStatus = $this->statusFromData($data);
+            if ($nextStatus === OperationCase::STATUS_COMPLETED
+                && data_get($case->metadata, 'source') === RescheduleWindowService::ASSESSMENT_SOURCE) {
+                throw ValidationException::withMessages(['operation_status' => 'Record the decision from the expiry assessment screen.']);
+            }
 
            if (
             $case->type

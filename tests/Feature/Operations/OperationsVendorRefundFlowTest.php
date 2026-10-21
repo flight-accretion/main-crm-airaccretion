@@ -70,16 +70,17 @@ class OperationsVendorRefundFlowTest extends TestCase
         $response->assertOk();
         $response->assertSee('Vendor Refund List');
 
+        // Redesigned headings; the service date now sits under Product / Service.
         foreach ([
-            'Vendor Name',
+            'Vendor',
             'Vendor Phone',
-            'Service Name',
-            'Service Date',
+            'Client',
+            'Product / Service',
             'Original Vendor Amount',
             'Cancellation Amount',
-            'Refund Received',
             'Refund Due',
-            'Refund Date',
+            'Status',
+            'Days Pending',
             'Action',
         ] as $heading) {
             $response->assertSee('<th>' . $heading . '</th>', false);
@@ -442,6 +443,21 @@ class OperationsVendorRefundFlowTest extends TestCase
         Schema::create('services', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->string('service')->nullable();
+            $table->timestamps();
+        });
+
+        // The shared refund summary header counts customer refunds too.
+        Schema::create('lead_refunds', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('lead_followup_id')->nullable();
+            $table->integer('status')->nullable();
+            $table->timestamps();
+        });
+
+        // The refund list shows product names next to services.
+        Schema::create('products', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('product')->nullable();
             $table->timestamps();
         });
 

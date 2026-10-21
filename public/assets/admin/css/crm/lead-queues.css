@@ -3,3 +3,26 @@
 @media(max-width:1100px){.crm-lead-queue .lq-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:767px){.crm-lead-queue .lq-table-controls .lq-mobile-sort{display:flex}.crm-lead-queue .lq-mobile-sort select{flex:1;max-width:100%}}
 @media(max-width:767px){.crm-lead-queue .lq-filters{display:grid;grid-template-columns:minmax(0,1fr)}.crm-lead-queue .lq-filters>.lq-filter-actions{margin:0}.crm-lead-queue .lq-filter-actions button{flex:1}.crm-lead-queue .lq-table-controls{align-items:stretch;flex-direction:column}.crm-lead-queue .lq-table-controls label:last-child input{flex:1;width:auto}.crm-lead-queue .lq-stat{padding:12px}.crm-lead-queue .lq-stat>strong{font-size:22px}.crm-lead-queue .lq-aging{grid-column:1/-1}.crm-lead-queue .lq-actions{justify-content:flex-end}.crm-lead-queue td{padding:7px 0}.crm-lead-queue td>strong{font-weight:600}.crm-lead-queue .lq-table-footer{align-items:flex-start;flex-direction:column}.crm-lead-queue .lq-tabs button{padding:8px;font-size:11px}.crm-lead-queue [data-queue-table] td:before{content:attr(data-label)}.crm-lead-queue [data-queue-table] th:first-child,.crm-lead-queue [data-queue-table] th:last-child{width:auto}}
+
+
+
+/* Today's Follow-up phone link */
+#followUpTable .leads-phone-link {
+    color: #1a1d21;
+    font-weight: 500;
+    text-decoration: none;
+    /* cursor: copy; */
+}
+
+#followUpTable .leads-phone-link:hover {
+    text-decoration: underline;
+}
+
+/* Mobile: tap to open dialer */
+@media (max-width: 767px) {
+    #followUpTable .leads-phone-link {
+        cursor: pointer;
+        text-decoration: underline;
+        text-underline-offset: 3px;
+    }
+}

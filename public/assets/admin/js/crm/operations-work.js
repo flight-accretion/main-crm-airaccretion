@@ -43,6 +43,13 @@ document.addEventListener('DOMContentLoaded', () => {
         for (const [key,value] of Object.entries(appliedFilters)) if (value != null) url.searchParams.set(key,value);
         url.searchParams.set('work_status',card.dataset.workSelect);
         if (card.dataset.workCategory) url.searchParams.set('work_type',card.dataset.workCategory);
+        page.querySelectorAll('[data-work-export]').forEach(link => {
+            const download = new URL(link.href);
+            download.searchParams.set('work_status', card.dataset.workSelect);
+            if (card.dataset.workCategory) download.searchParams.set('work_type', card.dataset.workCategory);
+            else download.searchParams.delete('work_type');
+            link.href = download.href;
+        });
         title.textContent = 'Case details'; loadDetails(url,true);
     }));
     body.addEventListener('click',event=>{
@@ -51,6 +58,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     page.querySelector('[data-close-work-details]').addEventListener('click',()=>{
         request?.abort(); generation++; wrapper.hidden = true; body.removeAttribute('aria-busy');
+        page.querySelectorAll('[data-work-export]').forEach(link => {
+            const download = new URL(link.href);
+            download.searchParams.delete('work_status'); download.searchParams.delete('work_type');
+            link.href = download.href;
+        });
         cards.forEach(card=>card.setAttribute('aria-pressed','false')); selected?.focus({preventScroll:true});
     });
 });

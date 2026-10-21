@@ -247,6 +247,33 @@ class HrDashboardDynamicTest extends KpiFeatureTestCase
         $this->assertSame(0, $this->dashboard($hr)['todayFollowups']);
     }
 
+    public function test_incentive_summary_uses_existing_every_sale_rules_and_refreshes(): void
+    {
+        require_once base_path('database/migrations/2026_10_14_180000_add_incentive_settings_to_targets.php');
+        (new \AddIncentiveSettingsToTargets())->up();
+        $sales = $this->createUserWithRole('Incentive Sales', UserType::SALES_EXECUTIVE);
+        $hr = $this->createUserWithRole('Incentive HR', UserType::HR);
+        $target = \App\Models\Target::create(['id'=>Str::uuid(),'sales_executive_id'=>$sales->id,'year'=>2026,'month'=>9,
+            'target_amount'=>100000,'achieved_amount'=>77,'status'=>'active','incentive_enabled'=>true,
+            'incentive_basis'=>'individual','incentive_multiplier'=>0.01]);
+        app()->instance(\App\Services\TargetIncentiveService::class, new class($sales->id) extends \App\Services\TargetIncentiveService {
+            public function __construct(private string $owner) {}
+            public function ledgerForPeriod(Carbon $from, Carbon $to): \Illuminate\Support\Collection
+            {
+                return collect([['owner'=>$this->owner,'amount'=>500,'products'=>[]]]);
+            }
+        });
+        $data = $this->dashboard($hr);
+        $this->assertSame(5.0,$data['incentiveSummary']['amount']);
+        $this->assertSame(1,$data['incentiveSummary']['earning']);
+        $this->assertSame(77.0,(float)$target->fresh()->achieved_amount);
+        $target->update(['incentive_multiplier'=>0.02]);
+        $this->assertSame(10.0,$this->dashboard($hr)['incentiveSummary']['amount']);
+        $target->update(['incentive_enabled'=>false]);
+        $this->assertSame(0,$this->dashboard($hr)['incentiveSummary']['configured']);
+        $this->assertNull($this->dashboard($hr,['preset'=>'custom','from_date'=>'2026-08-01','to_date'=>'2026-09-17'])['incentiveSummary']);
+    }
+
     private function dashboard($user, array $query = []): array
     {
         $request = Request::create('/admin/hr', 'GET', $query);

@@ -18,6 +18,7 @@ class OperationsWorkSummaryTest extends KpiFeatureTestCase
     protected function setUp(): void
     {
         parent::setUp();
+        \Illuminate\Support\Facades\Schema::create('lead_rides', function (\Illuminate\Database\Schema\Blueprint $table) { $table->uuid('id')->primary(); $table->uuid('lead_id'); $table->dateTime('from_date')->nullable(); });
         $this->compiled=sys_get_temp_dir().'/ops-detail-'.\Illuminate\Support\Str::uuid();mkdir($this->compiled);
         config(['view.compiled'=>$this->compiled]);app()->forgetInstance('blade.compiler');app('view.engine.resolver')->forget('blade');
         (require base_path('database/migrations/2026_09_23_160000_create_operation_cases_table.php'))->up();
@@ -150,5 +151,27 @@ class OperationsWorkSummaryTest extends KpiFeatureTestCase
         DB::table('clients')->update(['name'=>'<script>alert(1)</script>']);
         $html=$controller->workDetails($this->request(['work_status'=>'total']))->getData(true)['html'];
         $this->assertSame(false,str_contains($html,'<script>'));$this->assertSame(true,str_contains($html,'&lt;script&gt;'));
+    }
+
+    public function test_completed_by_duration_and_exports_share_the_case_selection(): void
+    {
+        \Illuminate\Support\Facades\Schema::create('services', function (\Illuminate\Database\Schema\Blueprint $table) { $table->uuid('id')->primary(); $table->string('service'); });
+        OperationCase::where('type', 'review')->update(['completed_by' => $this->ops->id]);
+        $controller = app(\App\Http\Controllers\OperationsDashboardController::class);
+        $data = $controller->index($this->request(['completed_by' => $this->ops->id]))->getData();
+        $this->assertSame(1, $data['summary']['total']);
+        $this->assertSame(1, $data['rows']->total());
+        $details = $controller->workDetails($this->request(['completed_by' => $this->ops->id, 'work_status' => 'completed']))->getData(true);
+        foreach (['Completed by', 'Working Operations', 'Elapsed duration', '96h'] as $text) $this->assertSame(true, str_contains($details['html'], $text));
+        DB::table('clients')->update(['name' => '=UNTRUSTED()']);
+        $export = new \App\Exports\OperationsWorkExport($data['filters'], $data['caseTypes'], 'completed', null);
+        $this->assertSame(1, $export->query()->count());
+        $this->assertSame("'=UNTRUSTED()", $export->map($export->query()->first())[0]);
+        foreach ([\Maatwebsite\Excel\Excel::CSV, \Maatwebsite\Excel\Excel::XLSX] as $format) {
+            $bytes = \Maatwebsite\Excel\Facades\Excel::raw($export, $format);
+            $this->assertSame(true, strlen($bytes) > 100);
+        }
+        $empty = $controller->workDetails($this->request(['completed_by' => $this->other->id]))->getData(true);
+        $this->assertSame(0, $empty['total']);
     }
 }

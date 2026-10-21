@@ -20,6 +20,7 @@ class OperationsVendorFollowupController extends Controller
         $base = OperationCase::query()
             ->with(['lead.client', 'lead.representative', 'lead.rideSegments', 'assignee', 'creator', 'completedBy'])
             ->where('type', OperationCase::TYPE_VENDOR_FOLLOWUP);
+        $base->withMax('activities', 'created_at');
 
         $this->applyFilters($base, $filters);
 
@@ -30,6 +31,12 @@ class OperationsVendorFollowupController extends Controller
             'today' => (clone $countsBase)->whereNull('completed_at')->whereDate('next_followup_at', now()->toDateString())->count(),
             'upcoming' => (clone $countsBase)->whereNull('completed_at')->whereDate('next_followup_at', '>', now()->toDateString())->count(),
             'closed' => (clone $countsBase)->whereNotNull('completed_at')->count(),
+            'all' => (clone $countsBase)->count(),
+            'completed' => (clone $countsBase)->whereNotNull('completed_at')->where('metadata->resolution', 'confirmed')->count(),
+            'cancelled' => (clone $countsBase)->whereNotNull('completed_at')->where('metadata->resolution', 'cancelled')->count(),
+            'completed_week' => (clone $countsBase)->where('metadata->resolution', 'confirmed')->whereBetween('completed_at', [now()->startOfWeek(), now()->endOfWeek()])->count(),
+            'age_2_7' => (clone $countsBase)->whereNull('completed_at')->where('opened_at', '>=', now()->subDays(7)->startOfDay())->where('opened_at', '<', now()->subDay()->startOfDay())->count(),
+            'age_over_7' => (clone $countsBase)->whereNull('completed_at')->where('opened_at', '<', now()->subDays(7)->startOfDay())->count(),
         ];
 
         $query = clone $base;
@@ -39,6 +46,7 @@ class OperationsVendorFollowupController extends Controller
             ->orderByRaw('CASE WHEN completed_at IS NULL THEN 0 ELSE 1 END')
             ->orderBy('next_followup_at')
             ->orderByDesc('opened_at')
+            ->orderBy('id')
             ->paginate($filters['per_page'])
             ->withQueryString();
 
@@ -47,6 +55,7 @@ class OperationsVendorFollowupController extends Controller
             'filters' => $filters,
             'counts' => $counts,
             'canManage' => $this->canManage($request->user()),
+            'vendorsById' => Vendor::whereIn('id', $cases->getCollection()->map(fn($case) => data_get($case->metadata, 'vendor_id'))->filter()->unique())->get(['id', 'name', 'contact_number'])->keyBy('id'),
         ]);
     }
 
@@ -101,6 +110,7 @@ class OperationsVendorFollowupController extends Controller
             'operationUsers' => $this->operationUsers(),
             'tentativeRideAt' => $tentativeRideAt,
             'suggestedFollowupDate' => $this->suggestedFollowupDate($tentativeRideAt),
+            'interestNames' => array_merge($lead->product_names ?: [], $lead->service_names ?: []),
         ]);
     }
 
@@ -187,7 +197,7 @@ class OperationsVendorFollowupController extends Controller
     private function filters(Request $request): array
     {
         $data = $request->validate([
-            'bucket' => ['nullable', 'in:open,overdue,today,upcoming,completed,cancelled,all'],
+            'bucket' => ['nullable', 'in:open,overdue,today,upcoming,completed,cancelled,all,age_2_7,age_over_7'],
             'search' => ['nullable', 'string', 'max:255'],
             'vendor_id' => ['nullable', 'uuid'],
             'assigned_to' => ['nullable', 'uuid'],
@@ -206,7 +216,7 @@ class OperationsVendorFollowupController extends Controller
     private function applyFilters($query, array $filters): void
     {
         if ($filters['vendor_id']) {
-            $query->whereRaw("metadata->>'vendor_id' = ?", [$filters['vendor_id']]);
+            $query->where('metadata->vendor_id', $filters['vendor_id']);
         }
 
         if ($filters['assigned_to']) {
@@ -215,12 +225,13 @@ class OperationsVendorFollowupController extends Controller
 
         if ($filters['search'] !== '') {
             $search = $filters['search'];
-            $query->where(function ($q) use ($search) {
-                $q->where('lead_id', 'like', "%{$search}%")
-                    ->orWhereRaw("metadata->>'vendor_name_snapshot' ILIKE ?", ["%{$search}%"])
-                    ->orWhereHas('lead.client', function ($clientQuery) use ($search) {
-                        $clientQuery->where('name', 'ilike', "%{$search}%")
-                            ->orWhere('contact_number', 'ilike', "%{$search}%");
+            $operator = $query->getModel()->getConnection()->getDriverName() === 'pgsql' ? 'ilike' : 'like';
+            $query->where(function ($q) use ($search, $operator) {
+                $q->whereRaw('CAST(lead_id AS TEXT) '.$operator.' ?', ["%{$search}%"])
+                    ->orWhere('metadata->vendor_name_snapshot', $operator, "%{$search}%")
+                    ->orWhereHas('lead.client', function ($clientQuery) use ($search, $operator) {
+                        $clientQuery->where('name', $operator, "%{$search}%")
+                            ->orWhere('contact_number', $operator, "%{$search}%");
                     });
             });
         }
@@ -234,13 +245,13 @@ class OperationsVendorFollowupController extends Controller
 
         if ($bucket === 'completed') {
             $query->whereNotNull('completed_at')
-                ->whereRaw("COALESCE(metadata->>'resolution', '') = 'confirmed'");
+                ->where('metadata->resolution', 'confirmed');
             return;
         }
 
         if ($bucket === 'cancelled') {
             $query->whereNotNull('completed_at')
-                ->whereRaw("metadata->>'resolution' = 'cancelled'");
+                ->where('metadata->resolution', 'cancelled');
             return;
         }
 
@@ -252,6 +263,10 @@ class OperationsVendorFollowupController extends Controller
             $query->whereDate('next_followup_at', now()->toDateString());
         } elseif ($bucket === 'upcoming') {
             $query->whereDate('next_followup_at', '>', now()->toDateString());
+        } elseif ($bucket === 'age_2_7') {
+            $query->where('opened_at', '>=', now()->subDays(7)->startOfDay())->where('opened_at', '<', now()->subDay()->startOfDay());
+        } elseif ($bucket === 'age_over_7') {
+            $query->where('opened_at', '<', now()->subDays(7)->startOfDay());
         }
     }
 
@@ -260,7 +275,7 @@ class OperationsVendorFollowupController extends Controller
         return Vendor::query()
             ->where('status', 1)
             ->orderBy('name')
-            ->get(['id', 'name']);
+            ->get(['id', 'name', 'contact_number']);
     }
 
     private function operationUsers()

@@ -9,6 +9,20 @@
     $resetRoute = $resetRoute ?? route('admin.rides.ride-status');
     $exportRoute = $exportRoute ?? ($operationsRescheduleMode ? null : route('admin.rides.ride-status.export'));
 @endphp
+@if($operationsRescheduleMode)
+    @include('admin.pages.operations.reschedules.index')
+@else
+@unless($operationsRescheduleMode)
+<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/ride-status.css') }}">
+<div class="crm-ride-status">
+<header class="rs-heading"><div><h1>Ride Status</h1><p>Ride cases and recorded lifecycle events</p></div>@if($exportRoute)<div class="rs-export"><a href="{{ $exportRoute.'?'.http_build_query(request()->except('page') + ['format' => 'xlsx']) }}" class="ti-btn ti-btn-outline-primary"><i class="ri-download-line" aria-hidden="true"></i> Excel</a><a href="{{ $exportRoute.'?'.http_build_query(request()->except('page') + ['format' => 'csv']) }}" class="ti-btn ti-btn-outline-primary"><i class="ri-download-line" aria-hidden="true"></i> CSV</a></div>@endif</header>
+<section class="rs-summary" aria-label="Ride summary">
+    <div><strong>{{ $rideSummary['active'] ?? 0 }}</strong><span>Active rides</span><small>Next 30 days &middot; unique leads</small></div>
+    <div><strong>{{ $rideSummary['in_transit'] ?? 0 }}</strong><span>In transit now</span><small>Within booked service time &middot; unique leads</small></div>
+    <div><strong>{{ $rideSummary['completed'] ?? 0 }}</strong><span>Completed this week</span><small>Latest completion follow-up</small></div>
+    <div><strong>{{ $rideSummary['no_vendor'] ?? 0 }}</strong><span>Vendor not assigned</span><small>Service within 72 hours</small></div>
+</section>
+@endunless
 <!-- Page Header -->
 <div class="block justify-between page-header md:flex">
 
@@ -160,6 +174,9 @@
             </div>
             <div class="box-body">
 
+                @unless($operationsRescheduleMode)
+                    @include('admin.account.rides.partials.status-cards')
+                @else
                 <div class="table-responsive">
                     <table id="{{ $operationsRescheduleMode ? 'operations-reschedule-table' : 'ride-status-table' }}"
                         class="table display responsive nowrap table-datatable server-paginated" width="100%"
@@ -298,9 +315,10 @@
                         </tbody>
                     </table>
                 </div>
+                @endunless
                 @if(isset($rideStatusPaginator) && $rideStatusPaginator->hasPages())
                 <div class="mt-4">
-                    {{ $rideStatusPaginator->appends(request()->except('page'))->links() }}
+                    {{ $rideStatusPaginator->onEachSide(1)->appends(request()->except('page'))->links() }}
                 </div>
                 @endif
             </div>
@@ -308,6 +326,7 @@
     </div>
 </div>
 
+@endif
 <!-- Ride Details Modal -->
 <div id="ride-details-modal" data-refunds-url="{{ route('admin.refunds.index') }}"
     class="hs-overlay hidden ti-offcanvas ti-offcanvas-right" tabindex="-1" data-hs-overlay-options='{
@@ -1293,6 +1312,7 @@
 
 </div>
 
+@unless($operationsRescheduleMode)</div>@endunless
 @endsection
 
 @push('scripts')

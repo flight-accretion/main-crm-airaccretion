@@ -2,7 +2,7 @@
 
 @section('content')
     <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/dashboards/hr-dashboard.css') }}?v=5">
-    <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/responsive/hr-dashboard-mobile.css') }}?v=5">
+    <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/responsive/hr-dashboard-mobile.css') }}?v=6">
 
     @php
         $reportPeriod = \Carbon\Carbon::createFromFormat('!Y-m', $month);
@@ -114,8 +114,10 @@
                     <span class="hr-meta">{{ $reportLabel }}</span>
                 </div>
                 <div class="hr-account-row">
-                    <div><h3>Incentive eligible this month</h3><p>Target &ge; 100% &middot; Attendance &ge; 95% &middot; KPI &ge; 3/5</p></div>
-                    <span class="hr-tag hr-tag-neutral">Not configured</span>
+                    <div><h3>Earned incentive &middot; {{ $reportPeriod->format('M Y') }}</h3>
+                        <p>{{ $incentiveSummary ? ($incentiveSummary['error'] ?: $incentiveSummary['earning'].' earning / '.$incentiveSummary['configured'].' configured employees') : 'Select dates within one month' }}</p>
+                    </div>
+                    <span class="hr-tag hr-tag-neutral">{{ $incentiveSummary && $incentiveSummary['amount'] !== null ? 'Rs. '.number_format($incentiveSummary['amount'], 2) : 'N/A' }}</span>
                 </div>
                 <div class="hr-account-row">
                     <div><h3>Attendance imports confirmed</h3><p>{{ $reportLabel }}</p></div>
@@ -141,7 +143,7 @@
                     </div>
                     <p class="hr-section-meta">{{ $reportLabel }}</p>
                     <div class="hr-table-wrap" tabindex="0" role="region" aria-label="{{ $departmentLabel }} work done today">
-                        <table class="hr-table hr-work-table {{ $department === 'operations' ? 'hr-operations-table' : '' }}">
+                        <table class="hr-table hr-work-table {{ $department === 'operations' ? 'hr-operations-table' : 'hr-sales-work-table' }}">
                             <thead><tr>
                                 <th scope="col">Person</th>
                                 @if($department === 'sales')
@@ -161,10 +163,10 @@
                             <tbody>
                                 @forelse($departmentRows[$department] as $row)
                                     <tr>
-                                        <td>{{ $row['user']->name }}</td>
+                                        <td data-label="Person">{{ $row['user']->name }}</td>
                                         @if($department === 'sales')
-                                            @foreach(['total', 'completed', 'active', 'cancelled', 'outreach'] as $metric)
-                                                <td class="hr-num">{{ $row['work'][$metric] ?? 'N/A' }}</td>
+                                            @foreach(['total'=>'Total Leads', 'completed'=>'Completed', 'active'=>'Active', 'cancelled'=>'Cancelled Leads', 'outreach'=>'Outreach done'] as $metric=>$label)
+                                                <td class="hr-num" data-label="{{ $label }}">{{ $row['work'][$metric] ?? 'N/A' }}</td>
                                             @endforeach
                                         @endif
                                         @if($department === 'operations')
@@ -172,7 +174,7 @@
                                             <td class="hr-num">{{ $row['work']['review'] }}</td>
                                             <td class="hr-num">{{ $row['work']['vendor'] }}</td>
                                         @endif
-                                        <td><span class="hr-tag hr-tag-{{ $row['attendance']['tone'] }}">{{ $row['attendance']['label'] }}</span></td>
+                                        <td data-label="Attendance"><span class="hr-tag hr-tag-{{ $row['attendance']['tone'] }}">{{ $row['attendance']['label'] }}</span></td>
                                     </tr>
                                     @if($row['work']['notice'])
                                         <tr><td colspan="{{ $department === 'sales' ? 7 : 5 }}" class="hr-meta">{{ $row['work']['notice'] }}</td></tr>

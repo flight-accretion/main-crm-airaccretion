@@ -34,7 +34,15 @@ No migrations or new dependencies are required.
   is N/A because this dashboard does not invent an untracked metric.
 - Targets and missing manual KPI entries remain monthly. They show N/A when
   custom dates span multiple months; there is no target proration or new formula.
-- Incentives remain Not configured for a later feature.
+- Earned incentive shows the selected month's current calculated amount for active
+  employees with enabled active monthly targets, using the existing individual,
+  team and company/product rules. Current-month payments are bounded through now.
+  No additional target-attainment, attendance or KPI eligibility gates are added.
+  Empty configuration shows zero; duplicate active targets show an explicit warning
+  instead of a potentially double-counted amount. Multi-month filters show N/A.
+- Mobile Sales Work Done uses labelled employee cards, including Total and
+  Cancelled counts, rather than requiring sideways table scrolling. Desktop tables
+  and Operations backlog semantics are unchanged.
 
 ## Performance and Verification
 

@@ -346,7 +346,19 @@
         }
     </style>
 
+    <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/whatsapp-inbox.css') }}">
     <div class="wa-inbox-page">
+        <h1 class="wa-page-title">WhatsApp Inbox</h1>
+        <section class="wa-summary" aria-label="Inbox summary">
+            <div><strong id="wa-summary-unread">--</strong><span>Unread chats</span><small id="wa-summary-old">&mdash;</small></div>
+            <div><strong id="wa-summary-messages">--</strong><span>Unread messages</span><small>Customer messages not read</small></div>
+            <div><strong id="wa-summary-cases">--</strong><span>Chats with open cases</span><small>Linked Operations cases</small></div>
+            <div>
+                <!-- <strong id="wa-summary-response">--</strong> -->
+            <!-- <span>Avg first response</span>
+            <small id="wa-summary-response-note">Last 7 days</small> -->
+        </div>
+        </section>
         <div class="wa-inbox-shell">
         <section class="wa-chat-pane">
             <div class="wa-chat-header">
@@ -359,12 +371,12 @@
                     </p>
                 </div>
 
-                <span
+                <div class="wa-header-actions"><a id="wa-open-lead" class="ti-btn ti-btn-light" target="_blank" rel="noopener noreferrer" hidden>Open lead <i class="ri-external-link-line" aria-hidden="true"></i></a><span
                     class="badge bg-success/10 text-success"
                     id="wa-chat-agent"
                 >
                     -
-                </span>
+                </span></div>
             </div>
 
             <div class="wa-messages" id="wa-messages">
@@ -401,7 +413,7 @@
                         class="ti-btn ti-btn-primary"
                         disabled
                     >
-                        Send
+                        <i class="ri-send-plane-line" aria-hidden="true"></i> Send
                     </button>
                 </div>
 
@@ -490,6 +502,7 @@
 
         <aside class="wa-list-pane">
             <div class="wa-toolbar">
+                <h2>Chats</h2>
                 <input
                     type="search"
                     id="wa-search"
@@ -503,6 +516,7 @@
                         <option value="">All chats</option>
                         <option value="unread">Unread</option>
                         <option value="read">Read</option>
+                        <option value="on_case">On case</option>
                     </select>
 
                     <select id="wa-agent-filter" class="ti-form-select">
@@ -514,6 +528,12 @@
                         @endforeach
                     </select>
                 </div>
+                <nav class="wa-status-chips" aria-label="Chat status">
+                    <button type="button" data-wa-status="" aria-pressed="true">All</button>
+                    <button type="button" data-wa-status="unread" aria-pressed="false">Unread</button>
+                    <button type="button" data-wa-status="on_case" aria-pressed="false">On case</button>
+                    <button type="button" data-wa-status="read" aria-pressed="false">Read</button>
+                </nav>
             </div>
 
             <div
@@ -547,6 +567,14 @@
             const chatNameEl = document.getElementById('wa-chat-name');
             const chatMetaEl = document.getElementById('wa-chat-meta');
             const chatAgentEl = document.getElementById('wa-chat-agent');
+            const openLeadEl = document.getElementById('wa-open-lead');
+            document.querySelectorAll('[data-wa-status]').forEach(button => button.addEventListener('click', () => {
+                statusEl.value = button.dataset.waStatus;
+                statusEl.dispatchEvent(new Event('change'));
+            }));
+            statusEl.addEventListener('change', () => document.querySelectorAll('[data-wa-status]').forEach(button => {
+                button.setAttribute('aria-pressed', String(button.dataset.waStatus === statusEl.value));
+            }));
             const sendFormEl = document.getElementById('wa-send-form');
             const messageTypeEl = document.getElementById('wa-message-type');
             const messageBodyEl = document.getElementById('wa-message-body');
@@ -662,9 +690,8 @@
                     const followupBadge = followups > 0
                         ? `<span class="wa-followup-pill" title="Follow-ups">${followups}</span>`
                         : '';
-                    const viewLeadButton = conversation.lead_followup_url
-                        ? `<a class="ti-btn ti-btn-sm ti-btn-light wa-view-lead" href="${escapeHtml(conversation.lead_followup_url)}" target="_blank" rel="noopener noreferrer">View Lead</a>`
-                        : '';
+                    const viewLeadButton = conversation.on_case ? '<span class="wa-case-tag">Open case</span>' : '';
+                    const initials = conversationLabel(conversation).split(/\s+/).filter(Boolean).slice(0, 2).map(word => word[0]).join('').toUpperCase();
 
                     return `
                         <div
@@ -673,7 +700,7 @@
                             role="button"
                             tabindex="0"
                         >
-                            <span class="wa-contact-top">
+                            <span class="wa-contact-avatar" aria-hidden="true">${escapeHtml(initials)}</span><span class="wa-contact-content"><span class="wa-contact-top">
                                 <span class="wa-contact-name-line">
                                     <span class="wa-contact-name">${escapeHtml(conversationLabel(conversation))}</span>
                                     ${followupBadge}
@@ -681,10 +708,11 @@
                                 ${viewLeadButton}
                                 ${unreadBadge}
                             </span>
+                            <span class="wa-contact-time">${escapeHtml(conversation.last_message_human || '')}</span>
                             <span class="wa-contact-number">${escapeHtml(conversation.number || conversation.raw_phone || '-')}</span>
                             <span class="wa-contact-bottom">
                                 <span class="wa-contact-message">${escapeHtml(conversation.last_message || '-')}</span>
-                            </span>
+                            </span></span>
                         </div>
                     `;
                 }).join('');
@@ -711,6 +739,8 @@
                 chatNameEl.textContent = 'Select a conversation';
                 chatMetaEl.textContent = '-';
                 chatAgentEl.textContent = '-';
+                openLeadEl.hidden = true;
+                openLeadEl.removeAttribute('href');
                 messagesEl.innerHTML = '<div class="wa-empty-state">No conversation selected.</div>';
                 setComposerEnabled(false);
             };
@@ -794,6 +824,25 @@
 
                 const payload = await response.json();
                 const incoming = payload.data || [];
+                if (payload.summary) {
+                    document.getElementById('wa-summary-unread').textContent = payload.summary.unread_chats;
+                    document.getElementById('wa-summary-messages').textContent = payload.summary.unread_messages;
+                    document.getElementById('wa-summary-cases').textContent = payload.summary.on_case;
+                    document.getElementById('wa-summary-old').textContent = `${payload.summary.old_unread} inactive over 24h`;
+                    // Guarded: the response card markup may be hidden or removed.
+                    const responseCard = document.getElementById('wa-summary-response');
+                    const responseNote = document.getElementById('wa-summary-response-note');
+                    const minutes = payload.summary.avg_first_response_minutes;
+                    if (responseCard) {
+                        responseCard.textContent = minutes === null || minutes === undefined
+                            ? '--'
+                            : (minutes >= 60 ? `${(minutes / 60).toFixed(1)}h` : `${Math.round(minutes)}m`);
+                    }
+                    if (responseNote) {
+                        responseNote.textContent =
+                            `Last 7 days · ${payload.summary.responded_turns ?? 0} replies · ${payload.summary.awaiting_reply ?? 0} awaiting`;
+                    }
+                }
                 const meta = payload.meta || {};
 
                 mergeConversations(
@@ -974,6 +1023,9 @@
                     chatNameEl.textContent = conversationLabel(conversation);
                     chatMetaEl.textContent = conversation.number || conversation.raw_phone || '-';
                     chatAgentEl.textContent = conversation.assigned_user_name || 'Unassigned';
+                    openLeadEl.hidden = !conversation.lead_view_url;
+                    if (conversation.lead_view_url) openLeadEl.href = conversation.lead_view_url;
+                    else openLeadEl.removeAttribute('href');
                     setComposerEnabled(true);
                     if (!silent) {
                         setStatus('');
@@ -1016,6 +1068,8 @@
             });
 
             const selectConversation = (conversationId) => {
+                openLeadEl.hidden = true;
+                openLeadEl.removeAttribute('href');
                 state.messageRequestId++;
                 state.selectedId = conversationId;
                 state.messages = [];
@@ -1024,6 +1078,7 @@
                 state.hasLoadedHistory = false;
                 state.isLoadingHistory = false;
                 state.historyError = '';
+                setComposerEnabled(false);
                 renderConversations();
                 loadMessages(conversationId);
             };

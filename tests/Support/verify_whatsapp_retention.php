@@ -42,6 +42,7 @@ Schema::create('leads', function (Blueprint $t) {
     $t->uuid('id')->primary(); $t->string('crm_lead_code'); $t->index('crm_lead_code', 'p10_leads_crm_code_idx');
 });
 Schema::create('lead_followups', function (Blueprint $t) { $t->uuid('id')->primary(); $t->uuid('lead_id'); });
+Schema::create('operation_cases', function (Blueprint $t) { $t->uuid('id')->primary(); $t->uuid('lead_id'); $t->timestamp('completed_at')->nullable(); });
 Schema::create('whatsapp_contacts', function (Blueprint $t) { $t->uuid('id')->primary(); $t->string('name')->nullable(); });
 Schema::create('whatsapp_conversations', function (Blueprint $t) {
     $t->uuid('id')->primary(); $t->uuid('contact_id')->nullable(); $t->uuid('assigned_user_id')->nullable();

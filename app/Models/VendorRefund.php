@@ -36,6 +36,11 @@ class VendorRefund extends Model
         'completed_by',
 
         'created_by',
+
+        'approval_status',
+        'approval_decided_by',
+        'approval_decided_at',
+        'approval_note',
     ];
 
 
@@ -46,6 +51,7 @@ class VendorRefund extends Model
         'no_refund_required' => 'boolean',
         'status' => 'integer',
         'completed_at' => 'datetime',
+        'approval_decided_at' => 'datetime',
     ];
 
 
@@ -59,6 +65,8 @@ class VendorRefund extends Model
                 $model->id =
                     (string) Str::uuid();
             }
+
+            \App\Support\RefundApproval::markPendingOnCreate($model);
         });
     }
 

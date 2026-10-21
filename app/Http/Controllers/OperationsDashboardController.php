@@ -20,8 +20,18 @@ class OperationsDashboardController extends Controller
     {
         $filters = $this->workFilters($request);
         $types = $this->visibleCaseTypes();
+        if ($request->filled('download')) {
+            $selection = $request->validate(['download' => 'required|in:xlsx,csv',
+                'work_status' => 'nullable|in:completed,in_progress,pending,total',
+                'work_type' => 'nullable|in:' . implode(',', $types)]);
+            return \Maatwebsite\Excel\Facades\Excel::download(
+                new \App\Exports\OperationsWorkExport($filters, $types, $selection['work_status'] ?? 'total', $selection['work_type'] ?? null),
+                'operations-work-' . now()->format('Y-m-d') . '.' . $selection['download']);
+        }
         $data = app(\App\Services\Operations\OperationsWorkSummaryService::class)->dashboard($filters, $types);
+        $rows = app(\App\Services\Operations\OperationsWorkSummaryService::class)->details($filters, $types, 'total', null);
         return view('admin.pages.operations.dashboard', $data + [
+            'rows' => $rows, 'serviceNames' => $this->workServiceNames($rows),
             'filters' => $filters,
             'operationUsers' => $this->operationUsers(),
             'caseTypes' => $types,
@@ -41,11 +51,12 @@ class OperationsDashboardController extends Controller
         $type = $selection['work_type'] ?? null;
         $rows = app(\App\Services\Operations\OperationsWorkSummaryService::class)
             ->details($filters, $this->visibleCaseTypes(), $status, $type);
+        $serviceNames = $this->workServiceNames($rows);
         $title = ($type ? ucwords(str_replace('_', ' ', $type)) . ' - ' : '')
             . ($status === 'total' ? 'All cases worked' : ucwords(str_replace('_', ' ', $status)));
         return response()->json([
             'success' => true, 'title' => $title, 'total' => $rows->total(),
-            'html' => view('admin.pages.operations.partials.work-details', compact('rows'))->render(),
+            'html' => view('admin.pages.operations.partials.work-details', compact('rows', 'serviceNames'))->render(),
         ])->header('Cache-Control', 'private, no-store');
     }
 
@@ -55,6 +66,12 @@ class OperationsDashboardController extends Controller
             $request->merge(['date_filter' => 'today']);
         }
         return $this->filters($request);
+    }
+
+    private function workServiceNames($rows)
+    {
+        $ids = collect($rows->items())->flatMap(fn ($row) => $row->lead?->service_ids_array ?? [])->unique();
+        return $ids->isEmpty() ? collect() : Service::whereIn('id', $ids)->pluck('service', 'id');
     }
 
    public function queue(Request $request, string $type)
@@ -119,6 +136,26 @@ class OperationsDashboardController extends Controller
         $filters,
         'opened_at'
     );
+
+    if ($type === OperationCase::TYPE_REVIEW) {
+        $selection = $request->validate([
+            'segment' => 'nullable|in:all,waiting,negative,positive,neutral,unknown,not_sent,unassigned',
+        ]);
+        $filters['segment'] = $selection['segment'] ?? 'all';
+        $presenter = app(\App\Services\Operations\ReviewQueueService::class);
+        $summary = $presenter->summary(clone $cases);
+        $presenter->filter($cases, $filters['segment']);
+        $cases->withMax('activities', 'created_at');
+        $cases = $cases->with('reviewConversation.whatsappConversation')
+            ->oldest('opened_at')->orderBy('id')->paginate($filters['per_page'])->withQueryString();
+        $tableData = $this->leadTableData($cases);
+
+        return view('admin.pages.operations.review-queue', array_merge($tableData, [
+            'cases' => $cases, 'filters' => $filters, 'summary' => $summary,
+            'operationUsers' => $this->operationUsers(), 'caseStatuses' => $this->caseStatuses(),
+            'presenter' => $presenter,
+        ]));
+    }
 
     $cases =
         $cases
@@ -297,6 +334,7 @@ public function cancelImageCollection(
             'type' => 'nullable|in:' . implode(',', OperationCase::validTypes()),
             'status' => 'nullable|in:' . implode(',', $this->caseStatuses()),
             'operations_user_id' => 'nullable|uuid',
+            'completed_by' => 'nullable|uuid',
             'search' => 'nullable|string|max:255',
             'per_page' => 'nullable|integer|in:10,25,50,100',
             'from_service_date' => 'nullable|date',
@@ -321,6 +359,7 @@ public function cancelImageCollection(
             'type' => $data['type'] ?? null,
             'status' => $data['status'] ?? null,
             'operations_user_id' => $data['operations_user_id'] ?? null,
+            'completed_by' => $data['completed_by'] ?? null,
             'search' => $data['search'] ?? null,
             'per_page' => (int) ($data['per_page'] ?? 25),
             'from_service_date' => $data['from_service_date'] ?? null,

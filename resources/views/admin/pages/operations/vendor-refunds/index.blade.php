@@ -1,6 +1,9 @@
 @extends('admin.layouts.header')
 
 @section('content')
+<div class="crm-refunds">
+@include('admin.pages.operations.partials.refund-summary')
+@php $canDecideRefundApproval = \App\Support\RefundApproval::canDecide(auth()->user()); @endphp
 
     <div class="block justify-between page-header md:flex">
 
@@ -171,22 +174,21 @@
 
             <table
                 id="vendorRefundTable"
-                class="table whitespace-nowrap table-bordered min-w-full"
+                class="table refund-list-table table-bordered min-w-full"
             >
 
                 <thead>
                     <tr>
-                        <th>S.No</th>
-                        <th>Customer Name</th>
-                        <th>Customer Phone</th>
-                        <th>Vendor Name</th>
+                        <th>Vendor</th>
                         <th>Vendor Phone</th>
-                        <th>Service Name</th>
-                        <th>Service Date</th>
+                        <th>Client</th>
+                        <th>Product / Service</th>
                         <th>Original Vendor Amount</th>
                         <th>Cancellation Amount</th>
                         <!-- <th>Refund Received</th> -->
                         <th>Refund Due</th>
+                        <th>Status</th>
+                        <th>Days Pending</th>
                         <!-- <th>Refund Date</th> -->
                         <th>Action</th>
                     </tr>
@@ -195,26 +197,11 @@
                 <tbody>
 
                     @forelse ($vendorRefunds as $index => $row)
-        <script>
-            console.log("Row [{{ $index }}] Data:", @js($row));
-        </script>
-                        <tr data-vendor-payment-id="{{ $row->id }}">
-
-                            <td>{{ $vendorRefunds->firstItem() + $index }}</td>
-
-                            <td>{{ $row->customer_name }}</td>
-
-                            <td>{{ $row->customer_phone }}</td>
-
+                        <tr data-vendor-payment-id="{{ $row->id }}" data-lead-url="{{ url('admin/leads/'.$row->lead_id) }}">
                             <td>{{ $row->vendor_name }}</td>
-
                             <td>{{ $row->vendor_phone }}</td>
-
-                            <td>{{ \Illuminate\Support\Str::limit($row->service_name, 60) }}</td>
-
-                            <td>
-                                {{ $row->service_date ? $row->service_date->format('d M Y') : '-' }}
-                            </td>
+                            <td><a class="refund-client" href="{{ url('admin/leads/'.$row->lead_id) }}" target="_blank" rel="noopener">{{ $row->customer_name }}</a></td>
+                            <td><div>{{ $row->product_name ?: $row->service_name }}@if($row->product_name && $row->service_name !== '-')<small>{{ $row->service_name }}</small>@endif<small>{{ $row->service_date ? $row->service_date->format('d M Y') : '--' }}</small></div></td>
 
                             <td>{{ $money($row->original_amount) }}</td>
 
@@ -225,6 +212,8 @@
                             <!-- <td>{{ $money($row->refund_received) }}</td> -->
 
                             <td>{{ $money($row->refund_due) }}</td>
+                            <td><span class="refund-pill is-pending">Pending</span>@if($row->approval_status)<small class="refund-approval is-{{ $row->approval_status }}" data-approval-label>{{ \App\Support\RefundApproval::label($row->approval_status) }}</small>@endif</td>
+                            <td>@if($row->pending_since)<span class="refund-pill is-pending">{{ max(0, (int)\Carbon\Carbon::parse($row->pending_since)->diffInDays(now())) }} days</span>@else -- @endif</td>
 
                             <!-- <td>
                                 {{ $row->refund_date ? \Carbon\Carbon::parse($row->refund_date)->format('d M Y') : '-' }}
@@ -264,6 +253,17 @@
                                         <i class="ri-file-text-line"></i>
                                     </a>
 
+                                    @if ($row->approval_status && $canDecideRefundApproval)
+                                        <button type="button" class="ti-btn ti-btn-icon ti-btn-sm ti-btn-success refund-approval-btn" data-decision="approve"
+                                            data-url="{{ route('admin.refunds.vendor-approval', $row->id) }}" title="Approve refund" @disabled($row->approval_status === 'approved')>
+                                            <i class="ri-thumb-up-line"></i>
+                                        </button>
+                                        <button type="button" class="ti-btn ti-btn-icon ti-btn-sm ti-btn-danger refund-approval-btn" data-decision="reject"
+                                            data-url="{{ route('admin.refunds.vendor-approval', $row->id) }}" title="Reject refund" @disabled($row->approval_status === 'rejected')>
+                                            <i class="ri-thumb-down-line"></i>
+                                        </button>
+                                    @endif
+
                                     {{-- Mark Done: only when the vendor owes nothing more --}}
                                     @if ((float) $row->refund_due <= 0)
                                         <button
@@ -294,7 +294,7 @@
                     @empty
 
                         <tr>
-                            <td colspan="13" class="text-center py-6 text-gray-500">
+                            <td colspan="10" class="text-center py-6 text-gray-500">
                                 No pending vendor refunds found.
                             </td>
                         </tr>
@@ -318,6 +318,7 @@
     {{-- Right-side drawer + Mark Done modal --}}
     @include('admin.pages.operations.vendor-refunds.partials.details')
 
+</div>
 @endsection
 
 

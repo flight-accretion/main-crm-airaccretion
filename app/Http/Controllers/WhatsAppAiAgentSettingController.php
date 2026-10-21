@@ -23,6 +23,7 @@ class WhatsAppAiAgentSettingController extends Controller
         return view(
             'admin.pages.whatsapp.ai-agent',
             [
+                'aiHealth' => app(\App\Services\Ai\AiAgentTelemetry::class)->summary(),
                 'setting' =>
                     WhatsAppAiAgentSetting::active(),
 

@@ -117,5 +117,6 @@ class BookingEmailTemplateControllerTest extends TestCase
             $table->uuid('updated_by')->nullable();
             $table->timestamps();
         });
+        (require database_path('migrations/2026_10_21_190000_create_booking_email_template_revisions_table.php'))->up();
     }
 }

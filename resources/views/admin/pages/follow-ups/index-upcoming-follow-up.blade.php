@@ -44,7 +44,61 @@
             @if($score && $score->status === 'completed' && $temperature)<span class="lq-pill lq-score-{{ $temperature }}">{{ strtoupper($temperature) }} {{ $score->score }}</span>
             @elseif($score && in_array($score->status,['pending','processing'],true))<span class="lq-pill">Analysing</span>
             @elseif($score && $score->status === 'failed')<span class="lq-pill lq-score-hot">Failed</span>@else - @endif</td>
-            <td data-label="Lead"><strong>{{ $lead?->client?->name ?? '-' }}</strong></td><td data-label="Phone">{{ $lead?->client?->contact_number ?? '-' }}</td><td data-label="Representative">{{ $lead?->representative?->name ?? 'Unassigned' }}</td>
+            <td data-label="Lead" ><strong>{{ $lead?->client?->name ?? '-' }}</strong></td>
+
+            <!-- <td data-label="Phone">{{ $lead?->client?->contact_number ?? '-' }}</td> -->
+
+          
+
+@php
+    $lead = $row->enquiry;
+    $score = $lead?->latestAiScore;
+
+    $temperature = $score
+        ? strtolower((string) $score->displayTemperature($leadAiScoringSetting))
+        : '';
+
+    $bucket = !$row->next_followup_date
+        ? 'no_date'
+        : (
+            $row->next_followup_date->toDateString() === $fromDate->toDateString()
+                ? 'today'
+                : 'overdue'
+        );
+
+    $serviceDate = $lead?->rideSegments->first()?->from_date;
+
+    // Same phone formatter used by the Leads page.
+    $phone = \App\Support\LeadPhonePresentation::forNumber(
+        $lead?->client?->contact_number
+    );
+@endphp
+
+
+
+<td
+    data-label="Phone"
+    class="leads-phone"
+    data-sort-value="{{ $phone['copy'] ?? $phone['display'] }}"
+>
+    @if($phone['dial'])
+        <a
+            class="leads-phone-link"
+            href="{{ $phone['dial'] }}"
+            data-lead-phone="{{ $phone['copy'] }}"
+            title="{{ $phone['display'] }}"
+        >
+            {{ $phone['display'] }}
+        </a>
+    @else
+        {{ $phone['display'] }}
+    @endif
+</td>
+
+
+
+            <td data-label="Representative">{{ $lead?->representative?->name ?? 'Unassigned' }}</td>
+            
             <td data-label="Next follow-up" data-order="{{ $row->next_followup_date?->timestamp ?? 0 }}"><span class="lq-pill {{ $bucket === 'overdue' ? 'lq-score-hot' : 'lq-scheduled' }}">{{ $row->next_followup_date ? ($bucket === 'today' ? $row->next_followup_date->format('H:i') : $row->next_followup_date->format('d M Y, H:i')) : 'Not set' }}</span></td>
             <td data-label="Service">{{ implode(', ',$queueServiceNames[$lead?->id] ?? []) ?: 'N/A' }}</td>
             <td data-label="Created" data-order="{{ $lead?->created_at?->timestamp ?? 0 }}">{{ $lead?->created_at?->format('d M Y') ?? '-' }}</td>
@@ -59,6 +113,64 @@
 </div>
 @endsection
 @push('scripts')
+
+
+<script>
+(function () {
+    const followUpTable = document.getElementById('followUpTable');
+
+    if (!followUpTable) return;
+
+    followUpTable.addEventListener('click', async function (event) {
+        const link = event.target.closest('.leads-phone-link');
+
+        if (!link || !followUpTable.contains(link)) return;
+
+        // Mobile: use the native phone dialer.
+        if (window.matchMedia('(max-width: 767px)').matches) {
+            return;
+        }
+
+        // Desktop: copy the phone number instead.
+        event.preventDefault();
+
+        const phone = link.dataset.leadPhone;
+
+        if (!phone) return;
+
+        try {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(phone);
+            } else {
+                const input = document.createElement('textarea');
+                input.value = phone;
+                input.style.position = 'fixed';
+                input.style.opacity = '0';
+
+                document.body.appendChild(input);
+                input.select();
+
+                const copied = document.execCommand('copy');
+                input.remove();
+
+                if (!copied) {
+                    throw new Error('Clipboard copy failed');
+                }
+            }
+
+            const originalTitle = link.title;
+            link.title = 'Copied!';
+
+            setTimeout(function () {
+                link.title = originalTitle;
+            }, 1500);
+        } catch (error) {
+            console.error('Phone copy failed:', error);
+        }
+    });
+})();
+</script>
+
 <script src="{{ asset('assets/admin/js/crm/kpi-tools.js') }}?v=1"></script>
 <script src="{{ asset('assets/admin/js/crm/lead-queues.js') }}?v=1"></script>
 @endpush

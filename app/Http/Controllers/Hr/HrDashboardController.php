@@ -61,6 +61,7 @@ class HrDashboardController extends Controller
             'filter' => $filter,
             'month' => $month,
             'targetAvailable' => $sameMonth,
+            'incentiveSummary' => $sameMonth ? $dashboard->incentiveSummary($period) : null,
             'activeEmployees' => User::query()->where('status', 1)->count(),
             'attendanceImports' => AttendanceImport::query()
                 ->whereNotNull('confirmed_at')

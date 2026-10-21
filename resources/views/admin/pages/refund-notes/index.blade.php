@@ -1,5 +1,8 @@
 @extends('admin.layouts.header')
 @section('content')
+<div class="crm-refunds">
+@include('admin.pages.operations.partials.refund-summary')
+@php $canDecideRefundApproval = \App\Support\RefundApproval::canDecide(auth()->user()); @endphp
 <!-- Page Header -->
 <div class="block justify-between page-header md:flex">
 
@@ -169,39 +172,29 @@
                     data-invoice-download-url-template="{{ route('admin.refunds.invoice.download', ':refundId') }}"
                     data-invoice-preview-url-template="{{ route('admin.refunds.invoice.preview', ':refundId') }}">
                     <div class="table-responsive">
-                        <table class="table display responsive nowrap table-datatable" width="100%"
+                        <table class="table display refund-list-table table-datatable" width="100%"
                             data-empty-msg="No cancelled rides found for refund processing.">
                             <thead class="bg-primary text-white">
                                 <tr class="border-b border-defaultborder">
 
-                                    <th data-priority="1">S. No.</th>
-                                    <th data-priority="2">Name</th>
-                                    <th data-priority="3">Phone</th>
-                                    <th data-priority="4">Invoice ID</th>
-                                    <th data-priority="5">Service Date</th>
-                                    <th data-priority="6">Original Amount</th>
-                                    <th data-priority="7">Refund Amount</th>
-                                    <th data-priority="8">Remarks</th>
-                                    <th data-priority="9">Refund Date</th>
-                                    <th data-priority="9" style="width: 200px;">Action</th>
+                                    <th>Client</th>
+                                    <th>Product / Service</th>
+                                    <th>Original Amount</th>
+                                    <th>Refund Amount</th>
+                                    <th>Status</th>
+                                    <th>Days Pending</th>
+                                    <th>Action</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @forelse($refundsData as $index => $refund)
-                                <tr>
-
-                                    <td class="text-center">{{ $index + 1 }}</td>
-                                    <td>{{ $refund['client_name'] }}</td>
-                                    <td class="text-center">{{ $refund['contact_number'] }}</td>
-                                    <td class="text-center">
-                                        {{ $refund['invoice_id'] ?? '-' }}</td>
-                                    <td class="text-center">
-                                        {{ \Carbon\Carbon::parse($refund['service_date'])->format('Y-m-d') }}</td>
+                                <tr data-lead-url="{{ url('admin/leads/'.$refund['lead_id']) }}">
+                                    <td><a class="refund-client" href="{{ url('admin/leads/'.$refund['lead_id']) }}" target="_blank" rel="noopener">{{ $refund['client_name'] }}</a></td>
+                                    <td><div>{{ $refund['product_names'] ?: ($refund['service_names'] ?: 'Not specified') }}@if($refund['product_names'] && $refund['service_names'])<small>{{ $refund['service_names'] }}</small>@endif<small>{{ !empty($refund['service_date']) ? \Carbon\Carbon::parse($refund['service_date'])->format('d M Y') : '--' }}</small></div></td>
                                     <td class="text-center">₹{{ number_format($refund['original_amount'], 2) }}</td>
                                     <td class="text-center">₹{{ number_format($refund['refund_amount'], 2) }}</td>
-                                    <td class="text-center">{{ $refund['remarks'] ?
-                                        \Illuminate\Support\Str::limit($refund['remarks'], 80) : '-' }}</td>
-                                    <td class="text-center">{{ $refund['refund_date'] ?? '-' }}</td>
+                                    <td><span class="refund-pill {{ $refund['refund_status'] === 'completed' ? 'is-completed' : 'is-pending' }}">{{ $refund['refund_status'] === 'completed' ? 'Completed' : 'Pending' }}</span>@if($refund['approval_status'])<small class="refund-approval is-{{ $refund['approval_status'] }}" data-approval-label>{{ \App\Support\RefundApproval::label($refund['approval_status']) }}</small>@endif</td>
+                                    <td>@if($refund['refund_status'] !== 'completed' && $refund['pending_since'])<span class="refund-pill is-pending">{{ max(0, (int)\Carbon\Carbon::parse($refund['pending_since'])->diffInDays(now())) }} days</span>@else -- @endif</td>
                                     <td>
                                         <div class="flex gap-2">
                                             <button type="button"
@@ -227,6 +220,16 @@
                                                 title="Preview Refund Invoice">
                                                 <i class="ri-file-text-line"></i>
                                             </button>
+                                            @if ($refund['refund_status'] != 'completed' && $refund['approval_status'] && $canDecideRefundApproval)
+                                            <button type="button" class="ti-btn ti-btn-icon ti-btn-sm ti-btn-success refund-approval-btn" data-decision="approve"
+                                                data-url="{{ route('admin.refunds.approval', $refund['refund_id']) }}" title="Approve refund" @disabled($refund['approval_status'] === 'approved')>
+                                                <i class="ri-thumb-up-line"></i>
+                                            </button>
+                                            <button type="button" class="ti-btn ti-btn-icon ti-btn-sm ti-btn-danger refund-approval-btn" data-decision="reject"
+                                                data-url="{{ route('admin.refunds.approval', $refund['refund_id']) }}" title="Reject refund" @disabled($refund['approval_status'] === 'rejected')>
+                                                <i class="ri-thumb-down-line"></i>
+                                            </button>
+                                            @endif
                                             @if ($refund['refund_status'] != 'completed')
                                             <button type="button"
                                                 class="ti-btn ti-btn-icon ti-btn-sm ti-btn-info-full mark-done-btn"
@@ -537,6 +540,7 @@
             </div>
         </div>
     </div>
+    </div>
     @endsection
     <!-- Mark Refund As Done Modal -->
     <div id="refund-mark-done-modal" class="hs-overlay hidden ti-modal" style="z-index: 9999;">
@@ -664,7 +668,7 @@
             const icon = $('#filter-icon');
 
             // Initially hide filter section and set icon to down
-            filterSection.hide();
+            filterSection.show();
             icon.removeClass('ti-chevron-up').addClass('ti-chevron-down');
 
             $('#toggle-filters').on('click', function() {

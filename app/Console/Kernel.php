@@ -15,6 +15,11 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
+        if (config('operations.reschedule_window_automation', false)) {
+            $schedule->command('operations:process-reschedule-windows')->hourly()
+            ->timezone('Asia/Kolkata')->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/reschedule-windows.log'));
+        }
     $schedule->command('crm:scheduler-heartbeat')
         ->everyFiveMinutes()
         ->withoutOverlapping();

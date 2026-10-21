@@ -320,6 +320,9 @@
                                             )->name
                                             ?? 'N/A'
                                         }}
+                                        @if(in_array(data_get($case->metadata, 'source'), [\App\Services\Operations\RescheduleWindowService::REMINDER_SOURCE, \App\Services\Operations\RescheduleWindowService::ASSESSMENT_SOURCE], true))
+                                            <div class="text-sm text-gray-500" style="white-space:normal;max-width:280px">{{ $case->note }}</div>
+                                        @endif
                                     </td>
 
 
@@ -1113,6 +1116,9 @@
         | etc.
         |
         --}}
+        @if(data_get($case->metadata, 'source') === \App\Services\Operations\RescheduleWindowService::ASSESSMENT_SOURCE)
+            <a class="ti-btn ti-btn-primary" href="{{ route('admin.operations.reschedule-assessments.index') }}">Open expiry assessment</a>
+        @else
         <form
             method="POST"
             action="{{
@@ -1144,6 +1150,7 @@
             </button>
 
         </form>
+        @endif
 
     @endif
 

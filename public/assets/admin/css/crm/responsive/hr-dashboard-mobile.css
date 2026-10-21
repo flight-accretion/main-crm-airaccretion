@@ -7,6 +7,12 @@
     .crm-hr-dashboard .hr-columns { grid-template-columns: minmax(0, 1fr); gap: 20px; }
 }
 @media (max-width: 767px) {
+    .crm-hr-dashboard .hr-sales-work-table,.crm-hr-dashboard .hr-sales-work-table tbody{display:block;min-width:0;width:100%}
+    .crm-hr-dashboard .hr-sales-work-table thead{display:none}
+    .crm-hr-dashboard .hr-sales-work-table tr{display:block;border:1px solid var(--hr-border);border-radius:6px;padding:10px 12px;margin:10px 0}
+    .crm-hr-dashboard .hr-sales-work-table td{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:7px 0;border:0;overflow-wrap:anywhere}
+    .crm-hr-dashboard .hr-sales-work-table td[data-label]::before{content:attr(data-label);font-size:11px;color:var(--hr-secondary);text-align:left;flex-shrink:0}
+    .crm-hr-dashboard .hr-sales-work-table td:first-child{font-weight:600}
     body.crm-hr-page .app-header .sidemenu-toggle { display: none !important; }
     .crm-hr-dashboard { padding: 20px 14px calc(100px + env(safe-area-inset-bottom, 0px)); }
     .crm-hr-dashboard .hr-heading { flex-direction: column; align-items: flex-start; gap: 16px; }

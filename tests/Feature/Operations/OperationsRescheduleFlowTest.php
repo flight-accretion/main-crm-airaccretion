@@ -63,9 +63,10 @@ class OperationsRescheduleFlowTest extends TestCase
             ->get(route('admin.operations.reschedules.index'));
 
         $response->assertOk();
-        $response->assertSee('Operations Reschedule');
-        $response->assertSee('operations-reschedule-table', false);
-        $response->assertSee('Original Service Date');
+        // Redesigned list: grouped reschedule tables instead of the single DataTable.
+        $response->assertSee('Rescheduled Rides');
+        $response->assertSee('class="rc-list"', false);
+        $response->assertSee('Original date');
         $response->assertSee('Reschedule Customer');
         $response->assertSee('9876543210');
         $response->assertSee('View');

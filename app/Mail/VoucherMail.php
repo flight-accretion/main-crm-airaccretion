@@ -2,6 +2,8 @@
 
 namespace App\Mail;
 
+use App\Support\OperationsEmailCc;
+
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Support\Facades\Log;
@@ -27,6 +29,10 @@ class VoucherMail extends Mailable
 
     public function build()
     {
+        if ($this->template === 'emails.voucher') {
+            OperationsEmailCc::apply($this);
+        }
+
         // Resolve from address and name (fallback to app.name)
         $fromAddress = config('mail.from.address', env('MAIL_FROM_ADDRESS', 'noreply@example.com'));
         $fromName = config('mail.from.name', config('app.name', 'Application'));

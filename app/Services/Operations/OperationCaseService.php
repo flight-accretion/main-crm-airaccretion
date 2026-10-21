@@ -32,6 +32,9 @@ class OperationCaseService
                 $createdBy
             ) {
                 $existing = OperationCase::query()
+                    ->when($type === OperationCase::TYPE_RESCHEDULE && !empty($metadata['ride_id']), function ($query) use ($metadata) {
+                        $query->where('metadata->ride_id', $metadata['ride_id']);
+                    })
                     ->where(
                         'lead_id',
                         $lead->id
@@ -48,6 +51,14 @@ class OperationCaseService
 
                 if ($existing) {
                     return $existing;
+                }
+
+                if ($type === OperationCase::TYPE_RESCHEDULE && !empty($metadata['ride_id'])) {
+                    $ride = \App\Models\LeadRide::where('lead_id', $lead->id)->find($metadata['ride_id']);
+                    if ($ride) {
+                        $tracking = app(RescheduleTrackingService::class);
+                        $metadata['reschedule']['original'] = $tracking->original($ride) ?? $tracking->trip($ride);
+                    }
                 }
 
                 $case = OperationCase::create([
@@ -103,6 +114,13 @@ class OperationCaseService
 
                 if ($case->completed_at) {
                     return $case;
+                }
+
+                if ($case->type === OperationCase::TYPE_REVIEW
+                    && $case->assigned_to && $case->assigned_to !== $user->id) {
+                    throw ValidationException::withMessages([
+                        'case' => 'This review case is already assigned to another employee. Refresh the queue.',
+                    ]);
                 }
 
                 if (
@@ -163,6 +181,9 @@ class OperationCaseService
         User $user,
         ?string $note = null
     ): OperationCase {
+        if (data_get($case->metadata, 'source') === RescheduleWindowService::ASSESSMENT_SOURCE) {
+            throw ValidationException::withMessages(['case' => 'Use the expiry assessment screen to record an Accounts decision.']);
+        }
         if (
             $case->type
             ===

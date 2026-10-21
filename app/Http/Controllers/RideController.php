@@ -1539,7 +1539,7 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                 'enquiry.vouchers.invoice',
                 'enquiry.leadVendorPayments.vendor',
                 'enquiry.leadFollowups' => function ($query) {
-                    $query->with('paymentAuditTrail')->orderByDesc('created_at');
+                    $query->with('paymentAuditTrail')->orderByDesc('created_at')->orderByDesc('id');
                 }
             ])->whereHas('enquiry.vouchers');
 
@@ -1618,6 +1618,35 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
             }
 
 
+            $rideSummaryBase = (clone $ridesQuery)->setEagerLoads([]);
+            $latestStatusOnly = function ($query) {
+                return $query->whereNotExists(function ($newer) {
+                    $newer->selectRaw('1')->from('lead_followups as newer_followup')
+                        ->whereColumn('newer_followup.lead_id', 'lead_followups.lead_id')
+                        ->where(function ($latest) {
+                            $latest->whereColumn('newer_followup.created_at', '>', 'lead_followups.created_at')
+                                ->orWhere(function ($tie) {
+                                    $tie->whereColumn('newer_followup.created_at', '=', 'lead_followups.created_at')
+                                        ->whereColumn('newer_followup.id', '>', 'lead_followups.id');
+                                });
+                        });
+                });
+            };
+            $rideSummary = [
+                'active' => (clone $rideSummaryBase)->whereBetween('from_date', [now(), now()->addDays(30)])
+                    ->whereHas('enquiry.leadFollowups', fn ($q) => $latestStatusOnly($q)->whereNotIn('status', [2, 5]))->distinct()->count('lead_id'),
+                // Derived from the booked schedule and existing statuses; no separate transit status is stored.
+                'in_transit' => (clone $rideSummaryBase)->where('from_date', '<=', now())
+                    ->where(fn ($q) => $q->where('to_date', '>=', now())
+                        ->orWhere(fn ($open) => $open->whereNull('to_date')->where('from_date', '>=', now()->startOfDay())))
+                    ->where(fn ($q) => $q->whereNull('is_tba')->orWhere('is_tba', false))
+                    ->whereHas('enquiry.leadFollowups', fn ($q) => $latestStatusOnly($q)->whereNotIn('status', [2, 5, 7]))->distinct()->count('lead_id'),
+                'completed' => (clone $rideSummaryBase)->whereHas('enquiry.leadFollowups', fn ($q) => $latestStatusOnly($q)->where('status', 5)
+                    ->whereBetween('created_at', [now()->startOfWeek(), now()->endOfWeek()]))->distinct()->count('lead_id'),
+                'no_vendor' => (clone $rideSummaryBase)->whereBetween('from_date', [now(), now()->addHours(72)])
+                    ->whereHas('enquiry.leadFollowups', fn ($q) => $latestStatusOnly($q)->whereNotIn('status', [2, 5]))
+                    ->whereDoesntHave('enquiry.leadVendorPayments', fn ($q) => $q->whereNotNull('vendor_id'))->distinct()->count('lead_id'),
+            ];
             $rideStatusPaginator = (clone $ridesQuery)
                 ->setEagerLoads([])
                 ->select('lead_id')
@@ -1761,6 +1790,18 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                     'status_text' => $this->getStatusText($latestFollowup ? $latestFollowup->status : 6),
                     'all_rides' => $allRides // Store all rides for this lead
                 ];
+                $booked = $lead->vouchers->sortBy('created_at')->first();
+                $vendorRecord = $lead->leadVendorPayments->whereNotNull('vendor_id')->sortBy('created_at')->first();
+                $completion = $lead->leadFollowups->where('status', 5)->sortByDesc('created_at')->first();
+                $serviceStart = $allRides->filter(fn ($segment) => !$segment->is_tba && $segment->from_date)->sortBy('from_date')->first()?->from_date;
+                $transitStarted = $serviceStart && $serviceStart->lte(now()) && !in_array((int) ($latestFollowup->status ?? 6), [2, 7], true);
+                $ridesData[array_key_last($ridesData)]['timeline'] = [
+                    ['label' => 'Booked', 'date' => $booked?->created_at, 'note' => 'Voucher created'],
+                    ['label' => 'Confirmed', 'date' => null, 'note' => 'Not recorded separately'],
+                    ['label' => 'Vendor assigned', 'date' => $vendorRecord?->created_at, 'note' => $vendorRecord?->vendor?->name ?: 'No vendor record'],
+                    ['label' => 'In transit', 'date' => $transitStarted ? $serviceStart : null, 'note' => $transitStarted ? 'Booked service start time' : 'Service not started'],
+                    ['label' => 'Completed', 'date' => $completion?->created_at, 'note' => $completion ? 'Completion follow-up recorded' : 'Not recorded'],
+                ];
             }
 
             // Ensure we only include rides whose latest followup status matches the requested status
@@ -1804,7 +1845,7 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
             $products = app(\App\Services\MasterDataCacheService::class)->activeProducts();
             $services = app(\App\Services\MasterDataCacheService::class)->activeServices();
 
-            return view('admin.account.rides.ride-status', compact('ridesData', 'rideStatusPaginator', 'statusOptions', 'currentFilters', 'products', 'services')); // PASS products and services to view
+            return view('admin.account.rides.ride-status', compact('ridesData', 'rideStatusPaginator', 'statusOptions', 'currentFilters', 'products', 'services', 'rideSummary')); // PASS products and services to view
         } catch (\Exception $e) {
             Log::error("Error in rideStatus: " . $e->getMessage());
             return view('admin.account.rides.ride-status', ['ridesData' => collect()]);

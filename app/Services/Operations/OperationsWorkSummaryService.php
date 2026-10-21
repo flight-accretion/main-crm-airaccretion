@@ -20,6 +20,7 @@ class OperationsWorkSummaryService
         if ($filters['operations_user_id']) $activity->where('activity.user_id', $filters['operations_user_id']);
         if ($filters['type']) $activity->where('cases.type', $filters['type']);
         if ($filters['status']) $activity->where('cases.status', $filters['status']);
+        if (!empty($filters['completed_by'])) $activity->where('cases.completed_by', $filters['completed_by']);
         if (!empty($filters['search'])) {
             $activity->whereExists(function ($query) use ($filters) {
                 $query->selectRaw('1')->from('leads')->join('clients', 'clients.id', '=', 'leads.client_id')
@@ -30,14 +31,19 @@ class OperationsWorkSummaryService
         return $activity;
     }
 
-    public function details(array $filters, array $types, string $status, ?string $type)
+    public function detailQuery(array $filters, array $types, string $status, ?string $type)
     {
         $activity = $this->workedActivity($filters, $types);
         if ($status !== 'total') $activity->where('cases.status', $status);
         if ($type) $activity->where('cases.type', $type);
-        return OperationCase::with(['lead.client', 'assignee'])
+        return OperationCase::with(['lead.client', 'lead.rideSegments', 'assignee', 'completedBy'])
             ->whereIn('id', $activity->select('cases.id'))
-            ->orderByDesc('updated_at')->orderByDesc('id')->paginate(25)->withQueryString();
+            ->orderByDesc('updated_at')->orderByDesc('id');
+    }
+
+    public function details(array $filters, array $types, string $status, ?string $type)
+    {
+        return $this->detailQuery($filters, $types, $status, $type)->paginate(25)->withQueryString();
     }
 
     public function dashboard(array $filters, array $types): array

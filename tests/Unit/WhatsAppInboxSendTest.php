@@ -436,5 +436,8 @@ class WhatsAppInboxSendTest extends TestCase
             $table->json('raw_payload')->nullable();
             $table->timestamps();
         });
+
+        // The inbox summary counts chats linked to open Operations cases.
+        (require base_path('database/migrations/2026_09_23_160000_create_operation_cases_table.php'))->up();
     }
 }

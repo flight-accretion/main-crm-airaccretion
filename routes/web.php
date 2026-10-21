@@ -741,6 +741,11 @@ Route::prefix(
         ->middleware('role:ADMIN_ROLES')
         ->name('admin.booking-email-template.update');
 
+    Route::post('/admin/booking-email-template/test', [BookingEmailTemplateController::class, 'sendTest'])
+        ->middleware(['role:ADMIN_ROLES', 'throttle:5,1'])->name('admin.booking-email-template.test');
+    Route::post('/admin/booking-email-template/restore/{revision}', [BookingEmailTemplateController::class, 'restore'])
+        ->middleware('role:ADMIN_ROLES')->name('admin.booking-email-template.restore');
+
 
 
         Route::prefix('admin/operations/vendor-refunds')
@@ -1289,6 +1294,11 @@ Route::post(
         ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES,HR')
         ->name('admin.operations.index');
 
+    Route::get('admin/operations/reschedule-assessments', [\App\Http\Controllers\RescheduleAssessmentController::class, 'index'])
+        ->middleware('role:OPERATIONS_ROLES,ACCOUNTS_ROLES,ADMIN_ROLES')->name('admin.operations.reschedule-assessments.index');
+    Route::post('admin/operations/reschedule-assessments/{case}', [\App\Http\Controllers\RescheduleAssessmentController::class, 'update'])
+        ->middleware('role:OPERATIONS_ROLES,ACCOUNTS_ROLES,ADMIN_ROLES')->name('admin.operations.reschedule-assessments.update');
+
     Route::prefix('admin/operations')
         ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES')
         ->group(function () {
@@ -1306,6 +1316,9 @@ Route::post(
                 '/reschedules/{ride}/edit',
                 [OperationsRescheduleController::class, 'edit']
             )->name('admin.operations.reschedules.edit');
+
+            Route::get('/reschedules/{ride}/conflicts', [OperationsRescheduleController::class, 'conflicts'])
+                ->name('admin.operations.reschedules.conflicts');
 
             Route::post(
                 '/reschedules/{ride}',
@@ -1719,6 +1732,9 @@ Route::post(
         Route::get('/{refundId}/invoice/pdf', [RefundController::class, 'generateRefundInvoice'])->name('admin.refunds.invoice.pdf');
         Route::get('/{refundId}/invoice/download', [RefundController::class, 'downloadRefundInvoice'])->name('admin.refunds.invoice.download');
         Route::get('/{refundId}/invoice/preview', [RefundController::class, 'previewRefundInvoice'])->name('admin.refunds.invoice.preview');
+        // Approval tracking: Super Admin, Accounts and Operations only (checked in the controller).
+        Route::post('/{refundId}/approval', [\App\Http\Controllers\RefundApprovalController::class, 'customer'])->name('admin.refunds.approval');
+        Route::post('/vendor/{vendorPayment}/approval', [\App\Http\Controllers\RefundApprovalController::class, 'vendor'])->name('admin.refunds.vendor-approval');
     });
 
     Route::prefix('admin/report')

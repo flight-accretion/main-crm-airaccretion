@@ -25,6 +25,17 @@ public function generateReply(
     Collection $products,
     ?Collection $contextMessages = null
 ): array {
+    return app(\App\Services\Ai\AiAgentTelemetry::class)->run($setting->ai_agent_id, 'whatsapp',
+        fn () => $this->generateTrackedReply($setting, $conversation, $messages, $products, $contextMessages));
+}
+
+private function generateTrackedReply(
+    WhatsAppAiAgentSetting $setting,
+    WhatsAppConversation $conversation,
+    Collection $messages,
+    Collection $products,
+    ?Collection $contextMessages = null
+): array {
     $agent =
         $setting
             ->aiAgent()

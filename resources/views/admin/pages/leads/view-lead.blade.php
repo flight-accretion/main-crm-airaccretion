@@ -1,6 +1,9 @@
 @extends('admin.layouts.header')
 
 @section('content')
+<div class="lead-detail">
+    @include('admin.pages.leads.partials.detail-summary')
+    <div class="ld-layout"><div class="ld-main" id="ld-main"></div><aside class="ld-side" id="ld-side"></aside></div>
     <!-- Page Header -->
     <div class="block justify-between page-header md:flex">
         <div>
@@ -24,7 +27,7 @@
         <div class="col-span-12">
             <div class="box">
               <div class="box-header flex justify-between items-center">
-                <h5 class="box-title">Basic Information</h5>
+                <h5 class="box-title">Contact details</h5>
 
                @php
     $currentUserType =
@@ -206,11 +209,14 @@
                 $extraServiceLabels = $extraServiceRows->pluck('extra_service')->filter()->values();
             @endphp
 
-            <div class="box">
+            <div class="box" id="ld-services">
                 <div class="box-header">
                     <h5 class="box-title">Services and Extra Services</h5>
                 </div>
                 <div class="box-body">
+                    @foreach($latestLead?->rideSegments ?? [] as $ride)
+                        <div class="ld-travel"><strong>{{ $ride->from_place ?: 'Departure' }} &rarr; {{ $ride->to_place ?: 'Arrival' }}</strong><div><span class="ld-tag">Departure: {{ optional($ride->from_date)->format('d M Y, H:i') ?: 'Not set' }}</span><span class="ld-tag">Return / arrival: {{ optional($ride->to_date)->format('d M Y, H:i') ?: 'Not set' }}</span></div></div>
+                    @endforeach
                     <div class="grid grid-cols-12 gap-6">
                         <div class="xl:col-span-6 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
                             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Products</label>
@@ -242,7 +248,7 @@
 
             <!-- Call Notes Section -->
             @if(isset($latestLead))
-                <div class="box">
+                <div class="box" id="ld-notes">
                     <div class="box-header">
                         <h5 class="box-title">Call Notes</h5>
                     </div>
@@ -270,7 +276,8 @@
                                             <div class="xl:col-span-12 col-span-12">
                                                 <div class="md:flex block items-start justify-between">
                                                     <p class="mb-0 text-[.875rem]">
-                                                        Note : {{ $followup->followup_note ?? 'N/A' }}
+                                                        {{ \Illuminate\Support\Str::limit($followup->followup_note ?? 'No note recorded', 180) }}
+                                                        @if(strlen($followup->followup_note ?? '') > 180)<details class="ld-raw"><summary>Show original note / email</summary><div>{{ $followup->followup_note }}</div></details>@endif
                                                         @if($followup->customer_not_picked_up)
                                                             <span class="badge bg-warning/10 text-warning ms-2">No Answer</span>
                                                         @endif
@@ -360,7 +367,8 @@
 
     <!-- Add Enquiry Modal -->
     <!-- Payment History Section -->
-    <div class="box">
+    @if(\App\Support\LeadDetailAccess::canViewAccountsActivity(auth()->user()))
+    <div class="box" id="ld-payments">
         <div class="box-header flex justify-between items-center">
             <h5 class="box-title">Payment History</h5>
         </div>
@@ -497,9 +505,10 @@
             @endif
         </div>
     </div>
+    @endif
 
-    @if(isset($auditTimeline) && $auditTimeline->count())
-        <div class="box">
+    @if(\App\Support\LeadDetailAccess::canViewAccountsActivity(auth()->user()) && isset($auditTimeline) && $auditTimeline->count())
+        <div class="box" id="ld-audit">
             <div class="box-header">
                 <h5 class="box-title">Business Activity Timeline</h5>
             </div>
@@ -927,4 +936,6 @@
 </div>
 
 @endif
+</div>
+<script src="{{ asset('assets/admin/js/crm/lead-detail.js') }}" defer></script>
 @endsection

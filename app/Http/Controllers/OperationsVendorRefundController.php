@@ -51,6 +51,7 @@ class OperationsVendorRefundController extends Controller
 
     public function index(Request $request)
     {
+        $refundProducts = \App\Models\Product::pluck('product', 'id');
         $rows = LeadVendorPayment::query()
             ->with(self::RELATIONS)
             ->whereHas('vendorRefunds', function ($query) {
@@ -58,7 +59,7 @@ class OperationsVendorRefundController extends Controller
             })
             ->orderByDesc('created_at')
             ->get()
-            ->map(fn (LeadVendorPayment $payment) => $this->buildRow($payment))
+            ->map(fn (LeadVendorPayment $payment) => $this->buildRow($payment, $refundProducts))
             ->values();
 
         $rows = $this->applyFilters($rows, $request);
@@ -369,7 +370,7 @@ class OperationsVendorRefundController extends Controller
     |--------------------------------------------------------------------------
     */
 
-    private function buildRow(LeadVendorPayment $payment): object
+    private function buildRow(LeadVendorPayment $payment, $refundProducts): object
     {
         $lead = $payment->lead;
         $refund = $this->latestRefund($payment);
@@ -377,6 +378,11 @@ class OperationsVendorRefundController extends Controller
 
         return (object) [
             'id' => $payment->getKey(),
+            'lead_id' => $payment->lead_id,
+            'pending_since' => $payment->vendorRefunds->filter(fn ($item) => !$this->isCompleted($item))->min('created_at'),
+            'approval_status' => \App\Support\RefundApproval::aggregate(
+                $payment->vendorRefunds->filter(fn ($item) => !$this->isCompleted($item))->pluck('approval_status')
+            ),
 
             'vendor_name' => $this->vendorName($payment),
             'vendor_phone' => $payment->vendor?->contact_number ?: '-',
@@ -384,6 +390,7 @@ class OperationsVendorRefundController extends Controller
             'customer_phone' => $lead?->client?->contact_number ?: '-',
 
             'service_name' => $this->serviceNames($lines) ?: '-',
+            'product_name' => collect($lead?->product_ids_array ?? [])->map(fn ($id) => $refundProducts[$id] ?? null)->filter()->implode(', '),
             'service_date' => $this->serviceDate($lead),
 
             'original_amount' => (float) ($payment->total_vendor_service_amount ?? 0),

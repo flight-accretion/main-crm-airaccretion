@@ -21,6 +21,12 @@ class LeadAiOpenAiClient
         LeadAiScoringSetting $setting,
         array $payload
     ): array {
+        return app(\App\Services\Ai\AiAgentTelemetry::class)->run($setting->ai_agent_id, 'lead_scoring',
+            fn () => $this->analyseTracked($setting, $payload));
+    }
+
+    private function analyseTracked(LeadAiScoringSetting $setting, array $payload): array
+    {
         $agent =
             $setting
                 ->aiAgent()

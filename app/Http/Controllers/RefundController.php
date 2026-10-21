@@ -160,6 +160,7 @@ class RefundController extends Controller
 
             // Transform data for refund notes
             $refundsData = [];
+            $refundProducts = \App\Models\Product::pluck('product', 'id');
             foreach ($rides as $ride) {
                 $lead = $ride->enquiry;
                 $client = $lead->client ?? null;
@@ -273,6 +274,8 @@ class RefundController extends Controller
                     'staff_name' => $staffName,
                     'service_date' => $serviceDateValue,
                     'service_names' => implode(', ', $serviceNames),
+                    'product_names' => collect($lead?->product_ids_array ?? [])->map(fn ($id) => $refundProducts[$id] ?? null)->filter()->implode(', '),
+                    'pending_since' => $existingRefund?->created_at,
                     'original_amount' => $totalAmount,
                     'refund_amount' => $refundAmount,
                     'refund_date' => $refundDate ? $refundDate->format('d M Y') : null,
@@ -280,7 +283,8 @@ class RefundController extends Controller
                     'has_refund' => $existingRefund ? true : false,
                     'refund_id' => $existingRefund ? $existingRefund->id : null,
                     'followup_id' => $ride->id,
-                    'remarks' => $existingRefund->remarks ?? null
+                    'remarks' => $existingRefund->remarks ?? null,
+                    'approval_status' => $existingRefund->approval_status ?? null,
                 ];
             }
             //dd($refundsData);
