@@ -151,6 +151,12 @@ class PaymentReviewController extends Controller
                 $query->where('status', $status);
             }
 
+            // Pending chip count: leads with an unreviewed payment under the current filters
+            // (these leads are never hidden by the "all reviewed" rule below, so the count matches the list).
+            $pendingLeadCount = (clone $query)->setEagerLoads([])
+                ->whereDoesntHave('paymentAuditTrail', fn ($q) => $q->whereIn('payment_status', PaymentAuditTrail::FINAL_REVIEW_STATUSES))
+                ->distinct()->count('lead_id');
+
             // Apply payment status filter (approval status from audit trail)
             if ($paymentStatus && $paymentStatus !== '') {
                 if ($paymentStatus === 'approved') {
@@ -298,7 +304,9 @@ class PaymentReviewController extends Controller
             // Get services for filter dropdown (same as refund notes)
             $services = Service::select('id', 'service')->get();
 
-            return view('admin.account.payment-review.payment-review', compact('payments', 'paymentsPaginator', 'services', 'serviceDate', 'serviceName', 'status', 'paymentStatus', 'fromDate', 'toDate'));
+            $reviewSummary = $this->reviewSummary();
+
+            return view('admin.account.payment-review.payment-review', compact('payments', 'paymentsPaginator', 'services', 'serviceDate', 'serviceName', 'status', 'paymentStatus', 'fromDate', 'toDate', 'reviewSummary', 'pendingLeadCount'));
         } catch (\Exception $e) {
             Log::error("Error in payment review index: " . $e->getMessage());
             return view('admin.account.payment-review.payment-review', [
@@ -310,6 +318,38 @@ class PaymentReviewController extends Controller
                 'paymentStatus' => null
             ]);
         }
+    }
+
+    /**
+     * Read-only header cards for the redesigned page (all payments, independent of list filters).
+     */
+    private function reviewSummary(): array
+    {
+        $pending = LeadFollowup::query()
+            ->whereNotNull('received_amount')->where('received_amount', '>', 0)
+            ->whereIn('status', [LeadFollowup::STATUS_FULL_PAYMENT_RECEIVED, LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED])
+            ->whereDoesntHave('paymentAuditTrail', fn ($q) => $q->whereIn('payment_status', PaymentAuditTrail::FINAL_REVIEW_STATUSES));
+        $stale = (clone $pending)->where('created_at', '<', now()->subHours(72));
+        $oldestStale = (clone $stale)->with('enquiry.client')->orderBy('created_at')->first();
+        $oldest = (clone $pending)->min('created_at');
+
+        $approvedToday = PaymentAuditTrail::where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
+            ->whereBetween('updated_at', [now()->startOfDay(), now()->endOfDay()])->get(['paid_amount', 'created_at', 'updated_at']);
+        $decisionHours = $approvedToday->map(fn ($a) => $a->created_at && $a->updated_at ? $a->created_at->diffInMinutes($a->updated_at) / 60 : null)->filter(fn ($h) => $h !== null);
+
+        return [
+            'pending_count' => (clone $pending)->count(),
+            'pending_amount' => (float) (clone $pending)->sum('received_amount'),
+            'oldest_days' => $oldest ? (int) Carbon::parse($oldest)->startOfDay()->diffInDays(now()->startOfDay()) : null,
+            'approved_today_count' => $approvedToday->count(),
+            'approved_today_amount' => (float) $approvedToday->sum('paid_amount'),
+            'avg_decision_hours' => $decisionHours->isNotEmpty() ? round($decisionHours->avg(), 1) : null,
+            'rejected_week_count' => PaymentAuditTrail::where('payment_status', PaymentAuditTrail::STATUS_REJECTED)
+                ->whereBetween('updated_at', [now()->startOfWeek(), now()->endOfWeek()])->count(),
+            'stale_count' => (clone $stale)->count(),
+            'stale_amount' => (float) (clone $stale)->sum('received_amount'),
+            'stale_oldest_client' => $oldestStale?->enquiry?->client?->name,
+        ];
     }
 
     public function show($id)

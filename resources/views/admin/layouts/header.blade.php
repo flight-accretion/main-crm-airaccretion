@@ -763,20 +763,30 @@
                                             Reschedule
                                         </a>
                                     </li>
-                                    <li class="slide">
-                                        <a href="{{ route('admin.refunds.index') }}" class="side-menu__item">Customer Refund</a>
-                                    </li>
-                                    <li class="slide">
-                                        <a
-                                        href="{{ route('admin.operations.vendor-refunds.index') }}"
-                                        class="side-menu__item {{
-                                            Route::is('admin.operations.vendor-refunds.*')
-                                                ? 'active'
-                                                : ''
-                                        }}"
-                                    >
-                                        Vendor Refund
-                                    </a>
+                                    {{-- Refund Queue: same two links as before, grouped as a sub-tree. --}}
+                                    <li class="slide has-sub {{ Route::is('admin.refunds.*') || Route::is('admin.operations.vendor-refunds.*') ? 'active open' : '' }}">
+                                        <a href="javascript:void(0);" class="side-menu__item">
+                                            <i class="ri-refund-2-line side-menu__icon"></i>
+                                            <span class="side-menu__label">Refund Queue</span>
+                                            <i class="fe fe-chevron-right side-menu__angle"></i>
+                                        </a>
+                                        <ul class="slide-menu child2">
+                                            <li class="slide">
+                                                <a href="{{ route('admin.refunds.index') }}" class="side-menu__item {{ Route::is('admin.refunds.*') ? 'active' : '' }}">Customer Refund</a>
+                                            </li>
+                                            <li class="slide">
+                                                <a
+                                                href="{{ route('admin.operations.vendor-refunds.index') }}"
+                                                class="side-menu__item {{
+                                                    Route::is('admin.operations.vendor-refunds.*')
+                                                        ? 'active'
+                                                        : ''
+                                                }}"
+                                            >
+                                                Vendor Refund
+                                            </a>
+                                            </li>
+                                        </ul>
                                     </li>
                                     <li class="slide">
                                         <a
@@ -845,12 +855,13 @@
                             </li>
                         @endif
 
-                        <!-- Refund Notes -->
-                        @if ($canAccess($userType, $adminRoles) || $canAccess($userType, $accountRoles) || $canAccess($userType, $operationsRoles))
+                        <!-- Customer Refund (same page as Operations > Customer Refund). The old "Refund Notes" entry is merged:
+                             Admin/Operations use the Operations menu link; Accounts, who don't see that menu, get this one. -->
+                        @if ($canAccess($userType, $accountRoles))
                             <li class="slide {{ Route::is('admin.refunds.*') ? 'active' : '' }}">
                                 <a href="{{ route('admin.refunds.index') }}" class="side-menu__item">
                                     <i class="bx bx-undo side-menu__icon"></i>
-                                    <span class="side-menu__label">Refund Notes</span>
+                                    <span class="side-menu__label">Customer Refund</span>
                                 </a>
                             </li>
                         @endif
@@ -1174,8 +1185,8 @@
                             </li>
                         @endif
 
-                        <!-- Voucher Generation Direct Link -->
-                        @if ($canAccess($userType, $adminRoles) || $canAccess($userType, $operationsRoles))
+                        <!-- Notification Master: Super Admin only (route is restricted too) -->
+                        @if ($userType === \App\Models\UserType::SUPER_ADMIN)
                             <li class="slide {{ Route::is('admin.notification-master.index') ? 'active' : '' }}">
                                 <a href="{{ route('admin.notification-master.index') }}" class="side-menu__item">
                                     <i class="bx bx-file side-menu__icon"></i>
@@ -1544,7 +1555,8 @@
 @endif
 <!-- End KPI Section -->
 
-                        @if(!$isHr)
+                        {{-- Reports: Super Admin only (route is restricted too). Accounts Reports below are unchanged. --}}
+                        @if($userType === \App\Models\UserType::SUPER_ADMIN)
                         <li class="slide {{ Route::is('admin.report') ? 'active' : '' }}">
                             <a href="{{ route('admin.report') }}" class="side-menu__item">
                                 <i class="bx bx-task side-menu__icon"></i>
@@ -1655,9 +1667,10 @@
                                 </a>
                             </li>
                         @endif
-                        @if ($canAccess($userType, $adminRoles) || $canAccess($userType, $accountRoles) || $canAccess($userType, $operationsRoles))
+                        {{-- Vendor Refunds (account list): hidden for Operations, who use Operations > Vendor Refund --}}
+                        @if ($canAccess($userType, $adminRoles) || $canAccess($userType, $accountRoles))
 
-                        <li class="slide">
+                        <li class="slide {{ Route::is('admin.account.vendor-refunds') ? 'active' : '' }}">
                         <a
                             href="{{ route('admin.account.vendor-refunds') }}"
                             class="side-menu__item"
@@ -1716,7 +1729,7 @@
 
         </aside>
         <!-- End::app-sidebar -->
-        <script src="{{ asset('assets/admin/js/crm/navigation.js') }}?v=1"></script>
+        <script src="{{ asset('assets/admin/js/crm/navigation.js') }}?v=2"></script>
 
 
         <div class="content main-index">
@@ -1728,6 +1741,10 @@
             <!-- end::main-content -->
 
         </div>
+
+        @if (!$isHr && ($canAccess($userType, $adminRoles) || $canAccess($userType, $operationsRoles)) && Route::is('admin.operations.*', 'admin.rides.*', 'admin.refunds.*', 'admin.whatsapp.*', 'admin.booking-email-template.*'))
+            @include('admin.layouts.partials.operations-mobile-nav')
+        @endif
 
         <!-- ========== Search Modal ========== -->
         <div id="search-modal" class="hs-overlay ti-modal hidden mt-[1.75rem]">

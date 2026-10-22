@@ -1,0 +1,146 @@
+/* Vendor Payments redesign: cards, pay-next bar, chips, filter bar and a grouped table without horizontal scroll. */
+.crm-vendor-payments{padding:22px 0;color:#1b1f27;min-width:0;letter-spacing:0}
+.crm-vendor-payments *{box-sizing:border-box}
+.vp-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+.vp-heading h1{font-size:24px;font-weight:600;margin:0 0 4px}
+.vp-heading p{margin:0;color:#8a93a3;font-size:13px}
+.vp-ghost,.vp-primary{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:7px;padding:8px 14px;font-weight:600;font-size:13px;white-space:nowrap;cursor:pointer;min-height:38px}
+.vp-ghost{border:1px solid #e4e7ec;background:#fff;color:#0f2b46}
+.vp-primary{border:1px solid #0f2b46;background:#0f2b46;color:#fff}
+.vp-primary:hover{background:#163b5f;color:#fff}.vp-ghost:hover{background:#f4f5f7;color:#0f2b46}
+.vp-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}
+.vp-stat{background:#fff;border:1px solid #e4e7ec;border-top:3px solid #0f2b46;border-radius:10px;padding:15px 16px;min-width:0}
+.vp-stat.is-red{border-top-color:#c62f3b}.vp-stat.is-green{border-top-color:#178a4c}.vp-stat.is-amber{border-top-color:#b26a00}
+.vp-stat strong{display:block;font-size:24px;font-weight:600}
+.vp-stat strong small{font-size:12px;font-weight:400;color:#8a93a3}
+.vp-stat span{display:block;font-size:12px;color:#5a6472;margin-top:4px}
+.vp-stat>small{display:block;font-size:11px;color:#8a93a3;margin-top:3px}
+.vp-paynext{display:flex;gap:10px;align-items:flex-start;background:#fbe5e7;color:#c62f3b;border-radius:8px;padding:10px 14px;font-size:12.5px;line-height:1.5;margin-bottom:18px;overflow-wrap:anywhere}
+.vp-paynext i{font-size:16px;line-height:1.3}
+.vp-chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.vp-chips a{border:1px solid #e4e7ec;border-radius:99px;padding:6px 14px;font-size:12.5px;color:#5a6472;background:#fff}
+.vp-chips a.is-on{background:#0f2b46;border-color:#0f2b46;color:#fff;font-weight:600}
+.vp-filters{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) auto;gap:12px;align-items:end;background:#fff;border:1px solid #e4e7ec;border-radius:12px;padding:14px 16px;margin-bottom:18px}
+.vp-field{min-width:0}
+.vp-field label{display:block;font-size:11.5px;color:#8a93a3;margin-bottom:5px}
+.vp-field select{width:100%;min-height:38px}
+.vp-field .select2-container{width:100%!important}
+.vp-filter-actions{display:flex;gap:8px}
+.crm-vendor-payments .vp-list{border:1px solid #e4e7ec;border-radius:12px;box-shadow:none}
+.crm-vendor-payments .vp-list .box-header{border-color:#e4e7ec}
+/* Grouped table: one tbody per client, fixed layout so it fits without a horizontal scrollbar. */
+.vp-table-wrap{border:1px solid #e4e7ec;border-radius:10px;overflow:hidden}
+.crm-vendor-payments table.vp-table{width:100%!important;min-width:0!important;table-layout:fixed;border-collapse:collapse;margin:0;font-size:12.5px}
+.crm-vendor-payments .vp-table th{text-align:left;font-size:11px;color:#8a93a3;font-weight:600;padding:10px 8px;background:#f0f1f4;border-bottom:1px solid #e4e7ec;white-space:normal;line-height:1.3}
+.crm-vendor-payments .vp-table td{padding:10px 8px;border-bottom:1px solid #eef1f5;vertical-align:top;white-space:normal!important;overflow-wrap:anywhere;word-break:normal}
+.crm-vendor-payments .vp-table tbody.vp-group:not(:last-of-type) tr:last-child td,.crm-vendor-payments .vp-table tbody.vp-group td[rowspan]{border-bottom:1px solid #d9dee6}
+.crm-vendor-payments .vp-table th.vp-col-sno{width:48px}.crm-vendor-payments .vp-table th.vp-col-client{width:14%}.crm-vendor-payments .vp-table th.vp-col-vendor{width:19%}.crm-vendor-payments .vp-table th.vp-col-action{width:76px}
+.vp-table td strong{display:block;font-weight:600;color:#1b1f27}
+.vp-table td small{display:block;font-size:11px;color:#8a93a3;margin-top:2px}
+.vp-table td.vp-balance.is-due{color:#c62f3b;font-weight:600}
+.vp-table tbody.is-overdue td:first-child{box-shadow:inset 3px 0 0 #c62f3b}
+.vp-overdue-note{color:#c62f3b!important;font-weight:600}
+.vp-actions>div{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.vp-tag{display:inline-block;font-size:11px;font-weight:600;padding:3px 8px;border-radius:5px;white-space:nowrap}
+.vp-tag.green{color:#178a4c;background:#e3f4eb}.vp-tag.amber{color:#b26a00;background:#fcefd9}.vp-tag.red{color:#c62f3b;background:#fbe5e7}
+.vp-empty-row td{text-align:center;color:#8a93a3;padding:30px!important}
+.crm-vendor-payments nav[role="navigation"]>div{flex-wrap:wrap;gap:10px}.crm-vendor-payments nav[role="navigation"] .shadow-sm{flex-wrap:wrap;max-width:100%}
+@media(max-width:1280px){.vp-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.vp-filter-actions{grid-column:span 2;justify-content:flex-end}}
+@media(max-width:1100px){.vp-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* Tablet and phone: each client group becomes one card; vendor lines stack inside it. */
+@media(max-width:1024px){
+  .vp-table-wrap{border:0;overflow:visible}
+  .crm-vendor-payments table.vp-table,.crm-vendor-payments .vp-table tbody,.crm-vendor-payments .vp-table tr,.crm-vendor-payments .vp-table td{display:block;width:100%!important}
+  .crm-vendor-payments .vp-table thead{display:none}
+  .crm-vendor-payments .vp-table tbody.vp-group{border:1px solid #e4e7ec;border-radius:10px;margin-bottom:12px;background:#fff;padding:6px 0;overflow:hidden}
+  .crm-vendor-payments .vp-table tbody.vp-group.is-overdue{border-color:#e7a1a8}
+  .crm-vendor-payments .vp-table tbody.is-overdue td{background:transparent}
+  .crm-vendor-payments .vp-table tr.vp-more{border-top:1px dashed #d9dee6;margin-top:6px;padding-top:6px}
+  .crm-vendor-payments .vp-table td{border:0!important;padding:5px 12px;display:grid!important;grid-template-columns:120px minmax(0,1fr);column-gap:14px;align-items:center}
+  .crm-vendor-payments .vp-table td:before{content:attr(data-label);font-size:11px;color:#8a93a3;font-weight:600;grid-row:1/span 3}
+  .crm-vendor-payments .vp-table td>*{grid-column:2;justify-self:end;text-align:right}
+  .crm-vendor-payments .vp-table td{text-align:right}
+  .crm-vendor-payments .vp-table td.vp-sno{display:none!important}
+  .crm-vendor-payments .vp-actions>div{flex-direction:row;justify-content:flex-end}
+  .crm-vendor-payments .vp-table .vp-empty-row td{display:block!important;text-align:center}
+  .crm-vendor-payments .vp-table .vp-empty-row td:before{display:none}
+}
+@media(max-width:767px){
+  .crm-vendor-payments{padding:14px 0}
+  .vp-heading h1{font-size:20px}
+  .vp-stats{gap:8px}.vp-stat{padding:12px}.vp-stat strong{font-size:19px}
+  .vp-filters{grid-template-columns:1fr;padding:12px}.vp-filter-actions{grid-column:auto}
+  .crm-vendor-payments .vp-list .box-body{padding:12px}
+  .crm-vendor-payments .vp-table td{grid-template-columns:110px minmax(0,1fr)}
+}
+.dark .crm-vendor-payments{color:#e8eaee}.dark .vp-stat,.dark .vp-filters,.dark .vp-chips a,.dark .vp-ghost,.dark .crm-vendor-payments .vp-table tbody.vp-group{background:#1b1e24;border-color:#2a2f38;color:#e8eaee}
+.dark .crm-vendor-payments .vp-table th{background:#22262e;border-color:#2a2f38}.dark .vp-table td strong{color:#e8eaee}
+/* ===== Vendor Payment details dialog (same design as Payment Review). Scoped to #view-vendor-payment. ===== */
+.vp-modal .vp-modal-box{width:calc(100% - 32px)!important;max-width:1080px!important;margin-left:auto!important;margin-right:auto!important}
+.vp-modal .vp-modal-content{border:1px solid #e4e7ec;border-radius:14px;overflow:hidden;box-shadow:0 24px 60px rgba(10,18,32,.28);background:#fff;color:#1b1f27;max-height:calc(100vh - 56px);display:flex;flex-direction:column}
+.vp-modal-head{display:flex;gap:14px;align-items:flex-start;justify-content:space-between;padding:18px 22px 14px;border-bottom:1px solid #e4e7ec;flex:none}
+.vp-modal-heading{min-width:0}
+.vp-modal-heading h5{font-size:17px;font-weight:650;margin:0;overflow-wrap:anywhere}
+.vp-modal-sub{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:12px}
+.vp-modal-sub a{color:#1d5bd8;font-weight:600}
+.vp-muted{color:#8a93a3;font-size:12px}
+.vp-modal-hint{color:#8a93a3;font-size:11.5px;margin:-4px 0 12px;line-height:1.5}
+.vp-pill{display:inline-block;font-size:11px;font-weight:600;padding:3px 9px;border-radius:5px}
+.vp-pill.amber{color:#b26a00;background:#fcefd9}.vp-pill.green{color:#178a4c;background:#e3f4eb}
+.vp-modal-close{width:36px;height:36px;display:grid;place-items:center;border:1px solid #e4e7ec;border-radius:8px;background:#fff;color:#5a6472;font-size:18px;flex:none}
+.vp-modal-close:hover{background:#f4f5f7}
+.vp-verdict{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:#e4e7ec;border-bottom:1px solid #e4e7ec;flex:none}
+.vp-verdict-cell{background:#fff;padding:12px 22px;min-width:0}
+.vp-verdict-cell span{display:block;font-size:10.5px;color:#8a93a3;text-transform:uppercase;letter-spacing:.04em}
+.vp-verdict-cell strong{display:block;font-size:19px;font-weight:650;margin-top:2px;overflow-wrap:anywhere}
+.vp-verdict-cell strong.is-ok{color:#178a4c}.vp-verdict-cell strong.is-due{color:#b26a00}
+.vp-verdict-note{grid-column:1/-1;font-size:12px;padding:8px 22px;font-weight:500;line-height:1.5}
+.vp-verdict-note.green{background:#e3f4eb;color:#178a4c}.vp-verdict-note.amber{background:#fcefd9;color:#b26a00}.vp-verdict-note.red{background:#fbe5e7;color:#c62f3b}
+.vp-modal .vp-modal-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);padding:0;overflow-y:auto;flex:1 1 auto;min-height:0}
+.vp-modal-col{padding:18px 22px;min-width:0}
+.vp-modal-left{border-right:1px solid #e4e7ec}
+.vp-block{margin-bottom:20px}.vp-block:last-child{margin-bottom:0}
+.vp-block h6{font-size:11px;font-weight:650;color:#8a93a3;letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px}
+/* Client / service info rendered by the existing script: compact label + value pairs. */
+.vp-modal .vp-info-grid{gap:10px 16px!important}
+.vp-modal .vp-info-grid>div{grid-column:span 4/span 4!important;min-width:0;margin-top:0!important}
+.vp-modal #service-info>div:nth-child(-n+2){grid-column:span 6/span 6!important}
+.vp-modal .vp-info-grid .ti-form-label,.vp-modal .vp-travel .ti-form-label{font-size:10.5px;color:#8a93a3!important;margin:0;font-weight:400}
+.vp-modal .vp-info-grid p,.vp-modal .vp-travel p{font-weight:600;font-size:12.5px;margin:2px 0 0;overflow-wrap:anywhere}
+.vp-modal .vp-travel .grid{gap:10px 16px!important}
+.vp-modal .vp-travel .hs-accordion{border-radius:8px;overflow:hidden}
+/* Payment histories (client + vendor) rendered by the existing script. */
+.vp-modal .vp-history>div,.vp-modal .vendor-payment-history>div.flex{border:1px solid #e4e7ec;border-radius:10px;padding:10px 12px;margin-bottom:8px!important;background:#fff;align-items:flex-start}
+.vp-modal .vp-history h5,.vp-modal .vendor-payment-history h5{font-size:15px!important;font-weight:650;margin-bottom:4px!important}
+.vp-modal .vp-history p,.vp-modal .vendor-payment-history p{font-size:11.5px;margin:0;color:#5a6472}
+.vp-modal .vp-history .avatar,.vp-modal .vendor-payment-history .avatar{transform:scale(.85)}
+.vp-modal .vp-history .badge,.vp-modal .vendor-payment-history .badge{font-size:10.5px}
+/* Vendor cards rendered by the existing script. */
+.vp-modal .vendor-section{border:1px solid #e4e7ec!important;border-radius:10px!important;box-shadow:none!important;margin-bottom:12px;overflow:hidden;background:#fff}
+.vp-modal .vendor-section>.box-header{padding:11px 14px;border-bottom:1px solid #eef1f5;background:#f8fafc;gap:10px;flex-wrap:wrap}
+.vp-modal .vendor-section>.box-header .box-title{font-size:13px;font-weight:650}
+.vp-modal .vendor-section>.box-header .box-title:before{display:none}
+.vp-modal .vendor-section>.box-body{padding:12px 14px;background:#fff!important}
+.vp-modal .vendor-section>.box-body>.grid{gap:10px 14px!important}
+.vp-modal .vendor-section .ti-form-label{font-size:10.5px;color:#8a93a3!important;margin:0;font-weight:400}
+.vp-modal .vendor-section .grid>div>p{font-weight:600;font-size:12.5px;margin:2px 0 0;overflow-wrap:anywhere}
+.vp-modal .vendor-section .add-payment-btn{background:#0f2b46!important;border-color:#0f2b46!important;color:#fff!important;border-radius:7px;font-weight:600}
+.vp-modal .inline-add-payment{border:1px dashed #d9dee6;border-radius:8px;padding:12px;background:#f8fafc}
+.vp-modal .inline-add-payment .ti-form-label{font-size:11px;color:#5a6472!important}
+.vp-modal .inline-add-payment .ti-form-input,.vp-modal .inline-add-payment .ti-form-select{width:100%;border-radius:7px}
+.vp-modal .inline-add-payment .grid>div{min-width:0}
+.vp-modal .vendor-payment-history{margin-top:4px}
+.vp-modal-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 22px;border-top:1px solid #e4e7ec;background:#f0f1f4;flex-wrap:wrap;flex:none}
+@media(max-width:960px){.vp-modal .vp-modal-body{grid-template-columns:1fr}.vp-modal-left{border-right:0;border-bottom:1px solid #e4e7ec}}
+@media(max-width:767px){
+  .vp-modal .vp-modal-box{width:100%!important;max-width:none!important;margin:0!important;min-height:100%}
+  .vp-modal .vp-modal-content{border-radius:0;border:0;max-height:100vh;min-height:100vh}
+  .vp-modal-head,.vp-modal-col,.vp-modal-foot{padding-left:16px;padding-right:16px}
+  .vp-verdict-cell{padding:10px 12px}.vp-verdict-cell strong{font-size:15px}.vp-verdict-note{padding:8px 16px}
+  .vp-modal .vp-info-grid>div,.vp-modal #service-info>div:nth-child(-n+2){grid-column:span 6/span 6!important}
+  .vp-modal .vendor-section .grid>div{grid-column:span 6/span 6!important}
+  .vp-modal .vendor-section .grid>div.inline-add-payment,.vp-modal .vendor-section .grid>div.vendor-payment-history,.vp-modal .vendor-section .grid>div:first-child{grid-column:1/-1!important}
+  .vp-modal .inline-add-payment .grid>div{grid-column:1/-1!important}
+}
+.dark .vp-modal .vp-modal-content,.dark .vp-verdict-cell,.dark .vp-modal-close,.dark .vp-modal .vendor-section,.dark .vp-modal .vendor-section>.box-body,.dark .vp-modal .vp-history>div,.dark .vp-modal .vendor-payment-history>div.flex{background:#1b1e24!important;border-color:#2a2f38!important;color:#e8eaee}
+.dark .vp-modal-foot,.dark .vp-modal .vendor-section>.box-header,.dark .vp-modal .inline-add-payment{background:#22262e!important;border-color:#2a2f38}

@@ -1,479 +1,246 @@
 @extends('admin.layouts.header')
 @section('content')
-<!-- Page Header -->
-<div class="block justify-between page-header md:flex">
+@php $tableProductNames = app(\App\Services\LeadTableProducts::class)->forRecords($payments); @endphp
+@php
+    $reviewSummary = $reviewSummary ?? [];
+    $inr = fn ($amount) => '₹' . number_format((float) $amount, 0);
+    // Compact rupee figure for the cards, e.g. ₹14.2L / ₹9.6K.
+    $inrShort = function ($amount) {
+        $amount = (float) $amount;
+        if ($amount >= 10000000) return '₹' . round($amount / 10000000, 1) . 'Cr';
+        if ($amount >= 100000) return '₹' . round($amount / 100000, 1) . 'L';
+        if ($amount >= 1000) return '₹' . round($amount / 1000, 1) . 'K';
+        return '₹' . number_format($amount, 0);
+    };
+    $currentApproval = request('payment_status', '');
+    $chipUrl = fn ($value) => route('admin.account.payment-review', array_filter(array_merge(request()->except(['page', 'payment_status']), ['payment_status' => $value]), fn ($v) => $v !== null && $v !== ''));
+@endphp
+<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/payment-review.css') }}">
+<div class="crm-payment-review">
+    <header class="pr-heading">
+        <div>
+            <h1>Payment Review</h1>
+            <p>Approve or reject incoming payments</p>
+        </div>
+        <a href="{{ route('admin.account.payment-review.export') }}{{ request()->getQueryString() ? '?' . request()->getQueryString() : '' }}"
+            class="pr-ghost"><i class="ri-download-line" aria-hidden="true"></i> Export (filtered)</a>
+    </header>
 
-</div>
-<!-- Page Header Close -->
+    <section class="pr-stats" aria-label="Payment review summary">
+        <div class="pr-stat is-brand">
+            <strong>{{ number_format($reviewSummary['pending_count'] ?? 0) }} <small>· {{ $inrShort($reviewSummary['pending_amount'] ?? 0) }}</small></strong>
+            <span>Pending approval</span>
+            <small>{{ isset($reviewSummary['oldest_days']) && $reviewSummary['oldest_days'] !== null ? 'oldest waiting ' . $reviewSummary['oldest_days'] . ' ' . \Illuminate\Support\Str::plural('day', $reviewSummary['oldest_days']) : 'nothing waiting' }}</small>
+        </div>
+        <div class="pr-stat is-green">
+            <strong>{{ number_format($reviewSummary['approved_today_count'] ?? 0) }} <small>· {{ $inrShort($reviewSummary['approved_today_amount'] ?? 0) }}</small></strong>
+            <span>Approved today</span>
+            <small>{{ isset($reviewSummary['avg_decision_hours']) && $reviewSummary['avg_decision_hours'] !== null ? 'avg decision time ' . $reviewSummary['avg_decision_hours'] . 'h' : 'no approvals yet today' }}</small>
+        </div>
+        <div class="pr-stat is-amber">
+            <strong>{{ number_format($reviewSummary['rejected_week_count'] ?? 0) }}</strong>
+            <span>Rejected this week</span>
+            <small>Since {{ now()->startOfWeek()->format('d M') }}</small>
+        </div>
+        <div class="pr-stat is-red">
+            <strong>{{ number_format($reviewSummary['stale_count'] ?? 0) }}</strong>
+            <span>Waiting &gt; 72h</span>
+            <small>@if(($reviewSummary['stale_count'] ?? 0) > 0){{ $inrShort($reviewSummary['stale_amount'] ?? 0) }}@if(!empty($reviewSummary['stale_oldest_client'])) — oldest: {{ $reviewSummary['stale_oldest_client'] }}@endif @else none @endif</small>
+        </div>
+    </section>
 
-<div class="grid grid-cols-12">
-    <div class="xl:col-span-12  col-span-12">
-        <div class="box">
-            <div class="hs-accordion-group">
-                <div class="hs-accordion" id="payment-review-accordion">
-                    <div class="box-header" style="display: block; padding-top: 10px; padding-bottom: 10px;">
-                        <div class="flex items-center">
-                            <div class="me-4 gap-0">
-                                <span class="avatar avatar-sm !rounded-full bg-theme m-0">
-                                    <svg xmlns="http://www.w3.org/2000/svg" height="24" width="24" fill="white"
-                                        viewBox="0 0 24 24">
-                                        <path
-                                            d="M2 6c0-1.1.9-2 2-2h16c1.1 0 2 .9 2 2v3H2V6zm0 5h20v7c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2v-7zm5 3c-.83 0-1.5.67-1.5 1.5S6.17 17 7 17s1.5-.67 1.5-1.5S7.83 14 7 14z" />
-                                    </svg>
-                                </span>
-                            </div>
-                            <div class="flex-grow">
-                                <div class="md:flex block items-center justify-between">
-                                    <h5 class="font-semibold mb-0 leading-none text-[1.25rem]">Payment Review</h5>
-                                    <div class="hs-dropdown ti-dropdown mt-3 md:mt-0">
-                                        <a href="{{ route('admin.account.payment-review.export') }}{{ request()->getQueryString() ? '?' . request()->getQueryString() : '' }}"
-                                            class="ti-btn bg-theme ti-btn-primary-full !py-1 !px-2"
-                                            aria-expanded="false">
-                                            <i class="ri-share-box-fill"></i>
-                                            Export
-                                            <i class="ri-arrow-down-s-line align-middle ms-1 inline-block"></i>
-                                        </a>
+    {{-- Chips only set the existing Payment Status filter; other filters are kept. --}}
+    <nav class="pr-chips" aria-label="Approval status">
+        <a href="{{ $chipUrl('pending') }}" class="{{ $currentApproval === 'pending' ? 'is-on' : '' }}">Pending · {{ number_format($pendingLeadCount ?? 0) }}</a>
+        <a href="{{ $chipUrl('approved') }}" class="{{ $currentApproval === 'approved' ? 'is-on' : '' }}">Approved</a>
+        <a href="{{ $chipUrl('rejected') }}" class="{{ $currentApproval === 'rejected' ? 'is-on' : '' }}">Rejected</a>
+        <a href="{{ $chipUrl('') }}" class="{{ $currentApproval === '' ? 'is-on' : '' }}">All</a>
+    </nav>
+
+    <form method="GET" action="{{ route('admin.account.payment-review') }}" id="filter-form" class="pr-filters">
+        @if(request('search'))<input type="hidden" name="search" value="{{ request('search') }}">@endif
+        <label class="pr-field">Created from<input type="date" name="from_date" value="{{ request('from_date') }}"></label>
+        <label class="pr-field">Created to<input type="date" name="to_date" value="{{ request('to_date') }}"></label>
+        <label class="pr-field">Service
+            <select name="service_name">
+                <option value="">All services</option>
+                @foreach ($services as $service)
+                    <option value="{{ $service->id }}" {{ request('service_name') == $service->id ? 'selected' : '' }}>{{ $service->service }}</option>
+                @endforeach
+            </select>
+        </label>
+        <label class="pr-field">Status
+            <select name="status">
+                <option value="">All status</option>
+                <option value="3" {{ request('status') == '3' ? 'selected' : '' }}>Full Paid</option>
+                <option value="4" {{ request('status') == '4' ? 'selected' : '' }}>Partial Paid</option>
+            </select>
+        </label>
+        <label class="pr-field">Payment status
+            <select name="payment_status">
+                <option value="">All payment status</option>
+                <option value="pending" {{ request('payment_status') == 'pending' ? 'selected' : '' }}>Pending</option>
+                <option value="approved" {{ request('payment_status') == 'approved' ? 'selected' : '' }}>Approved</option>
+                <option value="rejected" {{ request('payment_status') == 'rejected' ? 'selected' : '' }}>Rejected</option>
+            </select>
+        </label>
+        <label class="pr-field">Service date<input type="date" name="service_date" value="{{ request('service_date') }}"></label>
+        <div class="pr-filter-actions">
+            <button type="button" class="pr-ghost" onclick="clearFilters()">Reset</button>
+            <button type="submit" class="pr-primary">Filter</button>
+        </div>
+    </form>
+
+    <section class="box custom-box pr-queue">
+        <div class="box-header">
+            <div class="box-title">Payment transactions</div>
+        </div>
+        <div class="box-body">
+            <div class="pr-table-wrap">
+                <table class="table table-datatable server-paginated no-horizontal-scroll pr-table" width="100%" data-empty-msg="No payment records found">
+                    <thead>
+                        <tr>
+                            <th class="pr-col-client">Client</th>
+                            <th>Service date</th>
+                            <th class="pr-col-service">Product</th>
+                            <th>Received / Total</th>
+                            <th>Balance</th>
+                            <!-- <th>Status</th> -->
+                            <th>Payment status</th>
+                            <th class="pr-col-action">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse($payments as $index => $payment)
+                            @php
+                                $followupStatusLabels = [2 => 'Cancelled', 3 => 'Full Paid', 4 => 'Partial Paid', 5 => 'Confirmed/Complete', 6 => 'Pending', 7 => 'Rescheduled', 8 => 'Approved', 9 => 'Rejected'];
+                                $statusLabel = $followupStatusLabels[$payment->status] ?? 'Unknown';
+                                $statusTone = [3 => 'green', 4 => 'amber', 2 => 'red', 8 => 'blue', 9 => 'neutral'][$payment->status] ?? 'neutral';
+                                $received = (float) ($payment->received_amount ?? 0);
+                                $receivedApproved = (float) ($payment->received_amount_approved ?? 0);
+                                $total = (float) ($payment->total_amount ?? 0);
+                                if (isset($payment->audit_status) && $payment->audit_status == 1 && $receivedApproved >= $total && $total > 0) {
+                                    [$approvalLabel, $approvalTone] = ['Approved', 'green'];
+                                } elseif (isset($payment->audit_status) && $payment->audit_status == 2) {
+                                    [$approvalLabel, $approvalTone] = ['Rejected', 'red'];
+                                } else {
+                                    [$approvalLabel, $approvalTone] = ['Pending', 'amber'];
+                                }
+                                $initials = collect(preg_split('/\s+/', trim($payment->first_name ?: '?')))->filter()->take(2)->map(fn ($part) => mb_strtoupper(mb_substr($part, 0, 1)))->implode('');
+                            @endphp
+                            <tr>
+                                <td data-label="Client">
+                                    <div class="pr-client">
+                                        <span class="pr-avatar" aria-hidden="true">{{ $initials }}</span>
+                                        <div>
+                                            <strong>{{ $payment->first_name ?: 'N/A' }}</strong>
+                                            <small>{{ $payment->phone_number ?: 'No phone' }}</small>
+                                        </div>
                                     </div>
-                                </div>
-                            </div>
-                        </div>
+                                </td>
+                                <td data-label="Service date">
+                                    <strong>{{ $payment->from_date ? \Carbon\Carbon::parse($payment->from_date)->format('d M Y') : 'N/A' }}</strong>
+                                </td>
+                                <td data-label="Product">
+                                    <strong>{{ ($tableProductNames[$payment->lead_id] ?? '') ?: 'N/A' }}</strong>
+                                    @if($payment->from_place || $payment->to_place)<small>{{ $payment->from_place ?: '—' }} &rarr; {{ $payment->to_place ?: '—' }}</small>@endif
+                                </td>
+                                <td data-label="Received / Total">
+                                    <strong>₹{{ number_format($received, 2) }} / ₹{{ number_format($total, 2) }}</strong>
+                                    <small>Approved ₹{{ number_format($receivedApproved, 2) }}</small>
+                                </td>
+                                <td data-label="Balance">
+                                    @if((float) $payment->balance > 0)
+                                        <span class="pr-tag {{ $received > 0 ? 'amber' : 'red' }}">₹{{ number_format($payment->balance, 2) }}</span>
+                                    @else
+                                        <strong>—</strong>
+                                    @endif
+                                </td>
+                                <!-- <td data-label="Status"><span class="pr-tag {{ $statusTone }}">{{ $statusLabel }}</span></td> -->
+                                <td data-label="Payment status"><span class="pr-tag {{ $approvalTone }}">{{ $approvalLabel }}</span></td>
+                                <td data-label="Action">
+                                    <a aria-label="Review payment for {{ $payment->first_name }}" class="pr-primary pr-row-btn view-payment-btn"
+                                        data-id="{{ $payment->followup_id }}" data-hs-overlay="#view-payment-review">Review</a>
+                                </td>
+                            </tr>
+                        @empty
+                            <tr class="pr-empty-row"><td colspan="8">No payment records found.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+            @if(isset($paymentsPaginator) && $paymentsPaginator->hasPages())
+                <div class="mt-4">
+                    {{ $paymentsPaginator->onEachSide(1)->appends(request()->except('page'))->links() }}
+                </div>
+            @endif
+        </div>
+    </section>
+</div>
+<!-- Review Payment dialog (redesigned). All element IDs used by the existing scripts are unchanged. -->
+<div id="view-payment-review" class="view-payment-review hs-overlay hidden ti-modal pr-review-modal" tabindex="-1"
+    role="dialog" aria-modal="true" aria-labelledby="pr-review-title">
+    <div class="hs-overlay-open:mt-7 ti-modal-box mt-0 ease-out pr-review-box">
+        <div class="ti-modal-content pr-review-content">
+            <div class="pr-review-head">
+                <div class="pr-review-heading">
+                    <h5 id="pr-review-title">Review payment — <span id="client-name-header">Loading...</span></h5>
+                    <div class="pr-review-sub">
+                        <span class="pr-pill amber" id="pr-review-status" hidden></span>
+                        <a href="#" id="pr-open-lead" target="_blank" rel="noopener" hidden>Open lead <span aria-hidden="true">&rarr;</span></a>
+                        <span class="pr-review-muted" id="pr-received-at"></span>
                     </div>
                 </div>
-            </div>
-        </div>
-    </div>
-</div>
-<!-- Search Filters -->
-<div class="grid grid-cols-12 gap-6">
-    <div class="xl:col-span-12 col-span-12">
-        <div class="box custom-box">
-            <div class="box-header">
-                <div class="box-title">
-                    Search Filters
-                </div>
-                <button type="button" class="ti-btn ti-btn-sm ti-btn-outline-primary" id="toggle-filters">
-                    <i class="ti ti-chevron-up" id="filter-icon"></i>
+                <button type="button" class="pr-review-close" data-hs-overlay="#view-payment-review" aria-label="Close">
+                    <i class="ri-close-line" aria-hidden="true"></i>
                 </button>
             </div>
-            <div class="box-body" id="filter-section">
-                <form method="GET" action="{{ route('admin.account.payment-review') }}" id="filter-form">
-                    <div class="grid grid-cols-12 gap-4">
-                        <div class="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                            <label class="ti-form-label">From Date</label>
-                            <div class="input-group">
-                                <div class="input-group-text text-[#8c9097] dark:text-white/50">
-                                    <i class="ri-calendar-line"></i>
-                                </div>
-                                <input type="date" class="form-control form-control-sm rounded-sm" name="from_date"
-                                    value="{{ request('from_date') }}">
-                            </div>
-                        </div>
 
-                        <div class="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                            <label class="ti-form-label">To Date</label>
-                            <div class="input-group">
-                                <div class="input-group-text text-[#8c9097] dark:text-white/50">
-                                    <i class="ri-calendar-line"></i>
-                                </div>
-                                <input type="date" class="form-control form-control-sm rounded-sm" name="to_date"
-                                    value="{{ request('to_date') }}">
-                            </div>
-                        </div>
-                        <!-- Service Date Filter -->
-                        <div class="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                            <label class="ti-form-label">Service Date</label>
-                            <div class="input-group">
-                                <div class="input-group-text text-[#8c9097] dark:text-white/50">
-                                    <i class="ri-calendar-line"></i>
-                                </div>
-                                <input type="date" class="form-control form-control-sm rounded-sm" name="service_date"
-                                    value="{{ request('service_date') }}">
-                            </div>
-                        </div>
-
-                        <!-- Service Name Filter -->
-                        <div class="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                            <label class="ti-form-label">Service</label>
-                            <select class="js-example-basic-single w-full form-control-sm" name="service_name">
-                                <option value="">All Services</option>
-                                @foreach ($services as $service)
-                                <option value="{{ $service->id }}" {{ request('service_name')==$service->id ? 'selected'
-                                    : '' }}>
-                                    {{ $service->service }}
-                                </option>
-                                @endforeach
-                            </select>
-                        </div>
-
-                        <!-- Status Filter (Followup Status) -->
-                        <div class="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                            <label class="ti-form-label">Status</label>
-                            <select class="js-example-basic-single w-full form-control-sm" name="status">
-                                <option value="">All Status</option>
-                                <option value="3" {{ request('status')=='3' ? 'selected' : '' }}>Full Paid
-                                </option>
-                                <option value="4" {{ request('status')=='4' ? 'selected' : '' }}>Partial Paid
-                                </option>
-                            </select>
-                        </div>
-
-                        <!-- Payment Status Filter (Approval Status) -->
-                        <div class="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                            <label class="ti-form-label">Payment Status</label>
-                            <select class="js-example-basic-single w-full form-control-sm" name="payment_status">
-                                <option value="">All Payment Status</option>
-                                <option value="pending" {{ request('payment_status')=='pending' ? 'selected' : '' }}>
-                                    Pending
-                                </option>
-                                <option value="approved" {{ request('payment_status')=='approved' ? 'selected' : '' }}>
-                                    Approved
-                                </option>
-                                <option value="rejected" {{ request('payment_status')=='rejected' ? 'selected' : '' }}>
-                                    Rejected
-                                </option>
-                            </select>
-                        </div>
-
-                        <!-- Filter Buttons -->
-                        <div class="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                            <label class="ti-form-label">&nbsp;</label>
-                            <div class="flex gap-2">
-                                <button type="submit" class="ti-btn bg-theme ti-btn-primary-full !py-1 !px-2">
-                                    Apply Filters
-                                </button>
-                                <button type="button" class="ti-btn ti-btn-outline-secondary !py-1 !px-2"
-                                    title="Clear Filters" onclick="clearFilters()">
-                                    <i class="ri-refresh-line"></i>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </form>
+            <div class="pr-verdict">
+                <div class="pr-verdict-cell"><span>Total amount</span><strong id="total-amount">₹0</strong></div>
+                <div class="pr-verdict-cell"><span>Received amount</span><strong class="is-ok" id="paid-amount">₹0</strong></div>
+                <div class="pr-verdict-cell"><span>Balance</span><strong class="is-due" id="balance-amount">₹0</strong></div>
+                <div class="pr-verdict-note" id="pr-verdict-note" hidden></div>
             </div>
-        </div>
-    </div>
-</div>
-<div class="grid grid-cols-12 gap-6">
-    <div class="xl:col-span-12 col-span-12">
-        <div class="box custom-box">
-            <div class="box-header justify-between flex">
-                <div class="box-title">
-                    Payment Transactions
-                </div>
-            </div>
-            <div class="box-body">
-                <div class="table-responsive">
-                    <table class="table display responsive nowrap table-datatable server-paginated" width="100%"
-                        data-empty-msg="No payment records found">
-                        <thead class="bg-primary text-white">
-                            <tr class="border-b border-defaultborder">
 
-                                <th data-priority="1">S.No</th>
-                                <th data-priority="2">Name</th>
-                                <th data-priority="3">Phone</th>
-                                <th data-priority="4">Service Date</th>
-                                <th data-priority="5">Service</th>
-                                <th data-priority="6">Received/Total</th>
-                                <th data-priority="7">Status</th>
-                                <th data-priority="8">Payment Status</th>
-                                <th data-priority="1">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse($payments as $index => $payment)
-                            <tr>
-
-                                <td class="text-center">{{ (isset($paymentsPaginator) && $paymentsPaginator->firstItem() ? $paymentsPaginator->firstItem() : 1) + $index }}</td>
-                                <td>{{ $payment->first_name }} </td>
-                                <td class="text-center">{{ $payment->phone_number }}</td>
-                                <td class="text-center">
-                                    {{ $payment->from_date ? \Carbon\Carbon::parse($payment->from_date)->format('d-m-Y')
-                                    : 'N/A' }}
-                                </td>
-                                <td>
-                                    @php
-
-                                    $serviceIds = is_string($payment->service_ids)
-                                    ? json_decode($payment->service_ids, true)
-                                    : $payment->service_ids;
-
-                                    if ($serviceIds) {
-                                    $services = \App\Models\Service::whereIn('id', $serviceIds)
-                                    ->pluck('service')
-                                    ->toArray();
-
-                                    echo Str::limit(implode(', ', $services), 50); // yaha limit laga diya
-                                    } else {
-                                    echo 'N/A';
-                                    }
-                                    @endphp
-                                </td>
-
-                                <td class="text-center">
-                                    ₹{{ number_format($payment->received_amount, 2) }}/₹{{
-                                    number_format($payment->total_amount, 2) }}
-                                </td>
-                                <td>
-                                    @php
-                                    $followupStatusLabels = [
-                                    2 => 'Cancelled',
-                                    3 => 'Full Paid',
-                                    4 => 'Partial Paid',
-                                    5 => 'Confirmed/Complete',
-                                    6 => 'Pending',
-                                    7 => 'Rescheduled',
-                                    8 => 'Approved',
-                                    9 => 'Rejected',
-                                    ];
-                                    $statusLabel = $followupStatusLabels[$payment->status] ?? 'Unknown';
-                                    $statusClass = '';
-                                    if ($payment->status == 3) {
-                                    $statusClass = 'badge !rounded-full bg-success/10 text-success';
-                                    } elseif ($payment->status == 4) {
-                                    $statusClass = 'badge !rounded-full bg-warning/10 text-warning';
-                                    } elseif ($payment->status == 2) {
-                                    $statusClass = 'badge !rounded-full bg-danger/10 text-danger';
-                                    } elseif ($payment->status == 8) {
-                                    $statusClass = 'badge !rounded-full bg-info/10 text-info';
-                                    } elseif ($payment->status == 9) {
-                                    $statusClass = 'badge !rounded-full bg-secondary/10 text-secondary';
-                                    }
-                                    @endphp
-                                    <span class="{{ $statusClass }}">{{ $statusLabel }}</span>
-                                </td>
-                                <td class="text-center">
-                                    @php
-                                    // Numeric comparisons
-                                    $received = (float) ($payment->received_amount ?? 0);
-                                    $receivedApproved = (float) ($payment->received_amount_approved ?? 0);
-                                    $total = (float) ($payment->total_amount ?? 0);
-                                    @endphp
-                                    @if (isset($payment->audit_status))
-                                    @if ($payment->audit_status == 1 && $receivedApproved >= $total && $total > 0)
-                                    <span class="badge !rounded-full bg-success/10 text-success">Approved</span>
-                                    @elseif($payment->audit_status == 2)
-                                    <span class="badge !rounded-full bg-danger/10 text-danger">Rejected</span>
-                                    @else
-                                    <span class="badge !rounded-full bg-warning/10 text-warning">Pending</span>
-                                    @endif
-                                    @else
-                                    <span class="badge !rounded-full bg-warning/10 text-warning">Pending</span>
-                                    @endif
-                                </td>
-                                <td>
-                                    <a aria-label="anchor"
-                                        class="ti-btn ti-btn-icon ti-btn-sm ti-btn-primary-full view-payment-btn"
-                                        data-id="{{ $payment->followup_id }}" data-hs-overlay="#view-payment-review">
-                                        <i class="ri-eye-line"></i>
-                                    </a>
-                                </td>
-                            </tr>
-                            @empty
-
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-                @if(isset($paymentsPaginator) && $paymentsPaginator->hasPages())
-                <div class="mt-4">
-                    {{ $paymentsPaginator->appends(request()->except('page'))->links() }}
-                </div>
-                @endif
-            </div>
-        </div>
-    </div>
-</div>
-<div id="view-payment-review" class="view-payment-review hs-overlay hidden ti-offcanvas ti-offcanvas-right"
-    tabindex="-1">
-    <div class="ti-offcanvas-header">
-        <div class="flex items-center">
-            <div class="me-4 gap-0">
-                <span class="avatar avatar-sm !rounded-full bg-theme m-0">
-                    <span class="avatar avatar-sm !rounded-full bg-theme m-0">
-                        <svg xmlns="http://www.w3.org/2000/svg" height="24" width="24" fill="white" viewBox="0 0 24 24">
-                            <path
-                                d="M2 6c0-1.1.9-2 2-2h16c1.1 0 2 .9 2 2v3H2V6zm0 5h20v7c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2v-7zm5 3c-.83 0-1.5.67-1.5 1.5S6.17 17 7 17s1.5-.67 1.5-1.5S7.83 14 7 14z" />
-                        </svg>
-                    </span>
-                </span>
-            </div>
-            <div class="flex-grow">
-                <div class="flex items-center justify-between">
-                    <h5 class="font-semibold mb-0 leading-none text-[1rem]">Review Payment – <span
-                            id="client-name-header">Loading...</span>
-                    </h5>
-                    <div class="text-danger font-semibold">
-                        <button type="button"
-                            class="ti-btn flex-shrink-0 p-0 transition-none text-gray-500 hover:text-gray-700 focus:ring-gray-400 focus:ring-offset-white dark:text-[#8c9097] dark:text-white/50 dark:hover:text-white/80 dark:focus:ring-white/10 dark:focus:ring-offset-white/10"
-                            data-hs-overlay="#view-payment-review">
-                            <span class="sr-only">Close modal</span>
-                            <svg class="w-3.5 h-3.5" width="8" height="8" viewBox="0 0 8 8" fill="none"
-                                xmlns="http://www.w3.org/2000/svg">
-                                <path
-                                    d="M0.258206 1.00652C0.351976 0.912791 0.479126 0.860131 0.611706 0.860131C0.744296 0.860131 0.871447 0.912791 0.965207 1.00652L3.61171 3.65302L6.25822 1.00652C6.30432 0.958771 6.35952 0.920671 6.42052 0.894471C6.48152 0.868271 6.54712 0.854471 6.61352 0.853901C6.67992 0.853321 6.74572 0.865971 6.80722 0.891111C6.86862 0.916251 6.92442 0.953381 6.97142 1.00032C7.01832 1.04727 7.05552 1.1031 7.08062 1.16454C7.10572 1.22599 7.11842 1.29183 7.11782 1.35822C7.11722 1.42461 7.10342 1.49022 7.07722 1.55122C7.05102 1.61222 7.01292 1.6674 6.96522 1.71352L4.31871 4.36002L6.96522 7.00648C7.05632 7.10078 7.10672 7.22708 7.10552 7.35818C7.10442 7.48928 7.05182 7.61468 6.95912 7.70738C6.86642 7.80018 6.74102 7.85268 6.60992 7.85388C6.47882 7.85498 6.35252 7.80458 6.25822 7.71348L3.61171 5.06702L0.965207 7.71348C0.870907 7.80458 0.744606 7.85498 0.613506 7.85388C0.482406 7.85268 0.357007 7.80018 0.264297 7.70738C0.171597 7.61468 0.119017 7.48928 0.117877 7.35818C0.116737 7.22708 0.167126 7.10078 0.258206 7.00648L2.90471 4.36002L0.258206 1.71352C0.164476 1.61976 0.111816 1.4926 0.111816 1.36002C0.111816 1.22744 0.164476 1.10028 0.258206 1.00652Z"
-                                    fill="currentColor"></path>
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="ti-offcanvas-body view-payment-review-body">
-        <div class="grid grid-cols-12 gap-6">
-            <div class="col-span-12">
-                <div class="box">
-                    <div class="box-header flex justify-between items-center">
-                        <h5 class="box-title">Client Information</h5>
-                    </div>
-                    <div class="box-body bg-gray-50">
-                        <div class="grid grid-cols-12 gap-6">
-                            <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Full Name</label>
-                                <p class="text-gray-800 dark:text-white" id="client-name">-</p>
-                            </div>
-                            <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Email</label>
-                                <p class="text-gray-800 dark:text-white" id="client-email">-</p>
-                            </div>
-                            <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Phone Number</label>
-                                <p class="text-gray-800 dark:text-white" id="client-phone">-</p>
-                            </div>
-                            <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Whatsapp Number</label>
-                                <p class="text-gray-800 dark:text-white" id="client-whatsapp">-</p>
-                            </div>
-                            <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Country</label>
-                                <p class="text-gray-800 dark:text-white" id="client-country">-</p>
-                            </div>
-                            <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">City</label>
-                                <p class="text-gray-800 dark:text-white" id="client-city">-</p>
-                            </div>
-                            <div class="xl:col-span-6 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Address</label>
-                                <p class="text-gray-800 dark:text-white" id="client-address">-</p>
-                            </div>
+            <div class="ti-modal-body pr-review-body view-payment-review-body">
+                <div class="pr-review-col pr-review-left">
+                    <section class="pr-block">
+                        <h6>Client information</h6>
+                        <dl class="pr-kv">
+                            <div><dt>Full name</dt><dd id="client-name">-</dd></div>
+                            <div><dt>Phone</dt><dd id="client-phone">-</dd></div>
+                            <div><dt>WhatsApp</dt><dd id="client-whatsapp">-</dd></div>
+                            <div><dt>Email</dt><dd id="client-email">-</dd></div>
+                            <div><dt>Country</dt><dd id="client-country">-</dd></div>
+                            <div><dt>City</dt><dd id="client-city">-</dd></div>
+                            <div class="pr-kv-wide"><dt>Address</dt><dd id="client-address">-</dd></div>
+                        </dl>
+                    </section>
+                    <section class="pr-block">
+                        <h6>Travel information</h6>
+                        <div id="travel-information-container" class="pr-travel">
+                            <!-- Travel information will be populated dynamically -->
+                            <p class="pr-review-muted">Loading travel information...</p>
                         </div>
-                    </div>
+                    </section>
+                    <section class="pr-block">
+                        <h6>Service information</h6>
+                        <dl class="pr-kv pr-kv-two">
+                            <div><dt>Service</dt><dd id="service-name">-</dd></div>
+                            <div><dt>Extra services</dt><dd id="extra-services">-</dd></div>
+                        </dl>
+                    </section>
                 </div>
-                <div class="box">
-                    <div class="box-header flex justify-between items-center">
-                        <h5 class="box-title">Travel Information</h5>
-                    </div>
-                    <div class="box-body bg-gray-50" id="travel-information-container">
-                        <!-- Travel information will be populated dynamically -->
-                        <div class="text-center py-4">
-                            <p class="text-gray-500">Loading travel information...</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="box">
-                    <div class="box-header flex justify-between items-center">
-                        <h5 class="box-title">Service Information</h5>
-                    </div>
-                    <div class="box-body bg-gray-50">
-                        <div class="grid grid-cols-12 gap-6">
-                            <div class="xl:col-span-6 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Service</label>
-                                <p class="text-gray-800 dark:text-white" id="service-name">-</p>
-                            </div>
-                            <div class="xl:col-span-6 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Extra Services</label>
-                                <p class="text-gray-800 dark:text-white" id="extra-services">-</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="box">
-                    <div class="box-header flex justify-between items-center">
-                        <h5 class="box-title">Payment Information</h5>
-                    </div>
-                    <div class="box-body bg-gray-50">
-                        <div class="grid grid-cols-12 gap-6">
-                            <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Total Amount</label>
-                                <p class="text-gray-800 dark:text-white" id="total-amount">₹0</p>
-                            </div>
-                            <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Received Amount</label>
-                                <p class="text-gray-800 dark:text-white text-success" id="paid-amount">₹0</p>
-                            </div>
-                            <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Balance</label>
-                                <p class="text-danger-800 dark:text-white text-danger" id="balance-amount">₹0</p>
-                            </div>
-                        </div>
-                    </div>
-                    <!-- <div class="box-footer">
-                            <div class="grid grid-cols-12 gap-6">
-                                <div class="xl:col-span-6 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                    <label for="payment-method" class="ti-form-label mb-0">Payment Method</label>
-                                    <select class="ti-form-select rounded-sm form-control-sm w-full" name="payment_method"
-                                        required>
-                                        <option value="" disabled {{ old('payment_method') ? '' : 'selected' }}>
-                                            Select payment method</option>
-                                        <option value="Cash" {{ old('payment_method') == 'Cash' ? 'selected' : '' }}>
-                                            Cash</option>
-                                        <option value="UPI Payment"
-                                            {{ old('payment_method') == 'UPI Payment' ? 'selected' : '' }}>UPI Payment
-                                        </option>
-                                        <option value="Bank Transfer"
-                                            {{ old('payment_method') == 'Bank Transfer' ? 'selected' : '' }}>Bank Transfer
-                                        </option>
-                                        <option value="Payment Gateway"
-                                            {{ old('payment_method') == 'Payment Gateway' ? 'selected' : '' }}>Payment
-                                            Gateway</option>
-                                        <option value="Cheque" {{ old('payment_method') == 'Cheque' ? 'selected' : '' }}>
-                                            Cheque</option>
-                                        <option value="Cash" {{ old('payment_method') == 'Cash' ? 'selected' : '' }}>
-                                            Cash</option>
-                                        <option value="Credit Card"
-                                            {{ old('payment_method') == 'Credit Card' ? 'selected' : '' }}>Credit Card
-                                        </option>
-                                        <option value="Debit Card"
-                                            {{ old('payment_method') == 'Debit Card' ? 'selected' : '' }}>Debit Card
-                                        </option>
-                                        <option value="Net Banking"
-                                            {{ old('payment_method') == 'Net Banking' ? 'selected' : '' }}>Net Banking
-                                        </option>
-                                        <option value="Website"
-                                            {{ old('payment_method') == 'Website' ? 'selected' : '' }}>Website</option>
-                                        <option value="Other" {{ old('payment_method') == 'Other' ? 'selected' : '' }}>
-                                            Other</option>
-                                    </select>
-                                    <span id="payment_method_error" class="text-danger text-xs d-block mb-2"
-                                        style="display: none;"></span>
-                                </div>
-                                <div class="xl:col-span-6 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                    <label for="datetime" class="ti-form-label mb-0">Received Date</label>
-                                    <div class="form-group">
-                                        <input type="date" class="form-control form-control-sm datetime"
-                                            
-                                            value="{{ old('received_date') }}"
-                                            name="received_date" 
-                                            max="{{ date('Y-m-d') }}"
-                                            required>
-                                    </div>
-                                </div>
-                            </div>
-                        </div> -->
-                </div>
-                <div class="box">
-                    <div class="box-header flex justify-between items-center">
-                        <h5 class="box-title">Payment History</h5>
-                    </div>
-                    <div class="box-body bg-gray-50">
+
+                <div class="pr-review-col pr-review-right">
+                    <section class="pr-block">
+                        <h6>Payment history</h6>
+                        <p class="pr-review-hint">Each pending payment has its own decision: choose the method and date, add a narration, then Approve or Reject.</p>
                         <div id="payment-history-container">
-
                             <!-- Payment history will be populated dynamically -->
                         </div>
-                        <!-- <div class="text-center py-4">
-                                <p class="text-gray-500">Loading payment history...</p>
-                            </div> -->
-                    </div>
+                    </section>
                 </div>
                 <!-- <div class="box">
                         <div class="box-header flex justify-between items-center">
@@ -488,18 +255,23 @@
                             </div>
                         </div>
                     </div> -->
+                <!-- <div class="mt-5">
+                    <form id="payment-action-form">
+                        <input type="hidden" id="payment-followup-id" name="followup_id" value="">
+                        <button type="submit" id="approve-payment-btn"
+                            class="ti-btn bg-theme ti-btn-primary-full ti-custom-validate-btn"
+                            style="display: inline-block;">Approve all Payments</button>
+                        <button type="button" id="reject-payment-btn" class="ti-btn ti-btn-outline-primary ti-btn-wave"
+                            style="display: inline-block;">Reject all Payments </button>
+                    </form>
+                </div> -->
+            </div>
+
+            <div class="pr-review-foot">
+                <span class="pr-review-muted">Approved or rejected payments are locked; a payment already decided by someone else can't be decided twice.</span>
+                <button type="button" class="pr-ghost" data-hs-overlay="#view-payment-review">Cancel</button>
             </div>
         </div>
-        <!-- <div class="mt-5">
-                <form id="payment-action-form">
-                    <input type="hidden" id="payment-followup-id" name="followup_id" value="">
-                    <button type="submit" id="approve-payment-btn"
-                        class="ti-btn bg-theme ti-btn-primary-full ti-custom-validate-btn"
-                        style="display: inline-block;">Approve all Payments</button>
-                    <button type="button" id="reject-payment-btn" class="ti-btn ti-btn-outline-primary ti-btn-wave"
-                        style="display: inline-block;">Reject all Payments </button>
-                </form>
-            </div> -->
     </div>
 </div>
 
@@ -829,6 +601,8 @@
                     beforeSend: function() {
                         // Show loading state
                         $('#client-name-header').text('Loading...');
+                        $('#pr-review-status, #pr-verdict-note, #pr-open-lead').prop('hidden', true);
+                        $('#pr-received-at').text('');
                     },
                     success: function(response) {
                         const {
@@ -917,6 +691,9 @@
                         // Update payment history dynamically
                         updatePaymentHistory(paymentHistory);
 
+                        // Redesigned dialog header and summary strip (display only).
+                        updateReviewSummary(followup, paymentHistory || [], totalAmount, totalPaidAmount, balance);
+
                         // Show/hide action buttons based on status
                         const currentStatus = parseInt(followup.status);
                         // Always show approve/reject buttons for payment review
@@ -929,6 +706,51 @@
                         alert('Error loading payment details. Please try again.');
                     }
                 });
+            }
+
+            // Fills the dialog's status pill, lead link, received time and match note. Reads only; changes nothing.
+            function updateReviewSummary(followup, history, totalAmount, approvedAmount, balance) {
+                const money = value => '₹' + Number(value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+                const pending = history.filter(item => ![1, 2].includes(parseInt(item.audit_trail?.payment_status)));
+                const pendingAmount = pending.reduce((sum, item) => sum + parseFloat(item.amount || 0), 0);
+                const oldestPending = pending.map(item => new Date(item.created_at)).filter(d => !isNaN(d)).sort((a, b) => a - b)[0];
+
+                const $status = $('#pr-review-status').removeClass('amber green');
+                if (pending.length) {
+                    const days = oldestPending ? Math.max(0, Math.floor((Date.now() - oldestPending) / 86400000)) : null;
+                    const age = days === null ? '' : (days === 0 ? ' · today' : ` · ${days} ${days === 1 ? 'day' : 'days'}`);
+                    $status.addClass('amber').text(`Pending approval${pending.length > 1 ? ` (${pending.length})` : ''}${age}`).prop('hidden', false);
+                } else {
+                    $status.addClass('green').text('No pending payments').prop('hidden', false);
+                }
+
+                const leadId = followup.lead_id;
+                $('#pr-open-lead').attr('href', leadId ? `{{ url('admin/leads') }}/${leadId}` : '#').prop('hidden', !leadId);
+
+                const latest = history[0];
+                const receivedAt = latest && latest.created_at ? new Date(latest.created_at) : null;
+                $('#pr-received-at').text(receivedAt && !isNaN(receivedAt)
+                    ? 'latest received ' + receivedAt.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                    : '');
+
+                $('#paid-amount').toggleClass('is-ok', approvedAmount > 0);
+                $('#balance-amount').removeClass('is-ok is-due is-over').addClass(Math.abs(balance) < 0.005 ? 'is-ok' : (balance < 0 ? 'is-over' : 'is-due'));
+
+                let note = '';
+                let tone = 'green';
+                if (Math.abs(balance) < 0.005 && totalAmount > 0) {
+                    note = '✓ Approved payments match the booking total.';
+                } else if (balance < -0.005) {
+                    note = `Approved payments are ${money(Math.abs(balance))} more than the booking total — please check.`;
+                    tone = 'red';
+                } else {
+                    note = `${money(balance)} of ${money(totalAmount)} is not yet approved.`;
+                    tone = 'amber';
+                }
+                if (pending.length) {
+                    note += ` ${pending.length} pending ${pending.length === 1 ? 'payment' : 'payments'} worth ${money(pendingAmount)} below.`;
+                }
+                $('#pr-verdict-note').removeClass('green amber red').addClass(tone).text(note).prop('hidden', false);
             }
 
             // Handle approve payment (Approve All)
@@ -1366,198 +1188,107 @@
                         createdByInfo = payment.created_by;
                     }
 
-                    let statusIcon = '';
-                    if (isApproved) {
-                        statusIcon = `
-                            <span class="avatar avatar-sm !rounded-full bg-theme m-0">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
-                                    fill="none" viewBox="0 0 24 24">
-                                    <circle cx="12" cy="12" r="10" stroke="#fff" stroke-width="2"
-                                        fill="#2B53A9" />
-                                    <path d="M8.5 12.5L11 15L16 9.5" stroke="#fff" stroke-width="2"
-                                        stroke-linecap="round" stroke-linejoin="round" />
-                                </svg>
-                            </span>`;
-                    } else if (isRejected) {
-                        statusIcon = `
-                            <span class="avatar avatar-md p-2 !rounded-full bg-red-600 m-0">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
-                                    fill="none" viewBox="0 0 24 24">
-                                    <circle cx="12" cy="12" r="10" stroke="#fff" stroke-width="2"
-                                        fill="#dc2626" />
-                                    <path d="M8 8L16 16M16 8L8 16" stroke="#fff" stroke-width="2"
-                                        stroke-linecap="round" stroke-linejoin="round" />
-                                </svg>
-                            </span>`;
-                    } else {
-                        statusIcon = `
-                            <span class="avatar avatar-sm !rounded-full bg-theme m-0">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
-                                    fill="none" viewBox="0 0 24 24">
-                                    <circle cx="12" cy="12" r="10" stroke="#fff" stroke-width="2"
-                                        fill="#2B53A9" />
-                                    <path d="M8.5 12.5L11 15L16 9.5" stroke="#fff" stroke-width="2"
-                                        stroke-linecap="round" stroke-linejoin="round" />
-                                </svg>
-                            </span>`;
-                    }
+                    // Card layout (redesign). The inputs and buttons below keep the same classes and
+                    // data-payment-id attributes the approve / reject / receipt handlers read.
+                    const pillTone = isApproved ? 'green' : (isRejected ? 'red' : 'amber');
+                    const pillText = (isApproved || isRejected) ? statusText : 'Awaiting approval';
+                    const methodLabel = payment.payment_method ? payment.payment_method.charAt(0).toUpperCase() + payment.payment_method.slice(1) : '';
+                    const createdAt = payment.created_at ? new Date(payment.created_at) : null;
+                    const metaParts = [
+                        methodLabel,
+                        payment.paid_date ? new Date(payment.paid_date).toLocaleDateString('en-GB') : '',
+                        createdAt && !isNaN(createdAt) ? 'received ' + createdAt.toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '',
+                        (!isApproved && !isRejected) ? statusText : '',
+                        (payment.created_by_name || payment.user?.name || createdByInfo) ? 'recorded by ' + (payment.created_by_name || payment.user?.name || createdByInfo) : ''
+                    ].filter(Boolean);
+                    const receiptButtons = `
+                                <div class="pr-receipt-row">
+                                    <button type="button" class="pr-ghost pr-small view-receipt-btn"
+                                            data-payment-id="${payment.id}"
+                                            data-file="${payment.file || ''}"
+                                            ${!payment.file ? 'disabled' : ''}>
+                                        <i class="ri-eye-line" aria-hidden="true"></i>${payment.file ? 'View receipt' : 'No receipt'}
+                                    </button>
+                                    ${payment.file ? `<a href="${followupReceiptUrl(payment.file)}" class="pr-ghost pr-small download-receipt-btn" download><i class="ri-download-line" aria-hidden="true"></i>Download</a>` : ''}
+                                </div>`;
 
                     historyHtml += `
-                        <div class="box payment-card ${index > 0 ? 'mt-4' : ''} border border-gray-200 rounded-lg">
-                            <div class="box-header" style="display: block;">
-                                <div class="flex items-center">
-                                    <div class="me-4 gap-0">
-                                        ${statusIcon}
-                                    </div>
-                                    <div class="flex-grow">
-                                        <div class="payment-header flex items-center justify-between">
-                                            <div class="flex-grow mr-4">
-                                                <h5 class="font-semibold mb-1 leading-none text-[1.25rem]">
-                                                    ₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                                </h5>
-                                                <p class="text-sm text-gray-600 mb-1">
-                                                    ${payment.payment_method ? `<span class="badge bg-info/10 text-info">${payment.payment_method.charAt(0).toUpperCase() + payment.payment_method.slice(1)}</span>` : ''}
-                                                    ${payment.paid_date ? `<span class="ms-2 text-muted">${new Date(payment.paid_date).toLocaleDateString('en-GB')}</span>` : ''}
-                                                </p>
-                                                ${payment.followup_note ? `<p class="text-sm text-gray-600 mt-1"><i class="ri-sticky-note-line me-1"></i>Note: ${payment.followup_note}</p>` : ''}
-                                            </div>
-                                            <div class="payment-status text-right min-w-[200px]">
-                                                <div class="mb-2">
-                                                    <span class="badge !rounded-full ${statusClass}">${statusText}</span>
-                                                </div>
-                                                ${createdByInfo ? `<p class="text-xs text-gray-500 mb-2">${createdByInfo}</p>` : ''}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
+                        <div class="payment-card pr-pentry ${isRejected ? 'is-rejected' : ''}">
+                            <div class="pr-ptop">
+                                <span class="pr-pamt">₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                                <span class="pr-pill ${pillTone}">${pillText}</span>
                             </div>
+                            ${metaParts.length ? `<div class="pr-pmeta">${metaParts.join(' · ')}</div>` : ''}
+                            ${payment.followup_note ? `<div class="pr-narr"><b>Note</b>${payment.followup_note}</div>` : ''}
                     `;
 
-                    // Add footer section for each payment
                     if (!isApproved && !isRejected) {
-                        // Editable state - show form for pending payments
-                        historyHtml += `                            
-                            <div class="box-body">
-                                <div class="grid grid-cols-12 gap-2">
-                                    <!-- Payment Method -->
-                                    <div class="xl:col-span-6 col-span-12">
-                                        <label class="ti-form-label mb-0">Payment Method *</label>
-                                        <select class="ti-form-select rounded-sm form-control-sm w-full payment-method-select" data-payment-id="${payment.id}" required>
-                                            <option value="">Select method</option>
-                                            <option value="Cash">Cash</option>
-                                            <option value="Bank Transfer">Bank Transfer</option>
-                                            <option value="Online Payment">Online Payment</option>
-                                            <option value="UPI">UPI</option>
-                                            <option value="Credit Card">Credit Card</option>
-                                            <option value="Debit Card">Debit Card</option>
-                                            <option value="Cheque">Cheque</option>
-                                            <option value="Other">Other</option>
-                                            <option value="Net Banking">Net Banking</option>
-                                            <option value="Website">Website</option>
-                                                @php
-                                                    $currentUserType = auth()->user()->userType->user_type ?? null;
-                                                    $vendorAllowedRoles = array_merge(\App\Models\UserType::OPERATIONS_ROLES, \App\Models\UserType::ACCOUNTS_ROLES);
-                                                @endphp
-                                                @if(in_array($currentUserType, $vendorAllowedRoles))
-                                                    <option value="Paid Directly to Vendor">Paid Directly to Vendor</option>
-                                                @endif
-                                        </select>
-                                    </div>
-                                    <!-- Received Date -->
-                                    <!-- <div class="xl:col-span-6 col-span-12">
-                                        <label class="ti-form-label mb-0">Date *</label>
-                                        <div class="form-group">
-                                            <input type="date" class="form-control form-control-sm received-date-input" 
-                                                data-payment-id="${payment.id}" 
+                        // Pending: receipt, then the decision. Method / date / narration open from the toggle.
+                        historyHtml += `
+                            ${receiptButtons}
+                            <div class="pr-decide">
+                                <button type="button" class="pr-decision-toggle" aria-expanded="false" aria-controls="pr-decision-${payment.id}">
+                                    <span>Payment details</span><small>Payment Method *, Date *, Narration (Optional)</small>
+                                    <i class="ri-arrow-down-s-line" aria-hidden="true"></i>
+                                </button>
+                                <div class="pr-decision-fields" id="pr-decision-${payment.id}" hidden>
+                                    <div class="pr-decision-grid">
+                                        <label class="pr-field-label">Payment Method *
+                                            <select class="ti-form-select rounded-sm form-control-sm w-full payment-method-select" data-payment-id="${payment.id}" required>
+                                                <option value="">Select method</option>
+                                                <option value="Cash">Cash</option>
+                                                <option value="Bank Transfer">Bank Transfer</option>
+                                                <option value="Online Payment">Online Payment</option>
+                                                <option value="UPI">UPI</option>
+                                                <option value="Credit Card">Credit Card</option>
+                                                <option value="Debit Card">Debit Card</option>
+                                                <option value="Cheque">Cheque</option>
+                                                <option value="Other">Other</option>
+                                                <option value="Net Banking">Net Banking</option>
+                                                <option value="Website">Website</option>
+                                                    @php
+                                                        $currentUserType = auth()->user()->userType->user_type ?? null;
+                                                        $vendorAllowedRoles = array_merge(\App\Models\UserType::OPERATIONS_ROLES, \App\Models\UserType::ACCOUNTS_ROLES);
+                                                    @endphp
+                                                    @if(in_array($currentUserType, $vendorAllowedRoles))
+                                                        <option value="Paid Directly to Vendor">Paid Directly to Vendor</option>
+                                                    @endif
+                                            </select>
+                                        </label>
+                                        <label class="pr-field-label">Date *
+                                            <input type="date" class="form-control form-control-sm received-date-input"
+                                                data-payment-id="${payment.id}"
+                                                min="${isSuperAdmin ? '' : today}"
+                                                value="${today}"
                                                 required>
-                                        </div>
-                                    </div> -->
-
-                                    <!-- Received Date -->
-<div class="xl:col-span-6 col-span-12">
-    <label class="ti-form-label mb-0">Date *</label>
-    <div class="form-group">
-        <input type="date" class="form-control form-control-sm received-date-input" 
-            data-payment-id="${payment.id}"
-            min="${isSuperAdmin ? '' : today}"
-            value="${today}"
-            required>
-    </div>
-</div>
-                                    <!-- Narration -->
-                                    <div class="xl:col-span-12 col-span-12">
-                                        <label class="ti-form-label mb-0">Narration (Optional)</label>
-                                        <textarea class="form-control form-control-sm narration-textarea" 
-                                                data-payment-id="${payment.id}" 
-                                                rows="2"
-                                                placeholder="Add notes about this payment..."></textarea>
+                                        </label>
+                                        <label class="pr-field-label pr-field-wide">Narration (Optional)
+                                            <textarea class="form-control form-control-sm narration-textarea"
+                                                    data-payment-id="${payment.id}"
+                                                    rows="2"
+                                                    placeholder="Add notes about this payment..."></textarea>
+                                        </label>
                                     </div>
-                                    
                                 </div>
-                            </div>
-                            <div class="box-footer">
-                                <div class="grid grid-cols-12 gap-2">
-                                    <!-- View Receipt Button -->
-                                    <div class="xl:col-span-4 col-span-12">
-                                        <button type="button" class="ti-btn ti-btn-outline-primary view-receipt-btn w-full" 
-                                                data-payment-id="${payment.id}" 
-                                                data-file="${payment.file || ''}"
-                                                ${!payment.file ? 'disabled' : ''}>
-                                            <i class="ri-eye-line me-1"></i>${payment.file ? 'View Receipt' : 'No Receipt'}
-                                        </button>
-                                    </div>
-                                    <!-- Approve Button -->
-                                    <div class="xl:col-span-4 col-span-12">
-                                        <button type="button" class="ti-btn ti-btn-outline-success approve-individual-payment-btn w-full" data-payment-id="${payment.id}">
-                                            <i class="ri-check-line me-1"></i>Approve
-                                        </button>
-                                    </div>
-                                    <!-- Reject Button -->
-                                    <div class="xl:col-span-4 col-span-12">
-                                        <button type="button" class="ti-btn ti-btn-outline-danger reject-individual-payment-btn w-full" data-payment-id="${payment.id}">
-                                            <i class="ri-close-line me-1"></i>Reject
-                                        </button>
-                                    </div>
+                                <div class="pr-decision-actions">
+                                    <button type="button" class="pr-approve approve-individual-payment-btn" data-payment-id="${payment.id}">
+                                        <i class="ri-check-line" aria-hidden="true"></i>Approve payment
+                                    </button>
+                                    <button type="button" class="pr-reject reject-individual-payment-btn" data-payment-id="${payment.id}">
+                                        <i class="ri-close-line" aria-hidden="true"></i>Reject
+                                    </button>
                                 </div>
                             </div>
                         `;
                     } else {
-                        // Approved/Rejected state - show read-only information
+                        // Approved / rejected: read-only details.
                         historyHtml += `
-                            <!-- Box Footer -->
-                            <div class="box-body">
-                                <div class="grid grid-cols-12 gap-3">
-                                    <div class="xl:col-span-6 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                        <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Payment Method</label>
-                                        <p class="text-gray-800 dark:text-white">${auditEntry?.payment_method || 'Not specified'}</p>
-                                    </div>
-                                    <div class="xl:col-span-6 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                        <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Date</label>
-                                        <p class="text-gray-800 dark:text-white">${auditEntry?.paid_date ? new Date(auditEntry.paid_date).toLocaleDateString('en-GB') : 'Not specified'}</p>
-                                    </div>
-                                    ${auditEntry?.narration ? `
-                                                                                <div class="xl:col-span-6 lg:col-span-12 md:col-span-12 sm:col-span-12 col-span-12">
-                                                                                    <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Narration</label>
-                                                                                    <p class="text-gray-800 dark:text-white">${auditEntry.narration}</p>
-                                                                                </div>` : ''}
-                                    <div class="col-span-12">
-                                        <div class="flex gap-2">
-                                            <button type="button" class="ti-btn ti-btn-outline-primary view-receipt-btn" 
-                                                    data-payment-id="${payment.id}" 
-                                                    data-file="${payment.file || ''}"
-                                                    ${!payment.file ? 'disabled' : ''}>
-                                                <i class="ri-eye-line me-1"></i>View Receipt
-                                            </button>
-                                            <a href="${payment.file ? followupReceiptUrl(payment.file) : '#'}"
-                                               class="ti-btn ti-btn-outline-info download-receipt-btn ${!payment.file ? 'disabled pointer-events-none opacity-50' : ''}" 
-                                               download
-                                               ${!payment.file ? 'disabled' : ''}>
-                                                <i class="ri-download-line"></i>
-                                            </a>
-                                        </div>
-                                    </div>
-                                </div>
+                            <div class="pr-pgrid">
+                                <div><span>Payment method</span><strong>${auditEntry?.payment_method || 'Not specified'}</strong></div>
+                                <div><span>Date</span><strong>${auditEntry?.paid_date ? new Date(auditEntry.paid_date).toLocaleDateString('en-GB') : 'Not specified'}</strong></div>
                             </div>
+                            ${auditEntry?.narration ? `<div class="pr-narr"><b>Narration</b>${auditEntry.narration}</div>` : ''}
+                            ${receiptButtons}
                         `;
                     }
 
@@ -1806,6 +1537,29 @@
                     });
                 })();
             }
+            // Payment details toggle (Payment Method / Date / Narration are collapsed by default).
+            function setDecisionOpen(toggle, open) {
+                const fields = document.getElementById(toggle.getAttribute('aria-controls'));
+                if (!fields) return;
+                fields.hidden = !open;
+                toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+            }
+            $(document).on('click', '#view-payment-review .pr-decision-toggle', function() {
+                setDecisionOpen(this, this.getAttribute('aria-expanded') !== 'true');
+            });
+            // Approve while the details are collapsed: open them first so the required fields are visible.
+            // Nothing is sent here; once open, the existing approve flow below runs unchanged.
+            document.addEventListener('click', function(event) {
+                const approve = event.target.closest('#view-payment-review .approve-individual-payment-btn');
+                if (!approve) return;
+                const toggle = approve.closest('.pr-decide')?.querySelector('.pr-decision-toggle');
+                if (!toggle || toggle.getAttribute('aria-expanded') === 'true') return;
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                setDecisionOpen(toggle, true);
+                approve.closest('.pr-decide').querySelector('.payment-method-select')?.focus();
+            }, true);
+
             // Handle individual payment approve
             $(document).on('click', '.approve-individual-payment-btn', function() {
                 const paymentId = $(this).data('payment-id');

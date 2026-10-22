@@ -740,13 +740,16 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
      */
     public function upcomingRides(Request $request)
     {
+        $request->validate([
+            'from_date' => 'nullable|date_format:Y-m-d', 'to_date' => 'nullable|date_format:Y-m-d',
+            'view' => 'nullable|in:list,calendar', 'download' => 'nullable|in:csv',
+        ]);
         // Get date filters
         $fromDate = $request->input('from_date') ? Carbon::parse($request->input('from_date')) : Carbon::today();
-        $toDate = $request->input('to_date') ? Carbon::parse($request->input('to_date')) : Carbon::today()->addDays(7);
+        $toDate = $request->input('to_date') ? Carbon::parse($request->input('to_date')) : $fromDate->copy()->addDays(13);
 
-        // If no to_date provided, default to 7 days from from_date for better UX
-        if (!$toDate) {
-            $toDate = $fromDate->copy()->addDays(7);
+        if ($toDate->lt($fromDate)) {
+            throw ValidationException::withMessages(['to_date' => 'To date must be on or after the from date.']);
         }
 
         // Determine statuses filter (dynamic). If request provides 'status' use it, otherwise use defaults
@@ -763,8 +766,8 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
 
         $currentFilters = [
             'status'                 => $requestedStatuses,
-            'from_date'              => $request->input('from_date'),
-            'to_date'                => $request->input('to_date'),
+            'from_date'              => $fromDate->toDateString(),
+            'to_date'                => $toDate->toDateString(),
             // 'representative_user_id' => $request->input('representative_user_id'), ,
             'representative_user_id' => $request->input('representative_user_id'),
             'product_id'             => $productId,
@@ -781,7 +784,7 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
             'enquiry.vouchers.vendorPayments.paymentDetails.service',
             'enquiry.vouchers.vendorPayments.paymentDetails.extraService',
             'enquiry.leadFollowups' => function ($query) {
-                $query->orderByDesc('created_at');
+                $query->orderByDesc('created_at')->orderByDesc('id');
             },
             'enquiry.latestFollowup'
         ])
@@ -816,7 +819,9 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
 
         // Apply sales representative filter
         $representativeId = $request->input('representative_user_id');
-        if ($representativeId) {
+        if ($representativeId === 'unassigned') {
+            $upcomingRidesQuery->whereHas('enquiry', fn ($q) => $q->whereNull('representative_user_id'));
+        } elseif ($representativeId) {
             $upcomingRidesQuery->whereHas('enquiry', function ($q) use ($representativeId) {
                 $q->where('representative_user_id', $representativeId);
             });
@@ -944,9 +949,17 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
 
             // Get status information
             $statusId = $latestFollowup ? $latestFollowup->status : 0;
+            $billable = $lead->leadFollowups->first(fn ($followup) => (float) $followup->total_amount > 0);
+            $hasVendor = $vouchers->flatMap(fn ($voucher) => $voucher->vendorPayments)->whereNotNull('vendor_id')->isNotEmpty();
 
             return [
                 'id' => $ride->id,
+                'lead_id' => $lead->id,
+                'ride_day' => $ride->from_date->toDateString(),
+                'ride_start' => $ride->from_date->format('Y-m-d\TH:i:s'),
+                'pending_amount_value' => $pendingAmount,
+                'total_amount_value' => (float) ($billable?->total_amount ?? 0),
+                'has_vendor' => $hasVendor,
                 'client_name' => $client ? $client->name : 'N/A',
                 'contact_number' => $client ? $client->contact_number : 'N/A',
                 'ride_date' => $ride->from_date ? $ride->from_date->format('d-m-Y') : 'N/A',
@@ -963,7 +976,7 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                 'number_of_passengers' => $lead ? $lead->number_of_passengers : 0,
                 'occasion' => $lead ? $lead->occasion : '',
                 'status_id' => $statusId,
-                'status_name' => '', // Will be filled by view using availableStatuses
+                'status_name' => $statusId == 5 ? 'Completed' : (LeadFollowup::statusLabels()[(int) $statusId] ?? 'Pending'),
             ];
         });
 
@@ -995,7 +1008,19 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
             // 9 => 'Payment Rejected'
         ];
         $products = app(\App\Services\MasterDataCacheService::class)->activeProducts();
-        return view('admin.pages.rides.upcoming-rides', compact('ridesData', 'salesReps', 'availableStatuses', 'currentFilters', 'products'));
+        $schedule = app(\App\Services\Operations\UpcomingRideViewData::class)->build($ridesData);
+        if ($request->input('download') === 'csv') {
+            return response()->streamDownload(function () use ($schedule) {
+                $output = fopen('php://output', 'w');
+                fputcsv($output, ['Client', 'Phone', 'Product', 'Service', 'Service date', 'Time', 'Status', 'Payment', 'Due', 'Owner', 'From', 'To']);
+                foreach ($schedule['rows'] as $ride) {
+                    $values = [$ride['client_name'], $ride['contact_number'], $ride['product_names'], $ride['service_names'], $ride['ride_day'], $ride['ride_time'], $ride['status_name'], $ride['payment_label'], $ride['pending_amount_value'], $ride['sales_person_name'], $ride['from_place'], $ride['to_place']];
+                    fputcsv($output, array_map(fn ($value) => preg_match('/^[\s]*[=+@-]/', (string) $value) ? "'".$value : $value, $values));
+                }
+                fclose($output);
+            }, 'upcoming-rides.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
+        }
+        return view('admin.pages.rides.upcoming-rides', compact('ridesData', 'salesReps', 'availableStatuses', 'currentFilters', 'products', 'schedule'));
     }
 
     /**
@@ -1670,6 +1695,25 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                     ->groupBy('lead_id');
             }
 
+            // Latest audited event per lead on this page (payments, vouchers, invoices, vendor work, refunds, ride changes).
+            $latestAudits = collect();
+            if ($pageLeadIds->isNotEmpty() && Schema::hasTable('activity_audits')) {
+                $latestAudits = DB::table('activity_audits as audit')
+                    ->whereIn('audit.lead_id', $pageLeadIds->all())
+                    ->whereNotExists(function ($newer) {
+                        $newer->selectRaw('1')->from('activity_audits as newer_audit')
+                            ->whereColumn('newer_audit.lead_id', 'audit.lead_id')
+                            ->where(fn ($q) => $q->whereColumn('newer_audit.created_at', '>', 'audit.created_at')
+                                ->orWhere(fn ($tie) => $tie->whereColumn('newer_audit.created_at', '=', 'audit.created_at')
+                                    ->whereColumn('newer_audit.id', '>', 'audit.id')));
+                    })
+                    ->get(['audit.lead_id', 'audit.module', 'audit.action', 'audit.actor_name', 'audit.created_at'])
+                    ->keyBy('lead_id');
+            }
+            // Display-only labels for this page; stored status values are unchanged.
+            $rideStatusLabels = [0 => 'Initiated', 1 => 'Active', 2 => 'Cancelled', 3 => 'Full payment received', 4 => 'Partial payment received',
+                5 => 'Ride completed', 6 => 'Pending', 7 => 'Rescheduled', 8 => 'Approved', 9 => 'Rejected'];
+
             // Transform the grouped data for display
             $ridesData = [];
             foreach ($pageLeadIds as $leadId) {
@@ -1778,6 +1822,8 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                     'company_name' => $client ? ($client->company_name ?: 'N/A') : 'N/A',
                     'gst_number' => $client ? ($client->gst_number ?: 'N/A') : 'N/A',
                     'contact_number' => $client ? $client->contact_number : 'N/A',
+                    'client_email' => $client?->email ?: null,
+                    'whatsapp_number' => $client?->alternate_number ?: null,
                     'service_date' => $allRides->first()->from_date ? $allRides->first()->from_date->format('d-m-Y') : 'N/A',
                     'service_date_sortable' => $allRides->first()->from_date ? $allRides->first()->from_date->format('Y-m-d H:i:s') : '0000-00-00 00:00:00',
                     'service_names' => implode(', ', $serviceNames),
@@ -1790,18 +1836,35 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                     'status_text' => $this->getStatusText($latestFollowup ? $latestFollowup->status : 6),
                     'all_rides' => $allRides // Store all rides for this lead
                 ];
-                $booked = $lead->vouchers->sortBy('created_at')->first();
+                // Timeline is display-only and derived from existing records; no status is written.
+                $firstApprovedPayment = $lead->leadFollowups->flatMap->paymentAuditTrail
+                    ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
+                    ->map(fn ($payment) => $payment->updated_at ?? $payment->created_at)->filter()->sort()->first();
+                $voucher = $lead->vouchers->sortBy('created_at')->first();
                 $vendorRecord = $lead->leadVendorPayments->whereNotNull('vendor_id')->sortBy('created_at')->first();
-                $completion = $lead->leadFollowups->where('status', 5)->sortByDesc('created_at')->first();
-                $serviceStart = $allRides->filter(fn ($segment) => !$segment->is_tba && $segment->from_date)->sortBy('from_date')->first()?->from_date;
-                $transitStarted = $serviceStart && $serviceStart->lte(now()) && !in_array((int) ($latestFollowup->status ?? 6), [2, 7], true);
+
+                // Recent activity: newest of the latest follow-up and the latest audited event.
+                $recent = null;
+                if ($latestFollowup?->created_at) {
+                    $recent = ['date' => $latestFollowup->created_at,
+                        'note' => 'Follow-up: '.($rideStatusLabels[(int) $latestFollowup->status] ?? 'Updated')];
+                }
+                $audit = $latestAudits->get($leadId);
+                if ($audit && (!$recent || Carbon::parse($audit->created_at)->gt($recent['date']))) {
+                    $recent = ['date' => Carbon::parse($audit->created_at),
+                        'note' => Str::ucfirst(str_replace('_', ' ', $audit->module)).' '.str_replace('_', ' ', $audit->action)
+                            .($audit->actor_name ? ' by '.$audit->actor_name : '')];
+                }
+
                 $ridesData[array_key_last($ridesData)]['timeline'] = [
-                    ['label' => 'Booked', 'date' => $booked?->created_at, 'note' => 'Voucher created'],
-                    ['label' => 'Confirmed', 'date' => null, 'note' => 'Not recorded separately'],
+                    ['label' => 'Booked', 'date' => $firstApprovedPayment, 'note' => $firstApprovedPayment ? 'First payment approved' : 'No approved payment'],
+                    ['label' => 'Vouchered', 'date' => $voucher?->created_at, 'note' => $voucher ? 'Voucher created' : 'No voucher'],
                     ['label' => 'Vendor assigned', 'date' => $vendorRecord?->created_at, 'note' => $vendorRecord?->vendor?->name ?: 'No vendor record'],
-                    ['label' => 'In transit', 'date' => $transitStarted ? $serviceStart : null, 'note' => $transitStarted ? 'Booked service start time' : 'Service not started'],
-                    ['label' => 'Completed', 'date' => $completion?->created_at, 'note' => $completion ? 'Completion follow-up recorded' : 'Not recorded'],
+                    ['label' => 'Current status', 'date' => $latestFollowup?->created_at,
+                        'note' => $latestFollowup ? ($rideStatusLabels[(int) $latestFollowup->status] ?? 'Pending') : 'No follow-up recorded'],
+                    ['label' => 'Recent activity', 'date' => $recent['date'] ?? null, 'note' => $recent['note'] ?? 'No activity recorded'],
                 ];
+                $ridesData[array_key_last($ridesData)]['status_label'] = $rideStatusLabels[(int) ($latestFollowup->status ?? 6)] ?? 'Pending';
             }
 
             // Ensure we only include rides whose latest followup status matches the requested status

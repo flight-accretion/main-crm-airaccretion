@@ -2,6 +2,7 @@
 @section('content')
 @php
     $operationsRescheduleMode = $operationsRescheduleMode ?? false;
+    $tableProductNames = app(\App\Services\LeadTableProducts::class)->forRecords($ridesData ?? []);
     $pageTitle = $pageTitle ?? 'Ride Status';
     $tableTitle = $tableTitle ?? 'All Rides';
     $filterActionRoute = $filterActionRoute ?? route('admin.rides.ride-status');
@@ -193,7 +194,7 @@
                                 @endunless
                                 <th data-priority="7">Phone</th>
                                 <th data-priority="8">{{ $operationsRescheduleMode ? 'Original Service Date' : 'Service Date' }}</th>
-                                <th data-priority="9">Service</th>
+                                <th data-priority="9">Product</th>
                                 {{-- <th data-priority="2">Invoice ID</th> --}}
                                 {{-- <th data-priority="3">Vendor Name</th> --}}
                                 {{-- <th data-priority="4">Assigned Rep</th> --}}
@@ -219,7 +220,7 @@
                                     data-order="{{ isset($ride['service_date_sortable']) ? $ride['service_date_sortable'] : '0000-00-00' }}">
                                     {{ $ride['service_date'] }}</td>
                                 <td>
-                                    {{ $ride['service_names'] ?: 'N/A' }}
+                                    {{ ($tableProductNames[$ride['lead_id']] ?? '') ?: 'N/A' }}
                                 </td>
                                 {{-- <td>{{ $ride['invoice_id'] }}</td> --}}
                                 {{-- <td>{{ $ride['vendor_name'] }}</td> --}}
@@ -275,7 +276,9 @@
                                         <button type="button"
                                             class="ti-btn {{ $operationsRescheduleMode ? 'ti-btn-sm' : 'ti-btn-icon ti-btn-sm' }} ti-btn-primary-full view-ride-btn"
                                             data-ride-id="{{ $ride['id'] }}" data-hs-overlay="#ride-details-modal"
-                                            onclick="resetRefundSection()" title="View">
+                                            onclick="resetRefundSection()" title="View"
+                                            style="width:auto !important;"
+                                            >
                                             <i class="ri-eye-line"></i>
                                             <!-- @if($operationsRescheduleMode)
                                                 <span class="ms-1">View</span>
@@ -327,13 +330,17 @@
 </div>
 
 @endif
-<!-- Ride Details Modal -->
+<!-- Ride Details: drawer on the Reschedules page, inline Ride Status panel on the Ride Status page -->
+@if($operationsRescheduleMode)
 <div id="ride-details-modal" data-refunds-url="{{ route('admin.refunds.index') }}"
     class="hs-overlay hidden ti-offcanvas ti-offcanvas-right" tabindex="-1" data-hs-overlay-options='{
         "onClose": function () {
             document.getElementById("refund-information-section").style.display = "none";
         }
      }'>
+@else
+<div id="ride-details-modal" data-refunds-url="{{ route('admin.refunds.index') }}" class="rs-status-panel" data-inline-panel hidden>
+@endif
     <div class="ti-offcanvas-header">
         <div class="flex items-center">
             <div class="me-4 gap-0">
@@ -343,13 +350,13 @@
             </div>
             <div class="flex-grow">
                 <div class="flex items-center justify-between">
-                    <h5 class="font-semibold mb-0 leading-none text-[1rem]">Ride Details – <span class="text-primary"
+                    <h5 class="font-semibold mb-0 leading-none text-[1rem]">{{ $operationsRescheduleMode ? 'Ride Details' : 'Ride Status' }} – <span class="text-primary"
                             id="modal-client-name">Loading...</span>
                     </h5>
                     <div class="text-danger font-semibold">
                         <button type="button"
-                            class="ti-btn flex-shrink-0 p-0 transition-none text-gray-500 hover:text-gray-700 focus:ring-gray-400 focus:ring-offset-white dark:text-[#8c9097] dark:text-white/50 dark:hover:text-white/80 dark:focus:ring-white/10 dark:focus:ring-offset-white/10"
-                            data-hs-overlay="#ride-details-modal">
+                            class="ti-btn flex-shrink-0 p-0 transition-none text-gray-500 hover:text-gray-700 focus:ring-gray-400 focus:ring-offset-white dark:text-[#8c9097] dark:text-white/50 dark:hover:text-white/80 dark:focus:ring-white/10 dark:focus:ring-offset-white/10 {{ $operationsRescheduleMode ? '' : 'rs-panel-close' }}"
+                            @if($operationsRescheduleMode) data-hs-overlay="#ride-details-modal" @endif>
                             <span class="sr-only">Close modal</span>
                             <svg class="w-3.5 h-3.5" width="8" height="8" viewBox="0 0 8 8" fill="none"
                                 xmlns="http://www.w3.org/2000/svg">
@@ -366,6 +373,7 @@
     <div class="ti-offcanvas-body view-ride-status-body">
         <div class="grid grid-cols-12 gap-6">
             <div class="col-span-12">
+                @if($operationsRescheduleMode)
                 <!-- Current Status & Payment Progress -->
                 <div class="box">
                     <div class="box-body bg-gray-50">
@@ -428,6 +436,27 @@
                     Vendor Refund
                 </button>
                 </div>
+                @else
+                {{-- Ride Status page: small popup under the Ride Status button (moved there by JS).
+                     Same element IDs as the drawer, so the existing status/refund/date handlers are unchanged. --}}
+                <div id="rs-status-popover" class="rs-popover" role="dialog" aria-label="Ride status" hidden>
+                    <label class="ti-form-label mb-1" for="ride-status-dropdown">Ride Status</label>
+                    <select class="ti-form-select form-control-sm rounded-sm" id="ride-status-dropdown">
+                        <option value="">Select Status</option>
+                        <option value="2">Ride Cancelled</option>
+                        <option value="5">Ride Completed</option>
+                        <option value="7">Ride Reschedule</option>
+                    </select>
+                    <div class="rs-popover-actions" id="action-buttons" style="display: none;">
+                        <button type="button" class="ti-btn bg-theme ti-btn-primary-full ti-btn-sm" id="generate-invoice-btn" style="display: none;">Generate Invoice</button>
+                        <button type="button" class="ti-btn ti-btn-danger-full ti-btn-sm" id="refund-note-btn" style="display: none;"><i class="ri-refund-2-line me-1"></i>Customer Refund</button>
+                        <button type="button" class="ti-btn ti-btn-info ti-btn-sm" id="vendor-refund-btn" style="display: none;"><i class="ri-bank-card-line me-1"></i>Vendor Refund</button>
+                    </div>
+                    <div class="rs-popover-actions" id="edit-dates-container" style="display: none;">
+                        <button type="button" class="ti-btn ti-btn-outline-primary ti-btn-sm" id="edit-dates-btn">Edit Dates</button>
+                    </div>
+                </div>
+                @endif
 
                 <!-- Refund Information Section (Hidden by default, shown when refund note button is clicked) -->
                 <div class="box" id="refund-information-section" style="display: none;">
@@ -543,25 +572,25 @@
                 </div>
 
                 <!-- =========================================================
-     VENDOR REFUND / SETTLEMENT
-     ========================================================= -->
+            VENDOR REFUND / SETTLEMENT
+            ========================================================= -->
 
-<!-- =========================================================
-     VENDOR REFUND / SETTLEMENT
-     ========================================================= -->
+        <!-- =========================================================
+            VENDOR REFUND / SETTLEMENT
+            ========================================================= -->
 
-<div
-    class="box"
-    id="vendor-refund-information-section"
-    style="display:none;"
->
+        <div
+            class="box"
+            id="vendor-refund-information-section"
+            style="display:none;"
+        >
 
-    <div class="box-header flex justify-between items-center">
+            <div class="box-header flex justify-between items-center">
 
-        <div>
-            <h5 class="box-title">
-                Vendor Refund / Settlement
-            </h5>
+                <div>
+                    <h5 class="box-title">
+                        Vendor Refund / Settlement
+                    </h5>
 
             <!-- <p class="text-xs text-gray-500 mb-0 mt-1">
                 Record vendor cancellation charges and money returned by the vendor against this lead.
@@ -1023,9 +1052,10 @@
 
     </div>
 
-</div>
+ </div>
 
-                <!-- Client Information -->
+                @if($operationsRescheduleMode)
+                <!-- Client Information (Ride Status page shows this on the card instead) -->
                 <div class="box">
                     <div class="box-header flex justify-between items-center">
                         <h5 class="box-title">Client Information</h5>
@@ -1072,14 +1102,18 @@
                     </div>
                 </div>
 
-                <!-- Travel Information -->
-                <div class="box">
+                @endif
+
+                <!-- Travel Information (inline panel: only the reschedule date editor is shown) -->
+                <div class="box rs-travel-box">
                     <div class="box-header justify-between">
-                        <h5 class="box-title">Travel Information</h5>
+                        <h5 class="box-title">{{ $operationsRescheduleMode ? 'Travel Information' : 'Reschedule dates' }}</h5>
+                        @if($operationsRescheduleMode)
                         <div id="edit-dates-container" style="display: none;">
                             <button type="button" class="ti-btn ti-btn-outline-primary ti-btn-wave !py-1 !px-2"
                                 id="edit-dates-btn">Edit Dates</button>
                         </div>
+                        @endif
                     </div>
                     <div class="box-body bg-gray-50">
                         <div id="travel-info-display">
@@ -1100,6 +1134,7 @@
                     </div>
                 </div>
 
+                @if($operationsRescheduleMode)
                 <!-- Service Information -->
                 <div class="box">
                     <div class="box-header flex justify-between items-center">
@@ -1119,8 +1154,11 @@
                     </div>
                 </div>
 
-                <!-- Payment Information -->
-                <div class="box">
+                @endif
+
+                <!-- Payment Information: hidden on the inline panel (shown on the card), but kept because
+                     status updates and the refund form read #total-amount / #paid-amount. -->
+                <div class="box" @unless($operationsRescheduleMode) style="display:none" @endunless>
                     <div class="box-header flex justify-between items-center">
                         <h5 class="box-title">Payment Information</h5>
                     </div>
@@ -1156,8 +1194,8 @@
                     </div>
                 </div>
 
-                <!-- Payment History -->
-                <div class="box">
+                <!-- Payment History (Reschedules drawer only; the inline Ride Status panel shows status tools only) -->
+                <div class="box" @unless($operationsRescheduleMode) style="display:none" @endunless>
                     <div class="box-header flex justify-between items-center">
                         <h5 class="box-title">Payment History</h5>
                     </div>
@@ -1487,6 +1525,128 @@ $(document).on(
         let currentRideId = null;
         let pendingStatusChange = null;
         let lastUpdatedRideId = null;
+        let rideDetailsSequence = 0;
+        let rideDetailsRequest = null;
+        let loadedRideDetailsId = null;
+        let rideActionRequests = 0;
+
+        // Ride Status page: the details markup is an inline panel moved under the clicked ride card.
+        // The Reschedules page keeps it as a drawer (no [data-inline-panel] there).
+        const rideInlinePanel = document.querySelector('[data-inline-panel]');
+
+        // The small popup (status dropdown + refund / edit-dates buttons) sits under the Ride Status button;
+        // the refund and date forms it opens appear in the panel under the card header.
+        const rideStatusPopover = document.getElementById('rs-status-popover');
+
+        function lockRideDetails(locked) {
+            [document.getElementById('ride-details-modal'), rideStatusPopover].filter(Boolean).forEach(element => {
+                element.inert = locked;
+                element.setAttribute('aria-busy', String(locked));
+            });
+        }
+
+        function clearRideDetailsState() {
+            loadedRideDetailsId = null;
+            pendingStatusChange = null;
+            window.currentFollowupId = null;
+            window.currentRidesData = [];
+            window.currentRefundData = null;
+            window.currentVendorRefundData = [];
+            window.currentRideVendorRefunds = [];
+            $('#ride-followup-id, #ride-vendor-refund-payment-id').val('');
+            $('#ride-status-dropdown').val('').prop('disabled', true);
+            $('#action-buttons, #edit-dates-container').hide();
+            lockRideDetails(true);
+        }
+
+        function ensureRideDetailsReady() {
+            if (loadedRideDetailsId !== String(currentRideId) || rideActionRequests > 0) {
+                showError('Please wait for this ride to finish loading or saving before making changes.');
+                return false;
+            }
+            return true;
+        }
+
+        // A save must finish before the shared action panel can move to another ride.
+        const rideActionPaths = [
+            @json(route('admin.rides.ride-status.details', '__RIDE__')),
+            @json(route('admin.rides.ride-status.send-refund-email', '__RIDE__'))
+        ].map(url => new URL(url, location.href).pathname.split('__RIDE__')[0]);
+        $(document).ajaxSend(function(event, xhr, settings) {
+            const method = String(settings.type || settings.method || 'GET').toUpperCase();
+            if (method === 'GET' || !rideActionPaths.some(path => new URL(settings.url, location.href).pathname.startsWith(path))) return;
+            xhr.crmRideAction = true;
+            rideActionRequests++;
+            $('.rs-status-toggle, .view-ride-btn').prop('disabled', true);
+        });
+        $(document).ajaxComplete(function(event, xhr) {
+            if (!xhr.crmRideAction) return;
+            rideActionRequests = Math.max(0, rideActionRequests - 1);
+            if (!rideActionRequests) $('.rs-status-toggle, .view-ride-btn').prop('disabled', false);
+        });
+
+        function setPopoverOpen(open) {
+            if (!rideStatusPopover) return;
+            rideStatusPopover.hidden = !open;
+            document.querySelectorAll('.rs-status-toggle').forEach(button => {
+                button.setAttribute('aria-expanded', open && String(button.dataset.rideId) === String(currentRideId) ? 'true' : 'false');
+            });
+        }
+
+        function openRidePanel(rideId) {
+            if (rideActionRequests > 0) return;
+            const id = String(rideId);
+            const card = [...document.querySelectorAll('[data-ride-card]')].find(item => item.dataset.rideCard === id);
+            if (!rideInlinePanel || !card) return;
+            if (String(currentRideId) !== id || rideInlinePanel.hidden) {
+                $('#refund-information-section, #vendor-refund-information-section').hide();
+                hideEditDatesForm();
+            }
+            card.querySelector('[data-panel-slot]').appendChild(rideInlinePanel);
+            card.querySelector('.rs-actions').appendChild(rideStatusPopover);
+            rideInlinePanel.hidden = false;
+            currentRideId = id;
+            setPopoverOpen(true);
+            loadRideDetails(id);
+        }
+
+        function closeRidePanel() {
+            if (!rideInlinePanel) return;
+            rideDetailsSequence++;
+            if (rideDetailsRequest) { rideDetailsRequest.abort(); rideDetailsRequest = null; }
+            clearRideDetailsState();
+            setPopoverOpen(false);
+            $('#refund-information-section, #vendor-refund-information-section').hide();
+            hideEditDatesForm();
+            rideInlinePanel.hidden = true;
+        }
+
+        $(document).on('click', '.rs-status-toggle', function() {
+            const id = String($(this).data('ride-id'));
+            if (rideStatusPopover && !rideStatusPopover.hidden && String(currentRideId) === id) {
+                setPopoverOpen(false);
+            } else {
+                openRidePanel(id);
+            }
+        });
+
+        // Clicking outside the popup closes it; any open refund/date form stays open below the card.
+        $(document).on('click', function(event) {
+            if (!rideStatusPopover || rideStatusPopover.hidden) return;
+            if ($(event.target).closest('#rs-status-popover, .rs-status-toggle').length) return;
+            setPopoverOpen(false);
+        });
+
+        // Opening a refund or date form closes the popup so it doesn't cover the form below the card.
+        $(document).on('click', '#rs-status-popover #refund-note-btn, #rs-status-popover #vendor-refund-btn, #rs-status-popover #edit-dates-btn', function() {
+            setTimeout(() => setPopoverOpen(false), 0);
+        });
+
+        $(document).on('keydown', function(event) {
+            if (event.key === 'Escape' && rideStatusPopover && !rideStatusPopover.hidden) setPopoverOpen(false);
+        });
+
+        $(document).on('click', '.rs-panel-close', closeRidePanel);
 
         // Role flags from server side
         const isAdmin = {!! json_encode($isAdmin ?? false) !!};
@@ -1501,7 +1661,11 @@ $(document).on(
                 // Delay to ensure page is fully loaded
                 setTimeout(() => {
                     currentRideId = reopenRideId;
-                    loadRideDetails(reopenRideId);
+                    if (rideInlinePanel) {
+                        openRidePanel(reopenRideId);
+                    } else {
+                        loadRideDetails(reopenRideId);
+                    }
                 }, 500);
             }
 
@@ -1577,6 +1741,7 @@ $(document).on(
 
             // View ride details
             $(document).on('click', '.view-ride-btn', function(e) {
+                if (rideActionRequests > 0) { e.preventDefault(); return; }
                 // Don't prevent default - let the data-hs-overlay handle modal opening
                 currentRideId = $(this).data('ride-id');
 
@@ -1607,6 +1772,7 @@ $(document).on(
 
          $('#confirm-status-change').on('click', function() {
     if (pendingStatusChange) {
+        if (!ensureRideDetailsReady()) return;
         const statusToProcess = parseInt(pendingStatusChange);
         hideStatusChangeModal();
         showStatusLoader(statusToProcess);
@@ -1721,12 +1887,17 @@ $(document).on(
         });
 
         function loadRideDetails(rideId) {
+            const selectedRideId = String(rideId);
+            const requestSequence = ++rideDetailsSequence;
+            if (rideDetailsRequest) { rideDetailsRequest.abort(); rideDetailsRequest = null; }
+            currentRideId = selectedRideId;
+            clearRideDetailsState();
             // Show loading state
             showLoadingState();
 
             // ...removed debug log...
 
-            $.ajax({
+            rideDetailsRequest = $.ajax({
                 url: `{{ route('admin.rides.ride-status.details', ':rideId') }}`.replace(':rideId', rideId),
                 method: 'GET',
                 headers: {
@@ -1735,13 +1906,17 @@ $(document).on(
                     'Content-Type': 'application/json'
                 },
                 success: function(response) {
+                    if (requestSequence !== rideDetailsSequence || String(currentRideId) !== selectedRideId) return;
                     // Check if response has the expected format with success flag
                     if (response && response.success && response.data) {
                         populateRideDetails(response.data);
+                        loadedRideDetailsId = selectedRideId;
+                        lockRideDetails(false);
 
                         // Explicitly trigger the modal to open
                         setTimeout(() => {
-                            const modal = document.getElementById('ride-details-modal');
+                            if (requestSequence !== rideDetailsSequence) return;
+                            const modal = rideInlinePanel ? null : document.getElementById('ride-details-modal');
                             if (modal) {
                                 if (window.HSOverlay) {
                                     window.HSOverlay.open(modal);
@@ -1784,13 +1959,16 @@ $(document).on(
                             vendor_refunds: response.vendor_refunds || []
                         };
                         populateRideDetails(transformedData);
+                        loadedRideDetailsId = selectedRideId;
+                        lockRideDetails(false);
 
                         // Ensure modal opens after data is populated
                         // ...removed debug log...
 
                         // Explicitly trigger the modal to open
                         setTimeout(() => {
-                            const modal = document.getElementById('ride-details-modal');
+                            if (requestSequence !== rideDetailsSequence) return;
+                            const modal = rideInlinePanel ? null : document.getElementById('ride-details-modal');
                             if (modal) {
                                 // Use HSOverlay to show the modal
                                 if (window.HSOverlay) {
@@ -1810,16 +1988,13 @@ $(document).on(
                     }
                 },
                 error: function(xhr, status, error) {
+                    if (status === 'abort' || requestSequence !== rideDetailsSequence || String(currentRideId) !== selectedRideId) return;
                     // ...removed debug log...
 
                     let errorMessage = 'Error loading ride details. ';
                     if (xhr.status === 404) {
                         errorMessage +=
                             'Route not found (404). The backend controller method might not be implemented yet.';
-                        // Show sample data for testing
-                        // ...removed debug log...
-                        showSampleData(rideId);
-                        return;
                     } else if (xhr.status === 500) {
                         errorMessage += 'Server error (500). Please check the backend implementation.';
                     } else if (xhr.status === 0) {
@@ -1829,6 +2004,9 @@ $(document).on(
                     }
 
                     showError(errorMessage);
+                },
+                complete: function() {
+                    if (requestSequence === rideDetailsSequence) rideDetailsRequest = null;
                 }
             });
         }
@@ -1975,6 +2153,10 @@ if (shouldFreezeStatus) {
                 $('#edit-dates-container').show();
             } else {
                 $('#edit-dates-container').hide();
+            }
+            // Inline panel: dates/places are on the card, so the travel box only appears while editing dates.
+            if (!$('.rs-status-panel #travel-edit-form').is(':visible')) {
+                $('.rs-status-panel .rs-travel-box').hide();
             }
 
             window.currentVendorRefundData =
@@ -2284,6 +2466,7 @@ if (shouldFreezeStatus) {
         }
 
         function updateRideStatus(newStatus) {
+            if (!ensureRideDetailsReady()) return;
             if (!currentRideId) {
                 showError('No ride selected');
                 return;
@@ -2484,6 +2667,7 @@ if (shouldFreezeStatus) {
         }
 
         function showEditDatesForm() {
+            $('.rs-status-panel .rs-travel-box').show();
             $('#travel-info-display').hide();
             $('#travel-edit-form').show();
             $('#edit-dates-btn').text('Cancel').attr('id', 'cancel-edit-btn');
@@ -2655,6 +2839,7 @@ if (shouldFreezeStatus) {
         }
 
         function hideEditDatesForm() {
+            $('.rs-status-panel .rs-travel-box').hide();
             $('#travel-edit-form').hide();
             $('#travel-info-display').show();
             $('#cancel-edit-btn').text('Edit Dates').attr('id', 'edit-dates-btn');
@@ -2663,6 +2848,7 @@ if (shouldFreezeStatus) {
         }
 
         function saveDateChanges() {
+            if (!ensureRideDetailsReady()) return;
 
             if (!currentRideId) {
                 showError('No ride selected');
@@ -2790,6 +2976,7 @@ if (shouldFreezeStatus) {
         }
 
         function generateInvoice() {
+            if (!ensureRideDetailsReady()) return;
             if (!currentRideId) return;
 
             $.ajax({
@@ -2818,6 +3005,7 @@ if (shouldFreezeStatus) {
         }
 
         function generateRefundNote() {
+            if (!ensureRideDetailsReady()) return;
             if (!currentRideId) return;
 
             // Show loading state
@@ -2854,6 +3042,7 @@ if (shouldFreezeStatus) {
         }
 
         function showRefundInformationSection() {
+            if (!ensureRideDetailsReady()) return;
             if (!currentRideId) return;
 
             // console.log('showRefundInformationSection called with:', {
@@ -2971,6 +3160,7 @@ if (shouldFreezeStatus) {
 
 function showVendorRefundInformationSection()
 {
+    if (!ensureRideDetailsReady()) return;
     if (!currentRideId) {
         return;
     }
@@ -3557,6 +3747,7 @@ $(document).on(
     function (e) {
 
         e.preventDefault();
+        if (!ensureRideDetailsReady()) return;
 
         if (!currentRideId) {
 
@@ -4063,6 +4254,9 @@ $(document).on(
         //     });
         // }
         function saveRideRefundData() {
+            if (!ensureRideDetailsReady()) return;
+            const refundRideId = String(currentRideId);
+            const refundFollowupId = $('#ride-followup-id').val() || '';
             if (!currentRideId) {
                 showError('Error: Ride ID not found. Please close and reopen the modal.');
                 return;
@@ -4245,7 +4439,7 @@ const fd = new FormData($('#ride-refund-form')[0]);
 fd.append('_token', '{{ csrf_token() }}');
 
 $.ajax({
-    url: "{{ route('admin.rides.ride-status.save-refund', ':rideId') }}".replace(':rideId', currentRideId),
+    url: "{{ route('admin.rides.ride-status.save-refund', ':rideId') }}".replace(':rideId', refundRideId),
     method: 'POST',
     data: fd,
     processData: false,
@@ -4257,6 +4451,11 @@ $.ajax({
                 // Bind Edit button inside success only
                 $('#refund-modal-edit-btn').off('click').on('click', function() {
                     closeRefundSuccessModal();
+                    if (String(currentRideId) !== refundRideId || loadedRideDetailsId !== refundRideId) {
+                        if (rideInlinePanel) openRidePanel(refundRideId);
+                        else loadRideDetails(refundRideId);
+                        return;
+                    }
                     $('#refund-information-section').slideDown();
                 });
                 // Reset popup indicators
@@ -4294,7 +4493,7 @@ $.ajax({
                     $('#refund-modal-saved-indicator').hide();
                     $.ajax({
                         url: "{{ route('admin.rides.ride-status.send-refund-email', ':rideId') }}"
-                            .replace(':rideId', currentRideId),
+                            .replace(':rideId', refundRideId),
                         method: 'POST',
                         headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
                         success: function(emailResp) {
@@ -4317,7 +4516,7 @@ $.ajax({
                             setTimeout(function() {
                                 closeRefundSuccessModal();
                                 try { $('#refund-information-section').hide(); } catch(e) {}
-                                const followupParam = encodeURIComponent($('#ride-followup-id').val() || '');
+                                const followupParam = encodeURIComponent(refundFollowupId);
                                 const baseUrl = "{{ route('admin.refunds.index') }}";
                                 window.location.href = baseUrl + (followupParam ? '?open_refund_id=' + followupParam : '');
                             }, 1600);

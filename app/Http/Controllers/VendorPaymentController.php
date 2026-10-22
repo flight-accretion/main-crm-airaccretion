@@ -56,6 +56,7 @@ class VendorPaymentController extends Controller
                 'paymentDetails.extraService',
                 'vendorPayments',
                  'vendorRefunds',
+                'lead.rideSegments',
             ]);
 
             // $query->whereDoesntHave('lead.latestFollowup', function ($q) {
@@ -314,6 +315,20 @@ GREATEST(
 |
 */
 
+/*
+| Status chip counts (same conditions as the status filter below, other filters kept),
+| counted as distinct clients so each chip matches the list total it opens.
+*/
+$chipBase = (clone $query)->setEagerLoads([]);
+$statusChipCounts = [
+    'unpaid' => (clone $chipBase)->whereRaw("$rawNetPaid <= 0")->whereRaw("$rawAdjustedPayable > 0")->distinct()->count('lead_id'),
+    'partial' => (clone $chipBase)->whereRaw("$rawNetPaid > 0")->whereRaw("$rawBalance > 0")->distinct()->count('lead_id'),
+    'paid' => (clone $chipBase)->whereRaw("$rawBalance <= 0")->distinct()->count('lead_id'),
+    'all' => (clone $chipBase)->whereIn('lead_id', function ($sub) use ($rawBalance, $rawRefundDue) {
+        $sub->select('lead_id')->from('lead_vendor_payments')->whereRaw("($rawBalance > 0 OR $rawRefundDue > 0)");
+    })->distinct()->count('lead_id'),
+];
+
 if (!$request->filled('status')) {
 
     $query->whereIn(
@@ -467,6 +482,8 @@ elseif (!empty($status)) {
             
             $vendorPaymentsData = collect();
             
+            $paymentsSummary = $this->paymentsSummary($rawBalance, $rawRefundDue);
+
             $pageLeadIds->each(function ($leadId) use ($groupedByLead, &$vendorPaymentsData) {
                 $vendorPaymentsGroup = $groupedByLead->get($leadId);
                 if (!$vendorPaymentsGroup || $vendorPaymentsGroup->isEmpty()) {
@@ -475,6 +492,8 @@ elseif (!empty($status)) {
 
                 $lead = $vendorPaymentsGroup->first()->lead;
                 $clientName = $lead->client->name ?? 'N/A';
+                // Display only: earliest trip segment date for this client's booking.
+                $serviceDate = $lead?->rideSegments?->pluck('from_date')->filter()->sort()->first();
                 
                 // Collect all vendors for this client
                 $vendorsData = [];
@@ -678,6 +697,7 @@ $netVendorCost = $netPaidToVendor;
                 $vendorPaymentsData->push([
                     'lead_id' => $leadId,
                     'client_name' => $clientName,
+                    'service_date' => $serviceDate ? \Carbon\Carbon::parse($serviceDate) : null,
                     'vendors' => $vendorsData,
                     'view_id' => $vendorPaymentsGroup->first()->id, // for modal
                     // include voucher id so the view can link to the invoice for this voucher
@@ -692,13 +712,51 @@ $netVendorCost = $netPaidToVendor;
             $clients = Client::where('status', 1)->orderBy('name')->get();
             $vendors = Vendor::where('status', 1)->orderBy('name')->get();
 
-            return view('admin.account.vendors.vendor-payments', compact('vendorPaymentsData', 'vendorPayments', 'vendorPaymentsPaginator', 'services', 'clients', 'vendors'));
+            return view('admin.account.vendors.vendor-payments', compact('vendorPaymentsData', 'vendorPayments', 'vendorPaymentsPaginator', 'services', 'clients', 'vendors', 'paymentsSummary', 'statusChipCounts'));
         } catch (\Exception $e) {
             Log::error('Error in vendor payments index: ' . $e->getMessage());
             return redirect()->back()->with('error', 'Error loading vendor payments');
         }
     }
 
+
+    /**
+     * Read-only header cards and "pay next" line for the redesigned page.
+     * Uses the same balance / refund-due SQL as the list, across all vendor payments (not the filters).
+     */
+    private function paymentsSummary(string $rawBalance, string $rawRefundDue): array
+    {
+        $serviceDateSql = '(SELECT MIN(lr.from_date) FROM lead_rides lr WHERE lr.lead_id = lead_vendor_payments.lead_id)';
+        $outstanding = LeadVendorPayment::query()->whereRaw("$rawBalance > 0");
+        $overdue = (clone $outstanding)->whereRaw("$serviceDateSql < ?", [now()->startOfDay()]);
+
+        $payNext = (clone $overdue)->with(['vendor', 'lead.client'])
+            ->select('lead_vendor_payments.*')
+            ->selectRaw("$rawBalance AS balance_due")
+            ->selectRaw("$serviceDateSql AS service_date")
+            ->orderByRaw("$serviceDateSql ASC")
+            ->first();
+
+        $paidThisMonth = VendorPayment::query()
+            ->whereBetween('paid_date', [now()->startOfMonth(), now()->endOfMonth()]);
+
+        return [
+            'payable_amount' => (float) (clone $outstanding)->sum(DB::raw($rawBalance)),
+            'payable_vendors' => (clone $outstanding)->count(),
+            'overdue_count' => (clone $overdue)->count(),
+            'overdue_amount' => (float) (clone $overdue)->sum(DB::raw($rawBalance)),
+            'paid_month_count' => (clone $paidThisMonth)->count(),
+            'paid_month_amount' => (float) (clone $paidThisMonth)->sum('paid_amount'),
+            'refund_due_amount' => (float) LeadVendorPayment::query()->whereRaw("$rawRefundDue > 0")->sum(DB::raw($rawRefundDue)),
+            'refund_due_count' => LeadVendorPayment::query()->whereRaw("$rawRefundDue > 0")->count(),
+            'pay_next' => $payNext ? [
+                'vendor' => $payNext->vendor?->name ?? 'Vendor',
+                'client' => $payNext->lead?->client?->name,
+                'amount' => (float) $payNext->balance_due,
+                'service_date' => $payNext->service_date ? \Carbon\Carbon::parse($payNext->service_date) : null,
+            ] : null,
+        ];
+    }
 
     public function refundIndex(Request $request)
     {

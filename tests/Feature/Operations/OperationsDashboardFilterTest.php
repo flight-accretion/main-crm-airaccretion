@@ -90,12 +90,12 @@ class OperationsDashboardFilterTest extends TestCase
         $response->assertOk();
         $response->assertSee('Match Customer');
         $response->assertDontSee('Other Customer');
-        $response->assertSee('operations-queue-table');
+        $response->assertSee('class="rq-table"', false);
         $response->assertSee('name="status"', false);
         $response->assertSee('name="operations_user_id"', false);
     }
 
-    public function test_queue_uses_leads_table_columns_and_actions(): void
+    public function test_queue_uses_review_columns_and_stage_actions(): void
     {
         $viewer = $this->user('Ops Table Viewer', UserType::OPERATIONS_EXECUTIVE);
         $sales = $this->user('Sales Rep Anita', UserType::SALES_EXECUTIVE);
@@ -114,29 +114,25 @@ class OperationsDashboardFilterTest extends TestCase
 
         $response->assertOk();
 
-        foreach (['S.No', 'Client Name', 'Phone', 'Next Follow Up', 'Assigned:', 'Service Date:', 'Service:', 'Status', 'Action'] as $heading) {
+        foreach (['Age', 'Client', 'Product', 'Review status', 'Last touch', 'Assigned', 'Action'] as $heading) {
             $response->assertSee('>' . $heading . '</th>', false);
         }
 
         $response->assertSee('Table Customer');
         $response->assertSee('9876543210');
-        $response->assertSee('30-09-2026 15:30');
-        $response->assertSee('Sales Rep Anita');
-        $response->assertSee('From: 01-10-2026', false);
-        $response->assertSee('To: 03-10-2026', false);
-        $response->assertSee('Helicopter Charter');
-        $response->assertSee('Active');
+        $response->assertSee('Ops Table Viewer');
+        $response->assertSee('2026-10-01', false);
+        $response->assertSee('2026-10-03', false);
+        $response->assertSee('Helicopter Charter Product');
+        $response->assertSee('Not sent yet');
 
-        // Action items: existing Add Follow-up, View Lead like the Leads page, and Complete popup.
+        // Reviews and images resolve separately; generic completion must not bypass stages.
         $response->assertSee(route('admin.operations.followups.create', $caseId), false);
-        $response->assertSee(route('admin.leads.view', $leadId), false);
-        $response->assertSee('complete-case-btn', false);
-        $response->assertSee('complete-case-modal', false);
-        $response->assertSee(route('admin.operations.case.complete', $caseId), false);
-        $response->assertDontSee('<input name="note"', false);
-        $response->assertDontSee('>Start</button>', false);
-        $response->assertSee('name="lead_status"', false);
-        $response->assertSee('name="representative_user_id"', false);
+        $response->assertSee('data-rq-manage', false);
+        $response->assertSee(route('admin.operations.case.start', $caseId), false);
+        $response->assertSee(route('admin.operations.case.review-complete', $caseId), false);
+        $response->assertDontSee(route('admin.operations.case.complete', $caseId), false);
+        $response->assertSee('>Start</button>', false);
     }
 
     public function test_queue_applies_leads_style_filters(): void
@@ -195,7 +191,7 @@ class OperationsDashboardFilterTest extends TestCase
             ->assertDontSee('Filter Match');
     }
 
-    public function test_complete_from_popup_closes_case_with_optional_note(): void
+    public function test_review_requires_both_stages_and_other_cases_allow_optional_note(): void
     {
         $viewer = $this->user('Ops Complete Viewer', UserType::OPERATIONS_EXECUTIVE);
         $leadId = $this->lead('Complete Customer', $viewer);
@@ -205,7 +201,15 @@ class OperationsDashboardFilterTest extends TestCase
         $this
             ->actingAs($viewer)
             ->post(route('admin.operations.case.complete', $caseId), ['note' => 'Reviewed with customer'])
-            ->assertRedirect();
+            ->assertRedirect()
+            ->assertSessionHasErrors('case');
+
+        $this->assertDatabaseHas('operation_cases', ['id' => $caseId, 'status' => 'pending']);
+        $this->post(route('admin.operations.case.review-complete', $caseId), ['note' => 'Reviewed with customer'])
+            ->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertDatabaseMissing('operation_cases', ['id' => $caseId, 'status' => 'completed']);
+        $this->post(route('admin.operations.case.image-collection-complete', $caseId), ['note' => 'Images received'])
+            ->assertRedirect()->assertSessionHasNoErrors();
 
         $this
             ->actingAs($viewer)
@@ -215,7 +219,6 @@ class OperationsDashboardFilterTest extends TestCase
         $this->assertDatabaseHas('operation_cases', [
             'id' => $caseId,
             'status' => 'completed',
-            'note' => 'Reviewed with customer',
         ]);
         $this->assertDatabaseHas('operation_cases', [
             'id' => $withoutNoteId,
@@ -241,10 +244,10 @@ class OperationsDashboardFilterTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('History Table Customer');
-        $response->assertSee('>Client Name</th>', false);
-        $response->assertSee('>Completed</th>', false);
+        $response->assertSeeText('Client Name');
+        $response->assertSeeText('Completed');
         $response->assertSee('22-09-2026 15:00');
-        $response->assertSee(route('admin.leads.view', $leadId), false);
+        $response->assertViewHas('cases', fn ($cases) => $cases->contains('lead_id', $leadId));
         $response->assertDontSee(route('admin.operations.case.complete', $caseId), false);
         $response->assertDontSee('complete-case-modal', false);
     }
@@ -455,6 +458,12 @@ class OperationsDashboardFilterTest extends TestCase
             $table->json('metadata')->nullable();
             $table->timestamps();
         });
+
+        (require database_path('migrations/2026_09_23_160200_create_review_conversations_table.php'))->up();
+        Schema::create('whatsapp_conversations', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->timestamp('last_customer_message_at')->nullable();
+        });
     }
 
     private function user(string $name, string $role): User
@@ -522,8 +531,14 @@ class OperationsDashboardFilterTest extends TestCase
             'updated_at' => now(),
         ]);
 
+        $productId = (string) Str::uuid();
+        DB::table('products')->insert([
+            'id' => $productId, 'product' => $serviceName . ' Product', 'status' => 1,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
         DB::table('leads')->where('id', $leadId)->update([
             'service_ids' => json_encode([$serviceId]),
+            'product_ids' => json_encode([$productId]),
         ]);
 
         DB::table('lead_rides')->insert([

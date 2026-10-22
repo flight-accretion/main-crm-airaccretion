@@ -70,12 +70,12 @@ class OperationsVendorRefundFlowTest extends TestCase
         $response->assertOk();
         $response->assertSee('Vendor Refund List');
 
-        // Redesigned headings; the service date now sits under Product / Service.
+        // The service date sits under the product in the redesigned table.
         foreach ([
             'Vendor',
             'Vendor Phone',
             'Client',
-            'Product / Service',
+            'Product',
             'Original Vendor Amount',
             'Cancellation Amount',
             'Refund Due',
@@ -91,7 +91,7 @@ class OperationsVendorRefundFlowTest extends TestCase
 
         $response->assertSee('Bativala M Bhagvati Flying Charters');
         $response->assertSee('9876500000');
-        $response->assertSee('Helicopter Charter, Ground Transfer');
+        $response->assertSee('Private Charter Product');
         $response->assertSee('01 Oct 2026');
         $response->assertSee('₹75,000.00');
         $response->assertSee('₹20,000.00');
@@ -409,6 +409,7 @@ class OperationsVendorRefundFlowTest extends TestCase
             $table->uuid('id')->primary();
             $table->uuid('client_id')->nullable();
             $table->uuid('representative_user_id')->nullable();
+            $table->json('product_ids')->nullable();
             $table->timestamps();
         });
 
@@ -454,7 +455,7 @@ class OperationsVendorRefundFlowTest extends TestCase
             $table->timestamps();
         });
 
-        // The refund list shows product names next to services.
+        // Refund table products come from the lead, not vendor service lines.
         Schema::create('products', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->string('product')->nullable();
@@ -591,9 +592,15 @@ class OperationsVendorRefundFlowTest extends TestCase
             'updated_at' => now(),
         ]);
 
+        $productId = (string) Str::uuid();
+        DB::table('products')->insert([
+            'id' => $productId, 'product' => 'Private Charter Product',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
         DB::table('leads')->insert([
             'id' => $leadId,
             'client_id' => $clientId,
+            'product_ids' => json_encode([$productId]),
             'representative_user_id' => null,
             'created_at' => now(),
             'updated_at' => now(),

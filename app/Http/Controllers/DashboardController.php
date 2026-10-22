@@ -1304,6 +1304,9 @@ class DashboardController extends Controller
         $dataByServiceDate = $this->buildProductSummaryFromFollowups($byServiceDateFollowups);
         $dataByCreatedDate = $this->buildProductSummaryFromFollowups($byCreatedDateFollowups);
 
+        $tableProductNames = app(\App\Services\LeadTableProducts::class)->forLeads(
+            $todayFollowUps->pluck('enquiry')->merge($nextWeekDnpLeads)
+        );
         $todayRows = [];
         foreach ($todayFollowUps as $row) {
             $enq = $row->enquiry;
@@ -1315,6 +1318,7 @@ class DashboardController extends Controller
                 'contact_number' => $enq->client->contact_number ?? 'N/A',
                 'representative_name' => $enq->representative->name ?? '--',
                 'service_text' => $serviceText,
+                'product_text' => ($tableProductNames[$enq->id] ?? '') ?: 'N/A',
                 'next_followup' => $row->next_followup_date ? $row->next_followup_date->format('d M, H:i') : '--',
                 'followup_route' => route('admin.leads.follow-up.create', $enq->id ?? 0),
             ];
@@ -1329,6 +1333,7 @@ class DashboardController extends Controller
                 'name' => $lead->client->name ?? 'N/A',
                 'number' => $lead->client->contact_number ?? 'N/A',
                 'service_text' => $serviceText,
+                'product_text' => ($tableProductNames[$lead->id] ?? '') ?: 'N/A',
                 'last_followup' => $lead->updated_at ? $lead->updated_at->format('d M, H:i') : '--',
                 'representative_name' => $lead->representative->name ?? 'N/A',
                 'view_route' => route('admin.clients.view', $lead->client->id),
@@ -1471,6 +1476,7 @@ class DashboardController extends Controller
         }
 
         // Build response array
+        $tableProductNames = app(\App\Services\LeadTableProducts::class)->forRelatedLeads($result, 'enquiry');
         $data = [];
         foreach ($result as $intKey => $obj) {
             $enq = $obj->enquiry;
@@ -1484,6 +1490,7 @@ class DashboardController extends Controller
                 'contact_number' => $enq->client->contact_number ?? 'N/A',
                 'representative_name' => $enq->representative->name ?? '--',
                 'service_text' => $serviceText,
+                'product_text' => ($tableProductNames[$enq->id] ?? '') ?: 'N/A',
                 'next_followup' => $obj->next_followup_date ? $obj->next_followup_date->format('d M, H:i') : '--',
                 'followup_route' => route('admin.leads.follow-up.create', $enq->id ?? 0),
             ];

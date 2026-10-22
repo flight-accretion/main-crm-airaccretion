@@ -240,7 +240,6 @@
                 <th data-priority="9">Sales Amount</th>
                 <th data-priority="10">Sales Person</th>
                 <th data-priority="11">Product Name</th>
-                <th data-priority="12">Service</th>
                 <th data-priority="13">Extra Service</th>
                 <th data-priority="14">Paid Date</th>
                 <th data-priority="15">Ride Status</th>
@@ -263,7 +262,6 @@
                 <td>{{ number_format($sale->sales_amount, 2) }}</td>
                 <td>{{ $sale->sales_person_name }}</td>
                 <td>{{ $sale->product_name }}</td>
-                <td>{{ $sale->service }}</td>
                 <td>{{ $sale->extra_service }}</td>
                 <td>{{ $sale->paid_date }}</td>
                 <td>

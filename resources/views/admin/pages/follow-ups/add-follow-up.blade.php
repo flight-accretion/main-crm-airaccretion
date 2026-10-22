@@ -324,15 +324,7 @@
                             @else
                                 <label for="status" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Status<span
                                         class="text-danger">*</span></label>
-                                <select class="ti-form-select rounded-sm form-control-sm" name="status" id="status"
-                                    required>
-                                    <option value="1" {{ old('status') == '1' ? 'selected' : '' }}>Active</option>
-                                    <option value="2" {{ old('status') == '2' ? 'selected' : '' }}>Cancelled</option>
-                                    <option value="3" {{ old('status') == '3' ? 'selected' : '' }}>Full payment received
-                                    </option>
-                                    <option value="4" {{ old('status') == '4' ? 'selected' : '' }}>Partial payment
-                                        received</option>
-                                </select>
+                                @include('admin.pages.follow-ups.partials.status-select')
                                 @error('status')
                                     <p class="text-danger mt-1">{{ $message }}</p>
                                 @enderror

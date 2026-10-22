@@ -18,6 +18,7 @@
 @php
     $isQueue = ($mode ?? 'queue') === 'queue';
     $filters = $filters ?? [];
+    $tableProductNames = app(\App\Services\LeadTableProducts::class)->forRelatedLeads($cases);
 @endphp
 
 
@@ -161,7 +162,7 @@
                                     data-priority="10"
                                     class="lead-service-column"
                                 >
-                                    Service:
+                                    Product:
                                 </th>
 
                                 <th data-priority="1">
@@ -463,19 +464,7 @@
 
                                     <td class="lead-service-column">
 
-                                        @include(
-                                            'admin.pages.leads.partials.service-preview',
-                                            [
-                                                'serviceNames' =>
-                                                    $lead
-                                                        ? (
-                                                            $lead
-                                                                ->service_names
-                                                            ?? []
-                                                        )
-                                                        : [],
-                                            ]
-                                        )
+                                        <span class="lead-service-preview">{{ ($tableProductNames[$case->lead_id] ?? '') ?: 'N/A' }}</span>
 
                                     </td>
 @php

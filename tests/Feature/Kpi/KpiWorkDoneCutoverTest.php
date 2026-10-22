@@ -8,6 +8,13 @@ use Illuminate\Support\Str;
 
 class KpiWorkDoneCutoverTest extends KpiFeatureTestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+        \Illuminate\Support\Facades\Schema::table('kpi_outreach_assignments', function ($table) {
+            $table->string('completion_type')->nullable();
+        });
+    }
 
 public function test_historical_lead_work_before_cutover_is_marked_unavailable(): void
 {

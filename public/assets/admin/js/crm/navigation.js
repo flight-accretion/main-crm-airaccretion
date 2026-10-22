@@ -77,6 +77,9 @@
     const primary = [['HR Dashboard', hr], ['Attendance', attendance], ['KPI', kpi], ['Target', target], ["Today's Follow-up", followup], ['Leads', leads]]
         .filter(([, item]) => item).map(([label, item]) => { item.dataset.crmPrimary = label; return normalize(item); }).filter(Boolean);
     const remaining = Array.from(menu.children).map(normalize).filter(Boolean);
+    // HR-style groups stay on top; the Operations Dashboard tree comes first after them.
+    const operationsIndex = remaining.findIndex(item => item.querySelector(':scope > details > summary > .side-menu__label')?.textContent.trim() === 'Operations Dashboard');
+    if (operationsIndex > 0) remaining.unshift(remaining.splice(operationsIndex, 1)[0]);
     menu.replaceChildren(...primary, ...remaining);
     if (remaining.length && primary.length) remaining[0].classList.add('crm-nav-secondary-start');
     menu.querySelectorAll('.crm-nav-group').forEach(details => {

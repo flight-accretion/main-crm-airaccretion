@@ -182,7 +182,7 @@
                         <th>Vendor</th>
                         <th>Vendor Phone</th>
                         <th>Client</th>
-                        <th>Product / Service</th>
+                        <th>Product</th>
                         <th>Original Vendor Amount</th>
                         <th>Cancellation Amount</th>
                         <!-- <th>Refund Received</th> -->
@@ -201,7 +201,7 @@
                             <td>{{ $row->vendor_name }}</td>
                             <td>{{ $row->vendor_phone }}</td>
                             <td><a class="refund-client" href="{{ url('admin/leads/'.$row->lead_id) }}" target="_blank" rel="noopener">{{ $row->customer_name }}</a></td>
-                            <td><div>{{ $row->product_name ?: $row->service_name }}@if($row->product_name && $row->service_name !== '-')<small>{{ $row->service_name }}</small>@endif<small>{{ $row->service_date ? $row->service_date->format('d M Y') : '--' }}</small></div></td>
+                            <td><div>{{ $row->product_name ?: 'Not specified' }}<small>{{ $row->service_date ? $row->service_date->format('d M Y') : '--' }}</small></div></td>
 
                             <td>{{ $money($row->original_amount) }}</td>
 

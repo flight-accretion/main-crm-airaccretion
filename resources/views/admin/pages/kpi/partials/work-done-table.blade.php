@@ -1,4 +1,5 @@
 @if(in_array($type, ['completed', 'active', 'cancelled', 'total'], true))
+    @php $tableProductNames = app(\App\Services\LeadTableProducts::class)->forLeads($rows); @endphp
 
     <div class="table-responsive">
 
@@ -9,7 +10,7 @@
                     <th>Customer</th>
                     <th>Mobile</th>
                     <th>Lead</th>
-                    <th>Product / Service</th>
+                    <th>Product</th>
                     <th>Sales Executive</th>
                     <th>Current Status</th>
                     <th>Last Follow-Up</th>
@@ -58,7 +59,7 @@
                         </td>
 
                         <td>
-                            {{ $lead->product->product ?? '-' }}
+                            {{ ($tableProductNames[$lead->id] ?? '') ?: '-' }}
                         </td>
 
                         <td>

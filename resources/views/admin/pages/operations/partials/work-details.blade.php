@@ -1,12 +1,13 @@
+@php $tableProductNames = app(\App\Services\LeadTableProducts::class)->forRelatedLeads($rows); @endphp
 <table aria-label="Selected Operations cases">
-    <thead><tr><th>Client</th><th>Phone</th><th>Type</th><th>Service</th><th>Service date</th><th>Assigned to</th><th>Completed by</th><th>Opened</th><th>Completed</th><th>Duration / Age</th><th>Status</th></tr></thead>
+    <thead><tr><th>Client</th><th>Phone</th><th>Type</th><th>Product</th><th>Service date</th><th>Assigned to</th><th>Completed by</th><th>Opened</th><th>Completed</th><th>Duration / Age</th><th>Status</th></tr></thead>
     <tbody>
     @forelse($rows as $row)
         <tr data-operations-case="{{ $row->id }}">
             <td data-label="Client">{{ $row->lead?->client?->name ?? '-' }}</td>
             <td data-label="Phone">{{ $row->lead?->client?->contact_number ?? '-' }}</td>
             <td data-label="Type">{{ ucwords(str_replace('_', ' ', $row->type)) }}</td>
-            <td data-label="Service">{{ collect($row->lead?->service_ids_array ?? [])->map(fn($id) => $serviceNames[$id] ?? null)->filter()->implode(', ') ?: '-' }}</td>
+            <td data-label="Product">{{ ($tableProductNames[$row->lead_id] ?? '') ?: '-' }}</td>
             <td data-label="Service date">@forelse($row->lead?->rideSegments ?? [] as $ride)<small>{{ $ride->from_date?->format('d M Y, H:i') ?: '-' }}</small>@empty - @endforelse</td>
             <td data-label="Assigned to">{{ $row->assignee?->name ?? 'Unassigned' }}</td>
             <td data-label="Completed by">{{ $row->completed_at ? ($row->completedBy?->name ?? 'Not recorded') : '-' }}</td>

@@ -17,3 +17,9 @@
 @media(max-width:850px){.crm-refunds :is(.table-responsive,.overflow-auto,.overflow-x-auto){overflow-x:visible!important;width:100%;min-width:0}.crm-refunds :is(.table-responsive,.overflow-auto,.overflow-x-auto)>table.refund-list-table{display:block!important}.crm-refunds :is(.table-responsive,.overflow-auto,.overflow-x-auto) table.refund-list-table tbody td{min-width:0!important;max-width:100%}}
 .crm-refunds .refund-approval{display:block;margin-top:6px;font-size:11px;font-weight:600}.crm-refunds .refund-approval.is-pending{color:#a36300}.crm-refunds .refund-approval.is-approved{color:#16834b}.crm-refunds .refund-approval.is-rejected{color:#c0263a}
 @media(max-width:850px){.crm-refunds .refund-list-table td .refund-approval{grid-column:2;text-align:right}}
+/* Account Vendor Refund list (13 columns, read-only) in the shared refunds design. */
+.crm-refunds .vendor-refund-search input{min-width:220px;max-width:100%}
+.crm-refunds .account-vendor-refund-table th{font-size:11.5px;white-space:normal!important;line-height:1.3}
+.crm-refunds .account-vendor-refund-table td{font-size:12.5px}
+.crm-refunds .account-vendor-refund-table th:first-child{width:52px}
+@media(max-width:850px){.crm-refunds .vendor-refund-search,.crm-refunds .vendor-refund-search input{width:100%;min-width:0}}

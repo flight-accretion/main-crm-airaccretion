@@ -1,114 +1,147 @@
 @extends('admin.layouts.header')
 @section('content')
-    <div class="block justify-between page-header md:flex"></div>
-
-    @if (session('success'))
-        <div class="alert alert-success mb-4">
-            {{ session('success') }}
-        </div>
-    @endif
-    @if (session('error'))
-        <div class="alert alert-danger mb-4">
-            {{ session('error') }}
-        </div>
-    @endif
-
-    <div id="flash-messages"></div>
-
-    <div class="grid grid-cols-12">
-        <div class="xl:col-span-12  col-span-12">
-            <div class="box">
-                <div class="box-header" style="display: block; padding-top: 10px; padding-bottom: 10px;">
-                    <div class="flex items-center">
-                        <div class="me-4 gap-0">
-                            <span class="avatar avatar-sm !rounded-full bg-theme m-0">
-                                <i class="las la-exclamation-triangle" style="color:white"></i>
-                            </span>
-                        </div>
-                        <div class="flex-grow">
-                            <div class="flex items-center justify-between">
-                                <h5 class="font-semibold mb-0 leading-none text-[1.25rem]">Exceptional Dashboard</h5>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+    @php
+        // Summary cards: read-only figures from the same rows shown in the table below.
+        $exceptionalRows = collect($payments ?? []);
+        $excessOf = fn ($p) => max(0, (float) $p->received_amount - (float) $p->total_amount);
+        $openRows = $exceptionalRows->filter(fn ($p) => empty($p->added_to_sales) && empty($p->has_refund_note));
+        $absorbedRows = $exceptionalRows->filter(fn ($p) => !empty($p->added_to_sales));
+        $refundRows = $exceptionalRows->filter(fn ($p) => !empty($p->has_refund_note));
+        $oldestOpen = $openRows->pluck('created_at')->filter()->min();
+        $inr = fn ($amount) => '₹' . number_format((float) $amount, 2);
+    @endphp
+    <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/exceptional.css') }}">
+    <div class="crm-exceptional">
+        @if (session('success'))
+            <div class="alert alert-success mb-4">
+                {{ session('success') }}
             </div>
-        </div>
-    </div>
+        @endif
+        @if (session('error'))
+            <div class="alert alert-danger mb-4">
+                {{ session('error') }}
+            </div>
+        @endif
 
-    <div class="grid grid-cols-12 gap-6">
-        <div class="xl:col-span-12 col-span-12">
-            <div class="box custom-box">
-                <div class="box-header justify-between flex">
-                    <div class="box-title">Entries where Received &gt; Total</div>
-                </div>
-                <div class="box-body">
-                    <div class="table-responsive">
-                        <table class="table display responsive nowrap table-datatable" width="100%">
-                            <thead class="bg-primary text-white">
+        <div id="flash-messages"></div>
+
+        <header class="ex-heading">
+            <h1>Exceptional Dashboard</h1>
+            <p>Customer paid more than the total — resolve each excess with Add to sales or Process refund</p>
+        </header>
+
+        <section class="ex-stats" aria-label="Exceptional summary">
+            <div class="ex-stat is-amber">
+                <strong>{{ $openRows->count() }} <small>· {{ $inr($openRows->sum($excessOf)) }}</small></strong>
+                <span>Open overpayments</span>
+                <small>{{ $oldestOpen ? 'oldest ' . \Illuminate\Support\Carbon::parse($oldestOpen)->diffForHumans(null, true) : 'nothing open' }}</small>
+            </div>
+            <div class="ex-stat is-green">
+                <strong>{{ $absorbedRows->count() }}</strong>
+                <span>Added to sales</span>
+                <small>{{ $inr($absorbedRows->sum($excessOf)) }} excess</small>
+            </div>
+            <div class="ex-stat is-blue">
+                <strong>{{ $refundRows->count() }}</strong>
+                <span>Refund note created</span>
+                <small>{{ $inr($refundRows->sum($excessOf)) }} excess</small>
+            </div>
+            <div class="ex-stat is-brand">
+                <strong>{{ $inr($openRows->sum($excessOf)) }}</strong>
+                <span>Excess awaiting decision</span>
+                <small>{{ $exceptionalRows->count() }} {{ \Illuminate\Support\Str::plural('entry', $exceptionalRows->count()) }} where received &gt; total</small>
+            </div>
+        </section>
+
+        {{-- The controller already accepts from_date / to_date; this form just sends them. --}}
+        <form method="GET" action="{{ route('admin.account.exceptional') }}" class="ex-filters">
+            <label class="ex-field">From date<input type="date" name="from_date" value="{{ $fromDate ?? request('from_date') }}"></label>
+            <label class="ex-field">To date<input type="date" name="to_date" value="{{ $toDate ?? request('to_date') }}"></label>
+            <div class="ex-filter-actions">
+                <a href="{{ route('admin.account.exceptional') }}" class="ex-ghost">Reset</a>
+                <button type="submit" class="ex-primary">Filter</button>
+            </div>
+        </form>
+
+        <div class="box custom-box ex-list">
+            <div class="box-header justify-between flex">
+                <div class="box-title">Entries where Received &gt; Total</div>
+            </div>
+            <div class="box-body">
+                <div class="table-responsive">
+                    {{-- Same table classes as before: the CRM table script still adds search, sorting and paging. --}}
+                    <table class="table display responsive nowrap table-datatable ex-table" width="100%">
+                        <thead>
+                            <tr>
+                                <th>S.No</th>
+                                <th>Client</th>
+                                <th>Phone</th>
+                                <th>Service Date</th>
+                                <th>Received / Total</th>
+                                <th>Balance</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse($payments as $index => $p)
+                                @php
+                                    $initials = collect(preg_split('/\s+/', trim($p->first_name ?: '?')))->filter()->take(2)->map(fn ($part) => mb_strtoupper(mb_substr($part, 0, 1)))->implode('');
+                                @endphp
                                 <tr>
-                                    <th>S.No</th>
-                                    <th>Name</th>
-                                    <th>Phone</th>
-                                    <th>Service Date</th>
-                                    <th>Received / Total</th>
-                                    <th>Balance</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @forelse($payments as $index => $p)
-                                    <tr>
-                                        <td class="text-center">{{ $index + 1 }}</td>
-                                        <td>{{ $p->first_name }}</td>
-                                        <td class="text-center">{{ $p->phone_number }}</td>
-                                        <td class="text-center">{{ $p->from_date ? \Carbon\Carbon::parse($p->from_date)->format('d-m-Y') : 'N/A' }}</td>
-                                        <td class="text-center">₹{{ number_format($p->received_amount,2) }} / ₹{{ number_format($p->total_amount,2) }}</td>
-                                        <td class="text-center">₹{{ number_format($p->balance,2) }}</td>
-                                        <td>
-                                            <div class="flex gap-2">
-                                                {{-- Add to Sales button --}}
-                                                @if(!empty($p->added_to_sales))
-                                                    <button type="button" class="ti-btn ti-btn-icon ti-btn-sm ti-btn-success-full" disabled title="Already added to sales">
-                                                        <i class="ri-check-double-line"></i>
-                                                    </button>
-                                                @else
-                                                    <button type="button"
-                                                        class="ti-btn ti-btn-icon ti-btn-sm ti-btn-primary-full add-to-sales-btn"
-                                                        data-followup-id="{{ $p->followup_id }}"
-                                                        data-url="{{ route('admin.account.exceptional.add-to-sales', $p->followup_id) }}"
-                                                        data-extra="{{ $p->received_amount - $p->total_amount }}"
-                                                        title="Add extra amount to Sales">
-                                                        <i class="ri-add-circle-line"></i>
-                                                    </button>
-                                                @endif
+                                    <td class="text-center" data-label="S.No">{{ $index + 1 }}</td>
+                                    <td data-label="Client">
+                                        <div class="ex-client">
+                                            <span class="ex-avatar" aria-hidden="true">{{ $initials }}</span>
+                                            <a href="{{ url('admin/leads/' . $p->lead_id) }}" target="_blank" rel="noopener">{{ $p->first_name }}</a>
+                                        </div>
+                                    </td>
+                                    <td class="text-center" data-label="Phone">{{ $p->phone_number }}</td>
+                                    <td class="text-center" data-label="Service Date">{{ $p->from_date ? \Carbon\Carbon::parse($p->from_date)->format('d-m-Y') : 'N/A' }}</td>
+                                    <td class="text-center" data-label="Received / Total"><strong>₹{{ number_format($p->received_amount,2) }} / ₹{{ number_format($p->total_amount,2) }}</strong></td>
+                                    <td class="text-center ex-balance" data-label="Balance">₹{{ number_format($p->balance,2) }}</td>
+                                    <td data-label="Actions">
+                                        <div class="flex gap-2">
+                                            {{-- Add to Sales button --}}
+                                            @if(!empty($p->added_to_sales))
+                                                <button type="button" class="ti-btn ti-btn-icon ti-btn-sm ti-btn-success-full" disabled title="Already added to sales">
+                                                    <i class="ri-check-double-line"></i>
+                                                </button>
+                                            @else
+                                                <button type="button"
+                                                    class="ti-btn ti-btn-icon ti-btn-sm ti-btn-primary-full add-to-sales-btn"
+                                                    data-followup-id="{{ $p->followup_id }}"
+                                                    data-url="{{ route('admin.account.exceptional.add-to-sales', $p->followup_id) }}"
+                                                    data-extra="{{ $p->received_amount - $p->total_amount }}"
+                                                    title="Add extra amount to Sales">
+                                                    <i class="ri-add-circle-line"></i>
+                                                </button>
+                                            @endif
 
-                                                {{-- Refund button --}}
-                                                @if(!empty($p->has_refund_note))
-                                                    <a href="{{ route('admin.refunds.index') }}?followup_id={{ $p->followup_id }}" class="ti-btn ti-btn-icon ti-btn-sm ti-btn-success-full" title="View Refund Note">
-                                                        <i class="ri-check-line"></i>
-                                                    </a>
-                                                @else
-                                                    <button type="button" class="ti-btn ti-btn-icon ti-btn-sm ti-btn-warning-full process-refund-btn"
-                                                        data-lead-id="{{ $p->lead_id }}"
-                                                        data-followup-id="{{ $p->followup_id }}"
-                                                        data-total-amount="{{ $p->total_amount }}"
-                                                        data-received-amount="{{ $p->received_amount }}"
-                                                        data-service-ids='@json($p->service_ids)'
-                                                        data-from-date="{{ $p->from_date }}"
-                                                        title="Process Refund">
-                                                        <i class="ri-refund-2-line"></i>
-                                                    </button>
-                                                @endif
-                                            </div>
-                                        </td>
-                                    </tr>
-                                @empty
-                                    <tr><td colspan="7" class="text-center">No exceptional entries found.</td></tr>
-                                @endforelse
-                            </tbody>
-                        </table>
-                    </div>
+                                            {{-- Refund button --}}
+                                            @if(!empty($p->has_refund_note))
+                                                <a href="{{ route('admin.refunds.index') }}?followup_id={{ $p->followup_id }}" class="ti-btn ti-btn-icon ti-btn-sm ti-btn-success-full" title="View Refund Note">
+                                                    <i class="ri-check-line"></i>
+                                                </a>
+                                            @else
+                                                <button type="button" class="ti-btn ti-btn-icon ti-btn-sm ti-btn-warning-full process-refund-btn"
+                                                    data-lead-id="{{ $p->lead_id }}"
+                                                    data-followup-id="{{ $p->followup_id }}"
+                                                    data-total-amount="{{ $p->total_amount }}"
+                                                    data-received-amount="{{ $p->received_amount }}"
+                                                    data-service-ids='@json($p->service_ids)'
+                                                    data-from-date="{{ $p->from_date }}"
+                                                    title="Process Refund">
+                                                    <i class="ri-refund-2-line"></i>
+                                                </button>
+                                            @endif
+                                        </div>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr><td colspan="7" class="text-center">No exceptional entries found.</td></tr>
+                            @endforelse
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>

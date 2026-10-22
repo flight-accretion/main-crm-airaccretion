@@ -9,6 +9,8 @@ use App\Models\LeadFollowup;
 use App\Models\LeadRide;
 use App\Models\PaymentAuditTrail;
 use App\Models\Voucher;
+use App\Models\User;
+use App\Models\UserType;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -33,6 +35,11 @@ class RidePendingAmountTest extends TestCase
         DB::reconnect('sqlite');
 
         $this->createSchema();
+        $type = UserType::forceCreate(['id' => (string) Str::uuid(), 'user_type' => UserType::SUPER_ADMIN, 'status' => 1]);
+        $this->actingAs(User::forceCreate([
+            'id' => (string) Str::uuid(), 'name' => 'Ride Accountant',
+            'email' => 'ride-accountant@example.test', 'user_type_id' => $type->id, 'status' => 1,
+        ]));
     }
 
     public function test_upcoming_ride_detail_uses_last_valid_total_after_cancel_then_approve(): void
@@ -42,6 +49,7 @@ class RidePendingAmountTest extends TestCase
         $response = app(RideController::class)
             ->getRideDetails($ride->id);
 
+        $this->assertSame(200, $response->getStatusCode());
         $payload = $response->getData(true);
 
         $this->assertSame('0.00', $payload['pending_amount']);
@@ -121,11 +129,18 @@ class RidePendingAmountTest extends TestCase
 
     private function createSchema(): void
     {
+        Schema::create('user_types', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('user_type');
+            $table->integer('status')->default(1);
+            $table->timestamps();
+        });
         Schema::create('users', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->string('name')->nullable();
             $table->string('email')->nullable();
             $table->string('password')->nullable();
+            $table->uuid('user_type_id')->nullable();
             $table->integer('status')->default(1);
             $table->timestamps();
         });

@@ -5,7 +5,7 @@
     $segments = ['all' => 'All', 'waiting' => 'Waiting on customer', 'negative' => 'Negative',
         'positive' => 'Positive', 'neutral' => 'Neutral', 'unknown' => 'Unknown', 'not_sent' => 'Not sent yet', 'unassigned' => 'Unassigned'];
     $productNames = $products->pluck('product', 'id');
-    $serviceNames = $services->pluck('service', 'id');
+    $tableProductNames = app(\App\Services\LeadTableProducts::class)->forRelatedLeads($cases);
 @endphp
 <div class="review-queue">
     <header class="rq-heading"><h1>Review Queue</h1><p>Post-service reviews and image collection</p></header>
@@ -40,7 +40,7 @@
     </form>
     <section class="rq-list" aria-label="Review list">
         <div class="rq-list-heading"><h2>Review list</h2><span>{{ number_format($cases->total()) }} cases &middot; Page {{ $cases->currentPage() }} of {{ $cases->lastPage() }}</span></div>
-        <table class="rq-table"><thead><tr><th>Age</th><th>Client</th><th>Product / Service</th><th>Review status</th><th>Last touch</th><th>Assigned</th><th>Action</th></tr></thead><tbody>
+        <table class="rq-table"><thead><tr><th>Age</th><th>Client</th><th>Product</th><th>Review status</th><th>Last touch</th><th>Assigned</th><th>Action</th></tr></thead><tbody>
             @forelse($cases as $case)
                 @php
                     $state = $presenter->state($case);
@@ -48,20 +48,13 @@
                     $own = $case->assigned_to === auth()->id();
                     $canStart = !$case->assigned_to || $own;
                     $lead = $case->lead;
-                    $names = collect($lead?->product_ids_array ?? [])->map(fn($id) => $productNames[$id] ?? null)->filter();
-                    $serviceIds = $lead?->service_ids_array ?? [];
-                    if (!$serviceIds) {
-                        $raw = $latestFollowups[$case->lead_id]->service_ids ?? [];
-                        $serviceIds = is_string($raw) ? (json_decode($raw, true) ?: []) : ($raw ?: []);
-                    }
-                    $serviceLabels = collect($serviceIds)->map(fn($id) => $serviceNames[$id] ?? null)->filter();
                     $stage = $state['review_resolved'] ? 'image-collection' : 'review';
                     $resolved = $state['review_resolved'] && $state['images_resolved'];
                 @endphp
                 <tr>
                     <td data-label="Age"><span class="rq-pill {{ $age >= 3 ? 'rq-danger' : ($age >= 1 ? 'rq-warning' : 'rq-success') }}">{{ $age === null ? 'Unknown' : ($age === 0 ? 'Today' : $age.' days') }}</span></td>
                     <td data-label="Client"><strong>{{ $lead?->client?->name ?? 'Unknown client' }}</strong><small>{{ $lead?->client?->contact_number ?: '--' }}</small></td>
-                    <td data-label="Product / Service"><span>{{ $names->implode(', ') ?: 'Not specified' }}</span>@if($serviceLabels->isNotEmpty())<small>{{ $serviceLabels->implode(', ') }}</small>@endif
+                    <td data-label="Product"><span>{{ ($tableProductNames[$case->lead_id] ?? '') ?: 'Not specified' }}</span>
                         @foreach($lead?->rideSegments ?? [] as $ride)<small>{{ $ride->from_date }} @if($ride->to_date && $ride->to_date != $ride->from_date)&ndash; {{ $ride->to_date }}@endif</small>@endforeach
                     </td>
                     <td data-label="Review status"><span class="rq-sentiment rq-{{ $state['sentiment'] }}"><b aria-hidden="true">&bull;</b> {{ $state['label'] }}</span><small>{{ ucwords(str_replace('_', ' ', $case->status)) }}</small>

@@ -10,7 +10,10 @@
 <nav class="refund-tabs" aria-label="Refund type">
     <a href="{{ route('admin.refunds.index') }}" class="{{ request()->routeIs('admin.refunds.*') ? 'active' : '' }}">Customer refunds</a>
     @if(in_array(auth()->user()->userType->user_type, array_merge(\App\Models\UserType::OPERATIONS_ROLES, \App\Models\UserType::ADMIN_ROLES), true))
-        <a href="{{ route('admin.operations.vendor-refunds.index') }}" class="{{ request()->routeIs('admin.operations.vendor-refunds.*') ? 'active' : '' }}">Vendor refunds</a>
+        <a href="{{ route('admin.operations.vendor-refunds.index') }}" class="{{ request()->routeIs('admin.operations.vendor-refunds.*') || request()->routeIs('admin.account.vendor-refunds') ? 'active' : '' }}">Vendor refunds</a>
+    @elseif(in_array(auth()->user()->userType->user_type, \App\Models\UserType::ACCOUNTS_ROLES, true))
+        {{-- Accounts can't open the Operations vendor refund page; their tab opens the account Vendor Refund list. --}}
+        <a href="{{ route('admin.account.vendor-refunds') }}" class="{{ request()->routeIs('admin.account.vendor-refunds') ? 'active' : '' }}">Vendor refunds</a>
     @endif
 </nav>
 <script src="{{ asset('assets/admin/js/crm/refunds.js') }}" defer></script>

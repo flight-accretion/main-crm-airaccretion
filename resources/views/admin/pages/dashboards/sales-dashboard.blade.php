@@ -1,5 +1,10 @@
 @extends('admin.layouts.header')
 @section('content')
+@php
+    $tableProductNames = app(\App\Services\LeadTableProducts::class)->forLeads(
+        collect($todayFollowUps)->pluck('enquiry')->merge($nextWeekDnpLeads)
+    );
+@endphp
 <!-- Page Header -->
 <div class="block justify-between page-header md:flex">
 
@@ -685,7 +690,7 @@
                                         <th scope="col" class="text-start">Name</th>
                                         <th scope="col" class="text-start">Number</th>
                                         <th scope="col" class="text-start">Representative</th>
-                                        <th scope="col" class="text-start">Service</th>
+                                        <th scope="col" class="text-start">Product</th>
                                         <th scope="col" class="text-start">Next Follow-up</th>
                                         <th scope="col" class="text-start">Action</th>
                                     </tr>
@@ -699,10 +704,10 @@
                                         <td>{{ $obj->enquiry->representative->name ?? '--' }}</td>
                                         <td>
                                             @php
-                                            $serviceNames = $obj->enquiry->service_names ?? [];
+                                            $productText = $tableProductNames[$obj->enquiry->id] ?? '';
                                             @endphp
-                                            @if (!empty($serviceNames) && is_array($serviceNames))
-                                            {{ Str::limit(implode(', ', $serviceNames), 25) }}
+                                            @if ($productText !== '')
+                                            {{ $productText }}
                                             @else
                                             N/A
                                             @endif
@@ -786,7 +791,7 @@
                                         <th scope="col" class="text-start">S.No.</th>
                                         <th scope="col" class="text-start">Name</th>
                                         <th scope="col" class="text-start">Number</th>
-                                        <th scope="col" class="text-start">Service</th>
+                                        <th scope="col" class="text-start">Product</th>
                                         <th scope="col" class="text-start">Last Follow-up</th>
                                         <th scope="col" class="text-start">Representative</th>
                                         <th scope="col" class="text-start">Action</th>
@@ -800,10 +805,10 @@
                                         <td>{{ $obj->client->contact_number }}</td>
                                         <td>
                                             @php
-                                            $serviceNames = $obj->service_names ?? [];
+                                            $productText = $tableProductNames[$obj->id] ?? '';
                                             @endphp
-                                            @if (!empty($serviceNames) && is_array($serviceNames))
-                                            {{ implode(', ', $serviceNames) }}
+                                            @if ($productText !== '')
+                                            {{ $productText }}
                                             @else
                                             N/A
                                             @endif
@@ -1210,7 +1215,7 @@
                     html += '<td>' + escapeHtml(it.client_name) + '</td>';
                     html += '<td>' + escapeHtml(it.contact_number) + '</td>';
                     html += '<td>' + escapeHtml(it.representative_name) + '</td>';
-                    html += '<td>' + escapeHtml(it.service_text) + '</td>';
+                    html += '<td>' + escapeHtml(it.product_text) + '</td>';
                     html += '<td class="text-center">' + escapeHtml(it.next_followup) + '</td>';
                     html += '<td>' + (it.followup_route ? ('<a aria-label="anchor" href="' + escapeHtml(it.followup_route) + '" class="ti-btn ti-btn-icon ti-btn-sm ti-btn-primary-full" target="_blank" title="View"><i class="ri-eye-line"></i></a>') : '') + '</td>';
                     html += '</tr>';
@@ -1231,7 +1236,7 @@
                     html += '<td scope="row">' + (idx + 1) + '</td>';
                     html += '<td>' + escapeHtml(it.name) + '</td>';
                     html += '<td>' + escapeHtml(it.number) + '</td>';
-                    html += '<td>' + escapeHtml(it.service_text) + '</td>';
+                    html += '<td>' + escapeHtml(it.product_text) + '</td>';
                     html += '<td class="text-center">' + escapeHtml(it.last_followup) + '</td>';
                     html += '<td>' + escapeHtml(it.representative_name) + '</td>';
                     html += '<td>' + (it.view_route ? '<a aria-label="anchor" href="' + escapeHtml(it.view_route) + '" class="ti-btn ti-btn-icon ti-btn-sm ti-btn-primary-full" title="View"><i class="ri-eye-line"></i></a>' : '') + (it.edit_route ? '<a aria-label="anchor" href="' + escapeHtml(it.edit_route) + '" class="ti-btn ti-btn-icon ti-btn-sm ti-btn-info-full" title="Edit"><i class="ri-edit-line"></i></a>' : '') + '</td>';

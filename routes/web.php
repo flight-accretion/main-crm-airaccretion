@@ -1530,10 +1530,10 @@ Route::post(
         Route::delete('/{target}', [TargetController::class, 'destroy'])->name('admin.targets.destroy');
     });
 
-    //notification master routes
+    //notification master routes (Super Admin only; recipients still receive emails/WhatsApp as before)
    Route::prefix('admin')
     ->name('admin.')
-    ->middleware('role:ADMIN_ROLES')
+    ->middleware('role:SUPER_ADMIN')
     ->group(function () {
 
         Route::get('/notification-master', [NotificationMasterController::class, 'index'])
@@ -1713,8 +1713,9 @@ Route::post(
         'refundIndex'
     ]
 )
+// Operations use Operations > Vendor Refund instead of this account list.
 ->middleware(
-    'role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES'
+    'role:ADMIN_ROLES,ACCOUNTS_ROLES'
 )
 ->name(
     'admin.account.vendor-refunds'
@@ -1740,7 +1741,8 @@ Route::post(
     Route::prefix('admin/report')
         ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,SALES_ROLES,HR')
         ->group(function () {
-        Route::get('/', [ReportController::class, 'index'])->name('admin.report');
+        // Reports page: Super Admin only. Sales / Vendor / Profit-Loss / KPI reports keep the group's roles.
+        Route::get('/', [ReportController::class, 'index'])->middleware('role:SUPER_ADMIN')->name('admin.report');
         Route::get('/sales', [ReportController::class, 'salesReport'])->name('admin.report.sales');
         Route::get('/sales/sales-persons-by-manager', [ReportController::class, 'getSalesPersonsByManager'])->name('admin.report.sales.persons-by-manager');
         Route::get('/sales/export', [ReportController::class, 'exportSalesReport'])->name('admin.report.sales.export');

@@ -1,0 +1,62 @@
+/* Exceptional Dashboard redesign: heading, cards, date filter and table styling.
+   The table keeps the CRM's global DataTables setup (search, sorting, paging). */
+.crm-exceptional{padding:22px 0;color:#1b1f27;min-width:0;letter-spacing:0}
+.crm-exceptional *{box-sizing:border-box}
+.ex-heading{margin-bottom:20px}
+.ex-heading h1{font-size:24px;font-weight:600;margin:0 0 4px}
+.ex-heading p{margin:0;color:#8a93a3;font-size:13px}
+.ex-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}
+.ex-stat{background:#fff;border:1px solid #e4e7ec;border-top:3px solid #0f2b46;border-radius:10px;padding:15px 16px;min-width:0}
+.ex-stat.is-amber{border-top-color:#b26a00}.ex-stat.is-green{border-top-color:#178a4c}.ex-stat.is-blue{border-top-color:#2f6fed}
+.ex-stat strong{display:block;font-size:24px;font-weight:600;overflow-wrap:anywhere}
+.ex-stat strong small{font-size:12px;font-weight:400;color:#8a93a3}
+.ex-stat span{display:block;font-size:12px;color:#5a6472;margin-top:4px}
+.ex-stat>small{display:block;font-size:11px;color:#8a93a3;margin-top:3px}
+.ex-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr)) auto;gap:12px;align-items:end;background:#fff;border:1px solid #e4e7ec;border-radius:12px;padding:14px 16px;margin-bottom:18px}
+.ex-field{display:block;font-size:11.5px;color:#8a93a3;margin:0;min-width:0}
+.ex-field input{display:block;width:100%;margin-top:5px;border:1px solid #e4e7ec;background:#fff;color:#1b1f27;border-radius:7px;padding:8px 10px;font-size:13px;min-height:38px}
+.ex-filter-actions{display:flex;gap:8px}
+.ex-ghost,.ex-primary{display:inline-flex;align-items:center;justify-content:center;border-radius:7px;padding:8px 16px;font-weight:600;font-size:13px;min-height:38px;white-space:nowrap;cursor:pointer}
+.ex-ghost{border:1px solid #e4e7ec;background:#fff;color:#0f2b46}.ex-ghost:hover{background:#f4f5f7;color:#0f2b46}
+.ex-primary{border:1px solid #0f2b46;background:#0f2b46;color:#fff}.ex-primary:hover{background:#163b5f}
+.crm-exceptional .ex-list{border:1px solid #e4e7ec;border-radius:12px;box-shadow:none}
+.crm-exceptional .ex-list .box-header{border-color:#e4e7ec}
+.crm-exceptional .ex-table thead th,.crm-exceptional .dataTables_scrollHead thead th{background:#f0f1f4!important;color:#8a93a3!important;font-size:11px;font-weight:600;border-bottom:1px solid #e4e7ec!important}
+.crm-exceptional .ex-table tbody td{vertical-align:middle;border-color:#eef1f5;font-size:12.5px}
+.ex-client{display:flex;align-items:center;gap:9px;justify-content:flex-start}
+.ex-client a{font-weight:600;color:#1b1f27}.ex-client a:hover{color:#1d5bd8;text-decoration:underline}
+.ex-avatar{width:28px;height:28px;border-radius:8px;background:#0f2b46;color:#fff;display:grid;place-items:center;font-size:9.5px;font-weight:650;flex:none}
+.ex-balance{font-weight:600;color:#178a4c}
+@media(max-width:1100px){.ex-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* Phones: rows become labelled cards; the DataTables header copy is hidden. */
+@media(max-width:767px){
+  .crm-exceptional{padding:14px 0}
+  .ex-heading h1{font-size:20px}
+  .ex-stats{gap:8px}.ex-stat{padding:12px}.ex-stat strong{font-size:18px}
+  .ex-filters{grid-template-columns:1fr;padding:12px}
+  .crm-exceptional .ex-list .box-body{padding:12px}
+  .crm-exceptional .dataTables_scrollHead{display:none!important}
+  .crm-exceptional .dataTables_scrollBody,.crm-exceptional .table-responsive{overflow:visible!important;height:auto!important;max-height:none!important}
+  .crm-exceptional .dataTables_scrollBody table.ex-table,.crm-exceptional table.ex-table{width:100%!important;min-width:0!important}
+  .crm-exceptional table.ex-table thead{display:none}
+  .crm-exceptional table.ex-table,.crm-exceptional table.ex-table tbody,.crm-exceptional table.ex-table tr,.crm-exceptional table.ex-table td{display:block;width:100%!important}
+  .crm-exceptional table.ex-table tbody tr{border:1px solid #e4e7ec;border-radius:10px;margin-bottom:10px;background:#fff;padding:6px 0}
+  .crm-exceptional table.ex-table tbody td{display:flex!important;justify-content:space-between;align-items:center;gap:14px;border:0!important;padding:6px 12px!important;text-align:right!important;white-space:normal!important;overflow-wrap:anywhere}
+  .crm-exceptional table.ex-table tbody td:before{content:attr(data-label);font-size:11px;color:#8a93a3;font-weight:600;text-align:left;flex:none}
+  .crm-exceptional table.ex-table tbody td.dataTables_empty,.crm-exceptional table.ex-table tbody td[colspan]{display:block!important;text-align:center!important}
+  .crm-exceptional table.ex-table tbody td.dataTables_empty:before,.crm-exceptional table.ex-table tbody td[colspan]:before{display:none}
+  .crm-exceptional .ex-client{justify-content:flex-end}
+  .crm-exceptional .dataTables_wrapper .dataTables_filter,.crm-exceptional .dataTables_wrapper .dataTables_filter input{width:100%;max-width:100%}
+}
+.dark .crm-exceptional{color:#e8eaee}.dark .ex-stat,.dark .ex-filters,.dark .ex-ghost,.dark .ex-field input{background:#1b1e24;border-color:#2a2f38;color:#e8eaee}.dark .ex-client a{color:#e8eaee}
+/* Phones: keep each card's cells inside the card (DataTables sets fixed column widths). */
+@media(max-width:767px){
+  .crm-exceptional .dataTables_scroll,.crm-exceptional .dataTables_scrollBody{width:100%!important;max-width:100%}
+  .crm-exceptional table.ex-table{table-layout:auto!important;max-width:100%}
+  .crm-exceptional table.ex-table tbody tr{max-width:100%;overflow:hidden}
+  .crm-exceptional table.ex-table tbody td{width:auto!important;max-width:100%;min-width:0!important;box-sizing:border-box}
+  .crm-exceptional table.ex-table tbody td>*{min-width:0;max-width:100%}
+  .crm-exceptional table.ex-table tbody td.sorting_1,.crm-exceptional table.dataTable tbody tr>.sorting_1{background:transparent!important;box-shadow:none!important}
+  .crm-exceptional table.dataTable.display tbody tr>*{box-shadow:none!important}
+  .crm-exceptional .ex-client a{overflow-wrap:anywhere;text-align:right}
+}

@@ -4,6 +4,7 @@
     $reasonLabels = ['client_personal' => 'Client - personal', 'client_business' => 'Client - business', 'weather' => 'Weather', 'maintenance' => 'Maintenance', 'vendor_unavailable' => 'Vendor unavailable', 'other' => 'Other'];
     $stateLabels = ['fixed' => 'Date confirmed', 'open' => 'Awaiting date', 'pending' => 'Pending reschedule', 'legacy_closed' => 'Closed - legacy record', 'cancelled' => 'Cancelled'];
     $groups = collect($rescheduleRows)->groupBy('state');
+    $tableProductNames = app(\App\Services\LeadTableProducts::class)->forLeadIds(collect($rescheduleRows)->pluck('lead_id'));
 @endphp
 <div class="crm-reschedules">
     <header class="rc-heading"><div><h1>Rescheduled Rides</h1><p>Fixed dates, open reschedules and case history</p></div><a class="rc-button" href="{{ route('admin.operations.reschedules.index', array_merge(request()->except(['page', 'download']), ['download' => 'csv'])) }}"><i class="ri-download-line" aria-hidden="true"></i> Export</a></header>
@@ -37,12 +38,12 @@
         @if($groups->has($group))
         <section class="rc-list">
             <div class="rc-section-heading"><h2>{{ $heading }}</h2><span class="rc-badge">{{ $groups[$group]->count() }} on this page</span></div>
-            <table><thead><tr><th>Client</th><th>Product / Service</th><th>Original date</th><th>{{ $group === 'open' ? 'Window expires' : 'New date' }}</th><th>{{ $group === 'open' ? 'Days left' : 'Reason' }}</th><th>{{ $group === 'open' ? 'Assigned to' : 'Updated by' }}</th><th>Status</th><th>Actions</th></tr></thead>
+            <table><thead><tr><th>Client</th><th>Product</th><th>Original date</th><th>{{ $group === 'open' ? 'Window expires' : 'New date' }}</th><th>{{ $group === 'open' ? 'Days left' : 'Reason' }}</th><th>{{ $group === 'open' ? 'Assigned to' : 'Updated by' }}</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody>@foreach($groups[$group] as $row)
                 @php $case = $row['case']; $days = $row['days_left']; @endphp
                 <tr>
                     <td data-label="Client"><a class="rc-client" href="{{ route('admin.leads.view', $row['lead_id']) }}" target="_blank" rel="noopener">{{ $row['client']?->name ?: 'Not recorded' }}</a><small>{{ $row['client']?->contact_number ?: 'Not recorded' }}</small></td>
-                    <td data-label="Product / Service">{{ $row['service'] }}<small>{{ $row['ride']?->from_place }}@if($row['ride']?->to_place) &rarr; {{ $row['ride']->to_place }}@endif</small>@if($row['ride']?->booking_resource_key)<small>Resource: {{ $row['ride']->booking_resource_key }}</small>@endif<small>Paid / Total: &#8377;{{ number_format($row['received_amount'], 2) }} / &#8377;{{ number_format($row['total_amount'], 2) }}</small></td>
+                    <td data-label="Product">{{ ($tableProductNames[$row['lead_id']] ?? '') ?: 'Not specified' }}<small>{{ $row['ride']?->from_place }}@if($row['ride']?->to_place) &rarr; {{ $row['ride']->to_place }}@endif</small>@if($row['ride']?->booking_resource_key)<small>Resource: {{ $row['ride']->booking_resource_key }}</small>@endif<small>Paid / Total: &#8377;{{ number_format($row['received_amount'], 2) }} / &#8377;{{ number_format($row['total_amount'], 2) }}</small></td>
                     <td data-label="Original date">{{ $row['original_date']?->format('d M Y · H:i') ?: 'Not recorded' }}@if($group === 'pending' && !$row['original_date'] && $row['ride']?->from_date)<small>Current: {{ $row['ride']->from_date->format('d M Y · H:i') }}</small>@endif</td>
                     <td data-label="{{ $group === 'open' ? 'Window expires' : 'New date' }}">{{ ($group === 'open' ? $row['expires_on'] : $row['new_date'])?->format('d M Y') ?: 'Not recorded' }}</td>
                     <td data-label="{{ $group === 'open' ? 'Days left' : 'Reason' }}">

@@ -1,9 +1,11 @@
 @extends('admin.layouts.header')
 @section('content')
+@php $tableProductNames = app(\App\Services\LeadTableProducts::class)->forRelatedLeads($arrFollowUps, 'enquiry'); @endphp
 <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/kpi/management-work.css') }}?v=1">
 <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/lead-queues.css') }}?v=1">
 <div class="crm-kpi-tool crm-lead-queue" data-kpi-tool data-lead-queue>
-    <header class="lq-heading"><div><h3>Today's Follow-up</h3><p>{{ $fromDate->format('d M Y') }}</p></div><button type="button" class="ti-btn" data-export-followups><i class="ri-download-line"></i> Export</button></header>
+    <header class="lq-heading"><div><h3>Today's Follow-up</h3><p>{{ $fromDate->format('d M Y') }}</p></div>
+    <button type="button" class="ti-btn" data-export-followups><i class="ri-download-line"></i> Export</button></header>
     @if(session('success'))<p role="status">{{ session('success') }}</p>@endif
     @if(session('error'))<p role="alert">{{ session('error') }}</p>@endif
     @if($errors->any())<div role="alert">@foreach($errors->all() as $error)<p>{{ $error }}</p>@endforeach</div>@endif
@@ -28,7 +30,7 @@
     <section class="lq-list"><header class="lq-heading"><h2>Follow-ups</h2><small>{{ number_format($queueSummary['total']) }} leads</small></header>
     @include('admin.pages.leads.partials.queue-table-controls')
     <table data-queue-table id="followUpTable"><thead><tr>
-        @foreach(['#','Lead score','Lead','Phone','Representative','Next follow-up','Service','Created','Service date','Action'] as $heading)<th scope="col">@if($heading !== 'Action')<button type="button" data-queue-sort="{{ $loop->index }}">{{ $heading }} <i class="ri-arrow-up-down-line" aria-hidden="true"></i></button>@else{{ $heading }}@endif</th>@endforeach
+        @foreach(['#','Lead score','Lead','Phone','Representative','Next follow-up','Product','Created','Service date','Action'] as $heading)<th scope="col">@if($heading !== 'Action')<button type="button" data-queue-sort="{{ $loop->index }}">{{ $heading }} <i class="ri-arrow-up-down-line" aria-hidden="true"></i></button>@else{{ $heading }}@endif</th>@endforeach
     </tr></thead><tbody>
     @foreach($arrFollowUps as $row)
         @php
@@ -100,7 +102,7 @@
             <td data-label="Representative">{{ $lead?->representative?->name ?? 'Unassigned' }}</td>
             
             <td data-label="Next follow-up" data-order="{{ $row->next_followup_date?->timestamp ?? 0 }}"><span class="lq-pill {{ $bucket === 'overdue' ? 'lq-score-hot' : 'lq-scheduled' }}">{{ $row->next_followup_date ? ($bucket === 'today' ? $row->next_followup_date->format('H:i') : $row->next_followup_date->format('d M Y, H:i')) : 'Not set' }}</span></td>
-            <td data-label="Service">{{ implode(', ',$queueServiceNames[$lead?->id] ?? []) ?: 'N/A' }}</td>
+                <td data-label="Product">{{ ($tableProductNames[$lead?->id] ?? '') ?: 'N/A' }}</td>
             <td data-label="Created" data-order="{{ $lead?->created_at?->timestamp ?? 0 }}">{{ $lead?->created_at?->format('d M Y') ?? '-' }}</td>
             <td data-label="Service date" data-order="{{ $serviceDate?->timestamp ?? 0 }}">{{ $serviceDate?->format('d M Y') ?? '-' }}</td>
             <td data-label="Action" >@if($lead)<a class="ti-btn" target="_blank" href="{{ auth()->user()->userType->user_type === \App\Models\UserType::HR ? route('admin.clients.view',$lead->client_id) : route('admin.leads.follow-up.create',$lead->id) }}">Open</a>@endif</td>

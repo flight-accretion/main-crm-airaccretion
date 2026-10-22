@@ -129,6 +129,25 @@ class LeadQueueDesignTest extends KpiFeatureTestCase
         $this->assertSame($first,$measure());$this->assertSame(2,$first);
     }
 
+    public function test_followup_table_shows_products_without_changing_status_or_payments(): void
+    {
+        DB::table('clients')->update(['contact_number' => null]);
+        $product = (string) Str::uuid();
+        DB::table('products')->insert(['id' => $product, 'product' => 'Archived Helicopter Product', 'status' => 0]);
+        DB::table('leads')->whereIn('id', $this->ids)->update(['product_ids' => json_encode([$product])]);
+        $before = DB::table('lead_followups')->orderBy('id')->get()->toJson();
+        view()->getFinder()->prependLocation(base_path('tests/Fixtures/kpi-tools/views'));
+        view()->share('errors', new \Illuminate\Support\ViewErrorBag());
+        foreach ([$this->sales, $this->manager, $this->hr, $this->createUserWithRole('Product Super Admin', UserType::SUPER_ADMIN)] as $actor) {
+            $html = app(UpcomingFollowUpController::class)->index($this->request($actor))->render();
+            $this->assertStringContainsString('data-label="Product">Archived Helicopter Product', $html);
+            $this->assertStringNotContainsString('data-label="Service"', $html);
+            $this->assertStringContainsString('Service date', $html);
+        }
+        $this->assertSame($before, DB::table('lead_followups')->orderBy('id')->get()->toJson());
+        $this->assertSame(0, DB::table('payment_audit_trail')->count());
+    }
+
     public function test_age_exactly_ninety_is_not_over_ninety_and_missing_dates_stay_unknown(): void
     {
         $at90=Lead::findOrFail($this->ids[0]);$at90->created_at=now()->subDays(90);$at90->setRelation('representative',$this->sales);

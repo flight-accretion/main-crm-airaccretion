@@ -1,5 +1,6 @@
 @extends('admin.layouts.header')
 @section('content')
+@php $tableProductNames = app(\App\Services\LeadTableProducts::class)->forRecords($vouchers); @endphp
     <!-- Page Header -->
     <div class="block justify-between page-header md:flex">
 
@@ -119,7 +120,7 @@
                                     <th data-priority="5">Sales Person</th>
                                     <th data-priority="6">Phone</th>
                                     <th data-priority="7">Service Date</th>
-                                    <th data-priority="8">Service</th>
+                                    <th data-priority="8">Product</th>
                                     <th data-priority="9">Amount</th>
                                     <th data-priority="10">Profit/Loss</th>
                                     <th data-priority="11">Actions</th>
@@ -138,7 +139,7 @@
                                             {{ $invoice['ride']['from_date'] ? \Carbon\Carbon::parse($invoice['ride']['from_date'])->format('d-m-Y') : '-' }}
                                         </td>
                                         <td>
-                                            {{ Str::limit($invoice['service']['service_names'] ?? '-', 50) }}
+                                            {{ ($tableProductNames[$vouchers->firstWhere('id', $invoice['id'])?->lead_id] ?? '') ?: 'Not specified' }}
                                         </td>
                                         <td class="text-center">
                                             ₹{{ number_format($invoice['payment']['total_amount'] ?? 0, 2) }}</td>

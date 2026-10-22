@@ -6,6 +6,7 @@
 --}}
 @extends('admin.layouts.header')
 @section('content')
+@php $tableProductNames = app(\App\Services\LeadTableProducts::class)->forLeads($leads); @endphp
     <!-- Page Header -->
     <div class="block justify-between page-header md:flex">
         <div>
@@ -197,7 +198,7 @@
                                     <th data-priority="7">Created Date</th>
                                     <th data-priority="8">Assigned:</th>
                                     <th data-priority="9">Service Date:</th>
-                                    <th data-priority="10">Service:</th>
+                                    <th data-priority="10">Product:</th>
                                     <th data-priority="11">Last Update:</th>
                                     <th data-priority="12">Follow-up History:</th>
                                     <th data-priority="1">Status</th>
@@ -241,10 +242,10 @@
                                         </td>
                                         <td>
                                             @php
-                                                $serviceNames = $enquiry->service_names ?? [];
+                                                $productText = $tableProductNames[$enquiry->id] ?? '';
                                             @endphp
-                                            @if (!empty($serviceNames) && is_array($serviceNames))
-                                                {{ implode(', ', $serviceNames) }}
+                                            @if ($productText !== '')
+                                                {{ $productText }}
                                             @else
                                                 N/A
                                             @endif

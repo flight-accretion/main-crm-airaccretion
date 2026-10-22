@@ -178,7 +178,7 @@
                                 <tr class="border-b border-defaultborder">
 
                                     <th>Client</th>
-                                    <th>Product / Service</th>
+                                    <th>Product</th>
                                     <th>Original Amount</th>
                                     <th>Refund Amount</th>
                                     <th>Status</th>
@@ -190,7 +190,7 @@
                                 @forelse($refundsData as $index => $refund)
                                 <tr data-lead-url="{{ url('admin/leads/'.$refund['lead_id']) }}">
                                     <td><a class="refund-client" href="{{ url('admin/leads/'.$refund['lead_id']) }}" target="_blank" rel="noopener">{{ $refund['client_name'] }}</a></td>
-                                    <td><div>{{ $refund['product_names'] ?: ($refund['service_names'] ?: 'Not specified') }}@if($refund['product_names'] && $refund['service_names'])<small>{{ $refund['service_names'] }}</small>@endif<small>{{ !empty($refund['service_date']) ? \Carbon\Carbon::parse($refund['service_date'])->format('d M Y') : '--' }}</small></div></td>
+                                    <td><div>{{ $refund['product_names'] ?: 'Not specified' }}<small>{{ !empty($refund['service_date']) ? \Carbon\Carbon::parse($refund['service_date'])->format('d M Y') : '--' }}</small></div></td>
                                     <td class="text-center">₹{{ number_format($refund['original_amount'], 2) }}</td>
                                     <td class="text-center">₹{{ number_format($refund['refund_amount'], 2) }}</td>
                                     <td><span class="refund-pill {{ $refund['refund_status'] === 'completed' ? 'is-completed' : 'is-pending' }}">{{ $refund['refund_status'] === 'completed' ? 'Completed' : 'Pending' }}</span>@if($refund['approval_status'])<small class="refund-approval is-{{ $refund['approval_status'] }}" data-approval-label>{{ \App\Support\RefundApproval::label($refund['approval_status']) }}</small>@endif</td>

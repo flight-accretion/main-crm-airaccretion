@@ -1,0 +1,163 @@
+/* Payment Review redesign: cards, chips, filter bar and a table that fits without horizontal scroll. */
+.crm-payment-review{padding:22px 0;color:#1b1f27;min-width:0;letter-spacing:0}
+.crm-payment-review *{box-sizing:border-box}
+.pr-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+.pr-heading h1{font-size:24px;font-weight:600;margin:0 0 4px}
+.pr-heading p{margin:0;color:#8a93a3;font-size:13px}
+.pr-ghost,.pr-primary{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:7px;padding:8px 14px;font-weight:600;font-size:13px;white-space:nowrap;cursor:pointer}
+.pr-ghost{border:1px solid #e4e7ec;background:#fff;color:#0f2b46}
+.pr-primary{border:1px solid #0f2b46;background:#0f2b46;color:#fff}
+.pr-primary:hover{background:#163b5f;color:#fff}.pr-ghost:hover{background:#f4f5f7;color:#0f2b46}
+.pr-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:20px}
+.pr-stat{background:#fff;border:1px solid #e4e7ec;border-top:3px solid #0f2b46;border-radius:10px;padding:15px 16px;min-width:0}
+.pr-stat.is-green{border-top-color:#178a4c}.pr-stat.is-amber{border-top-color:#b26a00}.pr-stat.is-red{border-top-color:#c62f3b}
+.pr-stat strong{display:block;font-size:24px;font-weight:600}
+.pr-stat strong small{font-size:12px;font-weight:400;color:#8a93a3}
+.pr-stat span{display:block;font-size:12px;color:#5a6472;margin-top:4px}
+.pr-stat>small{display:block;font-size:11px;color:#8a93a3;margin-top:3px;overflow-wrap:anywhere}
+.pr-chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.pr-chips a{border:1px solid #e4e7ec;border-radius:99px;padding:6px 14px;font-size:12.5px;color:#5a6472;background:#fff}
+.pr-chips a.is-on{background:#0f2b46;border-color:#0f2b46;color:#fff;font-weight:600}
+.pr-filters{display:grid;grid-template-columns:repeat(6,minmax(0,1fr)) auto;gap:10px;align-items:end;background:#fff;border:1px solid #e4e7ec;border-radius:12px;padding:14px 16px;margin-bottom:18px}
+.pr-field{display:block;font-size:11.5px;color:#8a93a3;margin:0;min-width:0}
+.pr-field input,.pr-field select{display:block;width:100%;margin-top:5px;border:1px solid #e4e7ec;background:#fff;color:#1b1f27;border-radius:7px;padding:8px 10px;font-size:13px;min-height:38px}
+.pr-filter-actions{display:flex;gap:8px}
+.pr-filter-actions .pr-ghost,.pr-filter-actions .pr-primary{min-height:38px}
+.crm-payment-review .pr-queue{border:1px solid #e4e7ec;border-radius:12px;box-shadow:none}
+.crm-payment-review .pr-queue .box-header{border-color:#e4e7ec}
+/* Table: fixed layout and wrapping cells so it never needs a horizontal scrollbar. */
+.pr-table-wrap{border:1px solid #e4e7ec;border-radius:10px;overflow:hidden}
+.crm-payment-review table.pr-table{width:100%!important;min-width:0!important;table-layout:fixed;border-collapse:collapse;margin:0;font-size:12.5px}
+.crm-payment-review .pr-table th{text-align:left;font-size:11px;color:#8a93a3;font-weight:600;padding:10px;background:#f0f1f4;border-bottom:1px solid #e4e7ec;white-space:normal}
+.crm-payment-review .pr-table td{padding:11px 10px;border-bottom:1px solid #e4e7ec;vertical-align:middle;white-space:normal!important;overflow-wrap:anywhere;word-break:normal}
+.crm-payment-review .pr-table tr:last-child td{border-bottom:0}
+.crm-payment-review .pr-table th.pr-col-client{width:20%}.crm-payment-review .pr-table th.pr-col-service{width:16%}.crm-payment-review .pr-table th.pr-col-action{width:92px}
+.pr-table td strong{display:block;font-weight:600;color:#1b1f27}
+.pr-table td small{display:block;font-size:11px;color:#8a93a3;margin-top:2px}
+.pr-client{display:flex;gap:9px;align-items:center;min-width:0}
+.pr-client>div{min-width:0}
+.pr-avatar{width:30px;height:30px;border-radius:8px;background:#0f2b46;color:#fff;display:grid;place-items:center;font-size:10px;font-weight:650;flex:none}
+.pr-tag{display:inline-block;font-size:11px;font-weight:600;padding:3px 8px;border-radius:5px;white-space:nowrap}
+.pr-tag.green{color:#178a4c;background:#e3f4eb}.pr-tag.amber{color:#b26a00;background:#fcefd9}.pr-tag.red{color:#c62f3b;background:#fbe5e7}.pr-tag.blue{color:#1d5bd8;background:#e8f0fe}.pr-tag.neutral{color:#5a6472;background:#eef1f5}
+.pr-row-btn{padding:7px 14px;font-size:12px}
+.pr-empty-row td{text-align:center;color:#8a93a3;padding:30px!important}
+@media(max-width:1280px){.pr-filters{grid-template-columns:repeat(3,minmax(0,1fr))}.pr-filter-actions{grid-column:span 3;justify-content:flex-end}}
+@media(max-width:1100px){.pr-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* Tablet and phone: each row becomes a labelled card, so nothing scrolls sideways. */
+@media(max-width:1024px){
+  .pr-table-wrap{border:0;overflow:visible}
+  .crm-payment-review table.pr-table,.crm-payment-review .pr-table tbody,.crm-payment-review .pr-table tr,.crm-payment-review .pr-table td{display:block;width:100%!important}
+  .crm-payment-review .pr-table thead{display:none}
+  .crm-payment-review .pr-table tr{border:1px solid #e4e7ec;border-radius:10px;margin-bottom:10px;background:#fff;padding:6px 2px}
+  .crm-payment-review .pr-table td{border:0;padding:6px 12px;display:flex!important;justify-content:space-between;align-items:center;gap:14px;text-align:right}
+  .crm-payment-review .pr-table td:before{content:attr(data-label);font-size:11px;color:#8a93a3;font-weight:600;text-align:left;flex:none}
+  .crm-payment-review .pr-table td>*{min-width:0}
+  .crm-payment-review .pr-table .pr-client{justify-content:flex-end;text-align:right}
+  .crm-payment-review .pr-table .pr-empty-row td{display:block!important;text-align:center}
+  .crm-payment-review .pr-table .pr-empty-row td:before{display:none}
+}
+@media(max-width:767px){
+  .crm-payment-review{padding:14px 0}
+  .pr-heading h1{font-size:20px}
+  .pr-stats{gap:8px}.pr-stat{padding:12px}.pr-stat strong{font-size:19px}
+  .pr-filters{grid-template-columns:1fr;padding:12px}.pr-filter-actions{grid-column:auto}
+  .crm-payment-review .pr-queue .box-body{padding:12px}
+}
+.dark .crm-payment-review{color:#e8eaee}.dark .pr-stat,.dark .pr-filters,.dark .pr-chips a,.dark .pr-ghost,.dark .crm-payment-review .pr-table tr{background:#1b1e24;border-color:#2a2f38;color:#e8eaee}
+.dark .crm-payment-review .pr-table th{background:#22262e;border-color:#2a2f38}.dark .pr-table td strong{color:#e8eaee}.dark .pr-field input,.dark .pr-field select{background:#1b1e24;border-color:#2a2f38;color:#e8eaee}
+/* Pagination wraps instead of widening the page. */
+.crm-payment-review nav[role="navigation"]>div{flex-wrap:wrap;gap:10px}.crm-payment-review nav[role="navigation"] .shadow-sm{flex-wrap:wrap;max-width:100%}
+@media(max-width:1024px){.crm-payment-review .pr-table td{display:grid!important;grid-template-columns:110px minmax(0,1fr);column-gap:14px;row-gap:2px;align-items:center}.crm-payment-review .pr-table td:before{grid-row:1/span 3}.crm-payment-review .pr-table td>*{grid-column:2;justify-self:end;text-align:right}.crm-payment-review .pr-table td>small{margin-top:0}}
+/* ===== Review payment dialog (redesign). Scoped to #view-payment-review; scripts and IDs unchanged. ===== */
+.pr-review-modal .pr-review-box{width:calc(100% - 32px)!important;max-width:1020px!important;margin-left:auto!important;margin-right:auto!important}
+.pr-review-modal .pr-review-content{border:1px solid #e4e7ec;border-radius:14px;overflow:hidden;box-shadow:0 24px 60px rgba(10,18,32,.28);background:#fff;color:#1b1f27;max-height:calc(100vh - 56px);display:flex;flex-direction:column}
+.pr-review-head{display:flex;gap:14px;align-items:flex-start;justify-content:space-between;padding:18px 22px 14px;border-bottom:1px solid #e4e7ec}
+.pr-review-heading{min-width:0}
+.pr-review-heading h5{font-size:17px;font-weight:650;margin:0;overflow-wrap:anywhere}
+.pr-review-sub{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:12px}
+.pr-review-sub a{color:#1d5bd8;font-weight:600}
+.pr-review-muted{color:#8a93a3;font-size:12px}
+.pr-review-hint{color:#8a93a3;font-size:11.5px;margin:-4px 0 12px;line-height:1.5}
+.pr-pill{display:inline-block;font-size:11px;font-weight:600;padding:3px 9px;border-radius:5px}
+.pr-pill.amber{color:#b26a00;background:#fcefd9}.pr-pill.green{color:#178a4c;background:#e3f4eb}
+.pr-review-close{width:36px;height:36px;display:grid;place-items:center;border:1px solid #e4e7ec;border-radius:8px;background:#fff;color:#5a6472;font-size:18px;flex:none}
+.pr-review-close:hover{background:#f4f5f7}
+.pr-verdict{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:#e4e7ec;border-bottom:1px solid #e4e7ec;flex:none}
+.pr-verdict-cell{background:#fff;padding:12px 22px;min-width:0}
+.pr-verdict-cell span{display:block;font-size:10.5px;color:#8a93a3;text-transform:uppercase;letter-spacing:.04em}
+.pr-verdict-cell strong{display:block;font-size:19px;font-weight:650;margin-top:2px;overflow-wrap:anywhere}
+.pr-verdict-cell strong.is-ok{color:#178a4c}.pr-verdict-cell strong.is-due{color:#b26a00}.pr-verdict-cell strong.is-over{color:#c62f3b}
+.pr-verdict-note{grid-column:1/-1;font-size:12px;padding:8px 22px;font-weight:500;line-height:1.5}
+.pr-verdict-note.green{background:#e3f4eb;color:#178a4c}.pr-verdict-note.amber{background:#fcefd9;color:#b26a00}.pr-verdict-note.red{background:#fbe5e7;color:#c62f3b}
+.pr-review-modal .pr-review-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);padding:0;overflow-y:auto;flex:1 1 auto;min-height:0}
+.pr-review-col{padding:18px 22px;min-width:0}
+.pr-review-left{border-right:1px solid #e4e7ec}
+.pr-block{margin-bottom:20px}.pr-block:last-child{margin-bottom:0}
+.pr-block h6{font-size:11px;font-weight:650;color:#8a93a3;letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px}
+.pr-kv{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 16px;margin:0;font-size:12.5px}
+.pr-kv.pr-kv-two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.pr-kv>div{min-width:0}.pr-kv .pr-kv-wide{grid-column:1/-1}
+.pr-kv dt{color:#8a93a3;font-size:10.5px;font-weight:400;margin:0}
+.pr-kv dd{margin:2px 0 0;font-weight:600;overflow-wrap:anywhere}
+/* Travel info is rendered by the existing script; tighten it to the dialog style. */
+.pr-travel .grid{gap:10px 16px!important}
+.pr-travel .ti-form-label{font-size:10.5px;color:#8a93a3;margin:0}
+.pr-travel p{font-weight:600;font-size:12.5px;margin:2px 0 0;overflow-wrap:anywhere}
+.pr-travel .hs-accordion{border-radius:8px;overflow:hidden}
+/* Payment history cards rendered by the existing script. */
+#view-payment-review .payment-card{border:1px solid #e4e7ec!important;border-radius:10px!important;box-shadow:none;margin-bottom:10px;background:#fff;overflow:hidden}
+#view-payment-review .payment-card .box-header{padding:13px 15px;border-bottom:1px solid #eef1f5;background:#fff}
+#view-payment-review .payment-card .payment-header{flex-wrap:wrap;gap:8px}
+#view-payment-review .payment-card .payment-status{min-width:0!important;text-align:right}
+#view-payment-review .payment-card h5{font-size:17px!important;font-weight:650}
+#view-payment-review .payment-card .box-body{padding:12px 15px}
+#view-payment-review .payment-card .box-footer{padding:12px 15px;border-top:1px solid #eef1f5;background:#f8fafc}
+#view-payment-review .payment-card .ti-form-label{font-size:10.5px;color:#8a93a3}
+#view-payment-review .payment-card textarea,#view-payment-review .payment-card select,#view-payment-review .payment-card input{border-radius:7px}
+#view-payment-review .approve-individual-payment-btn{background:#178a4c!important;border-color:#178a4c!important;color:#fff!important;font-weight:650}
+#view-payment-review .approve-individual-payment-btn:hover{background:#12703d!important}
+#view-payment-review .reject-individual-payment-btn{background:#fff!important;border-color:#c62f3b!important;color:#c62f3b!important;font-weight:650}
+#view-payment-review .reject-individual-payment-btn:hover{background:#fbe5e7!important}
+.pr-review-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 22px;border-top:1px solid #e4e7ec;background:#f0f1f4;flex-wrap:wrap;flex:none}
+@media(max-width:860px){.pr-review-modal .pr-review-body{grid-template-columns:1fr}.pr-review-left{border-right:0;border-bottom:1px solid #e4e7ec}}
+@media(max-width:767px){
+  .pr-review-modal .pr-review-box{width:100%!important;max-width:none!important;margin:0!important;min-height:100%}
+  .pr-review-modal .pr-review-content{border-radius:0;border:0;max-height:100vh;min-height:100vh}
+  .pr-review-head,.pr-review-col,.pr-review-foot{padding-left:16px;padding-right:16px}
+  .pr-verdict-cell{padding:10px 12px}.pr-verdict-cell strong{font-size:15px}.pr-verdict-note{padding:8px 16px}
+  .pr-kv{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+.dark .pr-review-modal .pr-review-content,.dark .pr-verdict-cell,.dark .pr-review-close,.dark #view-payment-review .payment-card,.dark #view-payment-review .payment-card .box-header{background:#1b1e24;border-color:#2a2f38;color:#e8eaee}
+.dark .pr-review-foot,.dark #view-payment-review .payment-card .box-footer{background:#22262e;border-color:#2a2f38}
+/* Payment history cards (preview layout) + collapsible payment details. */
+#view-payment-review .pr-pentry{border:1px solid #e4e7ec!important;border-radius:10px!important;padding:13px 15px;margin-bottom:10px;background:#fff;box-shadow:none}
+#view-payment-review .pr-pentry.is-rejected{opacity:.8}
+.pr-ptop{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.pr-pamt{font-size:17px;font-weight:650;color:#1b1f27}
+.pr-pill.red{color:#c62f3b;background:#fbe5e7}
+.pr-pmeta{font-size:11.5px;color:#8a93a3;margin-top:3px;line-height:1.5;overflow-wrap:anywhere}
+.pr-pgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px;margin-top:11px;font-size:12px}
+.pr-pgrid span{display:block;color:#8a93a3;font-size:10.5px}.pr-pgrid strong{display:block;font-weight:600;margin-top:1px;overflow-wrap:anywhere}
+.pr-narr{border:1px dashed #e4e7ec;border-radius:8px;background:#f0f1f4;padding:8px 11px;font-size:12px;color:#5a6472;margin-top:10px;overflow-wrap:anywhere}
+.pr-narr b{display:block;color:#8a93a3;font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px}
+.pr-receipt-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+#view-payment-review .pr-small{min-height:32px;padding:5px 12px;font-size:12px;gap:6px}
+#view-payment-review .pr-ghost[disabled]{opacity:.5;cursor:not-allowed}
+.pr-decide{margin-top:12px;border-top:1px solid #eef1f5;padding-top:12px}
+.pr-decision-toggle{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;border:1px solid #e4e7ec;border-radius:8px;background:#f8fafc;color:#1b1f27;font-size:12.5px;font-weight:600;text-align:left;cursor:pointer}
+.pr-decision-toggle small{flex:1;min-width:0;font-weight:400;font-size:11px;color:#8a93a3;overflow-wrap:anywhere}
+.pr-decision-toggle i{font-size:18px;color:#5a6472;transition:transform .15s}
+.pr-decision-toggle[aria-expanded="true"] i{transform:rotate(180deg)}
+.pr-decision-toggle:hover{background:#eef1f5}
+.pr-decision-toggle:focus-visible{outline:2px solid #2f6fed;outline-offset:2px}
+.pr-decision-fields{margin-top:10px}.pr-decision-fields[hidden]{display:none!important}
+.pr-decision-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px}
+.pr-field-label{display:block;font-size:11px;color:#8a93a3;margin:0;min-width:0}
+.pr-field-label select,.pr-field-label input,.pr-field-label textarea{display:block;width:100%;margin-top:4px;border-radius:7px}
+.pr-field-wide{grid-column:1/-1}
+.pr-decision-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.pr-approve,.pr-reject{display:inline-flex;align-items:center;gap:6px;border-radius:8px;padding:9px 18px;font-weight:650;font-size:13px;cursor:pointer}
+.pr-approve{border:1px solid #178a4c;background:#178a4c;color:#fff}.pr-approve:hover{background:#12703d}
+.pr-reject{border:1px solid #c62f3b;background:#fff;color:#c62f3b}.pr-reject:hover{background:#fbe5e7}
+@media(max-width:767px){.pr-decision-grid{grid-template-columns:1fr}.pr-decision-actions>*{flex:1;justify-content:center}}
+.dark #view-payment-review .pr-pentry,.dark .pr-reject{background:#1b1e24;border-color:#2a2f38}.dark .pr-pamt{color:#e8eaee}.dark .pr-narr,.dark .pr-decision-toggle{background:#22262e;border-color:#2a2f38;color:#e8eaee}

@@ -1,349 +1,274 @@
 @extends('admin.layouts.header')
 @section('content')
-<!-- Page Header -->
-<div class="block justify-between page-header md:flex">
-
-</div>
-<!-- Page Header Close -->
-
-<div class="grid grid-cols-12">
-    <div class="xl:col-span-12 col-span-12">
-        <div class="box">
-            <div class="hs-accordion-group">
-                <div class="hs-accordion" id="invoice-accordion">
-                    <div class="box-header" style="display: block; padding-top: 10px; padding-bottom: 10px;">
-                        <div class="flex items-center">
-                            <div class="me-4 gap-0">
-                                <span class="avatar avatar-sm !rounded-full bg-theme m-0">
-                                    <i class="ri-box-3-line"></i>
-                                </span>
-                            </div>
-                            <div class="flex-grow">
-                                <div class="md:flex block items-center justify-between">
-                                    <h5 class="font-semibold mb-0 leading-none text-[1.25rem]">Vendor Payments</h5>
-                                    <div class="hs-dropdown ti-dropdown mt-3 md:mt-0">
-                                        <a href="{{ route('admin.account.vendor-payments.export', [], false) }}{{ request()->getQueryString() ? '?' . request()->getQueryString() : '' }}"
-                                            class="ti-btn bg-theme ti-btn-primary-full !py-1 !px-2"
-                                            aria-expanded="false">
-                                            <i class="ri-share-box-fill"></i>
-                                            Export
-                                            <i class="ri-arrow-down-s-line align-middle ms-1 inline-block"></i>
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+@php $tableProductNames = app(\App\Services\LeadTableProducts::class)->forRecords($vendorPaymentsData ?? []); @endphp
+@php
+    $paymentsSummary = $paymentsSummary ?? [];
+    $statusChipCounts = $statusChipCounts ?? [];
+    // Compact rupee figure for the cards, e.g. ₹41.2L / ₹86K.
+    $inrShort = function ($amount) {
+        $amount = (float) $amount;
+        if ($amount >= 10000000) return '₹' . round($amount / 10000000, 1) . 'Cr';
+        if ($amount >= 100000) return '₹' . round($amount / 100000, 1) . 'L';
+        if ($amount >= 1000) return '₹' . round($amount / 1000, 1) . 'K';
+        return '₹' . number_format($amount, 0);
+    };
+    $currentStatus = request('status', '');
+    // Chips only set the existing Payment Status filter; other filters are kept.
+    $chipUrl = fn ($value) => route('admin.account.vendor-payments', array_filter(array_merge(request()->except(['page', 'status']), ['status' => $value]), fn ($v) => $v !== null && $v !== ''), false);
+    $payNext = $paymentsSummary['pay_next'] ?? null;
+@endphp
+<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/vendor-payments.css') }}">
+<div class="crm-vendor-payments">
+    <header class="vp-heading">
+        <div>
+            <h1>Vendor Payments</h1>
+            <p>What we owe, what is overdue, what is settled</p>
         </div>
-    </div>
-</div>
-<div class="box">
-    <div class="box-header">
-        <div class="box-title">Search Filters</div>
-        <button type="button" class="ti-btn ti-btn-sm ti-btn-outline-primary" id="toggle-filters">
-            <i class="ti ti-chevron-up" id="filter-icon"></i>
-        </button>
-    </div>
-    <div class="box-body" id="filter-section">
-        <form method="GET" action="{{ route('admin.account.vendor-payments', [], false) }}" id="filter-form">
-            <div class="grid grid-cols-12 gap-4">
-                <div class="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                    <label class="ti-form-label">Client Name</label>
-                    <select class="js-example-basic-single w-full form-control-sm " name="client_id" id="client_id">
-                        <option value="">All Clients</option>
-                        @foreach ($clients as $client)
-                        <option value="{{ $client->id }}" {{ request('client_id')==$client->id ? 'selected' : '' }}>
-                            {{ $client->name }}
-                        </option>
-                        @endforeach
-                    </select>
-                </div>
+        <!-- <a href="{{ route('admin.account.vendor-payments.export', [], false) }}{{ request()->getQueryString() ? '?' . request()->getQueryString() : '' }}"
+            class="vp-ghost"><i class="ri-download-line" aria-hidden="true"></i> Export (filtered)</a> -->
+    </header>
 
-                <div class="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                    <label class="ti-form-label">Vendor Name</label>
-                    <select class="js-example-basic-single w-full form-control-sm" name="vendor_id" id="vendor_id">
-                        <option value="">All Vendors</option>
-                        @foreach ($vendors as $vendor)
-                        <option value="{{ $vendor->id }}" {{ request('vendor_id')==$vendor->id ? 'selected' : '' }}>
-                            {{ $vendor->name }}
-                        </option>
-                        @endforeach
-                    </select>
-                </div>
+    <section class="vp-stats" aria-label="Vendor payment summary">
+        <div class="vp-stat is-brand">
+            <strong>{{ $inrShort($paymentsSummary['payable_amount'] ?? 0) }}</strong>
+            <span>Payable to vendors</span>
+            <small>{{ number_format($paymentsSummary['payable_vendors'] ?? 0) }} vendor {{ \Illuminate\Support\Str::plural('entry', $paymentsSummary['payable_vendors'] ?? 0) }} with balance</small>
+        </div>
+        <div class="vp-stat is-red">
+            <strong>{{ number_format($paymentsSummary['overdue_count'] ?? 0) }} <small>· {{ $inrShort($paymentsSummary['overdue_amount'] ?? 0) }}</small></strong>
+            <span>Overdue — past service date</span>
+            <small>Balance still unpaid</small>
+        </div>
+        <div class="vp-stat is-green">
+            <strong>{{ number_format($paymentsSummary['paid_month_count'] ?? 0) }} <small>· {{ $inrShort($paymentsSummary['paid_month_amount'] ?? 0) }}</small></strong>
+            <span>Paid this month</span>
+            <small>Payments dated {{ now()->format('M Y') }}</small>
+        </div>
+        <div class="vp-stat is-amber">
+            <strong>{{ $inrShort($paymentsSummary['refund_due_amount'] ?? 0) }}</strong>
+            <span>Refund due from vendors</span>
+            <small>{{ number_format($paymentsSummary['refund_due_count'] ?? 0) }} vendor {{ \Illuminate\Support\Str::plural('entry', $paymentsSummary['refund_due_count'] ?? 0) }}</small>
+        </div>
+    </section>
 
-                <div class="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                    <label class="ti-form-label">Service</label>
-                    <select class="js-example-basic-single w-full form-control-sm" name="service_id" id="service_id">
-                        <option value="">All Services</option>
-                        @foreach ($services as $service)
-                        <option value="{{ $service->id }}" {{ request('service_id')==$service->id ? 'selected' : '' }}>
-                            {{ $service->service }}
-                        </option>
-                        @endforeach
-                    </select>
-                </div>
+    @if($payNext)
+        <div class="vp-paynext" role="status">
+            <i class="ri-error-warning-line" aria-hidden="true"></i>
+            <span><strong>Pay next:</strong> {{ $payNext['vendor'] }} ₹{{ number_format($payNext['amount'], 2) }}@if($payNext['client']) — {{ $payNext['client'] }}@endif
+                @if($payNext['service_date']) · service date {{ $payNext['service_date']->format('d M Y') }}, {{ (int) $payNext['service_date']->copy()->startOfDay()->diffInDays(now()->startOfDay()) }} days past @endif</span>
+        </div>
+    @endif
 
-                <div class="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                    <label class="ti-form-label">Payment Status</label>
-                    <select class="ti-form-select form-control-sm rounded-sm" name="status" id="status">
-                        <option value="">All Status</option>
-                        <option value="paid" {{ request('status')=='paid' ? 'selected' : '' }}>Full Paid</option>
-                        <option value="partial" {{ request('status')=='partial' ? 'selected' : '' }}>Partial Paid
-                        </option>
-                        <option value="unpaid" {{ request('status')=='unpaid' ? 'selected' : '' }}>Unpaid</option>
-                    </select>
-                </div>
+    <nav class="vp-chips" aria-label="Payment status">
+        <a href="{{ $chipUrl('unpaid') }}" class="{{ $currentStatus === 'unpaid' ? 'is-on' : '' }}">Unpaid · {{ number_format($statusChipCounts['unpaid'] ?? 0) }}</a>
+        <a href="{{ $chipUrl('partial') }}" class="{{ $currentStatus === 'partial' ? 'is-on' : '' }}">Partial · {{ number_format($statusChipCounts['partial'] ?? 0) }}</a>
+        <a href="{{ $chipUrl('paid') }}" class="{{ $currentStatus === 'paid' ? 'is-on' : '' }}">Paid · {{ number_format($statusChipCounts['paid'] ?? 0) }}</a>
+        <a href="{{ $chipUrl('') }}" class="{{ $currentStatus === '' ? 'is-on' : '' }}">All · {{ number_format($statusChipCounts['all'] ?? 0) }}</a>
+    </nav>
 
-                <div class="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
+    {{-- Same filters, names and IDs as before (Select2 still applies via js-example-basic-single). --}}
+    <form method="GET" action="{{ route('admin.account.vendor-payments', [], false) }}" id="filter-form" class="vp-filters">
+        @if(request('search'))<input type="hidden" name="search" value="{{ request('search') }}">@endif
+        <div class="vp-field">
+            <label for="client_id">Client Name</label>
+            <select class="js-example-basic-single w-full form-control-sm" name="client_id" id="client_id">
+                <option value="">All Clients</option>
+                @foreach ($clients as $client)
+                    <option value="{{ $client->id }}" {{ request('client_id') == $client->id ? 'selected' : '' }}>{{ $client->name }}</option>
+                @endforeach
+            </select>
+        </div>
+        <div class="vp-field">
+            <label for="vendor_id">Vendor Name</label>
+            <select class="js-example-basic-single w-full form-control-sm" name="vendor_id" id="vendor_id">
+                <option value="">All Vendors</option>
+                @foreach ($vendors as $vendor)
+                    <option value="{{ $vendor->id }}" {{ request('vendor_id') == $vendor->id ? 'selected' : '' }}>{{ $vendor->name }}</option>
+                @endforeach
+            </select>
+        </div>
+        <div class="vp-field">
+            <label for="service_id">Service</label>
+            <select class="js-example-basic-single w-full form-control-sm" name="service_id" id="service_id">
+                <option value="">All Services</option>
+                @foreach ($services as $service)
+                    <option value="{{ $service->id }}" {{ request('service_id') == $service->id ? 'selected' : '' }}>{{ $service->service }}</option>
+                @endforeach
+            </select>
+        </div>
+        <div class="vp-field">
+            <label for="status">Payment Status</label>
+            <select class="ti-form-select form-control-sm rounded-sm" name="status" id="status">
+                <option value="">All Status</option>
+                <option value="paid" {{ request('status') == 'paid' ? 'selected' : '' }}>Full Paid</option>
+                <option value="partial" {{ request('status') == 'partial' ? 'selected' : '' }}>Partial Paid</option>
+                <option value="unpaid" {{ request('status') == 'unpaid' ? 'selected' : '' }}>Unpaid</option>
+            </select>
+        </div>
+        <div class="vp-filter-actions">
+            <button type="button" class="vp-ghost" title="Clear Filters" onclick="clearFilters()">Reset</button>
+            <button type="submit" class="vp-primary">Apply Filters</button>
+        </div>
+    </form>
 
-                    <div class="flex gap-2">
-                        <button type="submit" class="ti-btn bg-theme ti-btn-primary-full !py-1 !px-2">Apply
-                            Filters</button>
-                        <button type="button" class="ti-btn ti-btn-outline-secondary !py-1 !px-2" title="Clear Filters"
-                            onclick="clearFilters()">
-                            <i class="ri-refresh-line"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </form>
-    </div>
-</div>
-
-<div class="grid grid-cols-12 gap-6">
-    <div class="xl:col-span-12 col-span-12">
-        <div class="box custom-box">
-            <div class="box-header justify-between flex">
-                <div class="box-title">
-                    Vendor Payment List
-                </div>
-            </div>
-            <div class="box-body">
-                <div class="table-responsive">
-                    <table class="table display responsive nowrap table-datatable server-paginated" width="100%"
-                        data-empty-msg="No vendor payments found">
-                        <thead class="bg-primary text-white">
-                            <tr class="border-b border-defaultborder">
-                                <th>S.No</th>
-                                <th>Client Name</th>
-                                <th>Vendor(s) Name</th>
-                                <th>Service Name</th>
-                                <th>Vendor Service Cost</th>
-                                <th>Balance Amount</th>
-                                <th>Paid Amount</th>
-                                <!-- <th>Refunded Amount</th>
-                                <th>Refund Due</th> -->
-                                <th>Date Paid</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse($vendorPaymentsData ?? [] as $index => $payment)
-                            <tr>
-                                <td class="text-center">{{ (isset($vendorPaymentsPaginator) && $vendorPaymentsPaginator->firstItem() ? $vendorPaymentsPaginator->firstItem() : 1) + $index }}</td>
-                                <td>{{ $payment['client_name'] }}</td>
-                                <td>
-                                    @foreach ($payment['vendors'] as $vendor)
-                                    {{ $vendor['vendor_name'] }}<br>
-                                    @endforeach
-                                </td>
-                                <td>
-                                    @foreach ($payment['vendors'] as $vendor)
-                                    {{ $vendor['service_info']['service_display'] }}
-                                    @if (!empty($vendor['service_info']['extra_service_display']))
-                                    <br> {{ $vendor['service_info']['extra_service_display'] }}
+    <section class="box custom-box vp-list">
+        <div class="box-header">
+            <div class="box-title">Vendor Payment List</div>
+        </div>
+        <div class="box-body">
+            <div class="vp-table-wrap">
+                {{-- One group (tbody) per client: client, service date and actions span that client's vendor lines. --}}
+                <table class="table table-datatable server-paginated no-horizontal-scroll vp-table" width="100%" data-empty-msg="No vendor payments found">
+                    <thead>
+                        <tr>
+                            <th class="vp-col-sno">S.No</th>
+                            <th class="vp-col-client">Client</th>
+                            <th>Service date</th>
+                            <th class="vp-col-vendor">Vendor / Product</th>
+                            <th>Vendor Service Cost</th>
+                            <th>Balance Amount</th>
+                            <th>Paid Amount</th>
+                            <th>Date Paid</th>
+                            <th>Status</th>
+                            <th class="vp-col-action">Actions</th>
+                        </tr>
+                    </thead>
+                    @forelse($vendorPaymentsData ?? [] as $index => $payment)
+                        @php
+                            $vendorRows = $payment['vendors'];
+                            $span = max(1, count($vendorRows));
+                            $hasBalance = collect($vendorRows)->contains(fn ($v) => (float) $v['balance_amount'] > 0);
+                            $isOverdue = $hasBalance && $payment['service_date'] && $payment['service_date']->lt(now()->startOfDay());
+                        @endphp
+                        <tbody class="vp-group {{ $isOverdue ? 'is-overdue' : '' }}">
+                            @foreach ($vendorRows as $vendorIndex => $vendor)
+                                @php
+                                    $tone = str_contains($vendor['status']['class'], 'success') ? 'green' : (str_contains($vendor['status']['class'], 'warning') ? 'amber' : 'red');
+                                @endphp
+                                <tr class="{{ $vendorIndex > 0 ? 'vp-more' : '' }}">
+                                    @if ($vendorIndex === 0)
+                                        <td rowspan="{{ $span }}" data-label="S.No" class="vp-sno">{{ (isset($vendorPaymentsPaginator) && $vendorPaymentsPaginator->firstItem() ? $vendorPaymentsPaginator->firstItem() : 1) + $index }}</td>
+                                        <td rowspan="{{ $span }}" data-label="Client">
+                                            <strong>{{ $payment['client_name'] }}</strong>
+                                            @if($span > 1)<small>{{ $span }} vendors</small>@endif
+                                        </td>
+                                        <td rowspan="{{ $span }}" data-label="Service date">
+                                            <strong>{{ $payment['service_date'] ? $payment['service_date']->format('d M Y') : 'N/A' }}</strong>
+                                            @if($isOverdue)<small class="vp-overdue-note">{{ (int) $payment['service_date']->copy()->startOfDay()->diffInDays(now()->startOfDay()) }} days past</small>@endif
+                                        </td>
                                     @endif
-                                    <br>
-                                    @endforeach
-                                </td>
-                                <td class="text-center">
-                                    @foreach ($payment['vendors'] as $vendor)
-                                   ₹{{ number_format(
-                                    $vendor[
-                                        'adjusted_vendor_payable'
-                                    ]
-                                    ??
-                                    $vendor[
-                                        'vendor_service_cost'
-                                    ],
-                                    2
-                                ) }}<br>
-                                    @endforeach
-                                </td>
-                                <td class="text-center text-danger">
-                                    @foreach ($payment['vendors'] as $vendor)
-                                    ₹{{ number_format($vendor['balance_amount'], 2) }}<br>
-                                    @endforeach
-                                </td>
-                                <td class="text-center">
-                                        @foreach ($payment['vendors'] as $vendor)
-                                        ₹{{ number_format($vendor['net_paid_amount'] ?? $vendor['paid_amount'], 2) }}<br>
-                                        @endforeach
-                                </td>
-                                <!-- <td class="text-center text-success">
-
-                                    @foreach (
-                                        $payment['vendors']
-                                        as $vendor
-                                    )
-
-                                        ₹{{ number_format(
-                                            $vendor[
-                                                'refunded_amount'
-                                            ]
-                                            ?? 0,
-                                            2
-                                        ) }}
-
-                                        <br>
-
-                                    @endforeach
-
-                                </td>
-                                <td class="text-center text-danger">
-                                    @foreach ($payment['vendors'] as $vendor)
-                                        ₹{{ number_format($vendor['refund_due_amount'] ?? 0, 2) }}<br>
-                                    @endforeach
-                                </td> -->
-                                <td class="text-center">
-                                    @foreach ($payment['vendors'] as $vendor)
-                                    {{ $vendor['paid_date'] }}<br>
-                                    @endforeach
-                                </td>
-                                <td class="text-center">
-                                    @foreach ($payment['vendors'] as $vendor)
-                                    <span class="badge !rounded-full {{ $vendor['status']['class'] }}">
-                                        {{ $vendor['status']['status'] }}
-                                    </span><br>
-                                    @endforeach
-                                </td>
-                                <td class="text-center">
-                                    <a aria-label="anchor"
-                                        class="ti-btn ti-btn-icon ti-btn-sm ti-btn-primary-full view-vendor-payment-btn"
-                                        data-payment-id="{{ $payment['view_id'] ?? $vendor['id'] }}"
-                                        data-hs-overlay="#view-vendor-payment">
-                                        <i class="ri-eye-line"></i>
-                                    </a>
-                                    <br>
-                                    @if(!empty($payment['voucher_id']))
-                                    <!-- Open PDF preview to match invoice module rendering -->
-                                    <a aria-label="anchor"
-                                        href="{{ route('admin.account.invoices.pdf', $payment['voucher_id']) }}"
-                                        target="_blank" class="ti-btn ti-btn-icon ti-btn-sm ti-btn-dark-full mt-1"
-                                        title="Preview Invoice (PDF)">
-                                        <i class="ri-file-text-line"></i>
-                                    </a>
+                                    <td data-label="Vendor / Product">
+                                        <strong>{{ $vendor['vendor_name'] }}</strong>
+                                        <small>{{ ($tableProductNames[$payment['lead_id']] ?? '') ?: 'Not specified' }}</small>
+                                    </td>
+                                    <td data-label="Vendor Service Cost">₹{{ number_format($vendor['adjusted_vendor_payable'] ?? $vendor['vendor_service_cost'], 2) }}</td>
+                                    <td data-label="Balance Amount" class="vp-balance {{ (float) $vendor['balance_amount'] > 0 ? 'is-due' : '' }}">₹{{ number_format($vendor['balance_amount'], 2) }}</td>
+                                    <td data-label="Paid Amount">₹{{ number_format($vendor['net_paid_amount'] ?? $vendor['paid_amount'], 2) }}</td>
+                                    <td data-label="Date Paid">{{ $vendor['paid_date'] }}</td>
+                                    <td data-label="Status"><span class="vp-tag {{ $tone }}">{{ $vendor['status']['status'] }}</span></td>
+                                    @if ($vendorIndex === 0)
+                                        <td rowspan="{{ $span }}" data-label="Actions" class="vp-actions">
+                                            <div>
+                                                <a aria-label="anchor"
+                                                    class="ti-btn ti-btn-icon ti-btn-sm ti-btn-primary-full view-vendor-payment-btn"
+                                                    data-payment-id="{{ $payment['view_id'] ?? $vendor['id'] }}"
+                                                    data-hs-overlay="#view-vendor-payment" title="View">
+                                                    <i class="ri-eye-line"></i>
+                                                </a>
+                                                @if(!empty($payment['voucher_id']))
+                                                    <!-- Open PDF preview to match invoice module rendering -->
+                                                    <a aria-label="anchor"
+                                                        href="{{ route('admin.account.invoices.pdf', $payment['voucher_id']) }}"
+                                                        target="_blank" class="ti-btn ti-btn-icon ti-btn-sm ti-btn-dark-full"
+                                                        title="Preview Invoice (PDF)">
+                                                        <i class="ri-file-text-line"></i>
+                                                    </a>
+                                                @endif
+                                            </div>
+                                        </td>
                                     @endif
-                                </td>
-                            </tr>
-                            @empty
-
-                            @endforelse
+                                </tr>
+                            @endforeach
                         </tbody>
-                    </table>
-                </div>
-                @if(isset($vendorPaymentsPaginator) && $vendorPaymentsPaginator->hasPages())
-                <div class="mt-4">
-                    {{ $vendorPaymentsPaginator->appends(request()->except('page'))->links() }}
-                </div>
-                @endif
+                    @empty
+                        <tbody><tr class="vp-empty-row"><td colspan="10">No vendor payments found.</td></tr></tbody>
+                    @endforelse
+                </table>
             </div>
+            @if(isset($vendorPaymentsPaginator) && $vendorPaymentsPaginator->hasPages())
+                <div class="mt-4">
+                    {{ $vendorPaymentsPaginator->onEachSide(1)->appends(request()->except('page'))->links() }}
+                </div>
+            @endif
         </div>
-    </div>
+    </section>
 </div>
 
-<!-- Vendor Payment Details Modal -->
-<div id="view-vendor-payment" class="view-vendor-payment hs-overlay hidden ti-offcanvas ti-offcanvas-right"
-    tabindex="-1">
-    <div class="ti-offcanvas-header">
-        <div class="flex items-center">
-            <div class="me-4 gap-0">
-                <span class="avatar avatar-sm !rounded-full bg-theme m-0">
-                    <i class="ri-box-3-line"></i>
-                </span>
-            </div>
-            <div class="flex-grow">
-                <div class="flex items-center justify-between">
-                    <h5 class="font-semibold mb-0 leading-none text-[1rem]">Vendor Pay Details –
-                        <span class="text-primary" id="modal-client-name">Loading...</span>
-                    </h5>
-                    <div class="text-danger font-semibold">
-                        <button type="button"
-                            class="ti-btn flex-shrink-0 p-0 transition-none text-gray-500 hover:text-gray-700 focus:ring-gray-400 focus:ring-offset-white dark:text-[#8c9097] dark:text-white/50 dark:hover:text-white/80 dark:focus:ring-white/10 dark:focus:ring-offset-white/10"
-                            data-hs-overlay="#view-vendor-payment">
-                            <span class="sr-only">Close modal</span>
-                            <svg class="w-3.5 h-3.5" width="8" height="8" viewBox="0 0 8 8" fill="none"
-                                xmlns="http://www.w3.org/2000/svg">
-                                <path
-                                    d="M0.258206 1.00652C0.351976 0.912791 0.479126 0.860131 0.611706 0.860131C0.744296 0.860131 0.871447 0.912791 0.965207 1.00652L3.61171 3.65302L6.25822 1.00652C6.30432 0.958771 6.35952 0.920671 6.42052 0.894471C6.48152 0.868271 6.54712 0.854471 6.61352 0.853901C6.67992 0.853321 6.74572 0.865971 6.80722 0.891111C6.86862 0.916251 6.92442 0.953381 6.97142 1.00032C7.01832 1.04727 7.05552 1.1031 7.08062 1.16454C7.10572 1.22599 7.11842 1.29183 7.11782 1.35822C7.11722 1.42461 7.10342 1.49022 7.07722 1.55122C7.05102 1.61222 7.01292 1.6674 6.96522 1.71352L4.31871 4.36002L6.96522 7.00648C7.05632 7.10078 7.10672 7.22708 7.10552 7.35818C7.10442 7.48928 7.05182 7.61468 6.95912 7.70738C6.86642 7.80018 6.74102 7.85268 6.60992 7.85388C6.47882 7.85498 6.35252 7.80458 6.25822 7.71348L3.61171 5.06702L0.965207 7.71348C0.870907 7.80458 0.744606 7.85498 0.613506 7.85388C0.482406 7.85268 0.357007 7.80018 0.264297 7.70738C0.171597 7.61468 0.119017 7.48928 0.117877 7.35818C0.116737 7.22708 0.167126 7.10078 0.258206 7.00648L2.90471 4.36002L0.258206 1.71352C0.164476 1.61976 0.111816 1.4926 0.111816 1.36002C0.111816 1.22744 0.164476 1.10028 0.258206 1.00652Z"
-                                    fill="currentColor"></path>
-                            </svg>
-                        </button>
+<!-- Vendor Payment Details dialog (redesigned like Payment Review). Element IDs used by the scripts are unchanged. -->
+<div id="view-vendor-payment" class="view-vendor-payment hs-overlay hidden ti-modal vp-modal" tabindex="-1"
+    role="dialog" aria-modal="true" aria-labelledby="vp-modal-title">
+    <div class="hs-overlay-open:mt-7 ti-modal-box mt-0 ease-out vp-modal-box">
+        <div class="ti-modal-content vp-modal-content">
+            <div class="vp-modal-head">
+                <div class="vp-modal-heading">
+                    <h5 id="vp-modal-title">Vendor payments — <span id="modal-client-name">Loading...</span></h5>
+                    <div class="vp-modal-sub">
+                        <span class="vp-pill amber" id="vp-modal-status" hidden></span>
+                        <a href="#" id="vp-open-lead" target="_blank" rel="noopener" hidden>Open lead <span aria-hidden="true">&rarr;</span></a>
+                        <a href="#" id="vp-open-invoice" target="_blank" rel="noopener" hidden>Invoice PDF <span aria-hidden="true">&rarr;</span></a>
                     </div>
                 </div>
+                <button type="button" class="vp-modal-close" data-hs-overlay="#view-vendor-payment" aria-label="Close">
+                    <i class="ri-close-line" aria-hidden="true"></i>
+                </button>
             </div>
-        </div>
-    </div>
-    <div class="ti-offcanvas-body view-vendor-payment-body">
-        <div class="grid grid-cols-12 gap-6">
-            <div class="col-span-12">
-                <!-- Client Information -->
-                <div class="box">
-                    <div class="box-header flex justify-between items-center">
-                        <h5 class="box-title">Client Information</h5>
-                    </div>
-                    <div class="box-body bg-gray-50">
-                        <div class="grid grid-cols-12 gap-6" id="client-info">
+
+            <div class="vp-verdict">
+                <div class="vp-verdict-cell"><span>Vendor payable</span><strong id="vp-sum-payable">—</strong></div>
+                <div class="vp-verdict-cell"><span>Net paid to vendors</span><strong class="is-ok" id="vp-sum-paid">—</strong></div>
+                <div class="vp-verdict-cell"><span>Balance</span><strong id="vp-sum-balance">—</strong></div>
+                <div class="vp-verdict-note" id="vp-sum-note" hidden></div>
+            </div>
+
+            <div class="ti-modal-body vp-modal-body view-vendor-payment-body">
+                <div class="vp-modal-col vp-modal-left">
+                    <section class="vp-block">
+                        <h6>Client information</h6>
+                        <div class="grid grid-cols-12 gap-6 vp-info-grid" id="client-info">
                             <!-- Dynamic client info will be loaded here -->
                         </div>
-                    </div>
-                </div>
-
-                <!-- Travel Information -->
-                <div class="box">
-                    <div class="box-header justify-between">
-                        <h5 class="box-title">Travel Information</h5>
-                    </div>
-                    <div class="box-body bg-gray-50" id="travel-information-container">
-                        <!-- Travel information will be populated dynamically -->
-                        <div class="text-center py-4">
-                            <p class="text-gray-500">Loading travel information...</p>
+                    </section>
+                    <section class="vp-block">
+                        <h6>Travel information</h6>
+                        <div id="travel-information-container" class="vp-travel">
+                            <!-- Travel information will be populated dynamically -->
+                            <p class="vp-muted">Loading travel information...</p>
                         </div>
-                    </div>
-                </div>
-
-                <!-- Service Information -->
-                <div class="box">
-                    <div class="box-header flex justify-between items-center">
-                        <h5 class="box-title">Service Information</h5>
-                    </div>
-                    <div class="box-body bg-gray-50">
-                        <div class="grid grid-cols-12 gap-6" id="service-info">
+                    </section>
+                    <section class="vp-block">
+                        <h6>Service information</h6>
+                        <div class="grid grid-cols-12 gap-6 vp-info-grid" id="service-info">
                             <!-- Dynamic service info will be loaded here -->
                         </div>
-                    </div>
+                    </section>
+                    <section class="vp-block">
+                        <h6>Client payment history</h6>
+                        <div id="client-payment-history" class="vp-history">
+                            <!-- Client payment audit trail will be rendered here -->
+                        </div>
+                    </section>
                 </div>
 
-                <!-- Dynamic Vendor Information Sections -->
-                <div id="vendor-sections">
-                    <!-- Dynamic vendor sections will be loaded here -->
+                <div class="vp-modal-col vp-modal-right">
+                    <section class="vp-block">
+                        <h6>Vendors</h6>
+                        <p class="vp-modal-hint">Record a payment with "Add Vendor Payment" on the vendor below; each vendor keeps its own payment history.</p>
+                        <!-- Dynamic Vendor Information Sections -->
+                        <div id="vendor-sections">
+                            <!-- Dynamic vendor sections will be loaded here -->
+                        </div>
+                    </section>
                 </div>
-
-                <!-- Payment History removed -->
-
-                <!-- Client Payment Audit History -->
-                <div class="box">
-                    <div class="box-header flex justify-between items-center">
-                        <h5 class="box-title">Client Payment History</h5>
-                    </div>
-                    <div class="box-body bg-gray-50" id="client-payment-history">
-                        <!-- Client payment audit trail will be rendered here -->
-                    </div>
-                </div>
-
                 <!-- Narration -->
                 <!-- <div class="box">
                             <div class="box-header flex justify-between items-center">
@@ -357,11 +282,16 @@
                                 </div>
                             </div>
                         </div> -->
-            </div>
-        </div>
-        <!-- <div class="mt-5">
+                <!-- <div class="mt-5">
                     <button type="submit" class="ti-btn bg-theme ti-btn-primary-full ti-custom-validate-btn">Generate Invoice</button>
                 </div> -->
+            </div>
+
+            <div class="vp-modal-foot">
+                <span class="vp-muted">Payments recorded here need a receipt and are logged in each vendor's history.</span>
+                <button type="button" class="vp-ghost" data-hs-overlay="#view-vendor-payment">Cancel</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -611,8 +541,71 @@
             if (typeof attachReceiptViewHandlers === 'function') attachReceiptViewHandlers();
         });
 
+        // Fills the dialog's pill, links and summary strip. Same formulas as the vendor cards; reads only.
+        function updateVendorSummary(data) {
+            const vendors = Array.isArray(data.all_vendor_payments) ? data.all_vendor_payments : [];
+            const histories = data.per_vendor_histories || {};
+            let payable = 0, netPaid = 0, balance = 0, refundDue = 0, owing = 0;
+            vendors.forEach(vendorPayment => {
+                const history = histories[vendorPayment.id] || {};
+                const refunds = history.refund_history || vendorPayment.vendor_refunds || [];
+                const latestRefund = Array.isArray(refunds) && refunds.length
+                    ? refunds.slice().sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))[0] : null;
+                const original = parseFloat(vendorPayment.total_vendor_service_amount || 0) || 0;
+                const finalPayable = latestRefund && latestRefund.cancellation_amount !== undefined && latestRefund.cancellation_amount !== null
+                    ? (parseFloat(latestRefund.cancellation_amount || 0) || 0) : original;
+                const gross = parseFloat(history.paid_total || vendorPayment.paid_amount || 0) || 0;
+                const refunded = parseFloat(history.refunded_total || 0) || 0;
+                const net = Math.max(0, gross - refunded);
+                const vendorBalance = Math.max(0, finalPayable - net);
+                payable += finalPayable;
+                netPaid += net;
+                balance += vendorBalance;
+                refundDue += Math.max(0, gross - finalPayable - refunded);
+                if (vendorBalance > 0.005) owing++;
+            });
+
+            $('#vp-sum-payable').text('₹' + formatNumber(payable));
+            $('#vp-sum-paid').text('₹' + formatNumber(netPaid));
+            $('#vp-sum-balance').text('₹' + formatNumber(balance)).toggleClass('is-due', balance > 0.005).toggleClass('is-ok', balance <= 0.005);
+
+            const $status = $('#vp-modal-status').removeClass('amber green');
+            const vendorWord = vendors.length === 1 ? 'vendor' : 'vendors';
+            if (owing) {
+                $status.addClass('amber').text(`${vendors.length} ${vendorWord} · ${owing} to pay`);
+            } else {
+                $status.addClass('green').text(`${vendors.length} ${vendorWord} · fully paid`);
+            }
+            $status.prop('hidden', vendors.length === 0);
+
+            let note = '';
+            let tone = 'green';
+            if (balance > 0.005) {
+                note = `₹${formatNumber(balance)} still to pay across ${owing} ${owing === 1 ? 'vendor' : 'vendors'}.`;
+                tone = 'amber';
+            } else if (vendors.length) {
+                note = '✓ All vendors are fully paid.';
+            }
+            if (refundDue > 0.005) {
+                note += ` ₹${formatNumber(refundDue)} refund due from vendors.`;
+                tone = tone === 'green' ? 'red' : tone;
+            }
+            $('#vp-sum-note').removeClass('green amber red').addClass(tone).text(note.trim()).prop('hidden', !note);
+
+            const vendorPayment = data.vendor_payment || {};
+            const leadUrl = @json(url('admin/leads'));
+            $('#vp-open-lead').attr('href', vendorPayment.lead_id ? `${leadUrl}/${vendorPayment.lead_id}` : '#').prop('hidden', !vendorPayment.lead_id);
+            const invoiceUrl = @json(route('admin.account.invoices.pdf', '__VOUCHER__'));
+            $('#vp-open-invoice').attr('href', vendorPayment.voucher_id ? invoiceUrl.replace('__VOUCHER__', vendorPayment.voucher_id) : '#').prop('hidden', !vendorPayment.voucher_id);
+        }
+
         function loadVendorPaymentDetails(paymentId) {
             window._currentVendorPaymentId = paymentId;
+            // Clear the redesigned header bits while the next client loads.
+            $('#vp-modal-status, #vp-sum-note, #vp-open-lead, #vp-open-invoice').prop('hidden', true);
+            $('#vp-sum-payable, #vp-sum-paid, #vp-sum-balance').text('—');
+            const clientNameEl = document.getElementById('modal-client-name');
+            if (clientNameEl) clientNameEl.textContent = 'Loading...';
             const detailsUrl = @json(route('admin.account.vendor-payments.show', ['id' => '__PAYMENT_ID__'], false));
             fetch(detailsUrl.replace('__PAYMENT_ID__', encodeURIComponent(paymentId)))
                 .then(response => response.json())
@@ -642,6 +635,9 @@
 
                     // Load client payment audit history (if present)
                     renderClientPaymentHistory(data.client_payment_history || []);
+
+                    // Redesigned dialog header and summary strip (display only).
+                    updateVendorSummary(data);
                 })
                 .catch(error => {
                     console.error('Error loading vendor payment details:', error);

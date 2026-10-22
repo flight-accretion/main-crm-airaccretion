@@ -350,7 +350,8 @@ class ClientController extends Controller
 
         $followups = $lead->leadFollowups()
             ->with(['paymentAuditTrail', 'followedBy'])
-            ->latest()
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
             ->get();
 
         $latestFollowup = $followups->first();
@@ -3011,6 +3012,15 @@ $leadFollowUp = LeadFollowUp::create([
     {
             $this->abortUnlessCanAccessLead($lead);
 
+        $preserveStatus = !$request->filled('status') || $request->input('status') === 'keep';
+        if ($preserveStatus) {
+            // Keeping a payment status is not a new payment or points redemption.
+            $request->merge([
+                'status' => 'keep', 'received_amount' => null, 'payment_method' => null,
+                'paid_date' => null, 'redeem_points' => null,
+            ]);
+        }
+
         $messages = [
             'notes.max' => 'Follow-up notes cannot exceed 1000 characters',
             'image.required_if' => 'Upload Receipt is required when status is Full or Partial payment received',
@@ -3047,7 +3057,7 @@ $leadFollowUp = LeadFollowUp::create([
                         }
                     },
                 ],
-                'status' => 'required|in:0,1,2,3,4,5',
+                'status' => 'required|in:keep,0,1,2,3,4,5',
                 'next_followup_date' => 'nullable|date_format:Y-m-d H:i',
                 'services' => 'nullable|array',
                 'services.*' => 'exists:services,id',
@@ -3081,7 +3091,7 @@ $leadFollowUp = LeadFollowUp::create([
                         }
                     },
                 ],
-                'status' => 'required|integer|in:0,1,2,3,4,5,6,7',
+                'status' => 'required|in:keep,0,1,2,3,4,5,6,7',
                 'next_followup_date' => ['nullable', 'date_format:Y-m-d\TH:i'],
                 'services' => 'required_if:status,3,4|array',
                 'services.*' => 'exists:services,id',
@@ -3173,6 +3183,17 @@ $leadFollowUp = LeadFollowUp::create([
 
         DB::beginTransaction();
         try {
+            // Serialize note saves so Keep uses the current server-side status, not a stale form value.
+            Lead::whereKey($lead->id)->lockForUpdate()->firstOrFail();
+            $previousStatus = LeadFollowup::query()
+                ->where('lead_id', $lead->id)
+                ->orderByDesc('created_at')
+                ->orderByDesc('id')
+                ->value('status');
+            $statusToSave = $preserveStatus
+                ? ($previousStatus === null ? LeadFollowup::STATUS_INITIATED : (int) $previousStatus)
+                : (int) $request->status;
+
             $imagePath = null;
             if ($request->hasFile('image')) {
                 $imagePath = $request->file('image')->store('followups', 'public');
@@ -3321,6 +3342,21 @@ $leadFollowUp = LeadFollowUp::create([
             // Ensure total is not negative as a final safeguard
             $totalAmount = max(0, $totalAmount);
 
+            if ($preserveStatus && empty($services) && empty($extraServices)
+                && !$request->filled('service_details') && !$request->filled('total_amount')) {
+                // A note-only save must not replace the last quotation with a zero total.
+                $pricing = $lead->leadFollowups()->whereNotNull('total_amount')
+                    ->orderByDesc('created_at')->orderByDesc('id')->first();
+                if ($pricing) {
+                    $services = $pricing->service_ids ?: [];
+                    $extraServices = $pricing->extra_service_ids ?: [];
+                    $serviceDetails = $pricing->service_details ?: [];
+                    $calculatedServiceAmount = $pricing->service_amount;
+                    $discountAmount = $pricing->discount_amount;
+                    $totalAmount = $pricing->total_amount;
+                }
+            }
+
             $customerNotPickedUp =
                 $request->boolean(
                     'customer_not_picked_up'
@@ -3340,18 +3376,12 @@ $leadFollowUp = LeadFollowUp::create([
                 $followupNote = 'Customer did not pick up.';
             }
 
-            $previousStatus = LeadFollowup::query()
-                ->where('lead_id', $lead->id)
-                ->orderByDesc('created_at')
-                ->orderByDesc('id')
-                ->value('status');
-
             $followup = LeadFollowup::create([
                 'id' => Str::uuid(),
                 'lead_id' => $lead->id,
                 'next_followup_date' => $request->next_followup_date,
                 'followup_note' => $followupNote,
-                'status' => $request->status,
+                'status' => $statusToSave,
                 'followed_by' => $followedById,
                 'file' => $imagePath,
                 'service_ids' => !empty($services) ? array_values($services) : null,
@@ -3574,7 +3604,7 @@ $leadFollowUp = LeadFollowUp::create([
                     4 => 'Partial Payment Received',
                     5 => 'Confirmed'
                 ];
-                $statusMessage = $statusMessages[$request->status] ?? 'Updated';
+                $statusMessage = $statusMessages[$statusToSave] ?? 'Updated';
 
                 return response()->json([
                     'success' => true,
@@ -5389,8 +5419,8 @@ $this->abortUnlessRepresentativeInScope($staff ? $staff->id : null);
                 ->get();
         }
 
-        // Get the latest followup for this specific lead
-        $followups = $lead->leadFollowups()->latest('next_followup_date')->first();
+        // A scheduled follow-up date is not the order in which lead statuses changed.
+        $followups = $lead->leadFollowups()->orderByDesc('created_at')->orderByDesc('id')->first();
 
         // Prepare trips for the edit view
         $trips = [];
@@ -5607,7 +5637,6 @@ $this->abortUnlessRepresentativeInScope($staff ? $staff->id : null);
                 'country_id' => $request->country_id ?: null,
                 'address' => $request->address,
                 'description' => $request->description,
-                'status' => $request->status ?? 1,
             ]);
 
             // Update the lead (enquiry)

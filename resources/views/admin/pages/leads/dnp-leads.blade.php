@@ -1,5 +1,6 @@
 @extends('admin.layouts.header')
 @section('content')
+@php $tableProductNames = app(\App\Services\LeadTableProducts::class)->forLeads($dnpLeads); @endphp
 <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/kpi/management-work.css') }}?v=1">
 <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/lead-queues.css') }}?v=1">
 <div class="crm-kpi-tool crm-lead-queue" data-kpi-tool data-lead-queue>
@@ -37,7 +38,7 @@
     <section class="lq-list"><header class="lq-heading"><h2>DNP list</h2><small>Age from lead-created date</small></header>
     @include('admin.pages.leads.partials.queue-table-controls')
     <table data-queue-table><thead><tr>
-    @foreach(['#','Client','Phone','Assigned','Next follow-up','Age','Last result','Action'] as $heading)<th scope="col">@if($heading !== 'Action')<button type="button" data-queue-sort="{{ $loop->index }}">{{ $heading }} <i class="ri-arrow-up-down-line" aria-hidden="true"></i></button>@else{{ $heading }}@endif</th>@endforeach
+    @foreach(['#','Client','Phone','Assigned','Next follow-up','Age','Product','Action'] as $heading)<th scope="col">@if($heading !== 'Action')<button type="button" data-queue-sort="{{ $loop->index }}">{{ $heading }} <i class="ri-arrow-up-down-line" aria-hidden="true"></i></button>@else{{ $heading }}@endif</th>@endforeach
     </tr></thead><tbody>
     @foreach($dnpLeads as $lead)
         @php($next=$queueSummary['followups']->get($lead->id)?->next_followup_date)
@@ -45,7 +46,7 @@
         <tr data-queue-row data-id="{{ $lead->id }}"><td data-label="#">{{ $loop->iteration }}</td><td data-label="Client"><strong>{{ $lead->client?->name ?? '-' }}</strong></td><td data-label="Phone">{{ $lead->client?->contact_number ?? '-' }}</td><td data-label="Assigned">{{ $lead->representative?->name ?? 'Unassigned' }}</td>
         <td data-label="Next follow-up" data-order="{{ $next?->timestamp ?? 0 }}"><span class="lq-pill {{ $next ? 'lq-scheduled' : 'lq-score-hot' }}">{{ $next?->format('d M Y, H:i') ?? 'Not set' }}</span></td>
         <td data-label="Age" data-order="{{ $age ?? -1 }}"><span class="lq-pill {{ $age !== null && $age > 90 ? 'lq-score-hot' : 'lq-score-neutral' }}">{{ $age === null ? 'Unknown' : $age.' days' }}</span></td>
-        <td data-label="Last result">{{ implode(', ',$queueServiceNames[$lead->id] ?? []) ?: 'N/A' }}</td>
+        <td data-label="Product">{{ ($tableProductNames[$lead->id] ?? '') ?: 'N/A' }}</td>
         <td data-label="Action"><div class="lq-actions"><a class="ti-btn" href="{{ $isHr ? route('admin.clients.view',$lead->client_id) : route('admin.leads.view',$lead->id) }}" title="View lead" aria-label="View lead"><i class="ri-eye-line"></i></a>
         @unless($isHr)<a class="ti-btn lq-edit" href="{{ route('admin.leads.edit',$lead->id) }}" title="Edit lead" aria-label="Edit lead"><i class="ri-edit-line"></i></a>@endunless</div></td></tr>
     @endforeach
