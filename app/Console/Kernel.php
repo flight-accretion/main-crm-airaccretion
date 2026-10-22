@@ -198,6 +198,11 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping();
         $schedule->command('google-chat:reconcile')->hourly()->withoutOverlapping();
 
+        $schedule->command('whatsapp:cleanup-ai-queue --limit=500')
+            ->everyFifteenMinutes()
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/whatsapp-ai-queue-cleanup.log'));
+
         $schedule->command('queue:health')
             ->everyFifteenMinutes()
             ->withoutOverlapping()

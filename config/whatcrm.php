@@ -49,8 +49,13 @@ return [
     'ai_queue' =>
         env('WHATCRM_AI_QUEUE', 'whatsapp-ai'),
 
+    // The scheduler (whatsapp:process-ai-replies) sends AI replies. Enable only
+    // when a dedicated whatsapp-ai queue worker runs, or jobs pile up unused.
     'ai_auto_dispatch' =>
-        env('WHATCRM_AI_AUTO_DISPATCH', true),
+        env('WHATCRM_AI_AUTO_DISPATCH', false),
+
+    'ai_processing_stale_minutes' =>
+        (int) env('WHATCRM_AI_PROCESSING_STALE_MINUTES', 30),
 
     'ai_process_limit' =>
         (int) env('WHATCRM_AI_PROCESS_LIMIT', 5),
