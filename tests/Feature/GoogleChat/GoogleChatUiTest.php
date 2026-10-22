@@ -11,7 +11,8 @@ class GoogleChatUiTest extends GoogleChatTestCase
     {
         $this->harden();
         config(['services.google_chat.enabled' => true]);
-        $actor = new User(['id' => (string) Str::uuid(), 'name' => 'Sales']);
+        // User::id is not mass assignable, so set it with forceFill.
+        $actor = (new User())->forceFill(['id' => (string) Str::uuid(), 'name' => 'Sales']);
         $actor->setRelation('userType', new UserType(['user_type' => UserType::SALES_EXECUTIVE]));
         $this->actingAs($actor);
         $lead = new Lead(['id' => (string) Str::uuid(), 'representative_user_id' => $actor->id]);

@@ -16,9 +16,10 @@ class GoogleChatConnectionTest extends GoogleChatTestCase
         \Illuminate\Support\Facades\Queue::fake();
         config(['services.google_chat.enabled' => true, 'services.google_chat.allowed_spaces' => ['spaces/one'],
             'services.google_chat.integration_user' => 'users/integration']);
-        $actor = new User(['id' => (string) Str::uuid(), 'name' => 'Sales']);
+        // User::id is not mass assignable, so set it with forceFill.
+        $actor = (new User())->forceFill(['id' => (string) Str::uuid(), 'name' => 'Sales']);
         $actor->setRelation('userType', new UserType(['user_type' => UserType::SALES_EXECUTIVE]));
-        $ops = new User(['id' => (string) Str::uuid(), 'name' => 'Ops', 'status' => 1]);
+        $ops = (new User())->forceFill(['id' => (string) Str::uuid(), 'name' => 'Ops', 'status' => 1]);
         $ops->setRelation('userType', new UserType(['user_type' => UserType::OPERATIONS_ROLES[0]]));
         GoogleChatIdentity::create(['google_user_name' => 'users/ops', 'user_id' => $ops->id, 'verified_at' => now()]);
         $lead = new Lead(['id' => (string) Str::uuid(), 'representative_user_id' => $actor->id]);
@@ -52,7 +53,7 @@ class GoogleChatConnectionTest extends GoogleChatTestCase
     public function test_sales_manager_can_connect_google_chat_for_assigned_executive_lead(): void
     {
         [$lead, $salesExecutive, $ops] = $this->fixture();
-        $manager = new User([
+        $manager = (new User())->forceFill([
             'id' => (string) Str::uuid(),
             'name' => 'Manager',
             'status' => 1,
