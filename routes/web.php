@@ -1286,6 +1286,10 @@ Route::post(
         Route::put('/agents/{agent}', [IvrAgentController::class, 'update'])->name('agents.update');
     });
 
+    Route::get('admin/operations/dashboard', [\App\Http\Controllers\OperationsHomeController::class, 'index'])
+        ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES')
+        ->name('admin.operations.dashboard');
+
     Route::get('admin/operations/work-details', [OperationsDashboardController::class, 'workDetails'])
         ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES,HR')
         ->name('admin.operations.work-details');
@@ -1580,7 +1584,7 @@ Route::post(
 
     // Product Sync to Airpoints
     Route::prefix('admin/product-sync')
-        ->middleware('role:ADMIN_ROLES')
+        ->middleware('role:ADMIN_ROLES,SENIOR_OPERATIONS_MANAGER,OPERATIONS_MANAGER')
         ->group(function () {
         Route::get('/', [ProductSyncController::class, 'index'])->name('admin.product-sync.index');
         Route::post('/sync', [ProductSyncController::class, 'syncProducts'])->name('admin.product-sync.sync');

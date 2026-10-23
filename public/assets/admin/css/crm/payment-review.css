@@ -1,6 +1,8 @@
 /* Payment Review redesign: cards, chips, filter bar and a table that fits without horizontal scroll. */
 .crm-payment-review{padding:22px 0;color:#1b1f27;min-width:0;letter-spacing:0}
 .crm-payment-review *{box-sizing:border-box}
+.crm-payment-review .pr-filters>.pr-field{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;align-content:start;align-items:stretch;line-height:18px;margin:0}.crm-payment-review .pr-filters>.pr-field>:is(input,select){width:100%;min-width:0;height:42px;min-height:42px;margin:0}
+.crm-payment-review .pr-filter-actions>button{min-height:42px}
 .pr-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:20px}
 .pr-heading h1{font-size:24px;font-weight:600;margin:0 0 4px}
 .pr-heading p{margin:0;color:#8a93a3;font-size:13px}

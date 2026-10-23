@@ -1,0 +1,43 @@
+/* Voucher Generation - small screens.
+   1) Page chrome on phones (<=767px).
+   2) Queue table -> labelled cards whenever the queue box is narrower than the 7 columns need
+      (phones, tablets, or a narrow window with the sidebar open). Uses a container query on .vg-section. */
+@media(max-width:767px){
+  .vg-page{padding:14px 0 24px}
+  .vg-heading{align-items:flex-start;flex-direction:column;margin-bottom:14px}
+  .vg-heading h1{font-size:20px}
+  .vg-stats{grid-template-columns:1fr 1fr;gap:8px}
+  .vg-stat{padding:12px}
+  .vg-stat strong{font-size:18px}
+  .vg-section{padding:14px;margin-bottom:16px}
+  .vg-section-head{align-items:stretch;flex-direction:column}
+  .vg-tools{width:100%}
+  .vg-search{flex:1 1 100%}
+  .vg-search input{width:100%}
+  .vg-filt{grid-template-columns:1fr;padding:12px}
+  .vg-filter-actions{justify-content:stretch}
+  .vg-filter-actions>*{flex:1}
+}
+
+.vg-section{container:vgqueue/inline-size}
+@container vgqueue (max-width:900px){
+  .vg-tblwrap{border:0;overflow:visible}
+  .vg-page table.vg-table{display:block;width:100%!important}
+  .vg-page table.vg-table tr,.vg-page table.vg-table td{display:block;width:auto!important}
+  .vg-page table.vg-table tbody{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;width:100%}
+  .vg-page table.vg-table thead{display:none}
+  .vg-page table.vg-table tbody tr{border:1px solid var(--vg-border);border-radius:10px;background:var(--vg-surface);padding:6px 2px;min-width:0}
+  .vg-page table.vg-table tbody tr.blocked{border-color:var(--vg-amber);background:var(--vg-amber-bg)}
+  .vg-page table.vg-table tbody tr:hover td{background:transparent}
+  .vg-page table.vg-table tbody td,.vg-page table.vg-table tbody td:first-child{border:0;padding:5px 12px;display:flex;justify-content:space-between;gap:14px;align-items:center;text-align:right;background:transparent!important;min-width:0}
+  .vg-page table.vg-table tbody td::before{content:attr(data-label);font-size:10.5px;color:var(--vg-muted);font-weight:600;text-align:left;flex:none}
+  .vg-page table.vg-table tbody td>*{min-width:0;margin-left:auto}
+  .vg-page table.vg-table tbody td .vg-main{white-space:normal}
+  .vg-page table.vg-table tbody td .vg-cellsub{overflow-wrap:anywhere}
+  .vg-wrap{min-width:0;max-width:none}
+  .vg-status{align-items:flex-end}
+  .vg-actions{justify-content:flex-end}
+  .vg-page table.vg-table td.dataTables_empty{display:block;text-align:center;grid-column:1/-1}
+  .vg-page table.vg-table td.dataTables_empty::before{content:none}
+  .vg-page .vg-tfoot{border:0;justify-content:center;padding:10px 0 0}
+}

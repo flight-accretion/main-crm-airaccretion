@@ -29,8 +29,104 @@ public function index(Request $request)
 
     $products = $query->get();
     $isSuperAdmin = auth()->user() && auth()->user()->isSuperAdmin();
-    return view('admin.pages.products.index-product', compact('products', 'isSuperAdmin'));
+
+    // Display-only data for the redesigned list (no product data is changed here).
+    $serviceCounts = self::serviceCountsByProduct();
+    $allProducts = Product::select('id', 'product', 'status', 'is_airambulance')->get();
+    $productSummary = [
+        'total' => $allProducts->count(),
+        'active' => $allProducts->where('status', 1)->count(),
+        'inactive' => $allProducts->where('status', '!=', 1)->count(),
+        'services_linked' => self::linkedServiceCount($allProducts->pluck('id')->map(fn ($id) => (string) $id)->all()),
+        'service_links' => $allProducts->sum(fn ($p) => $serviceCounts[(string) $p->id] ?? 0),
+    ];
+    $productCategories = $allProducts->mapWithKeys(fn ($p) => [(string) $p->id => self::productCategories($p)])->all();
+    $hasSyncColumn = \Illuminate\Support\Facades\Schema::hasColumn('products', 'sync_at');
+    $canSyncProducts = auth()->user()
+        && in_array(optional(auth()->user()->userType)->user_type, array_merge(UserType::ADMIN_ROLES, [UserType::SENIOR_OPERATIONS_MANAGER, UserType::OPERATIONS_MANAGER]), true);
+
+    return view('admin.pages.products.index-product', compact(
+        'products',
+        'isSuperAdmin',
+        'serviceCounts',
+        'productSummary',
+        'productCategories',
+        'hasSyncColumn',
+        'canSyncProducts'
+    ));
 }
+
+    /**
+     * Product ids stored on a service (services.product_ids may be JSON, or JSON encoded twice).
+     */
+    public static function serviceProductIds($productIds): array
+    {
+        for ($i = 0; $i < 3 && is_string($productIds); $i++) {
+            $decoded = json_decode($productIds, true);
+            if ($decoded === null) {
+                break;
+            }
+            $productIds = $decoded;
+        }
+
+        return is_array($productIds) ? array_values(array_unique(array_map('strval', array_filter($productIds)))) : [];
+    }
+
+    /**
+     * Number of services under each product id.
+     */
+    private static function serviceCountsByProduct(): array
+    {
+        $counts = [];
+        Service::select('id', 'product_ids')->get()->each(function ($service) use (&$counts) {
+            foreach (self::serviceProductIds($service->getRawOriginal('product_ids')) as $productId) {
+                $counts[$productId] = ($counts[$productId] ?? 0) + 1;
+            }
+        });
+
+        return $counts;
+    }
+
+    /**
+     * Services linked to at least one existing product.
+     */
+    private static function linkedServiceCount(array $productIds): int
+    {
+        $productIds = array_flip($productIds);
+
+        return Service::select('id', 'product_ids')->get()->filter(function ($service) use ($productIds) {
+            foreach (self::serviceProductIds($service->getRawOriginal('product_ids')) as $productId) {
+                if (isset($productIds[$productId])) {
+                    return true;
+                }
+            }
+            return false;
+        })->count();
+    }
+
+    /**
+     * Category tags for the list chips. There is no category column, so this is read from the
+     * product name (and the Air Ambulance flag). Display only.
+     */
+    public static function productCategories($product): array
+    {
+        $name = mb_strtolower((string) $product->product);
+        $categories = [];
+        if (str_contains($name, 'heli')) {
+            $categories[] = 'Helicopter';
+        }
+        if (str_contains($name, 'plane') || str_contains($name, 'jet') || str_contains($name, 'aircraft')) {
+            $categories[] = 'Plane';
+        }
+        if (str_contains($name, 'yacht') || str_contains($name, 'boat') || str_contains($name, 'cruise')) {
+            $categories[] = 'Yacht & boat';
+        }
+        if ((int) $product->is_airambulance === 1 || str_contains($name, 'ambulance')) {
+            $categories[] = 'Ambulance';
+        }
+
+        return $categories ?: ['Other'];
+    }
 
     public function create()
     {

@@ -1,0 +1,39 @@
+/* Import Leads - small screens.
+   1) Page chrome on phones (<=767px).
+   2) Preview table -> labelled cards whenever the preview box is too narrow for the columns
+      (container query on #previewSection), as in the kimi phone preview. */
+@media(max-width:767px){
+  .il-page{padding:14px 0 24px}
+  .il-heading{align-items:flex-start;flex-direction:column;margin-bottom:14px}
+  .il-heading h1{font-size:20px}
+  .crm-kimi .k-section{padding:14px;margin-bottom:16px}
+  .il-dz{padding:22px 14px}
+  .il-upload-grid{grid-template-columns:1fr;padding:12px}
+  .il-upload-actions>*{flex:1}
+  .il-final>button{flex:1}
+}
+
+#previewSection{container:ilpreview/inline-size}
+@container ilpreview (max-width:1000px){
+  .il-tblwrap{border:0;max-height:none;overflow:visible}
+  .crm-kimi table.il-table{display:block}
+  .crm-kimi table.il-table thead{display:none}
+  .crm-kimi table.il-table tbody{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
+  .crm-kimi table.il-table tr{display:block;min-width:0}
+  .crm-kimi table.il-table tr.il-row{border:1px solid var(--k-border);border-radius:10px;background:var(--k-surface);padding:6px 2px}
+  .crm-kimi table.il-table tr.il-row.existing-lead-row{border-color:var(--k-amber)}
+  .crm-kimi table.il-table tr.il-row:hover td{background:transparent}
+  .crm-kimi table.il-table tr.il-row.existing-lead-row td{background:transparent}
+  .crm-kimi table.il-table tr.il-row td{display:flex;justify-content:space-between;gap:14px;align-items:center;border:0;padding:5px 12px;text-align:right;min-width:0;max-width:none;width:auto}
+  .crm-kimi table.il-table tr.il-row td::before{content:attr(data-label);font-size:10.5px;color:var(--k-muted);font-weight:600;text-align:left;flex:none}
+  .crm-kimi table.il-table tr.il-row td>*{min-width:0;margin-left:auto}
+  .crm-kimi table.il-table tr.il-row td>.il-in,.crm-kimi table.il-table tr.il-row td>.il-stack{flex:1 1 auto;max-width:72%}
+  .crm-kimi table.il-table tr.il-row td[data-label]{min-width:0}
+  .crm-kimi table.il-table .il-in-pax{width:100%}
+  /* edit panel spans the full grid row under its card */
+  .crm-kimi table.il-table tr.il-edit-row{grid-column:1/-1;border:1px solid var(--k-border);border-radius:10px;overflow:hidden}
+  .crm-kimi table.il-table tr.il-edit-row td{display:block;border:0}
+  .il-editgrid{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
+  .il-span-2{grid-column:1/-1}
+  .crm-kimi table.il-table td.il-empty{display:block;grid-column:1/-1}
+}

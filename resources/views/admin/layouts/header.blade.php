@@ -17,7 +17,8 @@
     <link rel="stylesheet" href="/assets/admin/css/style.css?v=1.4">
     <link rel="stylesheet" href="/assets/admin/css/responsive.css?v=1.1">
     <link rel="stylesheet" href="/assets/admin/css/custom.css?v=2.4">
-    <link rel="stylesheet" href="/assets/admin/css/crm/navigation.css?v=4">
+    <link rel="stylesheet" href="/assets/admin/css/crm/navigation.css?v=6">
+    <link rel="stylesheet" href="/assets/admin/css/crm/responsive/mobile-tables.css?v=1">
 
     <!-- Simplebar Css -->
     <link rel="stylesheet" href="/assets/admin/libs/simplebar/simplebar.min.css">
@@ -44,7 +45,7 @@
 
 </head>
 
-<body>
+<body class="crm-operations-mobile-page">
 
     <!-- ========== Switcher  ========== -->
     <div id="hs-overlay-switcher" class="hs-overlay hidden ti-offcanvas ti-offcanvas-right" tabindex="-1">
@@ -697,7 +698,7 @@
                         );
                 };
             @endphp
-                    <ul class="main-menu">
+                    <ul class="main-menu" data-navigation-role="{{ $userType }}" data-navigation-user="{{ auth()->id() }}">
                         <!-- Start::slide__category -->
                         <li class="slide__category"><span class="category-name">Main</span></li>
                         <!-- End::slide__category -->
@@ -726,7 +727,7 @@
                             <li class="slide has-sub {{ Route::is('admin.operations.*') || Route::is('admin.refunds.*') || Route::is('admin.operations.vendor-refunds.*') ? 'active open' : '' }}">
                                 <a href="javascript:void(0);" class="side-menu__item">
                                     <i class="bx bx-task side-menu__icon"></i>
-                                    <span class="side-menu__label">Operations Dashboard</span>
+                                    <span class="side-menu__label">Operations</span>
                                     <i class="fe fe-chevron-right side-menu__angle"></i>
                                 </a>
                                 <ul class="slide-menu child1">
@@ -737,6 +738,9 @@
                                         >
                                             Work Done
                                         </a>
+                                    </li>
+                                    <li class="slide">
+                                        <a href="{{ route('admin.operations.dashboard') }}" class="side-menu__item"><i class="ri-home-4-line side-menu__icon" aria-hidden="true"></i><span class="side-menu__label">Operations Dashboard</span></a>
                                     </li>
                                     <li class="slide">
                                         <a
@@ -1729,7 +1733,8 @@
 
         </aside>
         <!-- End::app-sidebar -->
-        <script src="{{ asset('assets/admin/js/crm/navigation.js') }}?v=2"></script>
+        <script src="{{ asset('assets/admin/js/crm/navigation.js') }}?v=4"></script>
+        <script src="{{ asset('assets/admin/js/crm/mobile-tables.js') }}?v=1" defer></script>
 
 
         <div class="content main-index">
@@ -1742,9 +1747,7 @@
 
         </div>
 
-        @if (!$isHr && ($canAccess($userType, $adminRoles) || $canAccess($userType, $operationsRoles)) && Route::is('admin.operations.*', 'admin.rides.*', 'admin.refunds.*', 'admin.whatsapp.*', 'admin.booking-email-template.*'))
-            @include('admin.layouts.partials.operations-mobile-nav')
-        @endif
+        @include('admin.layouts.partials.operations-mobile-nav')
 
         <!-- ========== Search Modal ========== -->
         <div id="search-modal" class="hs-overlay ti-modal hidden mt-[1.75rem]">

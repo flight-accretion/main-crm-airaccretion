@@ -46,12 +46,45 @@ public function index(Request $request)
 
     $services = $query->get();
 
+    // Optional: only services under one product (link from the Products list).
+    $filterProduct = null;
+    if ($request->filled('product_id')) {
+        $filterProduct = Product::find($request->input('product_id'));
+        $productId = (string) $request->input('product_id');
+        $services = $services->filter(
+            fn ($service) => in_array($productId, ProductController::serviceProductIds($service->getRawOriginal('product_ids')), true)
+        )->values();
+    }
+
     $isSuperAdmin = auth()->check()
         && auth()->user()->isSuperAdmin();
+
+    $catalog = Service::select('id', 'status', 'service_amount', 'product_ids')->withCount('extraServices')->get();
+    $catalogProducts = Product::orderBy('product')->get(['id', 'product']);
+    $serviceProductIds = [];
+    $productCounts = [];
+    foreach ($catalog as $entry) {
+        $ids = ProductController::serviceProductIds($entry->getRawOriginal('product_ids'));
+        $serviceProductIds[(string) $entry->id] = $ids;
+        foreach (array_unique($ids) as $id) $productCounts[$id] = ($productCounts[$id] ?? 0) + 1;
+    }
+    $serviceSummary = [
+        'total' => $catalog->count(), 'active' => $catalog->where('status', 1)->count(),
+        'missing_price' => $catalog->filter(fn ($entry) => (float) $entry->service_amount <= 0)->count(),
+        'no_extras' => $catalog->where('extra_services_count', 0)->count(),
+        'products' => count($productCounts),
+    ];
+    // Display priority only; stored amounts and status rules are unchanged.
+    $services = $services->sortBy(fn ($entry) => (float) $entry->service_amount <= 0 ? 0 : 1)->values();
 
     return view('admin.pages.services.index-services', [
         'services' => $services,
         'isSuperAdmin' => $isSuperAdmin,
+        'filterProduct' => $filterProduct,
+        'catalogProducts' => $catalogProducts,
+        'serviceProductIds' => $serviceProductIds,
+        'productCounts' => $productCounts,
+        'serviceSummary' => $serviceSummary,
     ]);
 }
 
@@ -418,6 +451,10 @@ public function index(Request $request)
     public function view($id)
     {
         $service = Service::with('extraServices')->findOrFail($id);
+        if (request()->ajax()) {
+            return response()->json(['success' => true, 'id' => (string) $service->id,
+                'html' => view('admin.pages.services.partials.details', compact('service'))->render()]);
+        }
         return view('admin.pages.services.view-services', compact('service'));
     }
 

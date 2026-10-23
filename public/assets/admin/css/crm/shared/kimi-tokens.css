@@ -1,0 +1,56 @@
+/* Shared kimi design tokens + base pieces for redesigned CRM pages.
+   Scope: add class "crm-kimi" to the page wrapper; nothing outside it changes.
+   Load order on a page: shared/kimi-tokens.css -> <area>/<page>.css -> <area>/<page>-mobile.css */
+.crm-kimi{
+  --k-canvas:#F4F5F7;--k-surface:#FFFFFF;--k-border:#E4E7EC;--k-soft:#F0F1F4;--k-hover:#EEF1F5;
+  --k-text:#1B1F27;--k-secondary:#5A6472;--k-muted:#8A93A3;--k-brand:#0F2B46;--k-brand-hover:#163B5F;
+  --k-blue:#2F6FED;--k-blue-bg:#E8F0FE;--k-blue-t:#1D5BD8;
+  --k-green:#178A4C;--k-green-bg:#E3F4EB;
+  --k-amber:#B26A00;--k-amber-bg:#FCEFD9;
+  --k-red:#C62F3B;--k-red-bg:#FBE5E7;
+  color:var(--k-text);font-size:13px;letter-spacing:0;min-width:0
+}
+.dark .crm-kimi{
+  --k-canvas:#121417;--k-surface:#1B1E24;--k-border:#2A2F38;--k-soft:#22262E;--k-hover:#262B34;
+  --k-text:#E8EAEE;--k-secondary:#B9BFCC;--k-muted:#7E8694;
+  --k-blue-bg:#1B2A45;--k-blue-t:#7FA7F0;
+  --k-green:#3DBE7C;--k-green-bg:#12351F;
+  --k-amber:#E5A33B;--k-amber-bg:#3A2C10;
+  --k-red:#E56A73;--k-red-bg:#3B171B;
+}
+.crm-kimi *{box-sizing:border-box}
+.crm-kimi [hidden]{display:none!important}
+.crm-kimi :is(a,button,input,select,textarea):focus-visible{outline:2px solid var(--k-blue);outline-offset:2px}
+.crm-kimi .k-muted{color:var(--k-muted)}
+
+/* Tags */
+.crm-kimi .k-tag{display:inline-block;font-size:10.5px;padding:3px 8px;border-radius:5px;white-space:nowrap;font-weight:500;line-height:1.4}
+.crm-kimi .k-tag.neutral{background:var(--k-hover);color:var(--k-secondary)}
+.crm-kimi .k-tag.green{color:var(--k-green);background:var(--k-green-bg)}
+.crm-kimi .k-tag.amber{color:var(--k-amber);background:var(--k-amber-bg)}
+.crm-kimi .k-tag.red{color:var(--k-red);background:var(--k-red-bg)}
+.crm-kimi .k-tag.blue{color:var(--k-blue-t);background:var(--k-blue-bg)}
+
+/* Buttons */
+.crm-kimi .k-primary,.crm-kimi .k-ghost{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:7px;font-weight:600;font-size:12.5px;min-height:36px;white-space:nowrap;cursor:pointer;text-decoration:none}
+.crm-kimi .k-primary{border:1px solid var(--k-brand);padding:8px 18px;color:#fff;background:var(--k-brand)}
+.crm-kimi .k-primary:hover{background:var(--k-brand-hover);color:#fff}
+.crm-kimi .k-primary:disabled{opacity:.55;cursor:not-allowed}
+.crm-kimi .k-ghost{border:1px solid var(--k-border);padding:8px 14px;color:var(--k-brand);background:var(--k-surface)}
+.crm-kimi .k-ghost:hover{background:var(--k-hover);color:var(--k-brand)}
+.crm-kimi .k-ghost:disabled{opacity:.55;cursor:not-allowed}
+.crm-kimi .k-sm{min-height:30px;padding:5px 11px;font-size:11.5px}
+.crm-kimi .k-rowbtn{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--k-border);border-radius:7px;padding:6px 11px;font-size:11.5px;color:var(--k-brand);background:var(--k-surface);font-weight:600;white-space:nowrap;cursor:pointer}
+.crm-kimi .k-rowbtn:hover{background:var(--k-hover)}
+.dark .crm-kimi :is(.k-ghost,.k-rowbtn){color:#fff}
+
+/* Section, form fields, table frame */
+.crm-kimi .k-section{min-width:0;background:var(--k-surface);border:1px solid var(--k-border);border-radius:12px;padding:18px 20px;margin-bottom:24px}
+.crm-kimi .k-section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:4px;flex-wrap:wrap}
+.crm-kimi .k-section-head h2{font-size:15px;font-weight:600;margin:0;color:var(--k-text)}
+.crm-kimi .k-section-meta{font-size:11px;color:var(--k-muted);margin:4px 0 14px}
+.crm-kimi .k-filt{display:grid;gap:10px;background:var(--k-surface);border:1px solid var(--k-border);border-radius:12px;padding:14px 16px;align-items:end}
+.crm-kimi .k-fg{min-width:0}
+.crm-kimi .k-fg label{display:block;font-size:11px;color:var(--k-muted);margin-bottom:5px}
+.crm-kimi .k-fg :is(input:not([type="checkbox"]):not([type="radio"]),select,textarea){width:100%;border:1px solid var(--k-border);background:var(--k-surface);color:var(--k-text);border-radius:7px;padding:8px 10px;font-size:12.5px;min-height:36px}
+.crm-kimi .k-tblwrap{overflow-x:auto;border:1px solid var(--k-border);border-radius:10px}

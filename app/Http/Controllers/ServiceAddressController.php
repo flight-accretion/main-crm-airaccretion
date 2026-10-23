@@ -17,8 +17,32 @@ class ServiceAddressController extends Controller
 {
     public function index(Request $request)
     {
-        $perPage = min(max((int) $request->input('per_page', 20), 1), 100);
+        $perPage = min(max((int) $request->input('per_page', 10), 1), 100);
         $query = ServiceAddress::with(['product', 'service', 'city.state.country']);
+        $catalog = ServiceAddress::with('city')->get(['id', 'city_id', 'contact_number', 'contact_person_name']);
+        $phoneKey = static fn ($number) => preg_replace('/\D+/', '', (string) $number);
+        $phoneCounts = $catalog->filter(fn ($row) => $phoneKey($row->contact_number) !== '')
+            ->countBy(fn ($row) => $phoneKey($row->contact_number));
+        $addressFlags = $catalog->mapWithKeys(fn ($row) => [$row->id => [
+            'shared' => ($phoneCounts[$phoneKey($row->contact_number)] ?? 0) > 1,
+            'missing' => trim((string) $row->contact_person_name) === '',
+        ]]);
+        $cityCounts = $catalog->whereNotNull('city_id')->groupBy('city_id')->map(fn ($rows) => [
+            'name' => optional($rows->first()->city)->name ?? 'Unavailable city', 'count' => $rows->count(),
+        ])->sortByDesc('count');
+        $addressSummary = ['total' => $catalog->count(), 'cities' => $cityCounts->count(),
+            'shared_numbers' => $phoneCounts->filter(fn ($count) => $count > 1)->count(),
+            'missing_contact' => $catalog->filter(fn ($row) => trim((string) $row->contact_person_name) === '')->count()];
+        if ($request->filled('city_id')) {
+            $cityId = $request->input('city_id');
+            if (is_string($cityId) && Str::isUuid($cityId)) $query->where('city_id', $cityId);
+            else $query->whereRaw('1 = 0');
+        }
+        if (in_array($request->input('status'), ['0', '1'], true)) $query->where('status', $request->input('status'));
+        $flaggedIds = $addressFlags->filter(fn ($flags) => $flags['shared'] || $flags['missing'])->keys()->all();
+        if ($flaggedIds) {
+            $query->orderByRaw('CASE WHEN id IN ('.implode(',', array_fill(0, count($flaggedIds), '?')).') THEN 0 ELSE 1 END', $flaggedIds);
+        }
 
         if ($request->filled('search')) {
             $search = trim($request->input('search'));
@@ -61,7 +85,7 @@ class ServiceAddressController extends Controller
             ->get();
         // Explicitly pass $address as null so the view can safely reference it (edit form uses optional($address))
         $address = null;
-        return view('admin.pages.service-address.index-service-address', compact('addresses','products', 'services', 'countries', 'states', 'cities', 'address'));
+        return view('admin.pages.service-address.index-service-address', compact('addresses','products', 'services', 'countries', 'states', 'cities', 'address', 'addressSummary', 'addressFlags', 'cityCounts'));
     }
 
     public function create()
@@ -389,12 +413,12 @@ public function getEditDetails($id)
         $countries = Country::all();
 
         // Get states for the current country
-        $states = State::where('country_id', $serviceAddress->city->state->country_id)
+        $states = State::where('country_id', optional(optional($serviceAddress->city)->state)->country_id)
                     ->where('status', 1)
                     ->get();
 
         // Get cities for the current state
-        $cities = City::where('state_id', $serviceAddress->city->state_id)
+        $cities = City::where('state_id', optional($serviceAddress->city)->state_id)
                     ->where('status', 1)
                     ->get();
 

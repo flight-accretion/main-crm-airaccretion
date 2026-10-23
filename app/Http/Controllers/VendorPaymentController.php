@@ -931,6 +931,7 @@ $perVendorHistories[$vp->id] = [
                             'payment_status' => $auditTrail->payment_status,
                             'created_at' => $auditTrail->created_at,
                             'created_by_name' => $followupRecord && $followupRecord->followedBy ? $followupRecord->followedBy->name : null,
+                            'receipt' => $followupRecord ? $followupRecord->file : null,
                         ];
                     });
             } catch (\Exception $e) {

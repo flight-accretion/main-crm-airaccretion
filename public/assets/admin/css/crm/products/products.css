@@ -1,0 +1,92 @@
+/* Products (kimi design): heading, summary cards, category chips, product list,
+   and the Add / Edit / View popup modals. Needs shared/kimi-tokens.css first.
+   Small screens: products-mobile.css. */
+.pd-page{padding:22px 0 30px}
+
+/* Heading */
+.pd-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:20px;flex-wrap:wrap}
+.pd-heading h1{font-size:22px;font-weight:600;margin:0 0 4px;color:var(--k-text)}
+.pd-heading p{margin:0;color:var(--k-muted);font-size:12px}
+.pd-heading-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+/* Summary cards */
+.pd-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:20px}
+.pd-stat{background:var(--k-surface);border:1px solid var(--k-border);border-top:3px solid var(--k-border);border-radius:10px;padding:15px 14px;min-width:0}
+.pd-stat.acc-brand{border-top-color:var(--k-brand)}
+.pd-stat.acc-green{border-top-color:var(--k-green)}
+.pd-stat.acc-amber{border-top-color:var(--k-amber)}
+.pd-stat strong{display:block;font-size:23px;font-weight:600;color:var(--k-text);line-height:1.3}
+.pd-label{font-size:11px;color:var(--k-secondary);margin-top:4px}
+.pd-sub2{font-size:10.5px;color:var(--k-muted);margin-top:3px}
+
+/* Category chips */
+.pd-chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px}
+.pd-chip{border:1px solid var(--k-border);border-radius:99px;padding:6px 13px;font-size:12px;color:var(--k-secondary);background:var(--k-surface);white-space:nowrap;cursor:pointer}
+.pd-chip:hover{background:var(--k-hover);color:var(--k-brand)}
+.pd-chip.on,.pd-chip.on:hover{background:var(--k-brand);border-color:var(--k-brand);color:#fff;font-weight:600}
+
+/* Search + status next to the list */
+.pd-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0}
+.pd-search{position:relative;display:block;margin:0}
+.pd-search i{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--k-muted);font-size:14px;pointer-events:none}
+.pd-search input,.pd-select{border:1px solid var(--k-border);background:var(--k-surface);color:var(--k-text);border-radius:7px;font-size:12.5px;min-height:36px}
+.pd-search input{width:250px;max-width:100%;padding:8px 10px 8px 32px}
+.pd-select{padding:7px 28px 7px 10px}
+
+/* Table */
+.crm-kimi table.pd-table{width:100%!important;border-collapse:collapse;margin:0!important;font-size:12.5px;color:var(--k-text)}
+.crm-kimi table.pd-table thead th{text-align:left;font-size:10.5px;color:var(--k-muted);font-weight:600;padding:10px 8px;background:var(--k-soft);border-bottom:1px solid var(--k-border)!important;border-top:0;white-space:nowrap}
+.crm-kimi table.pd-table :is(th,td):first-child{padding-left:12px}
+.crm-kimi table.pd-table tbody td{padding:11px 8px;border-bottom:1px solid var(--k-border);border-top:0;vertical-align:top;background:transparent}
+.crm-kimi table.pd-table tbody tr:last-child td{border-bottom:0}
+.crm-kimi table.pd-table tbody tr:hover td{background:var(--k-hover)}
+.crm-kimi table.pd-table tbody td.sorting_1{background:transparent}
+.pd-main{display:inline-block;font-weight:600;color:var(--k-text);cursor:pointer}
+a.pd-main:hover{color:var(--k-blue-t);text-decoration:underline}
+.pd-sub{font-size:11px;color:var(--k-muted);margin-top:2px}
+.pd-note{color:var(--k-blue-t)}
+.pd-tags{display:flex;gap:4px;flex-wrap:wrap}
+.pd-link{color:var(--k-blue-t);font-weight:600}
+.pd-link:hover{text-decoration:underline;color:var(--k-blue-t)}
+.crm-kimi a.k-tag:hover{text-decoration:underline}
+.pd-actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.pd-actions form{display:inline;margin:0}
+.crm-kimi .k-rowbtn.solid{background:var(--k-brand);border-color:var(--k-brand);color:#fff}
+.crm-kimi .k-rowbtn.solid:hover{background:var(--k-brand-hover)}
+.crm-kimi .k-rowbtn:disabled{opacity:.45;cursor:not-allowed}
+.pd-iconbtn{display:inline-grid;place-items:center;width:30px;height:30px;border:1px solid var(--k-border);border-radius:7px;background:var(--k-surface);color:var(--k-secondary);font-size:14px;cursor:pointer}
+.pd-iconbtn.is-danger:hover{background:var(--k-red-bg);color:var(--k-red);border-color:var(--k-red-bg)}
+
+/* DataTables footer */
+.pd-page .dataTables_wrapper{padding:0}
+.pd-page .pd-tfoot{display:flex;align-items:center;justify-content:space-between;gap:10px 16px;flex-wrap:wrap;padding:10px 12px;border-top:1px solid var(--k-border);font-size:12px;color:var(--k-muted)}
+.pd-page .pd-tfoot :is(.dataTables_length,.dataTables_info,.dataTables_paginate){float:none;padding:0!important;margin:0;color:var(--k-muted)}
+.pd-page .pd-tfoot .dataTables_length select{border:1px solid var(--k-border);border-radius:6px;background:var(--k-surface);color:var(--k-text);padding:3px 24px 3px 8px}
+.crm-kimi table.pd-table td.dataTables_empty{text-align:center;color:var(--k-muted);padding:22px 8px}
+
+/* Modals (Add / Edit / View) */
+.pd-modal .pd-modal-box{max-width:560px;width:calc(100% - 32px);margin-left:auto;margin-right:auto}
+.pd-modal .pd-modal-content{background:var(--k-surface);border:1px solid var(--k-border);border-radius:12px;box-shadow:0 20px 50px rgba(15,43,70,.18);overflow:hidden;font-size:13px}
+.pd-modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:16px 20px 12px;border-bottom:1px solid var(--k-border)}
+.pd-modal-head h3{font-size:16px;font-weight:600;margin:0;color:var(--k-text)}
+.pd-modal-head p{margin:3px 0 0;font-size:11.5px;color:var(--k-muted)}
+.pd-modal-close{display:grid;place-items:center;width:30px;height:30px;border-radius:7px;border:1px solid var(--k-border);background:var(--k-surface);color:var(--k-secondary);font-size:16px;cursor:pointer;flex:none}
+.pd-modal-close:hover{background:var(--k-hover)}
+.pd-modal-body{padding:16px 20px;max-height:calc(100vh - 220px);overflow-y:auto}
+.pd-formgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.pd-full{grid-column:1/-1}
+.pd-req{color:var(--k-red)}
+.pd-checkline{display:flex;gap:18px;flex-wrap:wrap;align-items:center;min-height:36px}
+.pd-checkline label{display:flex!important;gap:7px;align-items:center;margin:0!important;font-size:12.5px!important;color:var(--k-secondary)!important;cursor:pointer}
+.pd-checkline input{width:16px;height:16px;accent-color:var(--k-brand);margin:0}
+.pd-hint{display:block;font-size:11px;color:var(--k-muted);margin-top:4px}
+.pd-error{display:block;font-size:11.5px;color:var(--k-red);margin-top:4px}
+.pd-error:empty{display:none}
+.pd-modal-foot{display:flex;justify-content:flex-end;gap:8px;padding:12px 20px 16px;border-top:1px solid var(--k-border);background:var(--k-soft)}
+.pd-view{display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;margin:0}
+.pd-view dt{font-size:11px;color:var(--k-muted);margin-bottom:4px}
+.pd-view dd{margin:0;color:var(--k-text)}
+.pd-view-name{font-weight:600;font-size:14px}
+.pd-view-note{white-space:pre-line;background:var(--k-soft);border:1px solid var(--k-border);border-radius:8px;padding:10px 12px;font-size:12.5px}
+
+@media(max-width:1100px){.pd-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}

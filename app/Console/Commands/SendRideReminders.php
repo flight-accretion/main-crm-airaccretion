@@ -47,7 +47,9 @@ class SendRideReminders extends Command
                 'to' => $to->toDateTimeString(),
             ]);
 
+            // Cancelled rides are excluded here so they never use up the batch limit.
             $rides = LeadRide::whereBetween('from_date', [$from, $to])
+                ->whereLeadNotCancelled()
                 ->with('enquiry.client', 'enquiry.vouchers', 'serviceAddress')
                 ->orderBy('from_date')
                 ->limit($limit - $queued)

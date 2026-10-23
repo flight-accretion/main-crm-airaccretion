@@ -9,7 +9,7 @@
         const links = root.querySelector('[data-operations-more-links]');
         const mobile = window.matchMedia('(max-width:767px)');
         const path = href => new URL(href, location.href).pathname.replace(/\/$/, '');
-        const authorized = Array.from(document.querySelectorAll('.app-sidebar .main-menu a[href]'));
+        const authorized = window.CrmNavigation.authorizedLinks ? window.CrmNavigation.authorizedLinks() : Array.from(document.querySelectorAll('.app-sidebar .main-menu a[href]'));
         const currentPath = path(location.href);
         let primaryActive = false;
         // Copy the authorized sidebar destination, including the configured CRM host.

@@ -1,0 +1,96 @@
+/* Voucher Generation page (kimi design): heading, summary cards, queue chips,
+   filters + search next to the table, and the voucher queue table.
+   Needs tokens.css first. Phone layout lives in voucher-generation-mobile.css. */
+.vg-page{padding:22px 0 30px;color:var(--vg-text);font-size:13px;min-width:0;letter-spacing:0}
+.vg-page *{box-sizing:border-box}
+
+/* Heading */
+.vg-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:20px;flex-wrap:wrap}
+.vg-heading h1{font-size:22px;font-weight:600;margin:0 0 4px;color:var(--vg-text)}
+.vg-heading p{margin:0;color:var(--vg-muted);font-size:12px}
+
+/* Summary cards */
+.vg-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:20px}
+.vg-stat{background:var(--vg-surface);border:1px solid var(--vg-border);border-top:3px solid var(--vg-border);border-radius:10px;padding:15px 14px;min-width:0}
+.vg-stat.acc-brand{border-top-color:var(--vg-brand)}
+.vg-stat.acc-amber{border-top-color:var(--vg-amber)}
+.vg-stat.acc-green{border-top-color:var(--vg-green)}
+.vg-stat.acc-red{border-top-color:var(--vg-red)}
+.vg-stat strong{display:block;font-size:23px;font-weight:600;color:var(--vg-text);line-height:1.3}
+.vg-stat strong small{font-size:12px;font-weight:400;color:var(--vg-muted)}
+.vg-label{font-size:11px;color:var(--vg-secondary);margin-top:4px}
+.vg-sub2{font-size:10.5px;color:var(--vg-muted);margin-top:3px}
+
+/* Queue chips */
+.vg-chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px}
+.vg-chip{border:1px solid var(--vg-border);border-radius:99px;padding:6px 13px;font-size:12px;color:var(--vg-secondary);background:var(--vg-surface);white-space:nowrap}
+.vg-chip:hover{background:var(--vg-hover);color:var(--vg-brand)}
+.vg-chip.on,.vg-chip.on:hover{background:var(--vg-brand);border-color:var(--vg-brand);color:#fff;font-weight:600}
+
+/* Section */
+.vg-section{min-width:0;background:var(--vg-surface);border:1px solid var(--vg-border);border-radius:12px;padding:18px 20px;margin-bottom:24px}
+.vg-section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:4px;flex-wrap:wrap}
+.vg-section-title{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.vg-section-head h2{font-size:15px;font-weight:600;margin:0;color:var(--vg-text)}
+.vg-section-meta{font-size:11px;color:var(--vg-muted);margin:4px 0 14px}
+
+/* Search, filter toggle and export - right next to the table */
+.vg-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.vg-search{position:relative;display:block;margin:0}
+.vg-search i{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--vg-muted);font-size:14px;pointer-events:none}
+.vg-search input{width:260px;max-width:100%;border:1px solid var(--vg-border);background:var(--vg-surface);color:var(--vg-text);border-radius:7px;padding:8px 10px 8px 32px;font-size:12.5px;min-height:36px}
+.vg-search input::placeholder{color:var(--vg-muted)}
+.vg-ghost.is-active{border-color:var(--vg-brand)}
+.vg-export{display:flex;gap:6px}
+.vg-iconbtn{display:inline-grid;place-items:center;width:32px;height:32px;border:1px solid var(--vg-border);border-radius:7px;background:var(--vg-surface);color:var(--vg-secondary);font-size:15px;cursor:pointer;flex:none}
+.vg-iconbtn:hover{background:var(--vg-hover);color:var(--vg-brand)}
+.vg-iconbtn.is-danger:hover{background:var(--vg-red-bg);color:var(--vg-red)}
+
+/* Filters (same fields as before) */
+.vg-filter-panel{margin-bottom:14px}
+.vg-filt{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px 12px;background:var(--vg-soft);border:1px solid var(--vg-border);border-radius:10px;padding:14px 16px;align-items:end}
+.vg-fg{min-width:0}
+.vg-fg label{display:block;font-size:11px;color:var(--vg-muted);margin-bottom:5px}
+.vg-fg input,.vg-fg select{width:100%;border:1px solid var(--vg-border);background:var(--vg-surface);color:var(--vg-text);border-radius:7px;padding:8px 10px;font-size:12.5px;min-height:36px}
+.vg-fg .select2-container{width:100%!important}
+.vg-fg .select2-container .select2-selection--single{min-height:36px;border-color:var(--vg-border);border-radius:7px;background:var(--vg-surface)}
+.vg-filter-actions{display:flex;gap:8px;justify-content:flex-end}
+
+/* Table */
+.vg-tblwrap{overflow-x:auto;border:1px solid var(--vg-border);border-radius:10px}
+.vg-page table.vg-table{width:100%!important;border-collapse:collapse;margin:0!important;font-size:12.5px;color:var(--vg-text)}
+.vg-page table.vg-table thead th{text-align:left;font-size:10.5px;color:var(--vg-muted);font-weight:600;padding:10px 8px;background:var(--vg-soft);border-bottom:1px solid var(--vg-border)!important;border-top:0;white-space:nowrap}
+.vg-page table.vg-table thead th:first-child{padding-left:12px}
+.vg-page table.vg-table tbody td{padding:11px 8px;border-bottom:1px solid var(--vg-border);border-top:0;vertical-align:top;background:transparent;white-space:normal}
+.vg-page table.vg-table tbody td:first-child{padding-left:12px}
+.vg-page table.vg-table tbody tr:last-child td{border-bottom:0}
+.vg-page table.vg-table tbody tr[data-view-url]{cursor:pointer}
+.vg-page table.vg-table tbody tr:hover td{background:var(--vg-hover)}
+.vg-page table.vg-table tbody tr.blocked td{background:var(--vg-amber-bg)}
+.vg-page table.vg-table tbody td.sorting_1{background:transparent}
+.vg-page table.vg-table tbody tr.blocked td.sorting_1{background:var(--vg-amber-bg)}
+.vg-main{font-weight:600;white-space:nowrap;color:var(--vg-text)}
+a.vg-client{display:inline-block;color:var(--vg-text)}
+a.vg-client:hover{color:var(--vg-blue-t);text-decoration:underline}
+.vg-cellsub{display:block;font-size:11px;color:var(--vg-muted);margin-top:2px;font-weight:400}
+.vg-wrap{min-width:160px;max-width:320px;overflow-wrap:anywhere}
+.vg-status{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
+.vg-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.vg-more{display:inline-flex;gap:4px}
+.vg-more .vg-iconbtn{width:28px;height:28px;font-size:13px}
+.vg-rowbtn{display:inline-flex;align-items:center;border:1px solid var(--vg-border);border-radius:7px;padding:7px 12px;font-size:11.5px;color:var(--vg-brand);background:var(--vg-surface);font-weight:600;white-space:nowrap}
+.vg-rowbtn:hover{background:var(--vg-hover);color:var(--vg-brand)}
+.vg-rowbtn.solid{background:var(--vg-brand);color:#fff;border-color:var(--vg-brand)}
+.vg-rowbtn.solid:hover{background:var(--vg-brand-hover);color:#fff}
+.dark .vg-rowbtn{color:#fff}
+
+/* DataTables footer (length, info, paging) */
+.vg-page .dataTables_wrapper{padding:0}
+.vg-page .vg-tfoot{display:flex;align-items:center;justify-content:space-between;gap:10px 16px;flex-wrap:wrap;padding:10px 12px;border-top:1px solid var(--vg-border);font-size:12px;color:var(--vg-muted)}
+.vg-page .vg-tfoot .dataTables_length,.vg-page .vg-tfoot .dataTables_info,.vg-page .vg-tfoot .dataTables_paginate{float:none;padding:0!important;margin:0;color:var(--vg-muted)}
+.vg-page .vg-tfoot .dataTables_length select{border:1px solid var(--vg-border);border-radius:6px;background:var(--vg-surface);color:var(--vg-text);padding:3px 24px 3px 8px}
+.vg-page table.vg-table td.dataTables_empty{text-align:center;color:var(--vg-muted);padding:22px 8px}
+
+@media(max-width:1200px){.vg-filt{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:1100px){.vg-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:900px){.vg-filt{grid-template-columns:1fr 1fr}.vg-search input{width:200px}}

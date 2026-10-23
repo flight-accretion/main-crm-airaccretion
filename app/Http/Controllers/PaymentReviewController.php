@@ -174,6 +174,13 @@ class PaymentReviewController extends Controller
                 }
             }
 
+            // Apply the existing reviewed-lead visibility rule before counting or slicing pages.
+            if ($status !== 'all' && $status !== 3 && $status !== 4) {
+                $visibleLeadIds = (clone $query)->setEagerLoads([])->select('lead_id')
+                    ->whereDoesntHave('paymentAuditTrail', fn ($q) => $q->whereIn('payment_status', PaymentAuditTrail::FINAL_REVIEW_STATUSES));
+                $query->whereIn('lead_id', $visibleLeadIds);
+            }
+
             $paymentsPaginator = (clone $query)
                 ->setEagerLoads([])
                 ->select('lead_id')
@@ -281,25 +288,7 @@ class PaymentReviewController extends Controller
                     ];
                 });
 
-            // Prepare final payments collection - apply status-specific rules
-            $payments = $mappedPayments
-                ->filter(function ($item) use ($status) {
-                    // If the caller explicitly selected "All", include everything
-                    if ($status === 'all') {
-                        return true;
-                    }
-                    // If the caller asked specifically for Full Paid or Partial Paid entries (status == 3 or 4), keep them
-                    if ($status === 3 || $status === 4) {
-                        return true;
-                    }
-                    // Otherwise hide leads whose all followups have already been reviewed
-                    if (isset($item->all_followups_reviewed) && $item->all_followups_reviewed) {
-                        return false;
-                    }
-
-                    return true;
-                })
-                ->values(); // Reset keys for view
+            $payments = $mappedPayments->values();
 
             // Get services for filter dropdown (same as refund notes)
             $services = Service::select('id', 'service')->get();

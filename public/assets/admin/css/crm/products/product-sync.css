@@ -1,0 +1,94 @@
+/* Product Sync — Airpoints (kimi design): heading, summary cards, matching note,
+   sync log (current run) and the sync queue. Needs shared/kimi-tokens.css first.
+   Phone layout is at the bottom of this file. */
+.ps-page{padding:22px 0 30px}
+.ps-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:20px;flex-wrap:wrap}
+.ps-heading h1{font-size:22px;font-weight:600;margin:0 0 4px;color:var(--k-text)}
+.ps-heading p{margin:0;color:var(--k-muted);font-size:12px}
+.ps-heading-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+/* Cards */
+.ps-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:20px}
+.ps-stat{background:var(--k-surface);border:1px solid var(--k-border);border-top:3px solid var(--k-border);border-radius:10px;padding:15px 14px;min-width:0}
+.ps-stat.acc-brand{border-top-color:var(--k-brand)}
+.ps-stat.acc-green{border-top-color:var(--k-green)}
+.ps-stat.acc-amber{border-top-color:var(--k-amber)}
+.ps-stat.acc-neutral{border-top-color:var(--k-muted)}
+.ps-stat strong{display:block;font-size:23px;font-weight:600;color:var(--k-text);line-height:1.3}
+.ps-label{font-size:11px;color:var(--k-secondary);margin-top:4px}
+.ps-sub2{font-size:10.5px;color:var(--k-muted);margin-top:3px}
+
+.ps-info .ps-info-text{margin-bottom:0}
+
+/* Sync log (current run) */
+.ps-loading:not(.hidden){display:flex;align-items:center;gap:10px;border:1px solid var(--k-border);border-radius:9px;padding:12px;font-size:12.5px;color:var(--k-secondary)}
+.ps-spinner{width:18px;height:18px;border-radius:50%;border:2px solid var(--k-border);border-top-color:var(--k-brand);animation:ps-spin .8s linear infinite;flex:none}
+@keyframes ps-spin{to{transform:rotate(360deg)}}
+.ps-logline{display:flex;gap:10px;align-items:center;border:1px solid var(--k-border);border-radius:9px;padding:9px 12px;margin-bottom:10px;font-size:12px;flex-wrap:wrap}
+.ps-runstats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.ps-runstats>div{border:1px solid var(--k-border);border-radius:9px;padding:10px 12px;background:var(--k-soft)}
+.ps-runstats span{display:block;font-size:11px;color:var(--k-muted)}
+.ps-runstats strong{font-size:18px;font-weight:600;color:var(--k-text)}
+.ps-runstats .is-green strong{color:var(--k-green)}
+.ps-runstats .is-blue strong{color:var(--k-blue-t)}
+.ps-runstats .is-red strong{color:var(--k-red)}
+.ps-subtitle{font-size:13px;font-weight:600;margin:4px 0 8px;color:var(--k-text)}
+
+/* Tables */
+.crm-kimi table.ps-table{width:100%;border-collapse:collapse;margin:0;font-size:12.5px;color:var(--k-text)}
+.crm-kimi table.ps-table thead th{text-align:left;font-size:10.5px;color:var(--k-muted);font-weight:600;padding:10px 8px;background:var(--k-soft);border-bottom:1px solid var(--k-border);white-space:nowrap}
+.crm-kimi table.ps-table :is(th,td):first-child{padding-left:12px}
+.crm-kimi table.ps-table tbody td{padding:11px 8px;border-bottom:1px solid var(--k-border);vertical-align:top}
+.crm-kimi table.ps-table tbody tr:last-child td{border-bottom:0}
+.crm-kimi table.ps-table tbody tr:hover td{background:var(--k-hover)}
+.crm-kimi table.ps-queue tbody tr.is-next td{background:var(--k-amber-bg)}
+.crm-kimi table.ps-table code{font-size:11.5px;background:var(--k-soft);padding:1px 5px;border-radius:4px}
+.ps-main{font-weight:600}
+.ps-sub{font-size:11px;color:var(--k-muted);margin-top:3px}
+.ps-tags{display:flex;gap:4px;flex-wrap:wrap}
+.ps-empty{text-align:center;color:var(--k-muted);padding:22px 8px!important}
+
+@media(max-width:1100px){.ps-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Phones: cards + labelled rows */
+@media(max-width:767px){
+  .ps-page{padding:14px 0 24px}
+  .ps-heading{align-items:flex-start;flex-direction:column;margin-bottom:14px}
+  .ps-heading h1{font-size:20px}
+  .ps-heading-actions{width:100%}
+  .ps-heading-actions>*{flex:1}
+  .ps-stats{gap:8px}
+  .ps-stat{padding:12px}
+  .ps-stat strong{font-size:18px}
+  .ps-runstats{grid-template-columns:1fr 1fr}
+  .crm-kimi .k-section{padding:14px;margin-bottom:16px}
+}
+
+/* Tables -> labelled cards whenever the section is too narrow for the columns. */
+.ps-page .k-section{container:pssec/inline-size}
+@container pssec (max-width:640px){
+  .crm-kimi .k-tblwrap{border:0;overflow:visible}
+  .crm-kimi table.ps-table,.crm-kimi table.ps-table tbody,.crm-kimi table.ps-table tr{display:block}
+  .crm-kimi table.ps-table thead{display:none}
+  .crm-kimi table.ps-table tbody tr{border:1px solid var(--k-border);border-radius:10px;margin-bottom:10px;background:var(--k-surface);padding:6px 2px}
+  .crm-kimi table.ps-queue tbody tr.is-next{border-color:var(--k-amber);background:var(--k-amber-bg)}
+  .crm-kimi table.ps-table tbody tr:hover td,.crm-kimi table.ps-queue tbody tr.is-next td{background:transparent}
+  .crm-kimi table.ps-table tbody td,.crm-kimi table.ps-table tbody td:first-child{display:flex;justify-content:space-between;gap:14px;align-items:center;border:0;padding:5px 12px;text-align:right;min-width:0}
+  .crm-kimi table.ps-table tbody td::before{content:attr(data-label);font-size:10.5px;color:var(--k-muted);font-weight:600;text-align:left;flex:none}
+  .crm-kimi table.ps-table tbody td>*{min-width:0;margin-left:auto;overflow-wrap:anywhere}
+  .ps-tags{justify-content:flex-end}
+  .crm-kimi table.ps-table td.ps-empty{display:block;text-align:center}
+  .crm-kimi table.ps-table td.ps-empty::before{content:none}
+}
+
+/* Sync queue pagination (10 rows per page) */
+.ps-pager:not([hidden]){display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:12px}
+.ps-page-info{font-size:11.5px;color:var(--k-muted)}
+.ps-page-btns{display:flex;gap:4px;flex-wrap:wrap}
+.ps-page-btn{min-width:34px;height:32px;padding:0 10px;border:1px solid var(--k-border);border-radius:7px;background:var(--k-surface);color:var(--k-brand);font-size:12px;font-weight:600;cursor:pointer}
+.ps-page-btn:hover:not(:disabled){background:var(--k-hover)}
+.ps-page-btn.is-active{background:var(--k-brand);border-color:var(--k-brand);color:#fff}
+.ps-page-btn:disabled{opacity:.45;cursor:default}
+.ps-page-gap{align-self:center;padding:0 2px;color:var(--k-muted)}
+.dark .ps-page-btn{color:#fff}
+@media(max-width:767px){.ps-pager:not([hidden]){justify-content:center}.ps-page-info{width:100%;text-align:center}}

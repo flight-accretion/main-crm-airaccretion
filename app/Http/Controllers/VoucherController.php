@@ -171,108 +171,158 @@ class VoucherController extends Controller
         $dnpService = Service::where('service', 'Call Not Connected')->first();
         $dnpServiceId = $dnpService ? $dnpService->id : null;
 
-        // Base query - only leads with approved payments and no voucher created yet
-        $query = Lead::with(['client', 'representative', 'rideSegments', 'leadFollowups.followedBy'])
-            ->whereHas('leadFollowups', function ($q) {
-                $q->whereHas('paymentAuditTrail', function ($pq) {
-                    $pq->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
-                        ->where('paid_amount', '>', 0);
+        // Queue chip: "pending" (default) is the original list - approved payment, no voucher yet.
+        // "generated" / "sent" / "all" are read-only views of leads that already have a voucher.
+        $voucherState = in_array($request->query('voucher_state'), ['pending', 'generated', 'sent', 'all'], true)
+            ? $request->query('voucher_state')
+            : 'pending';
+
+        $buildQuery = function (string $state) use ($request, $representatives, $dnpServiceId) {
+            // Base query - only leads with approved payments (pending: no voucher created yet)
+            $query = Lead::query()
+                ->whereHas('leadFollowups', function ($q) {
+                    $q->whereHas('paymentAuditTrail', function ($pq) {
+                        $pq->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
+                            ->where('paid_amount', '>', 0);
+                    });
                 });
-            })
-            ->whereDoesntHave('vouchers')
-            ->where(function ($q) {
-                $q->where(function ($subQ) {
-                    $subQ->whereNotNull('service_ids')
-                        ->whereRaw("service_ids::text != '[]'");
-                })
-                    ->orWhere(function ($subQ) {
-                        $subQ->where(function ($nullServiceQ) {
-                            $nullServiceQ->whereNull('service_ids')
-                                ->orWhereRaw("service_ids::text = '[]'")
-                                ->orWhereRaw("service_ids::text = 'null'");
-                        })
-                            ->whereDoesntHave('rideSegments');
-                    });
-            });
 
-        if ($representatives) {
-            $query->whereIn('representative_user_id', $representatives);
-        }
+            $this->applyVoucherStateScope($query, $state);
 
-        if ($dnpServiceId && !$request->filled('service_ids')) {
-            $query->whereRaw("
-                replace(trim(both '\"' from service_ids::text), '\\', '') NOT LIKE ?
-            ", ['%' . $dnpServiceId . '%']);
-        }
+            $query
+                ->where(function ($q) {
+                    $q->where(function ($subQ) {
+                        $subQ->whereNotNull('service_ids')
+                            ->whereRaw("service_ids::text != '[]'");
+                    })
+                        ->orWhere(function ($subQ) {
+                            $subQ->where(function ($nullServiceQ) {
+                                $nullServiceQ->whereNull('service_ids')
+                                    ->orWhereRaw("service_ids::text = '[]'")
+                                    ->orWhereRaw("service_ids::text = 'null'");
+                            })
+                                ->whereDoesntHave('rideSegments');
+                        });
+                });
 
-        // Date filters
-        if ($request->filled('from_date')) {
-            $fromDate = Carbon::parse($request->from_date)->startOfDay();
-            $query->whereHas('rideSegments', fn($q) => $q->where('from_date', '>=', $fromDate));
-        }
-        if ($request->filled('to_date')) {
-            $toDate = Carbon::parse($request->to_date)->endOfDay();
-            $query->whereHas('rideSegments', fn($q) => $q->where('to_date', '<=', $toDate));
-        }
-
-        // Client filters
-        foreach (['name', 'email', 'phone'] as $field) {
-            if ($request->filled($field)) {
-                $query->whereHas('client', fn($q) => $q->where($field === 'phone' ? 'contact_number' : $field, 'like', '%' . $request->$field . '%'));
+            if ($representatives) {
+                $query->whereIn('representative_user_id', $representatives);
             }
-        }
 
-        if ($request->filled('representative_user_id')) {
-            $query->where('representative_user_id', $request->representative_user_id);
-        }
+            if ($dnpServiceId && !$request->filled('service_ids')) {
+                $query->whereRaw("
+                    replace(trim(both '\"' from service_ids::text), '\\', '') NOT LIKE ?
+                ", ['%' . $dnpServiceId . '%']);
+            }
 
-        // Status filter (latest follow-up)
-        if ($request->filled('status')) {
-            $query->whereHas('leadFollowups', function ($q) use ($request) {
-                $q->where('status', $request->status)
-                    ->whereIn('id', function ($subQuery) {
-                        $subQuery->select('id')
-                            ->from('lead_followups as lf1')
-                            ->whereColumn('lf1.lead_id', 'lead_followups.lead_id')
-                            ->orderBy('lf1.created_at', 'desc')
-                            ->limit(1);
-                    });
-            });
-        }
+            // Date filters
+            if ($request->filled('from_date')) {
+                $fromDate = Carbon::parse($request->from_date)->startOfDay();
+                $query->whereHas('rideSegments', fn($q) => $q->where('from_date', '>=', $fromDate));
+            }
+            if ($request->filled('to_date')) {
+                $toDate = Carbon::parse($request->to_date)->endOfDay();
+                $query->whereHas('rideSegments', fn($q) => $q->where('to_date', '<=', $toDate));
+            }
 
-        $leads = $query->orderBy('created_at', 'desc')->get();
+            // Client filters
+            foreach (['name', 'email', 'phone'] as $field) {
+                if ($request->filled($field)) {
+                    $query->whereHas('client', fn($q) => $q->where($field === 'phone' ? 'contact_number' : $field, 'like', '%' . $request->$field . '%'));
+                }
+            }
 
-        // Service filtering (PHP-based)
-        if ($request->filled('service_ids')) {
-            $serviceIds = is_array($request->service_ids) ? $request->service_ids : [$request->service_ids];
+            if ($request->filled('representative_user_id')) {
+                $query->where('representative_user_id', $request->representative_user_id);
+            }
 
-            $leads = $leads->filter(function ($lead) use ($serviceIds) {
-                if (empty($lead->service_ids)) return false;
+            // Status filter (latest follow-up)
+            if ($request->filled('status')) {
+                $query->whereHas('leadFollowups', function ($q) use ($request) {
+                    $q->where('status', $request->status)
+                        ->whereIn('id', function ($subQuery) {
+                            $subQuery->select('id')
+                                ->from('lead_followups as lf1')
+                                ->whereColumn('lf1.lead_id', 'lead_followups.lead_id')
+                                ->orderBy('lf1.created_at', 'desc')
+                                ->limit(1);
+                        });
+                });
+            }
 
-                $json = trim($lead->service_ids, '"');
-                $json = str_replace('\\"', '"', $json);
-                $ids = json_decode($json, true);
+            return $query;
+        };
 
-                $match = is_array($ids) && count(array_intersect($ids, $serviceIds)) > 0;
-                return $match;
-            });
-        }
+        // Service / product filtering (PHP-based, unchanged rules)
+        $applyJsonIdFilters = function ($leads) use ($request) {
+            if ($request->filled('service_ids')) {
+                $serviceIds = is_array($request->service_ids) ? $request->service_ids : [$request->service_ids];
 
-        // Product filtering (PHP-based)
-        if ($request->filled('product_ids')) {
-            $productIds = is_array($request->product_ids) ? $request->product_ids : [$request->product_ids];
+                $leads = $leads->filter(function ($lead) use ($serviceIds) {
+                    if (empty($lead->service_ids)) return false;
 
-            $leads = $leads->filter(function ($lead) use ($productIds) {
-                if (empty($lead->product_ids)) return false;
+                    $json = trim($lead->service_ids, '"');
+                    $json = str_replace('\\"', '"', $json);
+                    $ids = json_decode($json, true);
 
-                $json = trim($lead->product_ids, '"');
-                $json = str_replace('\\"', '"', $json);
-                $ids = json_decode($json, true);
+                    $match = is_array($ids) && count(array_intersect($ids, $serviceIds)) > 0;
+                    return $match;
+                });
+            }
 
-                $match = is_array($ids) && count(array_intersect($ids, $productIds)) > 0;
-                return $match;
-            });
-        }
+            // Product filtering (PHP-based)
+            if ($request->filled('product_ids')) {
+                $productIds = is_array($request->product_ids) ? $request->product_ids : [$request->product_ids];
+
+                $leads = $leads->filter(function ($lead) use ($productIds) {
+                    if (empty($lead->product_ids)) return false;
+
+                    $json = trim($lead->product_ids, '"');
+                    $json = str_replace('\\"', '"', $json);
+                    $ids = json_decode($json, true);
+
+                    $match = is_array($ids) && count(array_intersect($ids, $productIds)) > 0;
+                    return $match;
+                });
+            }
+
+            return $leads;
+        };
+
+        $leads = $applyJsonIdFilters(
+            $buildQuery($voucherState)
+                ->with([
+                    'client',
+                    'representative',
+                    'rideSegments',
+                    'leadFollowups.followedBy',
+                    'vouchers:id,lead_id,customer_sent_at,customer_sent_via,created_at',
+                ])
+                ->orderBy('created_at', 'desc')
+                ->get()
+        );
+
+        // Summary cards + chip counts use the same filters as the table (only the queue state differs).
+        $countRows = fn (string $state, array $with = []) => $applyJsonIdFilters(
+            $buildQuery($state)->select('leads.id', 'leads.service_ids', 'leads.product_ids')->with($with)->get()
+        );
+        $pendingRows = $countRows('pending', ['rideSegments:id,lead_id,from_date,is_tba']);
+        $sentRows = $countRows('sent', ['vouchers:id,lead_id,customer_sent_at']);
+        $within48hLimit = now()->addHours(48);
+        $voucherSummary = [
+            'pending' => $pendingRows->count(),
+            'within_48h' => $pendingRows->filter(fn ($lead) => $lead->rideSegments->contains(
+                fn ($ride) => !$ride->is_tba && $ride->from_date && $ride->from_date->between(now(), $within48hLimit)
+            ))->count(),
+            'generated' => $countRows('generated')->count(),
+            'sent' => $sentRows->count(),
+            'sent_this_month' => $sentRows->filter(fn ($lead) => $lead->vouchers->contains(
+                fn ($voucher) => $voucher->customer_sent_at && $voucher->customer_sent_at->isSameMonth(now())
+            ))->count(),
+        ];
+
+        // Service names for the "Service" column (lead.service_ids holds Service ids).
+        $serviceNames = Service::pluck('service', 'id');
 
         // Fetch supporting data
         $services = Service::where('status', 1)
@@ -317,8 +367,40 @@ class VoucherController extends Controller
             'products',
             'statusOptions',
             'staff',
-            'leadsWithApprovedPayments'
+            'leadsWithApprovedPayments',
+            'voucherState',
+            'voucherSummary',
+            'serviceNames'
         ));
+    }
+
+    /**
+     * Restrict the voucher queue to one chip state.
+     *
+     * pending   - no voucher yet (the original Voucher Generation list)
+     * generated - voucher created, not sent to the client yet, ride still upcoming / TBA
+     * sent      - voucher delivered to the client (email or WhatsApp)
+     * all       - any of the three above
+     */
+    private function applyVoucherStateScope($query, string $state): void
+    {
+        $pending = fn ($q) => $q->whereDoesntHave('vouchers');
+        $generated = fn ($q) => $q
+            ->whereHas('vouchers', fn ($vq) => $vq->whereNull('customer_sent_at'))
+            ->whereHas('rideSegments', fn ($rq) => $rq
+                ->where('from_date', '>=', now()->startOfDay())
+                ->orWhere('is_tba', true));
+        $sent = fn ($q) => $q->whereHas('vouchers', fn ($vq) => $vq->whereNotNull('customer_sent_at'));
+
+        match ($state) {
+            'generated' => $generated($query),
+            'sent' => $sent($query),
+            'all' => $query->where(fn ($q) => $q
+                ->where(fn ($inner) => $pending($inner))
+                ->orWhere(fn ($inner) => $generated($inner))
+                ->orWhere(fn ($inner) => $sent($inner))),
+            default => $pending($query),
+        };
     }
 
     /**

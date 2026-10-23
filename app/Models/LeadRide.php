@@ -37,6 +37,21 @@ class LeadRide extends Model
         return app(\App\Services\Operations\BookingConflictService::class)
             ->protectSave($this, fn() => parent::save($options));
     }
+    /**
+     * Rides whose lead is not cancelled (latest follow-up status is not Cancelled).
+     * Used by Upcoming Rides (list + calendar) and the ride / booking reminders.
+     */
+    public function scopeWhereLeadNotCancelled($query)
+    {
+        return $query->whereHas('enquiry', function ($lead) {
+            $leads = $lead->getModel()->getTable();
+            $lead->whereRaw(
+                "coalesce((select lf.status from lead_followups lf where lf.lead_id = {$leads}.id order by lf.created_at desc, lf.id desc limit 1), -1) <> ?",
+                [LeadFollowup::STATUS_CANCELLED]
+            );
+        });
+    }
+
      public function enquiry()
     {
         return $this->belongsTo(Lead::class, 'lead_id');

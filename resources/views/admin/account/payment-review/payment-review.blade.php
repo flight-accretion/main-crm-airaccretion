@@ -15,7 +15,7 @@
     $currentApproval = request('payment_status', '');
     $chipUrl = fn ($value) => route('admin.account.payment-review', array_filter(array_merge(request()->except(['page', 'payment_status']), ['payment_status' => $value]), fn ($v) => $v !== null && $v !== ''));
 @endphp
-<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/payment-review.css') }}">
+<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/payment-review.css') }}?v=2">
 <div class="crm-payment-review">
     <header class="pr-heading">
         <div>
@@ -1411,7 +1411,7 @@
                 viewReceipt(fileName, paymentId);
             });
 
-            const followupReceiptBaseUrl = "{{ url('/admin/followups/files') }}";
+            const followupReceiptBaseUrl = "{{ route('admin.followups.file', ['filename' => '__file__'], false) }}".replace('/__file__', '');
 
             function followupReceiptUrl(fileName) {
                 const normalizedFileName = String(fileName || '')

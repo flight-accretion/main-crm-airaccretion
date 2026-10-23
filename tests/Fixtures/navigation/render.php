@@ -17,7 +17,8 @@ foreach($roles as $key=>$userType){
     file_put_contents($directory.'/'.$key.'.html',$doc);echo 'RENDER '.$key.PHP_EOL;
     $department=in_array($userType,App\Models\UserType::OPERATIONS_ROLES,true)?'operations':(in_array($userType,App\Models\UserType::ACCOUNTS_ROLES,true)?'accounts':'sales');
     $request=Illuminate\Http\Request::create('http://nav.test/admin/kpi','GET',['preset'=>'custom','from_date'=>'2026-09-01','to_date'=>'2026-09-30','lead_source'=>'manual','user_id'=>'employee-to-reset']);app()->instance('request',$request);
-    $tabs=Illuminate\Support\Facades\Blade::render(file_get_contents($root.'/resources/views/admin/pages/kpi/partials/department-tabs.blade.php'),compact('department'));
+    $filter=['preset'=>'custom','lead_source'=>'manual','from'=>\Carbon\Carbon::parse('2026-09-01'),'to'=>\Carbon\Carbon::parse('2026-09-30')];
+    $tabs=Illuminate\Support\Facades\Blade::render(file_get_contents($root.'/resources/views/admin/pages/kpi/partials/department-tabs.blade.php'),compact('department','filter'));
     $dom=new DOMDocument();@$dom->loadHTML($tabs);$links=$dom->getElementsByTagName('a');$labels=[];
     foreach($links as $link){$labels[]=$link->textContent;parse_str(parse_url($link->getAttribute('href'),PHP_URL_QUERY),$params);if(($params['from_date']??'')!=='2026-09-01'||isset($params['user_id']))throw new RuntimeException('Department tab lost filters or retained employee.');}
     $expected=in_array($userType,App\Models\UserType::ADMIN_ROLES,true)?['Sales','Operations','Accounts']:($userType===App\Models\UserType::HR?['Sales','Operations']:[ucfirst($department)]);

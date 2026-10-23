@@ -17,35 +17,37 @@ if (!directory) throw new Error('Pass the operations-mobile fixture directory.')
                 return route.fulfill({contentType:'text/html', body:fs.readFileSync(path.join(directory,file),'utf8')});
             });
             await page.goto('http://ops-nav.test/admin/operations/queue/review');
-            const expected = ['super-operations.html','operations-operations.html'].includes(file);
+            await page.addStyleTag({url:'http://ops-nav.test/assets/admin/css/crm/lead-detail.css'});
+            await page.evaluate(() => {
+                const actions=document.createElement('div');actions.className='ld-mobile-actions';
+                actions.innerHTML='<a href="tel:123">Call</a><a href="https://wa.me/123">WhatsApp</a>';
+                document.body.append(actions);
+            });
             const nav = page.locator('.operations-mobile-nav'), panel = page.locator('#operations-mobile-more');
-            if (!expected) {
-                assert.equal(await nav.count(), 0, `Unexpected navigation: ${file}`);
-                await page.close();
-                continue;
-            }
             for (const width of [390,320,767]) {
                 await page.setViewportSize({width,height:844});
                 await nav.waitFor({state:'visible'});
                 const box = await nav.boundingBox();
                 assert(Math.abs(box.y + box.height - 844) < 1, 'Navigation must remain at viewport bottom');
+                const actions=await page.locator('.ld-mobile-actions').boundingBox();
+                assert(actions.y+actions.height<=box.y+1,'Call/WhatsApp actions must not overlap bottom tabs');
                 assert.equal(await page.locator('.kt-mobile-nav').isVisible(),false,'Do not stack two navigation bars');
+                assert.equal(await page.locator('.hr-mobile-nav').isVisible(),false);
+                assert.equal(await page.locator('.target-mobile-nav').isVisible(),false);
+                assert.equal(await page.locator('.sidemenu-toggle').isVisible(),false,'Sidebar toggle must be hidden for every role');
                 const sources = await page.locator('.app-sidebar .main-menu a[href]').evaluateAll(items => items.map(item => item.href));
                 for (const href of await nav.locator('a:visible').evaluateAll(items => items.map(item => item.href))) assert(sources.includes(href),'Unauthorized primary link');
-                assert.equal(await nav.locator('[aria-current="page"]').innerText(),'Review');
+                assert.equal(await nav.locator('[aria-current="page"]').count(),1);
                 const toggle = nav.locator('[data-toggle-operations-more]');
                 await toggle.click();
                 assert.equal(await panel.isVisible(),true);
                 assert.equal(await toggle.getAttribute('aria-expanded'),'true');
                 const moreLinks = await panel.locator('a[href]').evaluateAll(items => items.map(item => item.href));
                 assert.deepEqual([...new Set(moreLinks)].sort(),[...new Set(sources)].sort(),'More must match sidebar permissions');
-                assert((await panel.locator('summary').allTextContents()).includes('Operations Dashboard'));
-                assert.equal(await panel.locator('a').filter({hasText:/^Reschedule$/}).count(),1);
-                assert.equal(await panel.locator('a').filter({hasText:/^Vendor Follow-ups$/}).count(),1);
                 const panelBox = await panel.boundingBox();
                 assert(panelBox.y >= 0 && panelBox.y + panelBox.height < box.y, 'Popup overlaps navigation or leaves screen');
                 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),false);
-                if (width === 390 && file === 'operations-operations.html') await page.screenshot({path:path.join(directory,'operations-more-mobile.png')});
+                if (width === 390) await page.screenshot({path:path.join(directory,`${file}-more-mobile.png`)});
                 await page.keyboard.press('Escape');
                 assert.equal(await panel.isVisible(),false);
                 assert.equal(await toggle.evaluate(el => el === document.activeElement),true);
@@ -58,6 +60,7 @@ if (!directory) throw new Error('Pass the operations-mobile fixture directory.')
             await page.setViewportSize({width:1440,height:1000});
             assert.equal(await nav.isVisible(),false);
             assert.equal(await panel.isVisible(),false);
+            assert.equal(await page.locator('.sidemenu-toggle').isVisible(),true,'Desktop navigation must remain unchanged');
             assert.deepEqual(errors,[]);
             console.log(`PASS ${file}: mobile bottom tabs, More permissions, close/Escape/outside click, responsive and desktop`);
             await page.close();

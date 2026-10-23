@@ -1806,12 +1806,14 @@ if (inline) {
 
         function getReceiptUrl(receipt, fallbackUrl) {
             if (!receipt) return fallbackUrl || null;
-            // If server already returned full URL, use it
-            if (receipt.indexOf('http://') === 0 || receipt.indexOf('https://') === 0) return receipt;
-            // if receipt already begins with /storage or /, normalize
-            if (receipt.indexOf('/storage/') === 0) return receipt;
-            if (receipt.indexOf('/') === 0) return '/storage' + receipt;
-            return '/storage/' + receipt;
+            const raw = String(receipt).replace(/\\/g, '/');
+            if (/^https?:\/\//i.test(raw)) return raw;
+            const normalized = raw.replace(/^\/+/, '').replace(/^storage\//, '');
+            if (normalized.startsWith('admin/followups/files/')) return '/' + normalized;
+            if (normalized.startsWith('followups/')) {
+                return '{{ route('admin.followups.file', ['filename' => '__file__'], false) }}'.replace('__file__', encodeURIComponent(normalized.slice('followups/'.length)));
+            }
+            return '/storage/' + normalized.split('/').map(encodeURIComponent).join('/');
         }
 
         function attachReceiptViewHandlers() {
@@ -1853,7 +1855,7 @@ if (inline) {
             // clear preview
             preview.innerHTML = '';
 
-            const url = `/storage/${receiptPath}`;
+            const url = getReceiptUrl(receiptPath);
             const ext = (receiptPath || '').split('.').pop().toLowerCase();
             if (['jpg','jpeg','png','gif','webp'].includes(ext)) {
                 const img = document.createElement('img');

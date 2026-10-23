@@ -1,10 +1,5 @@
 @extends('admin.layouts.header')
 @section('content')
-    <!-- Page Header -->
-    <div class="block justify-between page-header md:flex">
-
-    </div>
-    <!-- Page Header Close -->
     @if (session('success'))
         <div class="alert alert-success mb-4">
             {{ session('success') }}
@@ -16,6 +11,10 @@
         </div>
     @endif
 
+    <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/shared/kimi-tokens.css') }}">
+    <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/vendors.css') }}?v=2">
+    <div class="crm-kimi vc-page" data-vendor-catalog>
+    @include('admin.pages.vendors.partials.catalog-list')
     <div class="grid grid-cols-12">
         <div class="xl:col-span-12 col-span-12">
             <div class="box">
@@ -240,187 +239,6 @@
                             </form>
                         </div>
                     </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Search Filters -->
-    <div class="grid grid-cols-12 gap-6">
-        <div class="xl:col-span-12 col-span-12">
-            <div class="box custom-box">
-                <div class="box-header">
-                    <div class="box-title">
-                        Search Filters
-                        @if (request()->hasAny(['vendor_name', 'email', 'product_id', 'service_id', 'status']))
-                            <span class="badge bg-primary/10 text-primary ms-2">Active</span>
-                        @endif
-                    </div>
-                    <button type="button" class="ti-btn ti-btn-sm ti-btn-outline-primary" id="toggle-filters">
-                        <i class="ti ti-chevron-up" id="filter-icon"></i>
-                    </button>
-                </div>
-                <div class="box-body hidden" id="filter-section">
-                    <form method="GET" action="{{ route('admin.vendors.index') }}" class="filter-form"
-                        id="vendor-filter-form">
-                        <div class="grid grid-cols-12 gap-4">
-                            <!-- Vendor Name Search -->
-                            <div class="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Vendor Name</label>
-                                <input type="text" name="vendor_name"
-                                    class="ti-form-input w-full rounded-sm form-control-sm"
-                                    placeholder="Search by vendor name..." value="{{ request('vendor_name') }}">
-                            </div>
-                            <!-- Email Search -->
-                            <div class="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Email</label>
-                                <input type="text" name="email"
-                                    class="ti-form-input w-full rounded-sm form-control-sm"
-                                    placeholder="Search by email..." value="{{ request('email') }}">
-                            </div>
-                            <!-- Product Filter -->
-                            <div class="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Product</label>
-                                <select name="product_id"
-                                    class="ti-form-select w-full rounded-sm form-control-sm product-select"
-                                    data-placeholder="Select Product">
-                                    <option value="">All Products</option>
-                                    @foreach ($allProducts as $product)
-                                        <option value="{{ $product->id }}"
-                                            {{ request('product_id') == $product->id ? 'selected' : '' }}>
-                                            {{ $product->product }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                            </div>
-                            <!-- Service Filter -->
-                            <div class="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Service</label>
-                                <select name="service_id"
-                                    class="ti-form-select w-full rounded-sm form-control-sm service-select"
-                                    data-placeholder="Select Service">
-                                    <option value="">All Services</option>
-                                    @foreach ($allServices as $service)
-                                        <option value="{{ $service->id }}"
-                                            {{ request('service_id') == $service->id ? 'selected' : '' }}>
-                                            {{ $service->service }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                            </div>
-                            <!-- Status Filter -->
-                            <div class="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Status</label>
-                                <select name="status" class="ti-form-select w-full rounded-sm form-control-sm">
-                                    <option value="">All Status</option>
-                                    <option value="1" {{ request('status') == '1' ? 'selected' : '' }}>Active
-                                    </option>
-                                    <option value="0" {{ request('status') == '0' ? 'selected' : '' }}>Inactive
-                                    </option>
-                                </select>
-                            </div>
-                            <!-- Action Buttons -->
-                            <div class="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">&nbsp;</label>
-                                <div class="flex gap-2">
-                                    <button type="submit" class="ti-btn bg-theme ti-btn-primary-full !py-1 !px-2">
-                                        Apply Filters
-                                    </button>
-                                    <button type="button" class="ti-btn ti-btn-outline-secondary !py-1 !px-2"
-                                        onclick="clearFilters()">
-                                        <i class="ri-refresh-line"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Table -->
-    <div class="grid grid-cols-12 gap-6">
-        <div class="xl:col-span-12 col-span-12">
-            <div class="box custom-box">
-                <div class="box-header">
-                    <div class="box-title">
-                        Vendors List
-                        <span class="badge bg-info/10 text-info ms-2">{{ method_exists($vendors, 'total') ? $vendors->total() : count($vendors) }}
-                            {{ (method_exists($vendors, 'total') ? $vendors->total() : count($vendors)) == 1 ? 'vendor' : 'vendors' }}</span>
-                    </div>
-                </div>
-                <div class="box-body">
-                    <div class="table-responsive ">
-                        <table id="vendors-table" class="table display responsive nowrap table-datatable server-paginated" width="100%">
-                            <thead class="bg-primary text-white">
-                                <tr class="border-b border-defaultborder">
-                                    <th data-priority="1">Sr.No</th>
-                                    <th data-priority="2">Name</th>
-                                    <th data-priority="3">Contact</th>
-                                    <th data-priority="4">Email</th>
-                                    <th data-priority="5">Location</th>
-                                    <th data-priority="6">Status</th>
-                                    <th data-priority="7">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach ($vendors as $index => $vendor)
-                                    <tr class="border-b border-defaultborder">
-                                        <td class="text-center">{{ ($vendors->firstItem() ?? 1) + $index }}</td>
-                                        <td>{{ $vendor->name }}</td>
-                                        <td class="text-center">
-                                            {{ $vendor->contact_number }}<br>
-                                        </td>
-                                        <td>{{ $vendor->email }}</td>
-                                        <td>
-                                            {{ $vendor->city->name ?? '' }}, {{ $vendor->city->state->name ?? '' }}<br>
-                                            {{ $vendor->city->state->country->name ?? '' }}
-                                        </td>
-                                        <td class="text-center">
-                                            @if ($vendor->status == 1)
-                                                <span class="badge bg-success/10 text-success">Active</span>
-                                            @else
-                                                <span class="badge bg-danger/10 text-danger">Inactive</span>
-                                            @endif
-                                        </td>
-                                        <td>
-                                            <div class="hstack flex gap-3 text-[.9375rem]">
-                                                <a aria-label="anchor" href="javascript:void(0);"
-                                                    class="ti-btn ti-btn-icon ti-btn-sm ti-btn-primary-full view-vendor-btn view-product"
-                                                    data-hs-overlay="#view-vendor"
-                                                    data-bs-toggle="tooltip" data-bs-placement="top" title="View"
-                                                    data-vendor-id="{{ $vendor->id }}" data-id="{{ $vendor->id }}">
-                                                    <i class="ri-eye-line"></i>
-                                                </a>
-                                                <a aria-label="anchor" href="javascript:void(0);"
-                                                    class="ti-btn ti-btn-icon ti-btn-sm ti-btn-info-full edit-vendor-btn edit-product"
-                                                    data-hs-overlay="#edit-vendor"
-                                                    data-bs-toggle="tooltip" data-bs-placement="top" title="Edit"
-                                                    data-vendor-id="{{ $vendor->id }}" data-id="{{ $vendor->id }}">
-                                                    <i class="ri-edit-line"></i>
-                                                </a>
-                                                <button type="button"
-                                                    class="ti-btn ti-btn-icon ti-btn-sm {{ $vendor->status == 1 ? 'ti-btn-danger-full' : 'ti-btn-success-full' }} open-vendor-modal"
-                                                    data-id="{{ $vendor->id }}" data-name="{{ $vendor->name }}"
-                                                    data-status="{{ $vendor->status }}" data-bs-toggle="tooltip"
-                                                    data-bs-placement="top"
-                                                    title="{{ $vendor->status ? 'Deactivate' : 'Activate' }}">
-                                                    <i
-                                                        class="{{ $vendor->status ? 'ri-lock-line' : 'ri-check-line' }}"></i>
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                    @if($vendors->hasPages())
-                    <div class="mt-4">
-                        {{ $vendors->appends(request()->except('page'))->links() }}
-                    </div>
-                    @endif
                 </div>
             </div>
         </div>
@@ -711,6 +529,7 @@
                 </div>
             </div>
         </div>
+    </div>
     </div>
 @endsection
 
@@ -1053,26 +872,41 @@
                 }, 300);
             });
 
+            let activeVendorOverlay = null;
+            let vendorLoadRequest = null;
+            let vendorLoadSequence = 0;
+
+            function prepareVendorOverlay(selector) {
+                cleanupOverlays();
+                activeVendorOverlay = selector;
+                return ++vendorLoadSequence;
+            }
+
             // ===== VIEW VENDOR FUNCTIONALITY =====
 
             // View vendor button click handler - product-style: let HSOverlay open, fetch data via AJAX
             $(document).on('click', '.view-product', function(e) {
                 e.preventDefault();
                 const vendorId = $(this).data('id');
+                const sequence = prepareVendorOverlay('#view-vendor');
+                $('#view-vendor .ti-offcanvas-body [id^="view_"]').empty();
+                $('#view-profile-image').empty();
+                $('#view_name').text('Loading vendor...');
 
-                $.ajax({
+                vendorLoadRequest = $.ajax({
                     url: `/admin/vendors/${vendorId}/view-modal`,
                     type: 'GET',
                     headers: {
                         'X-Requested-With': 'XMLHttpRequest'
                     },
                     success: function(response) {
-                        if (response.success) {
+                        if (sequence !== vendorLoadSequence || activeVendorOverlay !== '#view-vendor') return;
+                        if (response.success && String(response.vendor?.id) === String(vendorId)) {
                             populateViewModal(response);
-                        }
+                        } else $('#view_name').text('Unable to load this vendor. Please reopen it.');
                     },
-                    error: function(xhr) {
-                        alert('Failed to load vendor data');
+                    error: function(xhr, status) {
+                        if (status !== 'abort' && sequence === vendorLoadSequence) $('#view_name').text('Unable to load this vendor. Please reopen it.');
                     }
                 });
                 // Fallback: ensure offcanvas becomes visible even if HSOverlay didn't open it
@@ -1177,6 +1011,7 @@
 
             // Close view modal handler
             $(document).on('click', '[data-hs-overlay="#view-vendor"]', function() {
+                if (!$(this).closest('#view-vendor').length) return;
                 var $el = $('#view-vendor');
                 $el.addClass('hidden').removeClass('open');
                 $el.css({'transform':'', 'right':'', 'visibility':''});
@@ -1195,23 +1030,31 @@
             $(document).on('click', '.edit-product', function(e) {
                 e.preventDefault();
                 const vendorId = $(this).data('id');
+                const sequence = prepareVendorOverlay('#edit-vendor');
+                $('#edit-vendor-form')[0].reset();
+                $('#edit-vendor-form').attr('action', '#').find(':input').prop('disabled', true);
+                $('#edit-vendor .vendor-load-error').remove();
+                $('#edit-vendor-form').prepend('<p class="vendor-load-error" role="status">Loading vendor...</p>');
 
-                $.ajax({
+                vendorLoadRequest = $.ajax({
                     url: `/admin/vendors/${vendorId}/edit`,
                     type: 'GET',
                     headers: {
                         'X-Requested-With': 'XMLHttpRequest'
                     },
                     success: function(response) {
-                        if (response.success) {
+                        if (sequence !== vendorLoadSequence || activeVendorOverlay !== '#edit-vendor') return;
+                        if (response.success && String(response.vendor?.id) === String(vendorId)) {
+                            $('#edit-vendor .vendor-load-error').remove();
+                            $('#edit-vendor-form :input').prop('disabled', false);
                             currentVendorData = response.vendor;
                             populateEditForm(response);
                             // clear error messages if any
                             if (typeof clearErrorMessages === 'function') clearErrorMessages();
-                        }
+                        } else $('#edit-vendor .vendor-load-error').text('Unable to load this vendor. Please reopen it.');
                     },
-                    error: function(xhr) {
-                        alert('Failed to load vendor data');
+                    error: function(xhr, status) {
+                        if (status !== 'abort' && sequence === vendorLoadSequence) $('#edit-vendor .vendor-load-error').text('Unable to load this vendor. Please reopen it.');
                     }
                 });
                 // Fallback: ensure offcanvas becomes visible even if HSOverlay didn't open it
@@ -1222,6 +1065,7 @@
 
             // Helper: ensure offcanvas shows up if HSOverlay fails (fallback)
             function ensureOffcanvasVisible(selector) {
+                if (activeVendorOverlay !== selector) return;
                 try {
                     var $el = $(selector);
                     if (!$el.length) return;
@@ -1272,6 +1116,9 @@
 
             // Cleanup helper to remove backdrops/body styles left behind by offcanvas/overlay
             function cleanupOverlays() {
+                activeVendorOverlay = null;
+                vendorLoadRequest?.abort();
+                vendorLoadSequence++;
                 try {
                     // Remove known body class
                     $('body').removeClass('ti-offcanvas-open');
@@ -1317,64 +1164,10 @@
             window._hsJustClosed = false;
 
 
-            // Diagnostic: log clicks on any overlay triggers and ensure offcanvas visible
-            // Avoid re-opening the offcanvas when clicking close buttons inside the offcanvas
-            $(document).on('click', '[data-hs-overlay]', function(e) {
-                try {
-                    // If we just closed a modal, avoid running the reopen logic for a short period
-                    if (window._hsJustClosed) {
-                        
-                        return;
-                    }
-                    var target = $(this).data('hs-overlay');
-                    
-                    if (!target) return;
-
-                    // If the click originated from within the target overlay (e.g. a close button inside the modal),
-                    // don't force it open again. This prevents the close button from immediately re-opening the offcanvas.
-                    var $targetEl = $(target);
-                    if ($targetEl.length && $.contains($targetEl[0], e.target)) {
-                        
-                        return;
-                    }
-
-                    // small delay to allow HSOverlay handler to run
-                    setTimeout(function() { ensureOffcanvasVisible(target); }, 80);
-                } catch (err) {
-                }
-            });
-
-            // Fallback: after any hs-overlay trigger is clicked, if the target ends up closed, ensure cleanup runs
-            $(document).on('click', '[data-hs-overlay]', function(e) {
-                try {
-                    var target = $(this).data('hs-overlay');
-                    if (!target) return;
-                    // Wait for HS overlay to toggle, then cleanup if the overlay is not open
-                    setTimeout(function() {
-                        try {
-                            var $t = $(target);
-                            if (!$t.length) return;
-                            if (!$t.hasClass('open') || $t.hasClass('hidden')) {
-                                cleanupOverlays();
-                            }
-                        } catch (innerErr) {
-                            cleanupOverlays();
-                        }
-                    }, 120);
-                } catch (err) {
+            $(document).on('keydown.vendorOverlay', function(event) {
+                if (event.key === 'Escape') {
                     cleanupOverlays();
-                }
-            });
-
-            // If a close trigger inside an overlay is clicked, mark as just closed and cleanup
-            $(document).on('click', '.hs-overlay [data-hs-overlay]', function(e) {
-                try {
-                    // this is likely a close button inside the overlay; prevent other handlers briefly
-                    window._hsJustClosed = true;
-                    setTimeout(function() { window._hsJustClosed = false; }, 300);
-                    // schedule cleanup after the HS overlay's own handler runs
-                    setTimeout(function() { cleanupOverlays(); }, 120);
-                } catch (err) {
+                    $('#vendor-status-modal').addClass('hidden');
                 }
             });
 
@@ -1812,6 +1605,7 @@
 
             // Close edit modal handler
             $(document).on('click', '[data-hs-overlay="#edit-vendor"]', function() {
+                if (!$(this).closest('#edit-vendor').length) return;
                 var $el = $('#edit-vendor');
                 $el.addClass('hidden').removeClass('open');
                 $el.css({'transform':'', 'right':'', 'visibility':''});
@@ -1826,23 +1620,28 @@
             window.location.href = '{{ route('admin.vendors.index') }}';
         }
 
-        // Toggle filters
+        // Keep filters collapsed on load, including when a filter is active.
         $(document).ready(function() {
-            const filterSection = $('#filter-section');
-            const icon = $('#filter-icon');
-
-            // Initially hide filter section and set icon to down
-            filterSection.hide();
-            icon.removeClass('ti-chevron-up').addClass('ti-chevron-down');
-
+            const section = document.getElementById('filter-section');
             $('#toggle-filters').on('click', function() {
-                if (filterSection.is(':visible')) {
-                    filterSection.slideUp();
-                    icon.removeClass('ti-chevron-up').addClass('ti-chevron-down');
-                } else {
-                    filterSection.slideDown();
-                    icon.removeClass('ti-chevron-down').addClass('ti-chevron-up');
+                section.hidden = !section.hidden;
+                this.setAttribute('aria-expanded', String(!section.hidden));
+                $('#filter-icon').toggleClass('ti-chevron-down', section.hidden).toggleClass('ti-chevron-up', !section.hidden);
+            });
+            $('[data-vendor-page-size]').on('change', function() {
+                const url = new URL(window.location.href);
+                url.searchParams.set('per_page', this.value);
+                url.searchParams.delete('page');
+                window.location.href = url.href;
+            });
+            $('[data-vendor-add]').on('click', function() {
+                const panel = document.getElementById('add-vendor-form');
+                if (panel.classList.contains('hidden')) {
+                    $('#add-vendor-accordion .hs-accordion-toggle').trigger('click');
+                    panel.classList.remove('hidden');
+                    panel.style.height = 'auto';
                 }
+                panel.scrollIntoView({behavior: 'smooth', block: 'start'});
             });
         });
     </script>

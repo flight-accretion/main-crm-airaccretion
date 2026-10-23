@@ -42,7 +42,7 @@
         </div>
         {{-- The shared Ride Status panel is moved here (directly under the buttons) when this ride's button is clicked. --}}
         <div class="rs-panel-slot" data-panel-slot></div>
-        <details class="rs-timeline" open><summary>Timeline</summary><ol>
+        <details class="rs-timeline"><summary>Timeline</summary><ol>
             @foreach($ride['timeline'] ?? [] as $event)
                 <li class="{{ $event['date'] ? 'is-recorded' : '' }}"><span class="rs-step" aria-hidden="true">@if($event['date'])<i class="ri-check-line"></i>@else{{ $loop->iteration }}@endif</span><strong>{{ $event['label'] }}</strong><time>{{ $event['date'] ? \Carbon\Carbon::parse($event['date'])->format('d M Y, H:i') : '--' }}</time><small>{{ $event['note'] }}</small></li>
             @endforeach

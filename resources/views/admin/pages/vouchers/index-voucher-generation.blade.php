@@ -1,4 +1,4 @@
-{{-- 
+{{--
     Voucher Generation Dashboard
     This page displays leads that have at least one approved payment.
     It allows Operations team to generate vouchers for these leads.
@@ -6,30 +6,60 @@
 --}}
 @extends('admin.layouts.header')
 @section('content')
-@php $tableProductNames = app(\App\Services\LeadTableProducts::class)->forLeads($leads); @endphp
-    <!-- Page Header -->
-    <div class="block justify-between page-header md:flex">
-        <div>
-            <h3
-                class="!text-defaulttextcolor dark:!text-defaulttextcolor/70 dark:text-white dark:hover:text-white text-[1.125rem] font-semibold">
-                Voucher Generation</h3>
-        </div>
-        <ol class="flex items-center whitespace-nowrap min-w-0">
-            <li class="text-[0.813rem] ps-[0.5rem]">
-                <a class="flex items-center text-primary hover:text-primary dark:text-primary truncate"
-                    href="javascript:void(0);">
-                    Voucher
-                    <i
-                        class="ti ti-chevrons-right flex-shrink-0 text-[#8c9097] dark:text-white/50 px-[0.5rem] overflow-visible rtl:rotate-180"></i>
-                </a>
-            </li>
-            <li class="text-[0.813rem] text-defaulttextcolor font-semibold hover:text-primary dark:text-[#8c9097] dark:text-white/50 "
-                aria-current="page">
-                Voucher Generation
-            </li>
-        </ol>
-    </div>
-    <!-- Page Header Close -->
+@php
+    $tableProductNames = app(\App\Services\LeadTableProducts::class)->forLeads($leads);
+    $voucherState = $voucherState ?? 'pending';
+    $voucherSummary = $voucherSummary ?? ['pending' => 0, 'within_48h' => 0, 'generated' => 0, 'sent' => 0, 'sent_this_month' => 0];
+    $serviceNames = $serviceNames ?? collect();
+
+    // Determine current user's user_type (string) - same rule as the old action column.
+    $currentUserType = Auth::user() && Auth::user()->userType ? Auth::user()->userType->user_type : null;
+    $canManageVouchers = $currentUserType
+        && (in_array($currentUserType, \App\Models\UserType::ADMIN_ROLES) || in_array($currentUserType, \App\Models\UserType::OPERATIONS_ROLES));
+    $isSuperAdmin = in_array(optional(auth()->user()->userType)->user_type, [\App\Models\UserType::SUPER_ADMIN]);
+
+    $crmStatusLabels = [0 => 'Initiated', 1 => 'Active', 2 => 'Cancelled', 3 => 'Full Payment Received', 4 => 'Partial Payment Received', 5 => 'Confirmed', 6 => 'Pending', 7 => 'Rescheduled', 8 => 'Approved', 9 => 'Rejected'];
+    $within48hLimit = now()->addHours(48);
+
+    // "in 1 day 4 hrs" / "2 days ago" - time left to the service date.
+    $countdown = function ($date) {
+        $seconds = $date->getTimestamp() - now()->getTimestamp();
+        $abs = abs($seconds);
+        $days = intdiv($abs, 86400);
+        $hours = intdiv($abs % 86400, 3600);
+        if ($days === 0 && $hours === 0) {
+            return $seconds >= 0 ? 'within the hour' : 'started';
+        }
+        $parts = [];
+        if ($days > 0) {
+            $parts[] = $days . ' ' . ($days === 1 ? 'day' : 'days');
+        }
+        if ($hours > 0 && $days < 7) {
+            $parts[] = $hours . ' ' . ($hours === 1 ? 'hr' : 'hrs');
+        }
+        return $seconds >= 0 ? 'in ' . implode(' ', $parts) : implode(' ', $parts) . ' ago';
+    };
+
+    // Rides within 48h first (amber rows); otherwise the existing newest-first order is kept.
+    $isUrgentLead = fn ($lead) => $lead->vouchers->isEmpty()
+        && $lead->rideSegments->contains(fn ($ride) => !$ride->is_tba && $ride->from_date && $ride->from_date->between(now(), $within48hLimit));
+    $queueLeads = $leads->sortBy(fn ($lead) => $isUrgentLead($lead) ? 0 : 1)->values();
+
+    $chipQuery = request()->except(['voucher_state', 'page']);
+    $chips = [
+        'pending' => 'Pending · ' . $voucherSummary['pending'],
+        'generated' => 'Generated · ' . $voucherSummary['generated'],
+        'sent' => 'Sent · ' . $voucherSummary['sent'],
+        'all' => 'All',
+    ];
+    $hasActiveFilters = collect(request()->only(['from_date', 'to_date', 'name', 'email', 'phone', 'representative_user_id', 'status', 'service_ids', 'product_ids']))
+        ->filter(fn ($value) => $value !== null && $value !== '')->isNotEmpty();
+@endphp
+<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/vouchers/tokens.css') }}?v=1">
+<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/vouchers/voucher-generation.css') }}?v=1">
+<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/vouchers/voucher-generation-mobile.css') }}?v=1">
+
+<div class="crm-voucher vg-page">
     @if (session('success'))
         <div class="alert alert-success mb-4">
             {{ session('success') }}
@@ -40,423 +70,294 @@
             {{ session('error') }}
         </div>
     @endif
-    <div class="grid grid-cols-12 gap-6">
-        <div class="col-span-12">
-            <div class="box">
-                <div class="box-header">
-                    <div class="box-title">
-                        Search Filters
-                    </div>
-                    <button type="button" class="ti-btn ti-btn-sm ti-btn-outline-primary" id="toggle-filters">
-                        <i class="ti ti-chevron-up" id="filter-icon"></i>
+
+    <header class="vg-heading">
+        <div>
+            <h1>Voucher Generation</h1>
+            <p>Travel vouchers for confirmed bookings — generated after payment approval, sent to the client before the ride</p>
+        </div>
+    </header>
+
+    <section class="vg-stats" aria-label="Voucher summary">
+        <div class="vg-stat acc-brand">
+            <strong>{{ $voucherSummary['pending'] }}</strong>
+            <div class="vg-label">Pending generation</div>
+            <div class="vg-sub2">payment approved, no voucher yet</div>
+        </div>
+        <div class="vg-stat acc-red">
+            <strong>{{ $voucherSummary['within_48h'] }}</strong>
+            <div class="vg-label">Ride within 48h</div>
+            <div class="vg-sub2">voucher needed before client travels</div>
+        </div>
+        <div class="vg-stat acc-amber">
+            <strong>{{ $voucherSummary['generated'] }}</strong>
+            <div class="vg-label">Generated, not sent</div>
+            <div class="vg-sub2">ride upcoming — send to client</div>
+        </div>
+        <div class="vg-stat acc-green">
+            <strong>{{ $voucherSummary['sent_this_month'] }} <small>· {{ now()->format('M') }}</small></strong>
+            <div class="vg-label">Vouchers sent</div>
+            <div class="vg-sub2">{{ $voucherSummary['sent'] }} sent to clients in total</div>
+        </div>
+    </section>
+
+    <nav class="vg-chips" aria-label="Voucher queue">
+        @foreach ($chips as $chipState => $chipLabel)
+            <a class="vg-chip {{ $voucherState === $chipState ? 'on' : '' }}"
+                href="{{ route('admin.vouchers.index', array_merge($chipQuery, $chipState === 'pending' ? [] : ['voucher_state' => $chipState])) }}"
+                @if ($voucherState === $chipState) aria-current="page" @endif>{{ $chipLabel }}</a>
+        @endforeach
+    </nav>
+
+    <section class="vg-section" aria-labelledby="vg-queue-title">
+        <div class="vg-section-head">
+            <div class="vg-section-title">
+                <h2 id="vg-queue-title">Voucher queue</h2>
+                @if (in_array($voucherState, ['pending', 'all'], true))
+                    <span class="vg-tag amber">urgent first</span>
+                @endif
+            </div>
+            <div class="vg-tools">
+                <label class="vg-search">
+                    <i class="ri-search-line" aria-hidden="true"></i>
+                    <span class="sr-only">Search vouchers</span>
+                    <input type="search" id="vg-search" placeholder="Search client, phone, service…" autocomplete="off">
+                </label>
+                <button type="button" class="vg-ghost {{ $hasActiveFilters ? 'is-active' : '' }}" id="toggle-filters" aria-controls="filter-section">
+                    <i class="ri-filter-3-line" aria-hidden="true"></i> Filters
+                    <i class="ti ti-chevron-down" id="filter-icon" aria-hidden="true"></i>
+                </button>
+                <div class="export-buttons vg-export">
+                    <button type="button" class="vg-iconbtn export-excel-btn" title="Export to Excel" aria-label="Export to Excel">
+                        <i class="ri-file-excel-line"></i>
+                    </button>
+                    <button type="button" class="vg-iconbtn export-csv-btn" title="Export to CSV" aria-label="Export to CSV">
+                        <i class="ri-file-text-line"></i>
                     </button>
                 </div>
-                <div class="box-body" id="filter-section">
-                    <form class="ti-custom-validation view-client-filters" method="GET"
-                        action="{{ route('admin.vouchers.index') }}" id="filter-form" novalidate>
-                        <div class="grid grid-cols-12 gap-6 flex items-center">
-                            <div class="xl:col-span-2 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <label for="from-date" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">From Service
-                                    Date</label>
-                                <input type="date" name="from_date" class="ti-form-input rounded-sm form-control-sm"
-                                    id="from-date" value="{{ request('from_date') }}">
-                            </div>
-                            <div class="xl:col-span-2 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <label for="to-date" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">To Service
-                                    Date</label>
-                                <input type="date" name="to_date" class="ti-form-input rounded-sm form-control-sm"
-                                    id="to-date" value="{{ request('to_date') }}">
-                            </div>
-                            <div class="xl:col-span-2 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <label for="input-label"
-                                    class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Name</label>
-                                <input type="text" name="name" class="ti-form-input rounded-sm form-control-sm"
-                                    id="input" value="{{ request('name') }}">
-                            </div>
-                            <div class="xl:col-span-2 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <label for="input-label"
-                                    class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Email</label>
-                                <input type="text" name="email" class="ti-form-input rounded-sm form-control-sm"
-                                    id="input-label" value="{{ request('email') }}">
-                            </div>
-                            <div class="xl:col-span-2 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <label for="input-placeholder"
-                                    class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Phone</label>
-                                <input type="text" name="phone" class="ti-form-input rounded-sm form-control-sm"
-                                    id="input-placeholder" value="{{ request('phone') }}">
-                            </div>
-                            <div class="xl:col-span-2 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <label for="input-placeholder"
-                                    class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Staff</label>
-                                <select name="representative_user_id"
-                                    class="js-example-basic-single w-full form-control-sm">
-                                    <option value="">Select Staff</option>
-                                    @foreach ($staff as $user)
-                                        <option value="{{ $user->id }}"
-                                            {{ request('representative_user_id') == $user->id ? 'selected' : '' }}>
-                                            {{ $user->name }}</option>
-                                    @endforeach
-                                </select>
-                            </div>
-                        </div>
+            </div>
+        </div>
+        <div class="vg-section-meta">Rides within 48h are highlighted and listed first. Countdown shows time left to the service date. Click a row to open the lead.</div>
 
-                        <!-- Second row of filters -->
-                        <div class="grid grid-cols-12 gap-6 flex items-center mt-4">
-                            <div class="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <label for="status-filter"
-                                    class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Status</label>
-                                <select name="status" class="js-example-basic-single w-full form-control-sm"
-                                    id="status-filter">
-                                    <option value="" {{ (string) request('status') === '' ? 'selected' : '' }}>Select
-                                        Status</option>
-                                    @foreach ($statusOptions as $statusValue => $statusLabel)
-                                        <option value="{{ $statusValue }}"
-                                            {{ (string) request('status') === (string) $statusValue ? 'selected' : '' }}>
-                                            {{ $statusLabel }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                            </div>
-                            <div class="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <label for="service-filter"
-                                    class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Service</label>
-                                <select name="service_ids" class="js-example-basic-single w-full form-control-sm"
-                                    id="service-filter">
-                                    <option value="">Select Service</option>
-                                    @foreach ($services as $service)
-                                        <option value="{{ $service->id }}"
-                                            {{ request('service_ids') == $service->id ? 'selected' : '' }}>
-                                            {{ $service->service }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                            </div>
-                            <div class="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <label for="product-filter"
-                                    class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Product</label>
-                                <select name="product_ids" class="js-example-basic-single w-full form-control-sm"
-                                    id="product-filter">
-                                    <option value="">Select Product</option>
-                                    @foreach ($products as $product)
-                                        <option value="{{ $product->id }}"
-                                            {{ request('product_ids') == $product->id ? 'selected' : '' }}>
-                                            {{ $product->product }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                            </div>
-                            <div class="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <div class="flex gap-2 mt-6">
-                                    <button type="submit" class="ti-btn bg-theme ti-btn-primary-full !py-1 !px-2">
-                                        Apply Filters
-                                    </button>
-                                    <button type="button" class="ti-btn ti-btn-outline-secondary !py-1 !px-2"
-                                        onclick="clearFilters()">
-                                        <i class="ri-refresh-line"></i>
-                                    </button>
+        {{-- Same GET filters as before; voucher_state keeps the selected chip. --}}
+        <div id="filter-section" class="vg-filter-panel">
+            <form class="ti-custom-validation view-client-filters vg-filt" method="GET"
+                action="{{ route('admin.vouchers.index') }}" id="filter-form" novalidate>
+                @if ($voucherState !== 'pending')
+                    <input type="hidden" name="voucher_state" value="{{ $voucherState }}">
+                @endif
+                <div class="vg-fg">
+                    <label for="from-date">From service date</label>
+                    <input type="date" name="from_date" id="from-date" value="{{ request('from_date') }}">
+                </div>
+                <div class="vg-fg">
+                    <label for="to-date">To service date</label>
+                    <input type="date" name="to_date" id="to-date" value="{{ request('to_date') }}">
+                </div>
+                <div class="vg-fg">
+                    <label for="vg-filter-name">Name</label>
+                    <input type="text" name="name" id="vg-filter-name" value="{{ request('name') }}">
+                </div>
+                <div class="vg-fg">
+                    <label for="vg-filter-email">Email</label>
+                    <input type="text" name="email" id="vg-filter-email" value="{{ request('email') }}">
+                </div>
+                <div class="vg-fg">
+                    <label for="vg-filter-phone">Phone</label>
+                    <input type="text" name="phone" id="vg-filter-phone" value="{{ request('phone') }}">
+                </div>
+                <div class="vg-fg">
+                    <label for="vg-filter-staff">Staff</label>
+                    <select name="representative_user_id" id="vg-filter-staff" class="js-example-basic-single w-full">
+                        <option value="">Select Staff</option>
+                        @foreach ($staff as $user)
+                            <option value="{{ $user->id }}"
+                                {{ request('representative_user_id') == $user->id ? 'selected' : '' }}>
+                                {{ $user->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="vg-fg">
+                    <label for="status-filter">Status</label>
+                    <select name="status" class="js-example-basic-single w-full" id="status-filter">
+                        <option value="" {{ (string) request('status') === '' ? 'selected' : '' }}>Select Status</option>
+                        @foreach ($statusOptions as $statusValue => $statusLabel)
+                            <option value="{{ $statusValue }}"
+                                {{ (string) request('status') === (string) $statusValue ? 'selected' : '' }}>
+                                {{ $statusLabel }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="vg-fg">
+                    <label for="service-filter">Service</label>
+                    <select name="service_ids" class="js-example-basic-single w-full" id="service-filter">
+                        <option value="">Select Service</option>
+                        @foreach ($services as $service)
+                            <option value="{{ $service->id }}"
+                                {{ request('service_ids') == $service->id ? 'selected' : '' }}>
+                                {{ $service->service }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="vg-fg">
+                    <label for="product-filter">Product</label>
+                    <select name="product_ids" class="js-example-basic-single w-full" id="product-filter">
+                        <option value="">Select Product</option>
+                        @foreach ($products as $product)
+                            <option value="{{ $product->id }}"
+                                {{ request('product_ids') == $product->id ? 'selected' : '' }}>
+                                {{ $product->product }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="vg-filter-actions">
+                    <button type="button" class="vg-ghost" onclick="clearFilters()" title="Reset filters">
+                        <i class="ri-refresh-line" aria-hidden="true"></i> Reset
+                    </button>
+                    <button type="submit" class="vg-primary">Apply filters</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="vg-tblwrap">
+            <table class="lead-datatable no-horizontal-scroll vg-table" width="100%"
+                data-empty-msg="No leads in this voucher queue">
+                <thead>
+                    <tr>
+                        <th>Client</th>
+                        <th>Service</th>
+                        <th>Service date</th>
+                        <th>Assigned</th>
+                        <th>Payment</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach ($queueLeads as $enquiry)
+                        @php
+                            $viewUrl = route('admin.leads.view', $enquiry->id);
+                            $firstSegment = $enquiry->rideSegments->first();
+                            $lastSegment = $enquiry->rideSegments->last();
+                            $voucher = $enquiry->vouchers->sortByDesc('created_at')->first();
+                            $isUrgent = $isUrgentLead($enquiry);
+
+                            $productText = $tableProductNames[$enquiry->id] ?? '';
+                            $serviceText = collect($enquiry->service_ids_array)
+                                ->map(fn ($serviceId) => $serviceNames[$serviceId] ?? null)
+                                ->filter()
+                                ->unique()
+                                ->implode(', ');
+                            $routeText = $firstSegment && ($firstSegment->from_place || $firstSegment->to_place)
+                                ? ($firstSegment->from_place ?: 'Not set') . ' → ' . ($firstSegment->to_place ?: 'Not set')
+                                : '';
+
+                            $status = $enquiry->leadFollowups()->orderBy('created_at', 'desc')->first()->status ?? null;
+                            $hasApprovedPayment = in_array($enquiry->id, $leadsWithApprovedPayments ?? []);
+                        @endphp
+                        <tr class="{{ $isUrgent ? 'blocked' : '' }}" data-view-url="{{ $viewUrl }}">
+                            <td data-label="Client">
+                                <div class="vg-cell">
+                                    <a class="vg-main vg-client" href="{{ $viewUrl }}" target="_blank" rel="noopener"
+                                        title="View lead">{{ $enquiry->client->name }}</a>
+                                    <div class="vg-cellsub">{{ $enquiry->client->email ?: 'No email' }} · {{ $enquiry->client->contact_number }}</div>
                                 </div>
-                            </div>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="grid grid-cols-12 gap-6">
-        <div class="xl:col-span-12 col-span-12">
-            <div class="box custom-box">
-                <div class="box-header flex justify-between items-center">
-                    <div class="box-title">Voucher Generation</div>
-                    <div class="export-buttons flex gap-2 mb-3">
-                        <button type="button" class="ti-btn ti-btn-success-full ti-btn-sm export-excel-btn"
-                            title="Export to Excel">
-                            <i class="ri-file-excel-line"></i>
-                        </button>
-                        <button type="button" class="ti-btn ti-btn-info-full ti-btn-sm export-csv-btn"
-                            title="Export to CSV">
-                            <i class="ri-file-text-line"></i>
-                        </button>
-                        <!-- <button type="button" class="ti-btn ti-btn-danger-full ti-btn-sm export-pdf-btn" title="Export to PDF"><i class="ri-file-pdf-line"></i>
-                                            </button>
-                                            <button type="button" class="ti-btn ti-btn-secondary-full ti-btn-sm export-print-btn" title="Print"><i class="ri-printer-line"></i>
-                                            </button> -->
-                    </div>
-                </div>
-                <div class="box-body">
-                    <div class="table-responsive">
-                        <table id="" class="table display responsive nowrap lead-datatable" width="100%"
-                            data-empty-msg="No vendor payments found">
-                            <thead class="bg-primary text-white">
-                                <tr class="border-b border-defaultborder">
-                                    <th></th>
-                                    <th data-priority="1">S.No</th>
-                                    <th data-priority="2">Client Name</th>
-                                    <th data-priority="3">Email</th>
-                                    <th data-priority="5">Phone</th>
-                                    <th data-priority="6">Next Follow Up</th>
-                                    <th data-priority="7">Created Date</th>
-                                    <th data-priority="8">Assigned:</th>
-                                    <th data-priority="9">Service Date:</th>
-                                    <th data-priority="10">Product:</th>
-                                    <th data-priority="11">Last Update:</th>
-                                    <th data-priority="12">Follow-up History:</th>
-                                    <th data-priority="1">Status</th>
-                                    <th data-priority="1">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach ($leads as $key => $enquiry)
-                                    <tr class="border-b border-defaultborder">
-                                        <td></td>
-                                        <td class="text-center">{{ $key + 1 }}</td>
-                                        <td>{{ $enquiry->client->name }}</td>
-                                        <td>{{ $enquiry->client->email }}</td>
-                                        <td class="text-center">{{ $enquiry->client->contact_number }}</td>
-                                        <td class="text-center">
-                                            @if ($enquiry->next_followup && $enquiry->next_followup->next_followup_date)
-                                                {{ $enquiry->next_followup->next_followup_date->format('d-m-Y H:i') }}
-                                            @else
-                                                N/A
-                                            @endif
-                                        </td>
-                                        <td class="text-center">{{ date('d-m-Y', strtotime($enquiry->created_at)) }}</td>
-                                        <td>
-                                            @if ($enquiry->representative)
-                                                {{ $enquiry->representative->name }}
-                                            @else
-                                                N/A
-                                            @endif
-                                        </td>
-                                        <td>
-                                            @if ($enquiry->rideSegments->count() > 0)
-                                                @php
-                                                    $firstSegment = $enquiry->rideSegments->first();
-                                                    $lastSegment = $enquiry->rideSegments->last();
-                                                @endphp
-                                                From: {{ date('d-m-Y', strtotime($firstSegment->from_date)) }} To:
-                                                {{ date('d-m-Y', strtotime($lastSegment->to_date)) }}
-                                            @else
-                                                N/A
-                                            @endif
-                                        </td>
-                                        <td>
-                                            @php
-                                                $productText = $tableProductNames[$enquiry->id] ?? '';
-                                            @endphp
-                                            @if ($productText !== '')
-                                                {{ $productText }}
-                                            @else
-                                                N/A
-                                            @endif
-                                        </td>
-                                        <td>{{ $enquiry->updated_at->format('d-m-Y H:i:s') }}</td>
-                                        <td>
-                                            {{--  <div class="followup-history grid gap-2">
-                                                    @forelse($enquiry->leadFollowups->sortByDesc('next_followup_date') as $followup)
-                                                        <div class="grid gap-2">
-                                                            <p class="text-sm text-gray-700 "><strong>Note:</strong> {{ $followup->followup_note }}</p>
-                                                            <p class="text-sm text-gray-700">
-                                                                <strong>Status:</strong>
-                                                                <span class="badge bg-primary/10 text-primary">
-                                                                    {{ $followup->status == 1 ? 'Pending' : ($followup->status == 2 ? 'Completed' : 'Skipped') }}
-                                                                </span>
-                                                            </p>
-                                                            <p class="text-sm text-gray-700">
-                                                                <strong>By:</strong> {{ $followup->followedBy->name ?? 'System' }}
-                                                                @if ($followup->file)
-                                                                    <a href="{{ route('admin.followups.file', ['filename' => basename($followup->file)]) }}" target="_blank" class="text-blue-500 ml-2">
-                                                                        <i class="ri-image-line"></i> View
-                                                                    </a>
-                                                                @endif
-                                                            </p>
-                                                            <p class="text-sm text-gray-700">
-                                                                <strong>Next Follow-up:</strong> {{ $followup->next_followup_date?->format('Y-m-d H:i T') }}
-                                                            </p>
-                                                        </div>
-                                                    @empty
-                                                        <div class="text-sm text-gray-700 text-center">No follow-up history</div>
-                                                    @endforelse
-                                                </div>  --}}
-                                            <div class="followup-history table-responsive">
-                                                <table class="table display responsive nowrap" width="100%">
-                                                    <thead class="bg-primary text-white">
-                                                        <tr class="border-b border-defaultborder">
-                                                            <th scope="col" class="text-start">Note</th>
-                                                            <th scope="col" class="text-start">By</th>
-                                                            <th scope="col" class="text-start">Next Follow-up</th>
-                                                            <th scope="col" class="text-start">Status</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody class="table-group-divider dark:border-defaultborder/10">
-                                                        @forelse($enquiry->leadFollowups->sortByDesc('next_followup_date') as $followup)
-                                                            <tr class="border-b border-defaultborder">
-                                                                <td
-                                                                    style="white-space: normal; word-break: break-word; max-width: 300px;">
-                                                                    {{ $followup->followup_note }}
-                                                                </td>
-                                                                <td>
-                                                                    {{ $followup->followedBy->name ?? 'System' }}
-                                                                    @if ($followup->file)
-                                                                        <a href="{{ route('admin.followups.file', ['filename' => basename($followup->file)]) }}"
-                                                                            target="_blank" class="text-blue-500 ml-2">
-                                                                            <i class="ri-image-line"></i> View
-                                                                        </a>
-                                                                    @endif
-                                                                </td>
-                                                                <td
-                                                                    style="white-space: normal; word-break: break-word; max-width: 100px;">
-                                                                    {{ $followup->next_followup_date?->format('Y-m-d H:i T') }}
-                                                                </td>
-                                                                <td>
-                                                                    <span
-                                                                        class="badge 
-                                                                            {{ $followup->status === 0
-                                                                                ? 'bg-secondary/10 text-secondary'
-                                                                                : ($followup->status === 1
-                                                                                    ? 'bg-success/10 text-success'
-                                                                                    : ($followup->status === 2
-                                                                                        ? 'bg-danger/10 text-danger'
-                                                                                        : ($followup->status === 3
-                                                                                            ? 'bg-primary/10 text-primary'
-                                                                                            : ($followup->status === 4
-                                                                                                ? 'bg-warning/10 text-warning'
-                                                                                                : ($followup->status === 5
-                                                                                                    ? 'bg-info/10 text-info'
-                                                                                                    : 'bg-default/10 text-default'))))) }}">
-                                                                        {{ $followup->status === 0
-                                                                            ? 'Initiated'
-                                                                            : ($followup->status === 1
-                                                                                ? 'Active'
-                                                                                : ($followup->status === 2
-                                                                                    ? 'Cancelled'
-                                                                                    : ($followup->status === 3
-                                                                                        ? 'Full Payment Received'
-                                                                                        : ($followup->status === 4
-                                                                                            ? 'Partial Payment Received'
-                                                                                            : ($followup->status === 5
-                                                                                                ? 'Confirmed'
-                                                                                                : ($followup->status === 6
-                                                                                                    ? 'Pending'
-                                                                                                    : ($followup->status === 7
-                                                                                                        ? 'Rescheduled'
-                                                                                                        : ($followup->status === 8
-                                                                                                            ? 'Approved'
-                                                                                                            : ($followup->status === 9
-                                                                                                                ? 'Rejected'
-                                                                                                                : 'N/A'))))))))) }}
-
-                                                                    </span>
-                                                                </td>
-                                                            </tr>
-                                                        @empty
-                                                            <tr>
-                                                                <td colspan="4"
-                                                                    class="text-sm text-gray-700 text-center">No follow-up
-                                                                    history</td>
-                                                            </tr>
-                                                        @endforelse
-                                                    </tbody>
-                                                </table>
+                            </td>
+                            <td data-label="Service">
+                                <div class="vg-cell">
+                                    <div class="vg-wrap">{{ $serviceText ?: ($productText ?: 'N/A') }}</div>
+                                    @if (($serviceText && $productText) || $routeText)
+                                        <div class="vg-cellsub">{{ collect([$serviceText ? $productText : '', $routeText])->filter()->implode(' · ') }}</div>
+                                    @endif
+                                </div>
+                            </td>
+                            <td data-label="Service date"
+                                data-order="{{ $firstSegment && $firstSegment->from_date ? $firstSegment->from_date->getTimestamp() : 0 }}">
+                                <div class="vg-cell">
+                                    @if ($firstSegment)
+                                        @if ($firstSegment->is_tba)
+                                            <div class="vg-main">TBA</div>
+                                        @else
+                                            <div class="vg-main">
+                                                {{ $firstSegment->from_date ? $firstSegment->from_date->format('d M Y') : 'N/A' }}@if ($lastSegment && $lastSegment->to_date && $firstSegment->from_date && !$lastSegment->to_date->isSameDay($firstSegment->from_date)) – {{ $lastSegment->to_date->format('d M Y') }}@endif
                                             </div>
-                                        </td>
-                                        <td class="text-center">
-                                            @php
-                                                $status =
-                                                    $enquiry->leadFollowups()->orderBy('created_at', 'desc')->first()
-                                                        ->status ?? null;
-                                            @endphp
-
-                                            @if ($status === 0)
-                                                <span class="badge bg-secondary/10 text-secondary">Initiated</span>
-                                            @elseif($status === 1)
-                                                <span class="badge bg-success/10 text-success">Active</span>
-                                            @elseif($status === 2)
-                                                <span class="badge bg-danger/10 text-danger">Cancelled</span>
-                                            @elseif($status === 3)
-                                                <span class="badge bg-primary/10 text-primary">Full Payment Received</span>
-                                            @elseif($status === 4)
-                                                <span class="badge bg-warning/10 text-warning">Partial Payment
-                                                    Received</span>
-                                            @elseif($status === 5)
-                                                <span class="badge bg-info/10 text-info">Confirmed</span>
-                                            @elseif($status === 6)
-                                                <span class="badge bg-default/10 text-default">Pending</span>
-                                            @elseif($status === 7)
-                                                <span class="badge bg-light/10 text-light">Rescheduled</span>
-                                            @elseif($status === 8)
-                                                <span class="badge bg-warning/10 text-warning">Approved</span>
-                                            @elseif($status === 9)
-                                                <span class="badge bg-danger/10 text-danger">Rejected</span>
-                                            @else
-                                                <span class="badge bg-default/10 text-default">N/A</span>
+                                            @if ($firstSegment->from_date)
+                                                <div class="vg-cellsub">{{ $countdown($firstSegment->from_date) }}</div>
                                             @endif
-                                        </td>
-                                        <td>
-                                            <div class="hstack flex gap-3 text-[.9375rem]">
-                                                @php
-                                                    $hasApprovedPayment = in_array(
-                                                        $enquiry->id,
-                                                        $leadsWithApprovedPayments ?? [],
-                                                    );
-                                                    // Determine current user's user_type (string)
-                                                    $currentUserType =
-                                                        Auth::user() && Auth::user()->userType
-                                                            ? Auth::user()->userType->user_type
-                                                            : null;
-                                                @endphp
-
-                                                @if (
-                                                    $hasApprovedPayment &&
-                                                        $currentUserType &&
-                                                        (in_array($currentUserType, \App\Models\UserType::ADMIN_ROLES) ||
-                                                            in_array($currentUserType, \App\Models\UserType::OPERATIONS_ROLES)))
-                                                    <a aria-label="anchor"
-                                                        href="{{ route('admin.vouchers.generate', $enquiry->id) }}"
-                                                        class="ti-btn ti-btn-icon ti-btn-sm ti-btn-warning-full"
-                                                        target="_blank" title="Generate Voucher"><i
-                                                            class="ri-file-text-line"></i>
-                                                    </a>
-                                                @endif
-                                                <a aria-label="anchor"
-                                                    href="{{ route('admin.leads.follow-up.create', $enquiry->id) }}"
-                                                    class="ti-btn ti-btn-icon ti-btn-sm ti-btn-success-full"
-                                                    target="_blank" data-bs-toggle="tooltip" data-bs-placement="top"
-                                                    title="Add Lead Followup"><i class="ri-add-line"></i></a>
-                                                <a aria-label="anchor"
-                                                    href="{{ route('admin.leads.view', $enquiry->id) }}"
-                                                    class="ti-btn ti-btn-icon ti-btn-sm ti-btn-primary-full"
-                                                    target="_blank" title="View Lead"><i class="ri-eye-line"></i></a>
-                                                <a aria-label="anchor"
-                                                    href="{{ route('admin.leads.edit', $enquiry->id) }}"
-                                                    class="ti-btn ti-btn-icon ti-btn-sm ti-btn-info-full"
-                                                    title="Edit Lead"><i class="ri-edit-line"></i></a>
-                                                <!-- <a aria-label="anchor" href="javascript:void(0);" class="ti-btn ti-btn-icon ti-btn-sm ti-btn-success-full toggle-client-status" data-id="{{ $enquiry->client->id }}" data-status="{{ $enquiry->client->status }}" data-name="{{ $enquiry->client->name }}" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ $enquiry->client->status ? 'Deactivate' : 'Activate' }}"><i class="{{ $enquiry->client->status ? 'ri-lock-line' : 'ri-check-line' }}"></i></a> -->
-                                                <!-- <a aria-label="Confirm Lead" href="javascript:void(0);"
-                                                                    class="ti-btn ti-btn-icon ti-btn-sm ti-btn-success-full confirm-lead"
-                                                                    data-lead-id="{{ $enquiry->id }}"title="Confirm Lead"><i
-                                                                        class="ri-check-line"></i></a> -->
-                                                <a aria-label="Cancel Lead" href="javascript:void(0);"
-                                                    class="ti-btn ti-btn-icon ti-btn-sm ti-btn-danger-full cancel-lead"
-                                                    data-lead-id="{{ $enquiry->id }}" title="Cancel Lead"><i
-                                                        class="ri-close-line"></i></a>
-                                                @if (in_array(optional(auth()->user()->userType)->user_type, [\App\Models\UserType::SUPER_ADMIN]))
-                                                    <a aria-label="Delete Lead" href="javascript:void(0);"
-                                                        class="ti-btn ti-btn-icon ti-btn-sm ti-btn-danger-full delete-lead"
-                                                        data-lead-id="{{ $enquiry->id }}" title="Delete Lead"><i
-                                                            class="ri-delete-bin-line"></i></a>
-                                                @endif
-                                            </div>
-                                        </td>
-                                    </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
+                                        @endif
+                                    @else
+                                        <div class="vg-main">N/A</div>
+                                    @endif
+                                </div>
+                            </td>
+                            <td data-label="Assigned">
+                                <div class="vg-cell">
+                                    <div class="vg-main">{{ $enquiry->representative ? $enquiry->representative->name : 'N/A' }}</div>
+                                    @if ($enquiry->next_followup && $enquiry->next_followup->next_followup_date)
+                                        <div class="vg-cellsub">Next follow-up {{ $enquiry->next_followup->next_followup_date->format('d M, H:i') }}</div>
+                                    @endif
+                                </div>
+                            </td>
+                            <td data-label="Payment">
+                                @if ($status === 4)
+                                    <span class="vg-tag amber">Part-paid</span>
+                                @else
+                                    <span class="vg-tag green">Approved</span>
+                                @endif
+                            </td>
+                            <td data-label="Status">
+                                <div class="vg-status">
+                                    @if (!$voucher)
+                                        <span class="vg-tag red">Pending</span>
+                                    @elseif ($voucher->customer_sent_at)
+                                        <span class="vg-tag green" title="Sent {{ $voucher->customer_sent_at->format('d M Y, H:i') }}{{ $voucher->customer_sent_via ? ' via ' . $voucher->customer_sent_via : '' }}">Sent · {{ $voucher->customer_sent_at->format('d M') }}</span>
+                                    @else
+                                        <span class="vg-tag amber">Generated · not sent</span>
+                                    @endif
+                                    <small class="vg-cellsub">{{ $crmStatusLabels[$status] ?? 'N/A' }}</small>
+                                </div>
+                            </td>
+                            <td data-label="Action">
+                                <div class="vg-actions">
+                                    @if ($canManageVouchers)
+                                        @if (!$voucher)
+                                            @if ($hasApprovedPayment)
+                                                <a href="{{ route('admin.vouchers.generate', $enquiry->id) }}"
+                                                    class="vg-rowbtn solid" target="_blank" title="Generate Voucher">Generate voucher</a>
+                                            @endif
+                                        @else
+                                            <a href="{{ route('admin.vouchers.form', $enquiry->id) }}" class="vg-rowbtn {{ $voucher->customer_sent_at ? '' : 'solid' }}"
+                                                target="_blank" title="Open the voucher page to send it by email / WhatsApp">{{ $voucher->customer_sent_at ? 'Open voucher' : 'Send to client' }}</a>
+                                            <a href="{{ route('admin.vouchers.pdf', $voucher->id) }}" class="vg-rowbtn" target="_blank" title="Voucher PDF">PDF</a>
+                                        @endif
+                                    @endif
+                                    <span class="vg-more" aria-label="More lead actions">
+                                        <a aria-label="Add Lead Followup" href="{{ route('admin.leads.follow-up.create', $enquiry->id) }}"
+                                            class="vg-iconbtn" target="_blank" title="Add Lead Followup"><i class="ri-add-line"></i></a>
+                                        <a aria-label="Edit Lead" href="{{ route('admin.leads.edit', $enquiry->id) }}"
+                                            class="vg-iconbtn" title="Edit Lead"><i class="ri-edit-line"></i></a>
+                                        <a aria-label="Cancel Lead" href="javascript:void(0);"
+                                            class="vg-iconbtn is-danger cancel-lead" data-lead-id="{{ $enquiry->id }}"
+                                            title="Cancel Lead"><i class="ri-close-line"></i></a>
+                                        @if ($isSuperAdmin)
+                                            <a aria-label="Delete Lead" href="javascript:void(0);"
+                                                class="vg-iconbtn is-danger delete-lead" data-lead-id="{{ $enquiry->id }}"
+                                                title="Delete Lead"><i class="ri-delete-bin-line"></i></a>
+                                        @endif
+                                    </span>
+                                </div>
+                            </td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
         </div>
-    </div>
+    </section>
+</div>
+
 
     <!-- Confirm Followup Modal -->
     <div id="confirm-followup-modal"
@@ -973,163 +874,34 @@
 
     <script>
         $(document).ready(function() {
-            // Initialize DataTable with export functionality
+            // Initialize DataTable (sorting + paging). Search uses the box in the "Voucher queue" header.
             var leadsTable = $('.lead-datatable').DataTable({
-
-                // Never hide columns. Keep every column available through horizontal scrolling.
                 responsive: false,
-                scrollX: true,
-                scrollCollapse: false,
-                autoWidth: true,
+                scrollX: false,
+                autoWidth: false,
+                dom: 'rt<"vg-tfoot"lip>',
+                // Keep the server order: rides within 48h first, then newest leads.
+                order: [],
                 columnDefs: [{
-                        visible: false,
-                        searchable: false,
-                        orderable: false,
-                        targets: 0 // Old Responsive control column is no longer required.
-                    },
-                    {
-                        orderable: false,
-                        targets: 1
-                    }
-                ],
-                order: [
-                    [1, 'asc']
-                ],
-                drawCallback: function(settings) {
-                    var api = this.api();
-                    api.rows({
-                        page: 'current'
-                    }).every(function(rowIdx) {
-                        var cell = this.cell(rowIdx, 1).node();
-                        $(cell).html(rowIdx + 1);
-                    });
-                    api.columns.adjust();
-                },
-                initComplete: function() {
-                    this.api().columns.adjust();
-                },
-                buttons: [{
-                        extend: 'excel',
-                        exportOptions: {
-                            columns: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-                            format: {
-                                body: function(data, row, column, node) {
-                                    var tempDiv = document.createElement('div');
-                                    tempDiv.innerHTML = data;
-                                    var plainText = tempDiv.textContent || tempDiv.innerText || '';
+                    orderable: false,
+                    targets: [3, 4, 5, 6]
+                }],
+                language: {
+                    emptyTable: $('.lead-datatable').data('empty-msg') || 'No records available',
+                    zeroRecords: 'No matching leads found'
+                }
+            });
 
-                                    if (column === 9) { // Status column
-                                        if (plainText.includes('Active')) return 'Active';
-                                        if (plainText.includes('Pending')) return 'Pending';
-                                        if (plainText.includes('Cancelled')) return 'Cancelled';
-                                        if (plainText.includes('Completed')) return 'Completed';
-                                        return 'N/A';
-                                    }
+            $('#vg-search').on('input search', function() {
+                leadsTable.search(this.value).draw();
+            });
 
-                                    // Phone column (index 4) - wrap in ="..." so Excel preserves leading + and formatting when opening CSV
-                                    if (column === 4) {
-                                        var cleaned = plainText.trim();
-                                        // escape any double quotes inside the value
-                                        cleaned = cleaned.replace(/"/g, '""');
-                                        return '="' + cleaned + '"';
-                                    }
-
-                                    return plainText.trim();
-                                }
-                            }
-                        },
-                        title: 'Leads Export - ' + new Date().toLocaleDateString()
-                    },
-                    {
-                        extend: 'csv',
-                        exportOptions: {
-                            columns: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-                            format: {
-                                body: function(data, row, column, node) {
-                                    var tempDiv = document.createElement('div');
-                                    tempDiv.innerHTML = data;
-                                    var plainText = tempDiv.textContent || tempDiv.innerText || '';
-
-                                    if (column === 9) { // Status column
-                                        if (plainText.includes('Active')) return 'Active';
-                                        if (plainText.includes('Pending')) return 'Pending';
-                                        if (plainText.includes('Cancelled')) return 'Cancelled';
-                                        if (plainText.includes('Completed')) return 'Completed';
-                                        return 'N/A';
-                                    }
-
-                                    // Phone column (index 4) - wrap in ="..." so Excel preserves leading + and formatting when opening CSV
-                                    if (column === 4) {
-                                        var cleaned = plainText.trim();
-                                        // escape any double quotes inside the value
-                                        cleaned = cleaned.replace(/"/g, '""');
-                                        // prefix with single quote so Excel treats it as text when opening CSV
-                                        return "'" + cleaned;
-                                    }
-
-                                    return plainText.trim();
-                                }
-                            }
-                        },
-                        title: 'Leads Export - ' + new Date().toLocaleDateString()
-                    },
-                    {
-                        extend: 'pdf',
-                        orientation: 'landscape',
-                        pageSize: 'A4',
-                        exportOptions: {
-                            columns: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-                            format: {
-                                body: function(data, row, column, node) {
-                                    var tempDiv = document.createElement('div');
-                                    tempDiv.innerHTML = data;
-                                    var plainText = tempDiv.textContent || tempDiv.innerText || '';
-
-                                    if (column === 9) { // Status column
-                                        if (plainText.includes('Active')) return 'Active';
-                                        if (plainText.includes('Pending')) return 'Pending';
-                                        if (plainText.includes('Cancelled')) return 'Cancelled';
-                                        if (plainText.includes('Completed')) return 'Completed';
-                                        return 'N/A';
-                                    }
-
-                                    return plainText.trim();
-                                }
-                            }
-                        },
-                        title: 'Leads Export - ' + new Date().toLocaleDateString(),
-                        customize: function(doc) {
-                            doc.content[1].table.widths = Array(doc.content[1].table.body[0]
-                                .length + 1).join('*').split('');
-                            doc.styles.tableHeader.fontSize = 8;
-                            doc.defaultStyle.fontSize = 7;
-                        }
-                    },
-                    {
-                        extend: 'print',
-                        exportOptions: {
-                            columns: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-                            format: {
-                                body: function(data, row, column, node) {
-                                    var tempDiv = document.createElement('div');
-                                    tempDiv.innerHTML = data;
-                                    var plainText = tempDiv.textContent || tempDiv.innerText || '';
-
-                                    if (column === 9) { // Status column
-                                        if (plainText.includes('Active')) return 'Active';
-                                        if (plainText.includes('Pending')) return 'Pending';
-                                        if (plainText.includes('Cancelled')) return 'Cancelled';
-                                        if (plainText.includes('Completed')) return 'Completed';
-                                        return 'N/A';
-                                    }
-
-                                    return plainText.trim();
-                                }
-                            }
-                        },
-                        title: 'Leads Export - ' + new Date().toLocaleDateString()
-                    }
-                ]
+            // Row click = old "View Lead" button (opens the lead in a new tab).
+            // Links, buttons and other controls inside the row keep their own action.
+            $('.lead-datatable tbody').on('click', 'tr[data-view-url]', function(e) {
+                if ($(e.target).closest('a, button, input, select, textarea, label').length) return;
+                if (window.getSelection && String(window.getSelection()).trim() !== '') return;
+                window.open($(this).data('view-url'), '_blank', 'noopener');
             });
 
             // Custom export button handlers - connect your buttons to DataTable export functions
@@ -1187,23 +959,10 @@
         });
     </script>
     <script>
-        window.addEventListener('DOMContentLoaded', () => {
-            const containers = document.querySelectorAll('.followup-history');
-
-            containers.forEach(container => {
-                if (container.scrollHeight > 150) {
-                    container.style.height = '150px';
-                    container.style.overflowY = 'auto';
-                } else {
-                    container.style.height = 'auto';
-                    container.style.overflowY = 'visible';
-                }
-            });
-        });
-
         function clearFilters() {
             $('#filter-form')[0].reset();
-            window.location.href = '{{ route('admin.clients.index') }}';
+            // Back to this page (same queue chip) without filters.
+            window.location.href = @json(route('admin.vouchers.index', $voucherState === 'pending' ? [] : ['voucher_state' => $voucherState]));
         }
 
         // Toggle filters
@@ -1211,9 +970,13 @@
             const filterSection = $('#filter-section');
             const icon = $('#filter-icon');
 
-            // Initially hide filter section and set icon to down
-            filterSection.hide();
-            icon.removeClass('ti-chevron-up').addClass('ti-chevron-down');
+            // Hidden by default; stays open while filters are applied so they are easy to change.
+            if (@json($hasActiveFilters)) {
+                icon.removeClass('ti-chevron-down').addClass('ti-chevron-up');
+            } else {
+                filterSection.hide();
+                icon.removeClass('ti-chevron-up').addClass('ti-chevron-down');
+            }
 
             $('#toggle-filters').on('click', function() {
                 if (filterSection.is(':visible')) {

@@ -60,7 +60,7 @@
                 <div class="box-title">
                     Search Filters
                 </div>
-                <button type="button" class="ti-btn ti-btn-sm ti-btn-outline-primary" id="toggle-filters">
+                <button type="button" class="ti-btn ti-btn-sm ti-btn-outline-primary" id="toggle-filters" style="width:auto;">
                     <i class="ti ti-chevron-up" id="filter-icon"></i>
                 </button>
             </div>
@@ -5046,7 +5046,7 @@ function closeRefundSuccessModal() {
             viewReceipt(fileName, paymentId);
         });
 
-        const followupReceiptBaseUrl = "{{ url('/admin/followups/files') }}";
+        const followupReceiptBaseUrl = "{{ route('admin.followups.file', ['filename' => '__file__'], false) }}".replace('/__file__', '');
 
         function followupReceiptUrl(fileName) {
             const normalizedFileName = String(fileName || '')

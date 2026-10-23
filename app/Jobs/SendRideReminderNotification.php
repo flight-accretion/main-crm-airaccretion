@@ -56,6 +56,16 @@ class SendRideReminderNotification implements ShouldQueue
                 throw new \RuntimeException('Ride reminder lead/client missing.');
             }
 
+            // The ride may have been cancelled after this reminder was queued: never send it.
+            if ((int) optional($lead->latestFollowup()->first())->status === \App\Models\LeadFollowup::STATUS_CANCELLED) {
+                $log->update([
+                    'status' => RideReminderLog::STATUS_FAILED,
+                    'error_message' => 'Skipped: ride cancelled',
+                ]);
+
+                return;
+            }
+
             $name = $client->name ?? ($lead->lead_name ?? 'Customer');
             $service = $ride->serviceAddress->from_place ?? 'ride';
             $time = Carbon::parse($ride->from_date)->format('H:i');

@@ -95,7 +95,8 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
     ])
     ->whereHas('enquiry.vouchers', function ($q) {
         $q->where('status', 1);
-    });
+    })
+    ->whereLeadNotCancelled();
 
     if ($minutes !== null) {
         $start = now()->addMinute();
@@ -789,7 +790,9 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
             'enquiry.latestFollowup'
         ])
             ->whereBetween(DB::raw('DATE(from_date)'), [$fromDate->toDateString(), $toDate->toDateString()])
-            ->whereHas('enquiry.vouchers');
+            ->whereHas('enquiry.vouchers')
+            // Cancelled rides never show, whatever status filter is used.
+            ->whereLeadNotCancelled();
 
         // Apply status filter
         if (!empty($statuses)) {
@@ -1049,6 +1052,8 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
         ])
             ->whereNotNull('from_date')
             ->whereHas('enquiry.vouchers')
+            // Cancelled rides never show on the calendar.
+            ->whereLeadNotCancelled()
             ->orderBy('from_date', 'asc');
 
         // Apply date filters if provided

@@ -92,6 +92,7 @@ class BookingSendUpdate extends Command
                 ->whereHas('enquiry.vouchers', function ($query) {
                     $query->where('status', 1);
                 })
+                ->whereLeadNotCancelled()
                 ->orderBy('from_date')
                 ->limit($remaining * 3)
                 ->get()

@@ -21,6 +21,15 @@ class VendorController extends Controller
 {
     public function index(Request $request)
     {
+        $summaryQuery = Vendor::query();
+        $vendorSummary = [
+            'total' => (clone $summaryQuery)->count(),
+            'active' => (clone $summaryQuery)->where('status', 1)->count(),
+            'inactive' => (clone $summaryQuery)->where('status', 0)->count(),
+            'no_email' => (clone $summaryQuery)->where(function ($query) {
+                $query->whereNull('email')->orWhereRaw("TRIM(email) = ''");
+            })->count(),
+        ];
         $query = Vendor::with(['city.state.country']);
         $perPage = min(max((int) $request->input('per_page', 20), 1), 100);
 
@@ -79,7 +88,7 @@ class VendorController extends Controller
             // ->distinct('extra_service_amount')
             ->get();
 
-        return view('admin.pages.vendors.index-vendor', compact('vendors', 'countries', 'allProducts', 'allServices', 'allExtraServices'));
+        return view('admin.pages.vendors.index-vendor', compact('vendors', 'countries', 'allProducts', 'allServices', 'allExtraServices', 'vendorSummary'));
     }
 
     public function create()

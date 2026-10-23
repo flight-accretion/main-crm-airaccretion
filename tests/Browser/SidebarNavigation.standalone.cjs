@@ -15,20 +15,22 @@ const targetPaths=['/admin/hr','/admin/attendance/import','/admin/attendance/set
   const labels=await page.locator('.main-menu > [data-crm-primary]').evaluateAll(items=>items.map(item=>item.dataset.crmPrimary));
   const permitted=p=>before.includes(p);
   const expected=[permitted('/admin/hr')?'HR Dashboard':null,permitted('/admin/attendance/import')||permitted('/admin/attendance/settings')?'Attendance':null,permitted('/admin/kpi')?'KPI':null,permitted('/admin/targets')?'Target':null,permitted('/admin/upcoming-follow-up')?"Today's Follow-up":null,permitted('/admin/lead')||permitted('/admin/dnp-leads')?'Leads':null].filter(Boolean);
-  assert.deepEqual(labels,expected,'role tree '+file);
+  const isOperations=file.includes('operations');
+  if(isOperations)assert.equal(await page.locator('.main-menu > li').first().innerText(),'Operations Dashboard');
+  else assert.deepEqual(labels,expected,'role tree '+file);
   const after=await page.locator('.main-menu').evaluate(menu=>Array.from(menu.querySelectorAll('a[href]')).filter(a=>/^https?:/.test(a.href)).map(a=>new URL(a.href).pathname.replace(/\/$/,'')).filter(Boolean));
   assert.deepEqual([...new Set(after)].sort(),[...new Set(before)].sort(),'authorized URLs changed '+file);
   assert.equal(await page.locator('.crm-nav-group').evaluateAll(groups=>groups.every(g=>g.querySelector('a[href]'))),true);
   if(permitted('/admin/targets'))assert.equal(await page.locator('.main-menu a').filter({hasText:/^Assign Target$/}).count(),1);
-  if(permitted('/admin/kpi-history'))assert.equal(await page.locator('[data-crm-primary=KPI] a[href$="kpi-history"]').count(),1);
-  if(permitted('/admin/operations'))assert.equal(await page.locator('[data-crm-key=daily-work] a').filter({hasText:/^Operations$/}).count(),1);
+  if(permitted('/admin/kpi-history'))assert.equal(await page.locator((isOperations?'[data-crm-key=other-tools]':'[data-crm-primary=KPI]')+' a[href$="kpi-history"]').count(),1);
+  if(permitted('/admin/operations'))assert.equal(await page.locator(isOperations?'[data-crm-key=operations-kpi] a':'[data-crm-key=daily-work] a').filter({hasText:isOperations?/^Daily Work Done$/:/^Operations$/}).count(),1);
   const tree=await page.evaluate(()=>window.CrmNavigation.tree());
   for(const width of [1440,1024,390,320]){
    await page.setViewportSize({width,height:1050});await page.locator('#test-more').click();
    await page.waitForFunction(()=>document.getElementById('test-more-panel').classList.contains('crm-more-tree'));
    assert.deepEqual(await page.locator('#test-more-panel').evaluate(panel=>Array.from(panel.querySelectorAll('a[href]')).map(a=>new URL(a.href).pathname)),after.map(p=>p||'/'));
    const mobileTree=await page.locator('#test-more-panel').evaluate(panel=>{
-    const read=parent=>Array.from(parent.children).map(node=>node.tagName==='DETAILS'?{label:node.querySelector('summary').textContent,children:read(node.querySelector('.crm-more-children'))}:{label:node.textContent,href:node.href});return read(panel);
+    const read=parent=>Array.from(parent.children).filter(node=>!node.classList.contains('crm-workspace-picker')).map(node=>node.tagName==='DETAILS'?{label:node.querySelector('summary').textContent,children:read(node.querySelector('.crm-more-children'))}:{label:node.textContent,href:node.href});return read(panel);
    });
    const compact=nodes=>nodes.map(node=>node.children?{label:node.label,children:compact(node.children)}:{label:node.label,href:node.href});
    assert.deepEqual(mobileTree,compact(tree),'More nesting differs from desktop '+file);

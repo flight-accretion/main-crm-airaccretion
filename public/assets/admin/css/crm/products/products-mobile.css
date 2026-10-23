@@ -1,0 +1,38 @@
+/* Products - small screens.
+   1) Page chrome on phones (<=767px).
+   2) Product list -> labelled cards whenever the list box is too narrow for the columns
+      (container query on the list section), as in the kimi phone preview. */
+@media(max-width:767px){
+  .pd-page{padding:14px 0 24px}
+  .pd-heading{align-items:flex-start;flex-direction:column;margin-bottom:14px}
+  .pd-heading h1{font-size:20px}
+  .pd-heading-actions{width:100%}
+  .pd-stats{grid-template-columns:1fr 1fr;gap:8px}
+  .pd-stat{padding:12px}
+  .pd-stat strong{font-size:18px}
+  .crm-kimi .k-section{padding:14px;margin-bottom:16px}
+  .crm-kimi .k-section-head{flex-direction:column;align-items:stretch}
+  .pd-tools{width:100%}
+  .pd-search{flex:1 1 100%}
+  .pd-search input{width:100%}
+  .pd-select{flex:1}
+  .pd-formgrid,.pd-view{grid-template-columns:1fr}
+  .pd-modal-head,.pd-modal-body,.pd-modal-foot{padding-left:14px;padding-right:14px}
+}
+
+.pd-page .k-section{container:pdlist/inline-size}
+@container pdlist (max-width:820px){
+  .pd-tblwrap{border:0;overflow:visible}
+  .crm-kimi table.pd-table{display:block}
+  .crm-kimi table.pd-table thead{display:none}
+  .crm-kimi table.pd-table tbody{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:10px}
+  .crm-kimi table.pd-table tr{display:block;min-width:0;border:1px solid var(--k-border);border-radius:10px;background:var(--k-surface);padding:6px 2px}
+  .crm-kimi table.pd-table tbody tr:hover td{background:transparent}
+  .crm-kimi table.pd-table tbody td,.crm-kimi table.pd-table tbody td:first-child{display:flex;justify-content:space-between;gap:14px;align-items:center;border:0;padding:5px 12px;text-align:right;width:auto!important;min-width:0}
+  .crm-kimi table.pd-table tbody td::before{content:attr(data-label);font-size:10.5px;color:var(--k-muted);font-weight:600;text-align:left;flex:none}
+  .crm-kimi table.pd-table tbody td>*{min-width:0;margin-left:auto}
+  .pd-tags,.pd-actions{justify-content:flex-end}
+  .crm-kimi table.pd-table td.dataTables_empty{display:block;grid-column:1/-1;text-align:center}
+  .crm-kimi table.pd-table td.dataTables_empty::before{content:none}
+  .pd-page .pd-tfoot{border:0;justify-content:center;padding:10px 0 0}
+}

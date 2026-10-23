@@ -1,0 +1,34 @@
+/* Voucher pages - kimi design tokens (colours as in the design preview).
+   Scoped to .crm-voucher so nothing outside the voucher pages changes.
+   Load order: tokens.css -> <page>.css -> <page>-mobile.css */
+.crm-voucher{
+  --vg-canvas:#F4F5F7;--vg-surface:#FFFFFF;--vg-border:#E4E7EC;--vg-soft:#F0F1F4;--vg-hover:#EEF1F5;
+  --vg-text:#1B1F27;--vg-secondary:#5A6472;--vg-muted:#8A93A3;--vg-brand:#0F2B46;--vg-brand-hover:#163B5F;
+  --vg-blue:#2F6FED;--vg-blue-bg:#E8F0FE;--vg-blue-t:#1D5BD8;
+  --vg-green:#178A4C;--vg-green-bg:#E3F4EB;
+  --vg-amber:#B26A00;--vg-amber-bg:#FCEFD9;
+  --vg-red:#C62F3B;--vg-red-bg:#FBE5E7;
+}
+.dark .crm-voucher{
+  --vg-canvas:#121417;--vg-surface:#1B1E24;--vg-border:#2A2F38;--vg-soft:#22262E;--vg-hover:#262B34;
+  --vg-text:#E8EAEE;--vg-secondary:#B9BFCC;--vg-muted:#7E8694;
+  --vg-blue-bg:#1B2A45;--vg-blue-t:#7FA7F0;
+  --vg-green:#3DBE7C;--vg-green-bg:#12351F;
+  --vg-amber:#E5A33B;--vg-amber-bg:#3A2C10;
+  --vg-red:#E56A73;--vg-red-bg:#3B171B;
+}
+
+/* Shared pieces (tags, buttons) used by the voucher pages. */
+.crm-voucher .vg-tag{display:inline-block;font-size:10.5px;padding:3px 8px;border-radius:5px;white-space:nowrap;font-weight:500;line-height:1.4}
+.crm-voucher .vg-tag.neutral{background:var(--vg-hover);color:var(--vg-secondary)}
+.crm-voucher .vg-tag.green{color:var(--vg-green);background:var(--vg-green-bg)}
+.crm-voucher .vg-tag.amber{color:var(--vg-amber);background:var(--vg-amber-bg)}
+.crm-voucher .vg-tag.red{color:var(--vg-red);background:var(--vg-red-bg)}
+.crm-voucher .vg-tag.blue{color:var(--vg-blue-t);background:var(--vg-blue-bg)}
+.crm-voucher .vg-primary,.crm-voucher .vg-ghost{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:7px;font-weight:600;font-size:12.5px;min-height:36px;white-space:nowrap;cursor:pointer}
+.crm-voucher .vg-primary{border:1px solid var(--vg-brand);padding:8px 18px;color:#fff;background:var(--vg-brand)}
+.crm-voucher .vg-primary:hover{background:var(--vg-brand-hover);color:#fff}
+.crm-voucher .vg-ghost{border:1px solid var(--vg-border);padding:8px 14px;color:var(--vg-brand);background:var(--vg-surface)}
+.crm-voucher .vg-ghost:hover{background:var(--vg-hover);color:var(--vg-brand)}
+.dark .crm-voucher .vg-ghost{color:#fff}
+.crm-voucher :is(a,button,input,select):focus-visible{outline:2px solid var(--vg-blue);outline-offset:2px}
