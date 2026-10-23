@@ -1,7 +1,7 @@
 @extends('admin.layouts.header')
 @section('content')
     <link rel="stylesheet" href="{{ asset('assets/admin/libs/fullcalendar/main.min.css') }}">
-    <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/upcoming-rides.css') }}">
+    <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/upcoming-rides.css') }}?v=2">
     @php
         $summary = $schedule['summary'];
         $isDefaultPeriod = $currentFilters['from_date'] === now()->toDateString() && $currentFilters['to_date'] === now()->addDays(13)->toDateString();

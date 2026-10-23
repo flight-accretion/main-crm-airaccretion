@@ -560,7 +560,14 @@
     overflow: hidden;
     cursor: pointer;
     font-size: 10px;
-    color: black;
+}
+.crm-upcoming .fc .ur-event strong,
+.crm-upcoming .fc .ur-event small {
+    color: #000;
+}
+.dark .crm-upcoming .fc .ur-event strong,
+.dark .crm-upcoming .fc .ur-event small {
+    color: var(--ur-text);
 }
 .ur-event strong,
 .ur-event small {
