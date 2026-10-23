@@ -13,10 +13,10 @@
     /* the bottom tabs + More replace the top sidebar toggle on phones */
     .crm-operations-mobile-page .app-header .sidemenu-toggle{display:none!important}
     .crm-operations-mobile-page .operations-mobile-nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));position:fixed;inset:auto 0 0;z-index:90;background:var(--ops-nav-surface);border-top:1px solid var(--ops-nav-border);padding:7px 4px calc(7px + env(safe-area-inset-bottom,0px));box-sizing:border-box}
-    .operations-mobile-nav :is(a,button){display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:4px;min-height:58px;min-width:0;padding:4px 2px;border:0;background:transparent;color:var(--ops-nav-muted);font-size:10.5px;text-align:center;line-height:1.25;text-decoration:none;letter-spacing:0;cursor:pointer}
+    .operations-mobile-nav :is(a,button){display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:3px;min-height:58px;min-width:0;padding:4px 2px;border:0;background:transparent;color:var(--ops-nav-muted);font-size:10.5px;text-align:center;line-height:1.25;text-decoration:none;letter-spacing:0;cursor:pointer}
     .operations-mobile-nav [hidden]{display:none!important}
-    .operations-mobile-nav i{font-size:19px;line-height:22px}
-    .operations-mobile-nav span{max-width:100%;overflow-wrap:anywhere}
+    .operations-mobile-nav i{font-size:19px;line-height:20px}
+    .operations-mobile-nav span{max-width:100%;min-height:26px;line-height:13px;overflow-wrap:anywhere}
     .operations-mobile-nav :is([aria-current],[aria-expanded=true]){color:var(--ops-nav-brand);font-weight:600}
     .operations-mobile-nav :is(a,button):focus-visible,.operations-mobile-more :is(a,button,summary):focus-visible{outline:2px solid #2f6fed;outline-offset:2px}
     .operations-mobile-more:not([hidden]){display:block;position:fixed;bottom:calc(80px + env(safe-area-inset-bottom,0px));right:12px;left:12px;z-index:91;border:1px solid var(--ops-nav-border);border-radius:8px;background:var(--ops-nav-surface);color:var(--ops-nav-text);padding:8px;box-shadow:0 4px 20px #1a1d2314;max-height:min(65vh,520px);max-height:min(65dvh,520px);overflow-y:auto;overscroll-behavior:contain;box-sizing:border-box}

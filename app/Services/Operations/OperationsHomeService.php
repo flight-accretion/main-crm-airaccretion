@@ -2,8 +2,9 @@
 
 namespace App\Services\Operations;
 
-use App\Models\{Lead, LeadFollowup, LeadRefund, LeadRide, OperationCase, OperationCaseActivity, User, UserType, VendorRefund};
+use App\Models\{Lead, LeadFollowup, LeadRefund, LeadRide, OperationCase, OperationCaseActivity, Target, User, UserType, VendorRefund};
 use App\Services\Kpi\KpiDashboardService;
+use App\Services\TargetIncentiveService;
 
 class OperationsHomeService
 {
@@ -71,8 +72,18 @@ class OperationsHomeService
             $kpi['day'] = app(KpiDashboardService::class)->forUser($actor, now(), $today)['overall_score'] ?? null;
             $kpi['month'] = app(KpiDashboardService::class)->forUser($actor, now(), now()->startOfMonth())['overall_score'] ?? null;
         }
+        $incentive = ['status' => $team ? 'not_selected' : 'not_configured', 'amount' => null];
+        if (!$team) {
+            $targets = Target::where('sales_executive_id', $actor->id)->where('year', now()->year)
+                ->where('month', now()->month)->where('status', 'active')->limit(2)->get();
+            if ($targets->count() > 1) {
+                $incentive['status'] = 'duplicate';
+            } elseif ($targets->first()?->incentive_enabled) {
+                $incentive = ['status' => 'configured', 'amount' => (float) app(TargetIncentiveService::class)->forTarget($targets->first())['incentive']];
+            }
+        }
 
-        return compact('team', 'todayRides', 'nextRide', 'unconfirmed', 'expiring', 'oldest', 'activities', 'caseRows', 'caseBucket', 'customerRefund', 'vendorRefund', 'kpi') + [
+        return compact('team', 'todayRides', 'nextRide', 'unconfirmed', 'expiring', 'oldest', 'activities', 'caseRows', 'caseBucket', 'customerRefund', 'vendorRefund', 'kpi', 'incentive') + [
             'partPaidCount' => $partPaid->count(),
             'partPaidBalance' => $partPaid->sum(fn ($lead) => max(0, (float) $lead->getRelation('latestFollowup')?->total_amount - (float) $lead->getRelation('latestFollowup')?->received_amount)),
             'openCount' => (clone $open)->count(),

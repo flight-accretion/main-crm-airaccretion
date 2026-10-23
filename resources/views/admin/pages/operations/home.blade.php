@@ -90,9 +90,14 @@
                         aria-hidden="true"></i></p>
             </a>
             <aside class="oh-incentive">
-                <h2><i class="ri-sparkling-line" aria-hidden="true"></i> Incentive &middot; Sample</h2><strong>&#8377;8,500
-                    <small>estimated</small></strong>
-                <p>3 of 4 criteria met &middot; Illustrative projection only, not confirmed eligibility or payout.</p>
+                <h2><i class="ri-sparkling-line" aria-hidden="true"></i> Incentive &middot; {{ now()->format('F Y') }}</h2>
+                @if($incentive['status'] === 'configured')
+                    <strong>&#8377;{{ number_format($incentive['amount'], 2) }} <small>estimated</small></strong>
+                    <p>Based on your active CRM incentive settings and qualifying sales. Estimate only, not a confirmed payout.</p>
+                @else
+                    <strong>{{ $incentive['status'] === 'duplicate' ? 'Check configuration' : ($team ? 'Personal view required' : 'Not configured') }}</strong>
+                    <p>{{ $incentive['status'] === 'duplicate' ? 'Multiple active targets exist for this month. Ask HR or Super Admin to resolve them.' : ($team ? 'Individual incentives are shown in the employee Operations dashboard.' : 'No active incentive configured for this month.') }}</p>
+                @endif
             </aside>
         </div>
         <div class="oh-columns">

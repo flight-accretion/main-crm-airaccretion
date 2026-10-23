@@ -17,6 +17,7 @@ class OperationsHomeTest extends KpiFeatureTestCase
         (require base_path('database/migrations/2026_09_23_160000_create_operation_cases_table.php'))->up();
         (require base_path('database/migrations/2026_09_23_160100_create_operation_case_activities_table.php'))->up();
         Schema::table('operation_cases', fn ($t) => $t->timestamp('next_followup_at')->nullable());
+        Schema::table('targets', function ($t) { $t->boolean('incentive_enabled')->default(false); $t->decimal('incentive_multiplier', 12, 8)->nullable(); $t->string('incentive_basis')->nullable(); $t->text('incentive_product_ids')->nullable(); });
         Schema::create('review_conversations', function ($t) { $t->uuid('id')->primary(); $t->uuid('operation_case_id'); $t->timestamp('initial_message_sent_at')->nullable(); $t->boolean('customer_replied')->default(false); });
         Schema::create('lead_rides', function ($t) { $t->uuid('id')->primary(); $t->uuid('lead_id'); $t->dateTime('from_date')->nullable(); $t->string('from_place')->nullable(); $t->string('to_place')->nullable(); $t->boolean('is_tba')->default(false); });
         Schema::create('vouchers', function ($t) { $t->uuid('id')->primary(); $t->uuid('lead_id'); });
@@ -117,7 +118,9 @@ class OperationsHomeTest extends KpiFeatureTestCase
         $this->assertStringContainsString('Operations Dashboard', $html);
         $this->assertStringContainsString('&lt;script&gt;Customer&lt;/script&gt;', $html);
         $this->assertStringNotContainsString('<script>Customer</script>', $html);
-        $this->assertStringContainsString('Sample', $html);
+        $this->assertStringNotContainsString('Sample', $html);
+        $this->assertStringNotContainsString('8,500', $html);
+        $this->assertStringContainsString('No active incentive configured', $html);
         $this->assertStringNotContainsString('Preview: incentive eligible', $html);
         if ($dir = getenv('CRM_HOME_PREVIEW_DIR')) file_put_contents($dir.'/index.html', $html);
         OperationCase::query()->delete();
@@ -145,5 +148,41 @@ class OperationsHomeTest extends KpiFeatureTestCase
                 $this->assertSame(403, $error->getStatusCode());
             }
         }
+    }
+
+    public function test_incentive_uses_only_own_current_active_target_and_existing_calculator(): void
+    {
+        $target = ['id' => (string) Str::uuid(), 'sales_executive_id' => $this->ops->id, 'year' => now()->year, 'month' => now()->month, 'target_amount' => 100000, 'status' => 'active', 'incentive_enabled' => true, 'incentive_multiplier' => 0.01, 'incentive_basis' => 'company'];
+        DB::table('targets')->insert($target);
+        DB::table('targets')->insert(array_merge($target, ['id' => Str::uuid(), 'sales_executive_id' => $this->other->id]));
+        $calculator = \Mockery::mock(\App\Services\TargetIncentiveService::class);
+        $calculator->shouldReceive('forTarget')->once()->with(\Mockery::on(fn ($value) => $value->id === $target['id']))->andReturn(['incentive' => 1234.56]);
+        app()->instance(\App\Services\TargetIncentiveService::class, $calculator);
+        $data = app(\App\Services\Operations\OperationsHomeService::class)->forUser($this->ops);
+        $this->assertSame('configured', $data['incentive']['status']);
+        $this->assertSame(1234.56, $data['incentive']['amount']);
+        $this->actingAs($this->ops);
+        view()->getFinder()->prependLocation(base_path('tests/Fixtures/kpi-tools/views'));
+        $html = view('admin.pages.operations.home', $data)->render();
+        $this->assertStringContainsString('1,234.56', $html);
+        $this->assertStringNotContainsString('3 of 4 criteria', $html);
+        DB::table('targets')->insert(array_merge($target, ['id' => Str::uuid()]));
+        $this->assertSame('duplicate', app(\App\Services\Operations\OperationsHomeService::class)->forUser($this->ops)['incentive']['status']);
+        $admin = $this->createUserWithRole('Incentive admin', UserType::SUPER_ADMIN);
+        $this->assertSame('not_selected', app(\App\Services\Operations\OperationsHomeService::class)->forUser($admin)['incentive']['status']);
+    }
+
+    public function test_disabled_inactive_and_other_month_incentives_do_not_become_a_dashboard_estimate(): void
+    {
+        $base = ['sales_executive_id' => $this->ops->id, 'year' => now()->year, 'month' => now()->month, 'target_amount' => 100000, 'status' => 'active', 'incentive_enabled' => false];
+        foreach ([[], ['month' => now()->month - 1, 'incentive_enabled' => true], ['status' => 'inactive', 'incentive_enabled' => true]] as $overrides) {
+            DB::table('targets')->insert(array_merge($base, $overrides, ['id' => Str::uuid()]));
+        }
+        $calculator = \Mockery::mock(\App\Services\TargetIncentiveService::class);
+        $calculator->shouldNotReceive('forTarget');
+        app()->instance(\App\Services\TargetIncentiveService::class, $calculator);
+        $data = app(\App\Services\Operations\OperationsHomeService::class)->forUser($this->ops);
+        $this->assertSame('not_configured', $data['incentive']['status']);
+        $this->assertNull($data['incentive']['amount']);
     }
 }

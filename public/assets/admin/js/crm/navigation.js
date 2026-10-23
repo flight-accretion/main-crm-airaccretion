@@ -144,7 +144,21 @@
                 take('/admin/leads/import', 'Import Leads'),
             ]),
         ];
-        const departmentKpi = take('/admin/kpi', 'Department KPI');
+        take('/admin/kpi');
+        const leafIcons = {
+            '/admin/operations/dashboard': 'ri-dashboard-line', '/admin/rides/upcoming-ride': 'ri-calendar-event-line',
+            '/admin/rides/ride-status': 'ri-route-line', '/admin/operations/queue/review': 'ri-star-line',
+            '/admin/operations/reschedules': 'ri-calendar-check-line', '/admin/operations/vendor-followups': 'ri-shake-hands-line',
+            '/admin/account/payment-review': 'ri-file-list-3-line', '/admin/vouchers': 'ri-coupon-3-line',
+            '/admin/account/vendor-payments': 'ri-bank-card-line', '/admin/account/exceptional': 'ri-shield-line',
+            '/admin/vendors': 'ri-store-2-line', '/admin/leads/import': 'ri-upload-2-line',
+        };
+        ordered.forEach(item => {
+            const anchor = direct(item, 'A'), glyph = anchor && leafIcons[pathOf(anchor)];
+            if (!glyph) return;
+            anchor.querySelectorAll(':scope > i').forEach(item => item.remove());
+            anchor.prepend(icon(glyph + ' side-menu__icon'));
+        });
         if (isSuperAdmin) {
             // All tools retains every allowed link; this view contains Operations tools only.
             menu.querySelectorAll('a[href]').forEach(anchor => {
@@ -152,7 +166,7 @@
             });
         }
         const rest = Array.from(menu.children).map(normalize).filter(Boolean);
-        const extras = branch('Other tools', 'other-tools', 'ri-apps-line', [departmentKpi, ...rest]);
+        const extras = branch('Other tools', 'other-tools', 'ri-apps-line', rest);
         menu.replaceChildren(...ordered.map(normalize).filter(Boolean), ...(extras ? [extras] : []));
     }
     function workspaceAccepts(path, view) {

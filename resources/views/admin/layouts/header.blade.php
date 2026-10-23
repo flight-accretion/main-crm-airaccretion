@@ -1733,7 +1733,7 @@
 
         </aside>
         <!-- End::app-sidebar -->
-        <script src="{{ asset('assets/admin/js/crm/navigation.js') }}?v=4"></script>
+        <script src="{{ asset('assets/admin/js/crm/navigation.js') }}?v=5"></script>
         <script src="{{ asset('assets/admin/js/crm/mobile-tables.js') }}?v=1" defer></script>
 
 

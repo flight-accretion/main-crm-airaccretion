@@ -7,6 +7,7 @@ async function checkOperationsTree(page){
  assert.deepEqual(tree.filter(item=>item.section).map(item=>item.label),sections);
  assert.deepEqual(tree.find(item=>item.label==='KPI').children.map(item=>item.label),['KPI Dashboard','Daily Work Done','Manual KPI']);
  assert.deepEqual(tree.find(item=>item.label==='Leads').children.map(item=>item.label),['View Leads']);
+ assert.equal(await page.locator('.main-menu a[href$="/admin/kpi"]').count(),0,'No redundant Department KPI');
  assert.equal(await page.locator('.main-menu a[href*="/admin/dnp-leads"],.main-menu a[href$="/admin/lead/create"]').count(),0);
  assert.deepEqual(tree.filter(item=>['Review Queue','Reschedule Queue','Refund Queue','Vendor Follow-ups'].includes(item.label)).map(item=>item.label),['Review Queue','Reschedule Queue','Refund Queue','Vendor Follow-ups']);
  assert.deepEqual(tree.find(item=>item.label==='Refund Queue').children.map(item=>item.label),['Customer Refund','Vendor Refund']);
@@ -22,9 +23,25 @@ await page.route('**/*',route=>{const u=new URL(route.request().url());if(u.path
 await page.goto('http://ops-nav.test/admin/operations/queue/review');
 if(role.includes('operations')){
  await checkOperationsTree(page);
+ const visible=await page.locator('.main-menu a[href]').evaluateAll(items=>items.map(a=>a.href).sort());
+ const allowed=await page.evaluate(()=>window.CrmNavigation.authorizedLinks().filter(a=>!['/admin/dnp-leads','/admin/lead/create','/admin/kpi'].includes(new URL(a.href).pathname)).map(a=>a.href).sort());
+ assert.deepEqual(visible,allowed,'Keep all other permitted Operations destinations');
+ if(role==='operations-manager'){
+  await page.setViewportSize({width:1440,height:2300});
+  await page.locator('.main-menu details').evaluateAll(items=>items.forEach(item=>item.open=true));
+  await page.locator('.app-sidebar').screenshot({path:path.join(dir,'final-operations-sidebar.png')});
+ }
  await page.setViewportSize({width:390,height:844});await page.locator('[data-toggle-operations-more]').click();
+ assert.deepEqual(await page.locator('.operations-mobile-nav a span').allTextContents(),['Dashboard','Voucher Generation','Upcoming Rides']);
+ const mobileTree=await page.locator('#operations-mobile-more a[href]').evaluateAll(items=>items.map(item=>item.href).sort());
+ assert.deepEqual(mobileTree,visible,'Mobile More must match the full desktop tree');
  assert.deepEqual(await page.locator('#operations-mobile-more .crm-more-section').allTextContents(),sections);
  assert.equal(await page.locator('#operations-mobile-more a[href*="/admin/dnp-leads"],#operations-mobile-more a[href$="/admin/lead/create"]').count(),0);
+ if(role==='operations-manager')await page.screenshot({path:path.join(dir,'final-operations-more.png')});
+ for(const width of [320,390,768,1024,1440]){
+  await page.setViewportSize({width,height:1000});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'Navigation overflow '+role+' '+width);
+ }
  await page.keyboard.press('Escape');await page.setViewportSize({width:1440,height:1000});
 }
 if(role==='super'){

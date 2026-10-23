@@ -17,8 +17,8 @@
         ],
         'operations' => [
             [route('admin.operations.dashboard'), 'ri-home-4-line', 'Dashboard'],
-            [route('admin.operations.queue', 'review'), 'ri-star-line', 'Review'],
-            [route('admin.rides.upcoming'), 'ri-calendar-event-line', 'Rides'],
+            [route('admin.vouchers.index'), 'ri-coupon-3-line', 'Voucher Generation'],
+            [route('admin.rides.upcoming'), 'ri-calendar-event-line', 'Upcoming Rides'],
         ],
         'accounts' => [
             [route('admin.account.payment-review'), 'ri-bank-card-line', 'Payments'],
@@ -39,7 +39,7 @@
         ],
     };
 @endphp
-<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/operations-mobile-nav.css') }}?v=3">
+<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/operations-mobile-nav.css') }}?v=4">
 <div data-operations-mobile-navigation>
     <section class="operations-mobile-more" id="operations-mobile-more" role="dialog" aria-labelledby="operations-mobile-more-title" hidden>
         <header><h2 id="operations-mobile-more-title">More</h2><button type="button" data-close-operations-more aria-label="Close navigation" title="Close"><i class="ri-close-line" aria-hidden="true"></i></button></header>

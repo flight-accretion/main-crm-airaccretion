@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
-class TargetIncentiveReportTest extends LeadListControllerIntegrationTest
+class TargetIncentiveReportTest extends LeadListFixtureTestCase
 {
     private array $people = [];
     private string $product;
