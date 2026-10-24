@@ -5839,7 +5839,11 @@ $this->abortUnlessRepresentativeInScope($staff ? $staff->id : null);
     public function viewLead(Lead $lead)
     {
 
-        $this->abortUnlessCanAccessLead($lead);
+        if (in_array(auth()->user()?->userType?->user_type, UserType::ACCOUNTS_ROLES, true)) {
+            abort_unless(\App\Support\LeadDetailAccess::canViewRideBooking(auth()->user(), $lead), 403);
+        } else {
+            $this->abortUnlessCanAccessLead($lead);
+        }
 
         // Load the lead with necessary relationships
         $lead->load([

@@ -14,7 +14,7 @@
         @include('admin.pages.operations.reschedules.index')
     @else
         @unless($operationsRescheduleMode)
-            <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/ride-status.css') }}">
+            <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/ride-status.css') }}?v={{ filemtime(public_path('assets/admin/css/crm/ride-status.css')) }}">
             <div class="crm-ride-status">
                 <header class="rs-heading">
                     <div>

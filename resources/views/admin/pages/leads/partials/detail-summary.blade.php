@@ -1,7 +1,7 @@
 <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/lead-detail.css') }}">
 @php
     $detailRole = auth()->user()?->userType?->user_type;
-    $detailCanAct = in_array($detailRole, array_merge(\App\Models\UserType::ADMIN_ROLES, \App\Models\UserType::SALES_ROLES, \App\Models\UserType::OPERATIONS_ROLES, \App\Models\UserType::ACCOUNTS_ROLES), true);
+    $detailCanAct = in_array($detailRole, array_merge(\App\Models\UserType::ADMIN_ROLES, \App\Models\UserType::SALES_ROLES, \App\Models\UserType::OPERATIONS_ROLES), true);
     $detailAccounts = \App\Support\LeadDetailAccess::canViewAccountsActivity(auth()->user());
     $detailNext = $latestFollowup?->next_followup_date;
     $detailScore = $latestLead ? $latestLead->latestAiScore()->whereNotNull('score')->first() : null;

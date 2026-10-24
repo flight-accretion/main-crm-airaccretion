@@ -847,6 +847,12 @@ Route::prefix(
             ->name('admin.lead-tracking.show');
     });
 
+    // Accounts may inspect Ride Status bookings; the controller enforces booking eligibility.
+    Route::get('/admin/leads/{lead}', [ClientController::class, 'viewLead'])
+        ->whereUuid('lead')
+        ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES')
+        ->name('admin.leads.view');
+
     // Separate route group for lead-specific operations
     Route::prefix('admin/leads')
         ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')
@@ -991,10 +997,6 @@ Route::get('/import/sample', [ClientController::class, 'downloadSampleExcel'])
             ->name('admin.leads.get-passenger-registration-link');
 
         // Dynamic routes that expect a UUID lead identifier
-        Route::get('/{lead}', [ClientController::class, 'viewLead'])
-            ->whereUuid('lead')
-            ->name('admin.leads.view');
-
         Route::get('/{lead}/edit', [ClientController::class, 'editLead'])
             ->whereUuid('lead')
             ->name('admin.leads.edit');

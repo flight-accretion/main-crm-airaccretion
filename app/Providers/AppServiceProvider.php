@@ -24,6 +24,7 @@ class AppServiceProvider extends ServiceProvider
     public function register()
     {
         $this->app->scoped(\App\Services\Attendance\AttendanceCalendarService::class);
+        $this->app->scoped(\App\Services\SidebarPendingCounts::class);
     }
 
     /**

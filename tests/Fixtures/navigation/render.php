@@ -1,6 +1,7 @@
 <?php
 $root=dirname(__DIR__,3);require $root.'/vendor/autoload.php';
 $app=require $root.'/bootstrap/app.php';$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+require __DIR__.'/pending-counts.php';
 $directory=$argv[1] ?? sys_get_temp_dir().'/crm-navigation';if(!is_dir($directory))mkdir($directory,0777,true);
 config(['view.compiled'=>$directory.'/compiled','cache.default'=>'array']);if(!is_dir(config('view.compiled')))mkdir(config('view.compiled'));
 app()->forgetInstance('blade.compiler');app('view.engine.resolver')->forget('blade');

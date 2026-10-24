@@ -37,11 +37,27 @@ class LeadViewDetailsTest extends TestCase
         Cache::flush();
 
         $this->createSchema();
+        (require base_path('database/migrations/2026_10_08_121000_create_activity_audits_table.php'))->up();
+        Schema::create('lead_ai_scores', function (Blueprint $table) {
+            $table->uuid('id')->primary(); $table->uuid('lead_id'); $table->integer('score')->nullable(); $table->timestamps();
+        });
+        Schema::create('email_lead_logs', function (Blueprint $table) {
+            $table->uuid('id')->primary(); $table->uuid('lead_id');
+        });
+        Schema::create('vouchers', function (Blueprint $table) {
+            $table->uuid('id')->primary(); $table->uuid('lead_id');
+        });
     }
 
-    public function test_lead_view_shows_add_followup_services_and_history_data(): void
+    public static function detailViewerRoles(): array
     {
-        $admin = $this->createUser(UserType::SUPER_ADMIN, 'View Admin');
+        return array_map(fn ($role) => [$role], array_merge([UserType::SUPER_ADMIN], UserType::ACCOUNTS_ROLES));
+    }
+
+    /** @dataProvider detailViewerRoles */
+    public function test_lead_view_shows_add_followup_services_and_history_data(string $role): void
+    {
+        $admin = $this->createUser($role, 'Detail viewer');
         $representative = $this->createUser(UserType::SALES_EXECUTIVE, 'Pallavi Singh');
 
         $product = Product::create([
@@ -119,11 +135,11 @@ class LeadViewDetailsTest extends TestCase
             'updated_at' => now(),
         ]);
 
+        DB::table('lead_rides')->insert(['id' => (string) Str::uuid(), 'lead_id' => $lead->id]);
+        DB::table('vouchers')->insert(['id' => (string) Str::uuid(), 'lead_id' => $lead->id]);
         $this->actingAs($admin);
 
-        $html = app(ClientController::class)
-            ->viewLead($lead)
-            ->render();
+        $html = $this->get(route('admin.leads.view', $lead))->assertOk()->getContent();
 
         $this->assertStringContainsString('Services and Extra Services', $html);
         $this->assertStringContainsString('Products', $html);
@@ -140,6 +156,63 @@ class LeadViewDetailsTest extends TestCase
         $this->assertStringNotContainsString('Trip Itinerary', $html);
         $this->assertStringNotContainsString('Services &amp; Costing', $html);
         $this->assertStringNotContainsString('Services & Costing', $html);
+        if (in_array($role, UserType::ACCOUNTS_ROLES, true)) {
+            $this->assertStringNotContainsString(route('admin.leads.edit', $lead), $html);
+            $this->assertStringNotContainsString(route('admin.leads.follow-up.create', $lead), $html);
+            $this->get(route('admin.leads.edit', $lead))->assertForbidden();
+            $this->get(route('admin.leads.follow-up.create', $lead))->assertForbidden();
+            $this->put(route('admin.leads.update', $lead), [])->assertForbidden();
+        }
+    }
+
+    public function test_accounts_can_access_only_the_read_route_not_lead_mutations(): void
+    {
+        foreach (UserType::ACCOUNTS_ROLES as $role) {
+            $actor = $this->createUser($role, $role);
+            foreach (['admin.leads.view' => true, 'admin.leads.edit' => false, 'admin.leads.update' => false,
+                'admin.leads.follow-up.create' => false, 'admin.leads.transfer.store' => false] as $name => $allowed) {
+                $route = app('router')->getRoutes()->getByName($name);
+                $gate = collect($route->gatherMiddleware())->first(fn ($middleware) => str_starts_with($middleware, 'role:'));
+                $this->assertNotNull($gate, $name);
+                $request = \Illuminate\Http\Request::create('/');
+                $request->setUserResolver(fn () => $actor);
+                try {
+                    $response = app(\App\Http\Middleware\RoleMiddleware::class)->handle($request, fn () => response('ok'), ...explode(',', substr($gate, 5)));
+                    $this->assertTrue($allowed, $role.' unexpectedly allowed '.$name);
+                    $this->assertSame(200, $response->getStatusCode());
+                } catch (\Symfony\Component\HttpKernel\Exception\HttpException $exception) {
+                    $this->assertFalse($allowed, $role.' cannot open '.$name);
+                    $this->assertSame(403, $exception->getStatusCode());
+                }
+            }
+        }
+    }
+
+    public function test_sales_cannot_view_another_representatives_lead(): void
+    {
+        $actor = $this->createUser(UserType::SALES_EXECUTIVE, 'Sales');
+        $this->actingAs($actor);
+        $lead = new Lead(['representative_user_id' => (string) Str::uuid()]);
+        $this->expectException(\Symfony\Component\HttpKernel\Exception\HttpException::class);
+        app(ClientController::class)->viewLead($lead);
+    }
+
+    public function test_accounts_cannot_view_leads_without_both_a_ride_and_voucher(): void
+    {
+        $actor = $this->createUser(UserType::ACCOUNTS_EXECUTIVE, 'Accounts');
+        $this->actingAs($actor);
+        foreach (['none', 'ride-only', 'voucher-only'] as $kind) {
+            $client = Client::create(['id' => (string) Str::uuid(), 'name' => $kind]);
+            $lead = Lead::create(['id' => (string) Str::uuid(), 'client_id' => $client->id]);
+            if ($kind === 'ride-only') DB::table('lead_rides')->insert(['id' => (string) Str::uuid(), 'lead_id' => $lead->id]);
+            if ($kind === 'voucher-only') DB::table('vouchers')->insert(['id' => (string) Str::uuid(), 'lead_id' => $lead->id]);
+            try {
+                app(ClientController::class)->viewLead($lead);
+                $this->fail('Accounts must not access '.$kind);
+            } catch (\Symfony\Component\HttpKernel\Exception\HttpException $exception) {
+                $this->assertSame(403, $exception->getStatusCode());
+            }
+        }
     }
 
     private function createUser(string $role, string $name): User

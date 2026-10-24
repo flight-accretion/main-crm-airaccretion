@@ -12,7 +12,7 @@
         $date = fn($value) => $value ? \Carbon\Carbon::parse($value)->format('d M') : 'None pending';
         $vendorUrl = route('admin.operations.vendor-followups.index', $team ? [] : ['assigned_to' => auth()->id()]);
     @endphp
-    <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/operations-home.css') }}?v=1">
+    <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/operations-home.css') }}?v=2">
     <main class="oh-dashboard">
         <header class="oh-heading">
             <div>
@@ -89,6 +89,7 @@
                 / 5</progress>@endforeach<p class="oh-muted">KPI breakdown <i class="ri-arrow-right-up-line"
                         aria-hidden="true"></i></p>
             </a>
+
             <aside class="oh-incentive">
                 <h2><i class="ri-sparkling-line" aria-hidden="true"></i> Incentive &middot; {{ now()->format('F Y') }}</h2>
                 @if($incentive['status'] === 'configured')
@@ -99,6 +100,7 @@
                     <p>{{ $incentive['status'] === 'duplicate' ? 'Multiple active targets exist for this month. Ask HR or Super Admin to resolve them.' : ($team ? 'Individual incentives are shown in the employee Operations dashboard.' : 'No active incentive configured for this month.') }}</p>
                 @endif
             </aside>
+
         </div>
         <div class="oh-columns">
             <section class="oh-panel" id="oh-cases">

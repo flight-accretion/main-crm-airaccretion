@@ -17,7 +17,7 @@
     <link rel="stylesheet" href="/assets/admin/css/style.css?v=1.4">
     <link rel="stylesheet" href="/assets/admin/css/responsive.css?v=1.1">
     <link rel="stylesheet" href="/assets/admin/css/custom.css?v=2.4">
-    <link rel="stylesheet" href="/assets/admin/css/crm/navigation.css?v=6">
+    <link rel="stylesheet" href="/assets/admin/css/crm/navigation.css?v=7">
     <link rel="stylesheet" href="/assets/admin/css/crm/responsive/mobile-tables.css?v=1">
 
     <!-- Simplebar Css -->
@@ -776,7 +776,7 @@
                                         </a>
                                         <ul class="slide-menu child2">
                                             <li class="slide">
-                                                <a href="{{ route('admin.refunds.index') }}" class="side-menu__item {{ Route::is('admin.refunds.*') ? 'active' : '' }}">Customer Refund</a>
+                                                <a href="{{ route('admin.refunds.index') }}" class="side-menu__item {{ Route::is('admin.refunds.*') ? 'active' : '' }}"><span class="side-menu__label">Customer Refund</span>@include('admin.layouts.partials.pending-count', ['queue' => 'customer_refund'])</a>
                                             </li>
                                             <li class="slide">
                                                 <a
@@ -787,7 +787,8 @@
                                                         : ''
                                                 }}"
                                             >
-                                                Vendor Refund
+                                                <span class="side-menu__label">Vendor Refund</span>
+                                                @include('admin.layouts.partials.pending-count', ['queue' => 'vendor_refund'])
                                             </a>
                                             </li>
                                         </ul>
@@ -866,6 +867,7 @@
                                 <a href="{{ route('admin.refunds.index') }}" class="side-menu__item">
                                     <i class="bx bx-undo side-menu__icon"></i>
                                     <span class="side-menu__label">Customer Refund</span>
+                                    @include('admin.layouts.partials.pending-count', ['queue' => 'customer_refund'])
                                 </a>
                             </li>
                         @endif
@@ -1652,6 +1654,7 @@
                                 <a href="{{ route('admin.account.payment-review') }}" class="side-menu__item">
                                     <i class="bx bx-wallet side-menu__icon"></i>
                                     <span class="side-menu__label">Payment Review</span>
+                                    @include('admin.layouts.partials.pending-count', ['queue' => 'payment_approval'])
                                 </a>
                             </li>
                             <li class="slide {{ Route::is('admin.account.exceptional*') ? 'active' : '' }}">
@@ -1685,6 +1688,7 @@
                             <span class="side-menu__label">
                                 Vendor Refunds
                             </span>
+                            @include('admin.layouts.partials.pending-count', ['queue' => 'account_vendor_refund'])
 
                         </a>
                     </li>
@@ -1695,6 +1699,7 @@
                                 <a href="{{ route('admin.account.invoices') }}" class="side-menu__item">
                                     <i class="bx bx-receipt side-menu__icon"></i>
                                     <span class="side-menu__label">Invoices</span>
+                                    @include('admin.layouts.partials.pending-count', ['queue' => 'invoice'])
                                 </a>
                             </li>
                         @endif
@@ -1733,7 +1738,7 @@
 
         </aside>
         <!-- End::app-sidebar -->
-        <script src="{{ asset('assets/admin/js/crm/navigation.js') }}?v=5"></script>
+        <script src="{{ asset('assets/admin/js/crm/navigation.js') }}?v=6"></script>
         <script src="{{ asset('assets/admin/js/crm/mobile-tables.js') }}?v=1" defer></script>
 
 

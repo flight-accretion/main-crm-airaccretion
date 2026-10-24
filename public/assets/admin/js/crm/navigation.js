@@ -8,14 +8,20 @@
         try { const url = new URL(anchor.getAttribute('href'), location.href); return /^https?:$/.test(url.protocol) ? url.pathname.replace(/\/$/, '') : null; }
         catch (_) { return null; }
     };
-    const labelOf = anchor => (anchor.querySelector('.side-menu__label') || anchor).textContent.replace(/\s+/g, ' ').trim();
+    const labelOf = anchor => {
+        const label = anchor.querySelector('.side-menu__label');
+        if (label) return label.textContent.replace(/\s+/g, ' ').trim();
+        const copy = anchor.cloneNode(true); copy.querySelectorAll('.badge').forEach(item => item.remove());
+        return copy.textContent.replace(/\s+/g, ' ').trim();
+    };
     const direct = (element, tag) => Array.from(element.children).find(child => child.tagName === tag);
     const currentPath = location.pathname.replace(/\/$/, '');
     const icon = name => { const item = document.createElement('i'); item.className = name; item.setAttribute('aria-hidden', 'true'); return item; };
     const rename = (anchor, label) => {
         const glyph = anchor.querySelector('i');
+        const badges = Array.from(anchor.querySelectorAll(':scope > .badge'));
         const text = document.createElement('span'); text.className = 'side-menu__label'; text.textContent = label;
-        anchor.replaceChildren(...(glyph ? [glyph] : []), text);
+        anchor.replaceChildren(...(glyph ? [glyph] : []), text, ...badges);
     };
     function take(path, label) {
         const anchor = Array.from(menu.querySelectorAll('a[href]')).find(item => pathOf(item) === path);
@@ -33,6 +39,16 @@
         summary.setAttribute('aria-label', label);
         if (glyph) summary.appendChild(icon(glyph));
         const text = document.createElement('span'); text.className = 'side-menu__label'; text.textContent = label; summary.append(text, icon('ri-arrow-right-s-line side-menu__angle'));
+        if (label === 'Refund Queue') {
+            const count = children.reduce((total, child) => total + Array.from(child.querySelectorAll('[data-pending-queue]')).reduce((sum, badge) => sum + Number(badge.textContent), 0), 0);
+            if (count > 0) {
+                const badge = document.createElement('span'); badge.className = 'badge bg-danger/10 text-danger ms-auto crm-nav-count';
+                badge.dataset.pendingQueue = 'refund_queue'; badge.textContent = count;
+                badge.setAttribute('aria-label', count + ' pending'); badge.title = count + ' pending';
+                summary.setAttribute('aria-label', label + ', ' + count + ' pending');
+                summary.insertBefore(badge, summary.lastChild);
+            }
+        }
         const list = document.createElement('ul'); list.className = 'crm-nav-children'; list.append(...children);
         details.append(summary, list); item.appendChild(details); return item;
     }
@@ -221,13 +237,26 @@
     });
     sidebar.classList.add('crm-sidebar'); document.documentElement.classList.add('crm-navigation-ready');
 
+    function readBadge(element) {
+        const badge = element.querySelector(':scope > [data-pending-queue], :scope > #lead-transfer-pending-count');
+        if (!badge || badge.hidden || badge.style.display === 'none') return null;
+        return {count: badge.textContent.trim(), queue: badge.dataset.pendingQueue, transfer: badge.id === 'lead-transfer-pending-count'};
+    }
+    function appendBadge(element, data) {
+        if (!data) return;
+        const badge = document.createElement('span'); badge.className = 'badge bg-danger/10 text-danger ms-auto crm-nav-count';
+        badge.textContent = data.count; badge.title = data.count + ' pending'; badge.setAttribute('aria-label', badge.title);
+        if (data.queue) badge.dataset.pendingQueue = data.queue;
+        if (data.transfer) badge.dataset.leadTransferCount = '';
+        element.appendChild(badge);
+    }
     function readTree(list) {
         return Array.from(list.children).map(item => {
             if (item.classList.contains('crm-nav-section')) return {label: item.textContent, section: true};
             const details = direct(item, 'DETAILS');
-            if (details) { const summary = direct(details, 'SUMMARY'); return {label: summary.querySelector('span').textContent, children: readTree(direct(details, 'UL')), active: details.classList.contains('crm-nav-current')}; }
+            if (details) { const summary = direct(details, 'SUMMARY'); return {label: summary.querySelector('.side-menu__label').textContent, badge: readBadge(summary), children: readTree(direct(details, 'UL')), active: details.classList.contains('crm-nav-current')}; }
             const anchor = direct(item, 'A'); if (!anchor || !pathOf(anchor)) return null;
-            return {label: labelOf(anchor), href: anchor.href, target: anchor.target, active: anchor.getAttribute('aria-current') === 'page'};
+            return {label: labelOf(anchor), badge: readBadge(anchor), href: anchor.href, target: anchor.target, active: anchor.getAttribute('aria-current') === 'page'};
         }).filter(Boolean);
     }
     function moreItem(item) {
@@ -238,10 +267,12 @@
         if (item.children) {
             const details = document.createElement('details'); details.open = item.active;
             const summary = document.createElement('summary'); summary.textContent = item.label;
+            appendBadge(summary, item.badge);
             const children = document.createElement('div'); children.className = 'crm-more-children'; children.append(...item.children.map(moreItem));
             details.append(summary, children); return details;
         }
         const anchor = document.createElement('a'); anchor.href = item.href; anchor.textContent = item.label;
+        appendBadge(anchor, item.badge);
         if (item.target) { anchor.target = item.target; anchor.rel = 'noopener'; }
         if (item.active) anchor.setAttribute('aria-current', 'page'); return anchor;
     }

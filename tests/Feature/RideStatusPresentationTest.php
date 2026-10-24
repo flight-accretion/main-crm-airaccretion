@@ -5,6 +5,11 @@ use Tests\TestCase;
 
 class RideStatusPresentationTest extends TestCase
 {
+    public function test_ride_stylesheet_has_a_deployment_cache_version(): void
+    {
+        $source = file_get_contents(resource_path('views/admin/account/rides/ride-status.blade.php'));
+        $this->assertMatchesRegularExpression('/ride-status\.css.*\?v=/', $source);
+    }
     public function test_removed_export_controls_are_not_left_as_executable_blade_inside_html_comments(): void
     {
         $source = file_get_contents(resource_path('views/admin/account/rides/ride-status.blade.php'));
