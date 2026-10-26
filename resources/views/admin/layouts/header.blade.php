@@ -712,17 +712,25 @@
 
                             <li class="slide__category"><span class="category-name">Work Queues</span></li>
                             <li class="slide {{ Route::is('admin.account.payment-review*') ? 'active' : '' }}">
-                                <a href="{{ route('admin.account.payment-review') }}" class="side-menu__item"><i class="bx bx-wallet side-menu__icon"></i><span class="side-menu__label">Payment Review</span>@include('admin.layouts.partials.pending-count', ['queue' => 'payment_approval'])</a>
+                                <a href="{{ route('admin.account.payment-review') }}" class="side-menu__item"><i class="bx bx-wallet side-menu__icon"></i><span class="side-menu__label">Payment Review</span>
+                                    @include('admin.layouts.partials.pending-count', ['queue' => 'payment_approval'])
+                                </a>
                             </li>
                             <li class="slide has-sub {{ Route::is('admin.refunds.*') || Route::is('admin.account.vendor-refunds') ? 'active open' : '' }}">
                                 <a href="javascript:void(0);" class="side-menu__item"><i class="ri-refund-2-line side-menu__icon"></i><span class="side-menu__label">Refund Queue</span><i class="fe fe-chevron-right side-menu__angle"></i></a>
                                 <ul class="slide-menu child1">
-                                    <li class="slide"><a href="{{ route('admin.refunds.index') }}" class="side-menu__item {{ Route::is('admin.refunds.*') ? 'active' : '' }}">Customer Refund@include('admin.layouts.partials.pending-count', ['queue' => 'customer_refund'])</a></li>
-                                    <li class="slide"><a href="{{ route('admin.account.vendor-refunds') }}" class="side-menu__item {{ Route::is('admin.account.vendor-refunds') ? 'active' : '' }}">Vendor Refund@include('admin.layouts.partials.pending-count', ['queue' => 'account_vendor_refund'])</a></li>
+                                    <li class="slide"><a href="{{ route('admin.refunds.index') }}" class="side-menu__item {{ Route::is('admin.refunds.*') ? 'active' : '' }}"><span class="side-menu__label">Customer Refund</span>
+                                        @include('admin.layouts.partials.pending-count', ['queue' => 'customer_refund'])
+                                    </a></li>
+                                    <li class="slide"><a href="{{ route('admin.account.vendor-refunds') }}" class="side-menu__item {{ Route::is('admin.account.vendor-refunds') ? 'active' : '' }}"><span class="side-menu__label">Vendor Refund</span>
+                                        @include('admin.layouts.partials.pending-count', ['queue' => 'account_vendor_refund'])
+                                    </a></li>
                                 </ul>
                             </li>
                             <li class="slide {{ Route::is('admin.account.exceptional*') ? 'active' : '' }}"><a href="{{ route('admin.account.exceptional') }}" class="side-menu__item"><i class="bx bx-error-alt side-menu__icon"></i><span class="side-menu__label">Exceptional Dashboard</span></a></li>
-                            <li class="slide {{ Route::is('admin.account.invoices*') ? 'active' : '' }}"><a href="{{ route('admin.account.invoices') }}" class="side-menu__item"><i class="bx bx-receipt side-menu__icon"></i><span class="side-menu__label">Invoices</span>@include('admin.layouts.partials.pending-count', ['queue' => 'invoice'])</a></li>
+                            <li class="slide {{ Route::is('admin.account.invoices*') ? 'active' : '' }}"><a href="{{ route('admin.account.invoices') }}" class="side-menu__item"><i class="bx bx-receipt side-menu__icon"></i><span class="side-menu__label">Invoices</span>
+                                @include('admin.layouts.partials.pending-count', ['queue' => 'invoice'])
+                            </a></li>
                             <li class="slide {{ Route::is('admin.account.vendor-payments*') ? 'active' : '' }}"><a href="{{ route('admin.account.vendor-payments') }}" class="side-menu__item"><i class="bx bx-credit-card side-menu__icon"></i><span class="side-menu__label">Vendor Payments</span></a></li>
 
                             <li class="slide__category"><span class="category-name">Reports</span></li>
