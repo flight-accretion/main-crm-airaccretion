@@ -7,6 +7,7 @@ use App\Models\OperationCase;
 use App\Models\OperationCaseActivity;
 use App\Models\Lead;
 use App\Models\UserType;
+use App\Services\Operations\VendorFollowupService;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
@@ -27,6 +28,7 @@ class VendorFollowupDesignTest extends KpiFeatureTestCase
         (require base_path('database/migrations/2026_09_23_160000_create_operation_cases_table.php'))->up();
         (require base_path('database/migrations/2026_09_23_160100_create_operation_case_activities_table.php'))->up();
         (require base_path('database/migrations/2026_09_24_120000_add_operations_followup_fields.php'))->up();
+        (require base_path('database/migrations/2026_10_03_160100_add_vendor_followup_fields_to_lead_followups_table.php'))->up();
         $this->ops = $this->createUserWithRole('Vendor Operations', UserType::OPERATIONS_EXECUTIVE);
         $this->lead = Lead::findOrFail($this->createLeadFor($this->ops, 'Vendor Client'));
         $this->vendor = \App\Models\Vendor::create(['id' => (string) Str::uuid(), 'name' => 'Vendor <script>name</script>', 'contact_number' => '9876543210', 'status' => 1]);
@@ -105,5 +107,43 @@ class VendorFollowupDesignTest extends KpiFeatureTestCase
         $hr = $this->createUserWithRole('Create HR', UserType::HR);
         try { app(OperationsVendorFollowupController::class)->create($this->request([], $hr), $this->lead); $this->assertSame(true, false); }
         catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) { $this->assertSame(403, $e->getStatusCode()); }
+    }
+
+    public function test_operations_user_can_save_a_vendor_followup_and_write_compatible_lead_history(): void
+    {
+        $newVendor = \App\Models\Vendor::create([
+            'id' => (string) Str::uuid(),
+            'name' => 'New Vendor',
+            'contact_number' => '9123456789',
+            'status' => 1,
+        ]);
+        $request = Request::create('/admin/operations/vendor-followups/lead', 'POST', [
+            'vendor_id' => $newVendor->id,
+            'purpose' => 'Confirm availability',
+            'followup_date' => now()->toDateString(),
+            'remarks' => 'Call vendor before departure.',
+        ]);
+        auth()->setUser($this->ops);
+        $request->setUserResolver(fn () => $this->ops);
+        $request->setLaravelSession(app('session.store'));
+        app()->instance('request', $request);
+        config(['logging.default' => 'null']);
+
+        $response = app(OperationsVendorFollowupController::class)->store(
+            $request,
+            $this->lead,
+            app(VendorFollowupService::class)
+        );
+
+        $case = OperationCase::query()
+            ->where('type', OperationCase::TYPE_VENDOR_FOLLOWUP)
+            ->where('metadata->vendor_id', $newVendor->id)
+            ->firstOrFail();
+        $history = \App\Models\LeadFollowup::query()->where('operation_case_id', $case->id)->firstOrFail();
+
+        $this->assertSame(302, $response->getStatusCode());
+        $this->assertSame('operations_vendor', $history->source);
+        $this->assertSame('vendor_followup_note', $history->followup_type);
+        $this->assertSame($this->ops->id, $case->assigned_to);
     }
 }

@@ -21,7 +21,10 @@ class Invoice extends Model
         'gst_number',
         'billing_address',
         'status',
+        'finalized_date',
     ];
+
+    protected $casts = ['finalized_date' => 'date'];
 
     /**
      * Relationships

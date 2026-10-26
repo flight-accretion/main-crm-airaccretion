@@ -3,6 +3,7 @@
 namespace App\Exports;
 
 use App\Models\LeadVendorPayment;
+use Carbon\Carbon;
 use Maatwebsite\Excel\Concerns\FromQuery;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
@@ -45,6 +46,42 @@ class VendorReportExport implements FromQuery, WithHeadings, WithMapping, WithSt
         if (!empty($this->filters['service_id'])) {
             $query->whereHas('paymentDetails', function ($q) {
                 $q->where('service_id', $this->filters['service_id']);
+            });
+        }
+        if (!empty($this->filters['from_payment_date'])) {
+            $fromPaymentDate = Carbon::parse($this->filters['from_payment_date'])->startOfDay();
+            $query->whereHas('vendorPayments', function ($q) use ($fromPaymentDate) {
+                $q->where('paid_date', '>=', $fromPaymentDate);
+            });
+        }
+        if (!empty($this->filters['to_payment_date'])) {
+            $toPaymentDate = Carbon::parse($this->filters['to_payment_date'])->endOfDay();
+            $query->whereHas('vendorPayments', function ($q) use ($toPaymentDate) {
+                $q->where('paid_date', '<=', $toPaymentDate);
+            });
+        }
+        if (!empty($this->filters['service_date_from'])) {
+            $serviceDateFrom = Carbon::parse($this->filters['service_date_from'])->startOfDay();
+            $query->whereHas('lead.rideSegments', function ($q) use ($serviceDateFrom) {
+                $q->where('from_date', '>=', $serviceDateFrom);
+            });
+        }
+        if (!empty($this->filters['service_date_to'])) {
+            $serviceDateTo = Carbon::parse($this->filters['service_date_to'])->endOfDay();
+            $query->whereHas('lead.rideSegments', function ($q) use ($serviceDateTo) {
+                $q->where('from_date', '<=', $serviceDateTo);
+            });
+        }
+        if (!empty($this->filters['search'])) {
+            $search = trim((string) $this->filters['search']);
+            $query->where(function ($recordQuery) use ($search) {
+                $recordQuery->whereHas('lead.client', function ($clientQuery) use ($search) {
+                    $clientQuery->where('name', 'like', "%{$search}%")
+                        ->orWhere('contact_number', 'like', "%{$search}%");
+                })->orWhereHas('vendor', function ($vendorQuery) use ($search) {
+                    $vendorQuery->where('name', 'like', "%{$search}%")
+                        ->orWhere('contact_number', 'like', "%{$search}%");
+                });
             });
         }
 

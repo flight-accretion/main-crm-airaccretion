@@ -4184,6 +4184,9 @@ public function saveVendorRefundFromRideStatus(
     */
 
     $request->validate([
+        'stage' =>
+            'nullable|in:cancellation,refund',
+
         'lead_vendor_payment_id' =>
             'required|uuid',
 
@@ -4206,13 +4209,17 @@ public function saveVendorRefundFromRideStatus(
             'nullable|file|mimes:jpg,jpeg,png,pdf|max:2048',
     ]);
 
+    // Calls without a stage are retained for the legacy single-submit form.
+    $stage = $request->input('stage', 'legacy');
+
 
     try {
 
         $response = DB::transaction(
             function () use (
                 $request,
-                $rideId
+                $rideId,
+                $stage
             ) {
 
                 /*
@@ -4283,6 +4290,45 @@ public function saveVendorRefundFromRideStatus(
                     ]);
                 }
 
+                $savedCancellation = VendorRefund::query()
+                    ->where('lead_vendor_payment_id', $leadVendorPayment->id)
+                    ->where('refund_amount', 0)
+                    ->latest('created_at')
+                    ->lockForUpdate()
+                    ->first();
+
+                // The original single-submit form has no stage value. Preserve its
+                // update-in-place behavior when it is reconfirming an existing refund.
+                if ($stage === 'legacy' && !$savedCancellation) {
+                    $savedCancellation = VendorRefund::query()
+                        ->where('lead_vendor_payment_id', $leadVendorPayment->id)
+                        ->latest('created_at')
+                        ->lockForUpdate()
+                        ->first();
+                }
+
+                if ($stage === 'refund' && !$savedCancellation) {
+                    throw ValidationException::withMessages([
+                        'stage' => 'Save the vendor cancellation before recording a refund receipt.',
+                    ]);
+                }
+
+                if ($stage === 'cancellation' && VendorRefund::query()
+                    ->where('lead_vendor_payment_id', $leadVendorPayment->id)
+                    ->where('refund_amount', '>', 0)
+                    ->exists()) {
+                    throw ValidationException::withMessages([
+                        'stage' => 'Cancellation cannot be changed after a vendor refund receipt is recorded.',
+                    ]);
+                }
+
+                if ($stage === 'cancellation' && $savedCancellation
+                    && ($savedCancellation->refund_proof || $savedCancellation->refund_type)) {
+                    throw ValidationException::withMessages([
+                        'stage' => 'Cancellation cannot replace an existing refund record with payment evidence.',
+                    ]);
+                }
+
 
                 /*
                 |--------------------------------------------------------------------------
@@ -4324,7 +4370,9 @@ public function saveVendorRefundFromRideStatus(
                 $cancellationAmount =
                     round(
                         (float)
-                        $request->cancellation_amount,
+                        ($stage === 'refund'
+                            ? $savedCancellation->cancellation_amount
+                            : $request->cancellation_amount),
                         2
                     );
 
@@ -4484,6 +4532,18 @@ public function saveVendorRefundFromRideStatus(
                 $refundAmount =
                     $submittedRefundAmount;
 
+                if ($stage === 'cancellation' && $refundAmount > 0) {
+                    throw ValidationException::withMessages([
+                        'refund_amount' => 'Save Cancellation does not record a refund amount.',
+                    ]);
+                }
+
+                if ($stage === 'refund' && $refundAmount <= 0) {
+                    throw ValidationException::withMessages([
+                        'refund_amount' => 'Enter the amount received from the vendor before saving the refund.',
+                    ]);
+                }
+
 
                 /*
                 |--------------------------------------------------------------------------
@@ -4559,6 +4619,8 @@ public function saveVendorRefundFromRideStatus(
 
 
                 if (
+                    $stage !== 'cancellation'
+                    &&
                     $request->hasFile(
                         'refund_proof'
                     )
@@ -4595,16 +4657,7 @@ public function saveVendorRefundFromRideStatus(
 
                 if ($refundAmount == 0) {
 
-                    $existingVendorSettlement =
-                        VendorRefund::query()
-                            ->where(
-                                'lead_vendor_payment_id',
-                                $leadVendorPayment->id
-                            )
-                            ->latest(
-                                'created_at'
-                            )
-                            ->first();
+                    $existingVendorSettlement = $savedCancellation;
 
 
                     if ($existingVendorSettlement) {

@@ -7,7 +7,7 @@ const documentFor=file=>fs.readFileSync(path.join(dir,file),'utf8').replace(/<sc
  .replace('</head>','<style>#loader{display:none!important}</style></head>')
  .replace('</body>','<script src="/assets/admin/js/crm/navigation.js"></script><script src="/assets/admin/js/crm/operations-mobile-nav.js"></script></body>');
 (async()=>{const browser=await chromium.launch({headless:true,executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe'});try{
- for(const role of ['ops','super']){
+ for(const role of ['ops','manager','senior','super']){
   const page=await browser.newPage({viewport:{width:1440,height:1050}}),errors=[],writes=[];
   page.on('pageerror',error=>errors.push(error.message));
   await page.route('**/*',route=>{
@@ -19,7 +19,8 @@ const documentFor=file=>fs.readFileSync(path.join(dir,file),'utf8').replace(/<sc
   });
   await page.goto('http://home.test/admin/operations/dashboard');
   assert.equal(await page.locator('h1').innerText(),'Operations Dashboard');
-  assert(!(await page.locator('.oh-incentive').innerText()).includes('Sample'));
+  for(const panel of await page.locator('.oh-incentive').all())assert((await panel.innerText()).trim().length>0);
+  assert.equal((await page.locator('.oh-heading > .oh-badge').innerText()).trim(),role==='ops'?'Personal workspace':'Team workspace');
   for(const width of [1440,1024,768,390,320])for(const dark of [false,true]){
    await page.setViewportSize({width,height:1050});
    await page.evaluate(dark=>{document.documentElement.classList.toggle('dark',dark);document.documentElement.classList.toggle('light',!dark);},dark);

@@ -19,6 +19,7 @@ use App\Http\Controllers\VoucherController;
 use App\Http\Controllers\UserTypeController;
 use function App\Helpers\getStatesByCountry;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\AccountsHomeController;
 use App\Http\Controllers\ExtraServiceController;
 use App\Http\Controllers\PaymentReviewController;
 use App\Http\Controllers\ExceptionalController;
@@ -198,6 +199,7 @@ Route::get(
 | LEAD-WISE SALES ↔ OPERATIONS CHAT
 |--------------------------------------------------------------------------
 */
+
 
 Route::prefix('admin/lead-chat')
     ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')
@@ -1144,6 +1146,9 @@ Route::post(
 
     // Payment Review Routes
     Route::prefix('admin/account')->group(function () {
+        Route::get('/dashboard', [AccountsHomeController::class, 'index'])
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES')
+            ->name('admin.account.dashboard');
         // Exceptional Dashboard
         Route::get('/exceptional', [ExceptionalController::class, 'index'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')->name('admin.account.exceptional');
         Route::post('/exceptional/{followupId}/update-total', [ExceptionalController::class, 'updateTotal'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')->name('admin.account.exceptional.update-total');
@@ -1752,6 +1757,9 @@ Route::post(
         Route::get('/sales', [ReportController::class, 'salesReport'])->name('admin.report.sales');
         Route::get('/sales/sales-persons-by-manager', [ReportController::class, 'getSalesPersonsByManager'])->name('admin.report.sales.persons-by-manager');
         Route::get('/sales/export', [ReportController::class, 'exportSalesReport'])->name('admin.report.sales.export');
+        // Accounts can view and download the existing incentive ledger, but cannot edit targets or incentive settings.
+        Route::get('/incentives', [TargetController::class, 'accountIncentives'])->name('admin.report.incentives');
+        Route::get('/incentives/download', [TargetController::class, 'downloadAccountIncentive'])->name('admin.report.incentives.download');
         // Vendor report for account side (flat per-vendor view)
         Route::get('/vendor-payments', [ReportController::class, 'vendorReport'])->name('admin.report.vendor');
         Route::get('/vendor-payments/export', [ReportController::class, 'exportVendorReport'])->name('admin.report.vendor.export');

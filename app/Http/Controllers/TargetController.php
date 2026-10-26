@@ -488,6 +488,53 @@ class TargetController extends Controller
     public function incentives(Request $request)
     {
         $this->abortUnlessCanConfigure();
+        return $this->renderIncentives($request, $this->getAssignableStaff(), 'admin.targets.incentives', 'admin.targets.download-incentive');
+    }
+
+    /**
+     * Read-only monthly incentive report for Accounts. Target configuration remains
+     * restricted to HR and Super Admin through the existing incentives page.
+     */
+    public function accountIncentives(Request $request)
+    {
+        abort_unless($this->canViewAccountIncentives(), 403);
+
+        $staff = $this->getAccountIncentiveStaff();
+        $response = $this->renderIncentives(
+            $request,
+            $staff,
+            'admin.report.incentives',
+            'admin.report.incentives.download',
+            $this->configuredIncentiveStaffIds(
+                $staff,
+                (int) $request->input('year', now()->year),
+                (int) $request->input('month', now()->month)
+            )
+        );
+
+        $response->with('isAccountReadOnly', true);
+
+        return $response;
+    }
+
+    public function downloadAccountIncentive(Request $request)
+    {
+        abort_unless($this->canViewAccountIncentives(), 403);
+
+        $staff = $this->getAccountIncentiveStaff();
+        return $this->downloadIncentiveFile(
+            $request,
+            $staff,
+            $this->configuredIncentiveStaffIds(
+                $staff,
+                (int) $request->input('year', now()->year),
+                (int) $request->input('month', now()->month)
+            )
+        );
+    }
+
+    private function renderIncentives(Request $request, $assignableStaff, string $indexRoute, string $downloadRoute, $defaultStaffIds = null)
+    {
         $input = $request->validate([
             'year' => 'nullable|integer|between:2020,' . now()->year,
             'month' => 'nullable|integer|between:1,12',
@@ -499,9 +546,11 @@ class TargetController extends Controller
         $salesExecutiveId = $input['person_id'] ?? null;
         $search = trim($input['search'] ?? '');
         $perPage = (int) ($input['per_page'] ?? 25);
-        $assignableStaff = $this->getAssignableStaff();
         if ($salesExecutiveId) abort_unless($assignableStaff->contains('id', $salesExecutiveId), 403);
-        $staff = $assignableStaff->filter(function ($person) use ($salesExecutiveId, $search) {
+        $candidateStaff = $defaultStaffIds !== null && !$salesExecutiveId && $search === ''
+            ? $assignableStaff->whereIn('id', $defaultStaffIds)
+            : $assignableStaff;
+        $staff = $candidateStaff->filter(function ($person) use ($salesExecutiveId, $search) {
             return (!$salesExecutiveId || $person->id === $salesExecutiveId)
                 && ($search === '' || mb_stripos($person->name . ' ' . optional($person->userType)->user_type, $search) !== false);
         })->values();
@@ -529,19 +578,26 @@ class TargetController extends Controller
                 'incentive' => $result['incentive'] ?? null,
                 'basis' => $result ? ucfirst($target->incentive_basis) : 'Not configured'];
         });
-        return view('admin.targets.incentives', compact('year', 'month', 'salesExecutiveId', 'search', 'perPage', 'assignableStaff', 'rows', 'pagination'));
+        return view('admin.targets.incentives', compact('year', 'month', 'salesExecutiveId', 'search', 'perPage', 'assignableStaff', 'rows', 'pagination', 'indexRoute', 'downloadRoute'));
     }
 
     public function downloadIncentive(Request $request)
     {
         $this->abortUnlessCanConfigure();
+        return $this->downloadIncentiveFile($request, $this->getAssignableStaff());
+    }
+
+    private function downloadIncentiveFile(Request $request, $staff, $defaultStaffIds = null)
+    {
         $input = $request->validate(['year' => 'required|integer|between:2020,2050', 'month' => 'required|integer|between:1,12', 'file_type' => 'required|in:excel,csv', 'person_id' => 'nullable|uuid']);
-        $staff = $this->getAssignableStaff();
         $staffIds = $staff->pluck('id');
         if (!empty($input['person_id'])) {
             abort_unless($staffIds->contains($input['person_id']), 403);
             $staffIds = collect([$input['person_id']]);
             $staff = $staff->where('id', $input['person_id'])->values();
+        } elseif ($defaultStaffIds !== null) {
+            $staffIds = $staffIds->intersect($defaultStaffIds)->values();
+            $staff = $staff->whereIn('id', $staffIds)->values();
         }
         $targets = Target::query()->whereIn('sales_executive_id', $staffIds)
             ->where('year', $input['year'])->where('month', $input['month'])->where('status', 'active')->get();
@@ -554,5 +610,28 @@ class TargetController extends Controller
             sprintf('incentives-%d-%02d.%s', $input['year'], $input['month'], $csv ? 'csv' : 'xlsx'),
             ['Content-Type' => $csv ? 'text/csv; charset=UTF-8' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                 'Cache-Control' => 'private, no-store', 'X-Content-Type-Options' => 'nosniff']);
+    }
+
+    private function canViewAccountIncentives(): bool
+    {
+        $role = optional(auth()->user()?->userType)->user_type;
+
+        return in_array($role, array_merge(UserType::ACCOUNTS_ROLES, UserType::ADMIN_ROLES), true);
+    }
+
+    private function getAccountIncentiveStaff()
+    {
+        return User::with('userType')->where('status', 1)->orderBy('name')->get();
+    }
+
+    private function configuredIncentiveStaffIds($staff, int $year, int $month)
+    {
+        return Target::query()
+            ->whereIn('sales_executive_id', $staff->pluck('id'))
+            ->where('year', $year)
+            ->where('month', $month)
+            ->where('status', 'active')
+            ->where('incentive_enabled', true)
+            ->pluck('sales_executive_id');
     }
 }

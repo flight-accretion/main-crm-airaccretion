@@ -61,6 +61,7 @@ class InvoiceController extends Controller
      */
     public function index(Request $request)
     {
+        $request->validate(array_fill_keys(['invoice_created_from', 'invoice_created_to', 'finalized_from', 'finalized_to', 'service_from', 'service_to'], 'nullable|date_format:Y-m-d'));
         try {
             // Get query parameters for filtering
             $clientId = $request->input('client_id');
@@ -190,13 +191,38 @@ class InvoiceController extends Controller
                 });
             }
 
+            foreach (['invoice_created' => 'created_at', 'finalized' => 'finalized_date'] as $prefix => $column) {
+                if ($request->filled($prefix.'_from') || $request->filled($prefix.'_to')) {
+                    $query->whereHas('invoice', function ($invoiceQuery) use ($request, $prefix, $column) {
+                        if ($request->filled($prefix.'_from')) $invoiceQuery->whereDate($column, '>=', $request->input($prefix.'_from'));
+                        if ($request->filled($prefix.'_to')) $invoiceQuery->whereDate($column, '<=', $request->input($prefix.'_to'));
+                    });
+                }
+            }
+            if ($request->filled('service_from') || $request->filled('service_to')) {
+                $query->whereHas('lead.rideSegments', function ($rideQuery) use ($request) {
+                    if ($request->filled('service_from')) $rideQuery->whereDate('from_date', '>=', $request->input('service_from'));
+                    if ($request->filled('service_to')) $rideQuery->whereDate('from_date', '<=', $request->input('service_to'));
+                });
+            }
+            $invoiceStats = [
+                'total' => (clone $query)->count(),
+                'awaiting' => (clone $query)->whereDoesntHave('invoice')->count(),
+                'generated' => (clone $query)->whereHas('invoice', fn ($q) => $q->where('status', 1))->count(),
+                'finalized' => (clone $query)->whereHas('invoice', fn ($q) => $q->where('status', 2))->count(),
+            ];
+
             // Invoice status handling:
             // - If explicit status filter provided, honor it:
             //     '2' or 'completed' => show only finalized (invoice.status = 2)
             //     '1' or 'active'    => show only active (invoice.status = 1) or vouchers without invoice
             // - If no status filter provided, exclude finalized invoices by default
             if ($status) {
-                if ($status === 'completed' || $status == 2 || $status === '2') {
+                if ($status === 'awaiting') {
+                    $query->whereDoesntHave('invoice');
+                } elseif ($status === 'generated') {
+                    $query->whereHas('invoice', fn ($q) => $q->where('status', 1));
+                } elseif ($status === 'completed' || $status == 2 || $status === '2') {
                     $query->whereHas('invoice', function ($q) {
                         $q->where('status', 2);
                     });
@@ -253,8 +279,8 @@ class InvoiceController extends Controller
                 $rideInfo = $this->getRideInformation($lead);
                 $allRides = $this->getAllRideSegments($lead);
                 $existingInvoiceModel = Invoice::where('voucher_id', $voucher->id)->first();
-                $displayCompanyName = $existingInvoiceModel?->company_name ?: ($client->company_name ?: 'N/A');
-                $displayGstNumber = $existingInvoiceModel?->gst_number ?: ($client->gst_number ?: 'N/A');
+                $displayCompanyName = $existingInvoiceModel ? ($existingInvoiceModel->company_name ?: 'N/A') : ($client->company_name ?: 'N/A');
+                $displayGstNumber = $existingInvoiceModel ? ($existingInvoiceModel->gst_number ?: 'N/A') : ($client->gst_number ?: 'N/A');
 
                 $invoiceData = [
                     'id' => $voucher->id,
@@ -291,13 +317,16 @@ class InvoiceController extends Controller
                 // Attach existing invoice metadata so view can disable quick-generate button
                 $invoiceData['existing_invoice'] = $existingInvoiceModel ? true : false;
                 $invoiceData['existing_invoice_id'] = $existingInvoiceModel->invoice_id ?? null;
+                $invoiceData['invoice_status'] = $existingInvoiceModel ? (int) $existingInvoiceModel->status : null;
+                $invoiceData['invoice_created_at'] = $existingInvoiceModel?->created_at;
+                $invoiceData['finalized_date'] = $existingInvoiceModel?->finalized_date;
 
                 $invoicesData->push($invoiceData);
             }
 
             $clients = Client::where('status', 1)->select('id', 'name')->get();
             $services = Service::where('status', 1)->select('id', 'service')->get();
-            return view('admin.account.invoices.invoices', compact('invoicesData', 'vouchers', 'clients', 'services'));
+            return view('admin.account.invoices.invoices', compact('invoicesData', 'vouchers', 'clients', 'services', 'invoiceStats'));
         } catch (\Exception $e) {
             Log::error('Error in InvoiceController@index: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString()
@@ -395,6 +424,7 @@ class InvoiceController extends Controller
             // Check if invoice already exists -> return existing invoice instead of treating as error
             $existingInvoice = Invoice::where('voucher_id', $voucher->id)->first();
             if ($existingInvoice) {
+                DB::commit();
                 return response()->json([
                     'success' => true,
                     'message' => 'Invoice already exists for this voucher.',
@@ -596,38 +626,49 @@ class InvoiceController extends Controller
      */
     public function finalizeInvoice(Request $request, $voucherId)
     {
+        $validator = \Illuminate\Support\Facades\Validator::make($request->all(), ['finalized_date' => 'nullable|date_format:Y-m-d']);
+        if ($validator->fails()) {
+            return response()->json(['success' => false, 'message' => 'Enter a valid invoice finalize date.', 'errors' => $validator->errors()], 422);
+        }
         try {
-            $voucher = Voucher::findOrFail($voucherId);
+            return DB::transaction(function () use ($request, $voucherId) {
+                $voucher = Voucher::findOrFail($voucherId);
 
-            $invoice = Invoice::where('voucher_id', $voucher->id)->first();
-            if (!$invoice) {
-                return response()->json([ 'success' => false, 'message' => 'Invoice not found for this voucher' ], 404);
-            }
+                $invoice = Invoice::where('voucher_id', $voucher->id)->lockForUpdate()->first();
+                if (!$invoice) {
+                    return response()->json([ 'success' => false, 'message' => 'Invoice not found for this voucher' ], 404);
+                }
+                if ($this->invoiceIsFinalized($invoice)) {
+                    return response()->json(['success' => true, 'message' => 'Invoice is already finalized.', 'finalized_date' => $invoice->finalized_date?->toDateString()]);
+                }
 
-            // mark as finalized/completed (use status = 2 for completed)
-            $oldStatus = $invoice->status;
-            $invoice->status = 2;
-            $invoice->save();
+                // mark as finalized/completed (use status = 2 for completed)
+                $oldStatus = $invoice->status;
+                $invoice->status = 2;
+                $invoice->finalized_date = $request->input('finalized_date') ?: now()->toDateString();
+                $invoice->save();
 
-            app(ActivityAuditService::class)->record(
-                'invoice',
-                'finalized',
-                $invoice,
-                [
-                    'status' => $oldStatus,
-                ],
-                [
-                    'status' => $invoice->status,
-                    'finalized_at' => now()->toDateTimeString(),
-                ],
-                [
-                    'lead_id' => $voucher->lead?->id,
-                    'client_id' => $voucher->lead?->client_id,
-                    'voucher_id' => $voucher->id,
-                ]
-            );
+                app(ActivityAuditService::class)->record(
+                    'invoice',
+                    'finalized',
+                    $invoice,
+                    [
+                        'status' => $oldStatus,
+                    ],
+                    [
+                        'status' => $invoice->status,
+                        'finalized_at' => now()->toDateTimeString(),
+                        'finalized_date' => $invoice->finalized_date->toDateString(),
+                    ],
+                    [
+                        'lead_id' => $voucher->lead?->id,
+                        'client_id' => $voucher->lead?->client_id,
+                        'voucher_id' => $voucher->id,
+                    ]
+                );
 
-            return response()->json([ 'success' => true, 'message' => 'Invoice marked as finalized.' ]);
+                return response()->json(['success' => true, 'message' => 'Invoice finalized successfully.', 'finalized_date' => $invoice->finalized_date->toDateString()]);
+            });
         } catch (\Exception $e) {
             Log::error('Error in InvoiceController@finalizeInvoice: ' . $e->getMessage());
             return response()->json([ 'success' => false, 'message' => 'Failed to finalize invoice.' ], 500);

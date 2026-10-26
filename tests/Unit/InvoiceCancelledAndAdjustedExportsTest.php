@@ -46,6 +46,7 @@ class InvoiceCancelledAndAdjustedExportsTest extends TestCase
         DB::reconnect('sqlite');
 
         $this->createSchema();
+        (require base_path('database/migrations/2026_10_24_130000_add_finalized_date_to_invoices_table.php'))->up();
     }
 
     public function test_paid_cancelled_customer_ride_is_excluded_from_invoice_index(): void
@@ -82,6 +83,122 @@ class InvoiceCancelledAndAdjustedExportsTest extends TestCase
         $this->assertSame(25000.0, (float) $row['refund_due_amount']);
         $this->assertSame(0.0, (float) $row['balance_amount']);
         $this->assertSame('Full Paid', $row['status']);
+    }
+
+    public function test_invoice_finalization_saves_selected_date_and_is_idempotent(): void
+    {
+        $scenario = $this->createPaidCancelledScenario();
+        $controller = app(InvoiceController::class);
+        $request = Request::create('/', 'POST', ['finalized_date' => '2026-10-12']);
+        $this->assertTrue($controller->finalizeInvoice($request, $scenario['voucher']->id)->getData(true)['success']);
+        $invoice = Invoice::where('voucher_id', $scenario['voucher']->id)->first();
+        $this->assertSame('2026-10-12', $invoice->finalized_date?->toDateString());
+        $this->assertSame(2, (int) $invoice->status);
+        $controller->finalizeInvoice(Request::create('/', 'POST', ['finalized_date' => '2026-10-20']), $scenario['voucher']->id);
+        $this->assertSame('2026-10-12', $invoice->fresh()->finalized_date?->toDateString());
+        $this->assertSame(2, (int) $scenario['followup']->fresh()->status, 'Lead status must not change');
+    }
+
+    public function test_invalid_finalization_date_does_not_lock_invoice(): void
+    {
+        $scenario = $this->createPaidCancelledScenario();
+        $response = app(InvoiceController::class)->finalizeInvoice(Request::create('/', 'POST', ['finalized_date' => '2026-02-30']), $scenario['voucher']->id);
+        $this->assertSame(422, $response->getStatusCode());
+        $this->assertSame(1, (int) Invoice::where('voucher_id', $scenario['voucher']->id)->value('status'));
+    }
+
+    public function test_blank_gst_is_optional_and_finalized_invoice_remains_locked(): void
+    {
+        $scenario = $this->createPaidCancelledScenario();
+        $controller = app(InvoiceController::class);
+        $request = Request::create('/', 'PUT', ['company_name' => '', 'gst_number' => '', 'billing_address' => '']);
+        $this->assertTrue($controller->updateGstInfo($request, $scenario['voucher']->id)->getData(true)['success']);
+        $this->assertEmpty(Invoice::where('voucher_id', $scenario['voucher']->id)->value('gst_number'));
+        $controller->finalizeInvoice(Request::create('/', 'POST'), $scenario['voucher']->id);
+        $this->assertSame(423, $controller->updateGstInfo($request, $scenario['voucher']->id)->getStatusCode());
+    }
+
+    public function test_generation_without_gst_preserves_payment_requirement_and_duplicate_transaction_balance(): void
+    {
+        $scenario = $this->createPaidCancelledScenario();
+        DB::table('invoices')->delete();
+        DB::table('clients')->where('id', $scenario['client']->id)->update(['gst_number' => null, 'company_name' => null]);
+        $controller = app(InvoiceController::class);
+        $request = Request::create('/', 'POST', ['gst_number' => '', 'company_name' => '']);
+        $this->assertTrue($controller->generateInvoice($request, $scenario['voucher']->id)->getData(true)['success']);
+        $this->assertEmpty(Invoice::first()->gst_number);
+        $level = DB::transactionLevel();
+        $controller->generateInvoice($request, $scenario['voucher']->id);
+        $this->assertSame($level, DB::transactionLevel(), 'Duplicate generation must not leak an open transaction');
+        $this->assertSame(1, Invoice::count());
+        DB::table('invoices')->delete();
+        DB::table('payment_audit_trail')->update(['payment_status' => 2]);
+        $this->assertSame(422, $controller->generateInvoice($request, $scenario['voucher']->id)->getStatusCode());
+        $this->assertSame(0, Invoice::count());
+    }
+
+    public function test_invoice_created_and_finalize_dates_filter_before_pagination(): void
+    {
+        $scenario = $this->createPaidCancelledScenario();
+        DB::table('lead_followups')->where('id', $scenario['followup']->id)->update(['status' => 5]);
+        DB::table('invoices')->where('voucher_id', $scenario['voucher']->id)->update(['created_at' => '2026-10-03 10:00:00', 'status' => 2, 'finalized_date' => '2026-10-12']);
+        foreach ([['invoice_created_from' => '2026-10-03', 'invoice_created_to' => '2026-10-03'], ['finalized_from' => '2026-10-12', 'finalized_to' => '2026-10-12']] as $filters) {
+            $response = app(InvoiceController::class)->index(Request::create('/', 'GET', $filters + ['status' => 'all']));
+            $this->assertSame(1, $response->getData()['vouchers']->total());
+        }
+        $response = app(InvoiceController::class)->index(Request::create('/', 'GET', ['status' => 'all', 'finalized_to' => '2026-10-11']));
+        $this->assertSame(0, $response->getData()['vouchers']->total());
+    }
+
+    public function test_invoice_redesign_renders_existing_data_and_optional_gst_without_state_column(): void
+    {
+        $this->actingAs($this->createAdminUser());
+        $scenario = $this->createPaidCancelledScenario();
+        DB::table('lead_followups')->where('id', $scenario['followup']->id)->update(['status' => 5]);
+        foreach (['awaiting', 'finalized', 'legacy'] as $kind) {
+            $voucher = (string) Str::uuid();
+            DB::table('vouchers')->insert(['id' => $voucher, 'lead_id' => $scenario['lead']->id, 'status' => 1, 'created_at' => now(), 'updated_at' => now()]);
+            if ($kind !== 'awaiting') DB::table('invoices')->insert(['id' => (string) Str::uuid(), 'voucher_id' => $voucher, 'invoice_id' => 'INV-'.$kind, 'status' => 2, 'finalized_date' => $kind === 'finalized' ? '2026-10-12' : null, 'created_at' => now(), 'updated_at' => now()]);
+        }
+        view()->getFinder()->prependLocation(base_path('tests/Fixtures/kpi-tools/views'));
+        $request = Request::create('/admin/account/invoices', 'GET', ['status' => 'all']);
+        app()->instance('request', $request);
+        $response = app(InvoiceController::class)->index($request);
+        $html = $response->render();
+        $this->assertStringContainsString('Invoice finalize date', $html);
+        $this->assertStringContainsString('12 Oct 2026', $html);
+        $this->assertStringContainsString('Not recorded', $html);
+        $this->assertStringContainsString('+91-9876543210', $html);
+        $this->assertStringNotContainsString('Blocked', $html);
+        $this->assertStringNotContainsString('>State<', $html);
+        $this->assertStringNotContainsString('ti-offcanvas-right', $html);
+        $this->assertStringContainsString('ai-invoice-row', $html);
+        $this->assertStringContainsString('name="invoice_created_from"', $html);
+        $this->assertStringContainsString('name="finalized_from"', $html);
+        $this->assertStringNotContainsString('@selected', $html);
+        if ($directory = getenv('CRM_INVOICE_PREVIEW_DIR')) {
+            if (!is_dir($directory)) mkdir($directory, 0777, true);
+            file_put_contents($directory.'/index.html', $html);
+            $ajax = Request::create('/', 'GET', [], [], [], ['HTTP_X_REQUESTED_WITH' => 'XMLHttpRequest']);
+            app()->instance('request', $ajax);
+            file_put_contents($directory.'/details.json', app(InvoiceController::class)->show($scenario['voucher']->id)->getContent());
+            file_put_contents($directory.'/rows.json', $response->getData()['invoicesData']->toJson());
+            DB::table('lead_followups')->update(['status' => 2]);
+            app()->instance('request', $request);
+            file_put_contents($directory.'/empty.html', app(InvoiceController::class)->index($request)->render());
+        }
+    }
+
+    public function test_clearing_optional_gst_does_not_restore_the_clients_old_gst_in_the_queue(): void
+    {
+        $scenario = $this->createPaidCancelledScenario();
+        DB::table('lead_followups')->where('id', $scenario['followup']->id)->update(['status' => 5]);
+        $controller = app(InvoiceController::class);
+        $controller->updateGstInfo(Request::create('/', 'PUT', ['gst_number' => '', 'company_name' => '']), $scenario['voucher']->id);
+        $row = $controller->index(Request::create('/', 'GET'))->getData()['invoicesData']->first();
+        $this->assertSame('N/A', $row['invoice_gst_number']);
+        $this->assertSame('N/A', $row['invoice_company_name']);
+        $this->assertSame('GST-CANCEL-1', $scenario['client']->fresh()->gst_number, 'Client master must remain unchanged');
     }
 
     public function test_vendor_report_export_uses_refund_adjusted_vendor_amounts(): void
@@ -139,6 +256,31 @@ class InvoiceCancelledAndAdjustedExportsTest extends TestCase
         $this->assertSame(25000.0, (float) $row->refund_due_amount);
         $this->assertSame(0.0, (float) $row->balance_amount);
         $this->assertSame('Full Paid', $row->status);
+    }
+
+    public function test_vendor_report_filters_by_service_date_and_client_name_or_number(): void
+    {
+        $this->actingAs($this->createAdminUser());
+        $scenario = $this->createPaidCancelledScenario();
+
+        $response = app(ReportController::class)->vendorReport(Request::create('/admin/report/vendor-payments', 'GET', [
+            'service_date_from' => '2026-09-15',
+            'service_date_to' => '2026-09-15',
+            'search' => '9876543210',
+        ]));
+
+        $this->assertInstanceOf(View::class, $response);
+        $rows = $response->getData()['rows'];
+
+        $this->assertCount(1, $rows);
+        $this->assertSame($scenario['client']->name, $rows->first()->client_name);
+
+        $emptyResponse = app(ReportController::class)->vendorReport(Request::create('/admin/report/vendor-payments', 'GET', [
+            'service_date_from' => '2026-09-16',
+            'service_date_to' => '2026-09-16',
+        ]));
+
+        $this->assertCount(0, $emptyResponse->getData()['rows']);
     }
 
     public function test_profit_loss_report_screen_includes_paid_cancelled_ride_with_adjusted_vendor_amount(): void

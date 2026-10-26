@@ -29,7 +29,7 @@ class VendorFollowupService
                 ->where('lead_id', $lead->id)
                 ->where('type', OperationCase::TYPE_VENDOR_FOLLOWUP)
                 ->whereNull('completed_at')
-                ->whereRaw("metadata->>'vendor_id' = ?", [$vendor->id])
+                ->where('metadata->vendor_id', $vendor->id)
                 ->lockForUpdate()
                 ->first();
 
@@ -318,7 +318,7 @@ class VendorFollowupService
             'followup_note' => $note,
             'followed_by' => $user->id,
             'status' => $latest ? $latest->status : LeadFollowup::STATUS_ACTIVE,
-            'source' => 'operations_vendor_followup',
+            'source' => 'operations_vendor',
             'followup_type' => 'vendor_followup_note',
         ]);
     }

@@ -2,6 +2,12 @@ const fs=require('node:fs'), path=require('node:path'), assert=require('node:ass
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/reser/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
 const root=path.resolve(__dirname,'../..'), dir=process.argv[2];
 if(!dir) throw Error('Pass the synthetic fixture directory.');
+const rideStatusSource=fs.readFileSync(path.join(root,'resources/views/admin/account/rides/ride-status.blade.php'),'utf8');
+assert.match(rideStatusSource,/id="ride-vendor-refund-form"/);
+assert.match(rideStatusSource,/data-vendor-save="cancellation"/);
+assert.match(rideStatusSource,/data-vendor-save="refund"/);
+assert.match(rideStatusSource,/formData\.set\('stage', stage\)/);
+assert.doesNotMatch(rideStatusSource,/vendor-settlements/);
 function extract(file,start,end) {
     const source=fs.readFileSync(path.join(root,file),'utf8'); const from=source.indexOf(start), to=source.indexOf(end,from);
     assert.ok(from>=0 && to>from,'Missing production function');

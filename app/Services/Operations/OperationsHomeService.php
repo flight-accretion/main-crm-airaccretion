@@ -11,7 +11,10 @@ class OperationsHomeService
     public function forUser(User $actor, ?string $caseBucket = null): array
     {
         $actor->loadMissing('userType');
-        $team = in_array($actor->userType?->user_type, UserType::ADMIN_ROLES, true);
+        $role = $actor->userType?->user_type;
+        // Match the existing Operations call dashboard's manager/team scope.
+        $team = in_array($role, [...UserType::ADMIN_ROLES, UserType::OPERATIONS_MANAGER, UserType::SENIOR_OPERATIONS_MANAGER], true);
+        $personalKpi = in_array($role, UserType::OPERATIONS_ROLES, true);
         $today = now()->startOfDay();
         $tomorrow = $today->copy()->addDay();
         $cases = OperationCase::query();
@@ -68,12 +71,12 @@ class OperationsHomeService
             ->with(['latestFollowup' => fn ($followup) => $latestStatus($followup)])
             ->whereHas('leadFollowups', fn ($followup) => $latestStatus($followup)->where('status', LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED))->get();
         $kpi = ['day' => null, 'month' => null];
-        if (!$team) {
+        if ($personalKpi) {
             $kpi['day'] = app(KpiDashboardService::class)->forUser($actor, now(), $today)['overall_score'] ?? null;
             $kpi['month'] = app(KpiDashboardService::class)->forUser($actor, now(), now()->startOfMonth())['overall_score'] ?? null;
         }
-        $incentive = ['status' => $team ? 'not_selected' : 'not_configured', 'amount' => null];
-        if (!$team) {
+        $incentive = ['status' => $personalKpi ? 'not_configured' : 'not_selected', 'amount' => null];
+        if ($personalKpi) {
             $targets = Target::where('sales_executive_id', $actor->id)->where('year', now()->year)
                 ->where('month', now()->month)->where('status', 'active')->limit(2)->get();
             if ($targets->count() > 1) {
@@ -83,7 +86,7 @@ class OperationsHomeService
             }
         }
 
-        return compact('team', 'todayRides', 'nextRide', 'unconfirmed', 'expiring', 'oldest', 'activities', 'caseRows', 'caseBucket', 'customerRefund', 'vendorRefund', 'kpi', 'incentive') + [
+        return compact('team', 'personalKpi', 'todayRides', 'nextRide', 'unconfirmed', 'expiring', 'oldest', 'activities', 'caseRows', 'caseBucket', 'customerRefund', 'vendorRefund', 'kpi', 'incentive') + [
             'partPaidCount' => $partPaid->count(),
             'partPaidBalance' => $partPaid->sum(fn ($lead) => max(0, (float) $lead->getRelation('latestFollowup')?->total_amount - (float) $lead->getRelation('latestFollowup')?->received_amount)),
             'openCount' => (clone $open)->count(),

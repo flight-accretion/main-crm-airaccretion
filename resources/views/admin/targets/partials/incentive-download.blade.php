@@ -1,6 +1,6 @@
 <dialog id="target-export" aria-labelledby="target-export-title">
     <header class="target-modal-heading"><h2 id="target-export-title">Download Incentive</h2><button type="button" data-close aria-label="Close download modal"><i class="ri-close-line" aria-hidden="true"></i></button></header>
-    <form method="GET" action="{{ route('admin.targets.download-incentive') }}">
+    <form method="GET" action="{{ route($downloadRoute ?? 'admin.targets.download-incentive') }}">
         <div class="target-form-grid">
             <label>Month<select name="month">@foreach($months as $key=>$label)<option value="{{ $key }}" {{ ($month ?: now()->month)==$key?'selected':'' }}>{{ $label }}</option>@endforeach</select></label>
             <label>Year<select name="year">@for($i=2020;$i<=now()->year;$i++)<option {{ ($year ?: now()->year)==$i?'selected':'' }}>{{ $i }}</option>@endfor</select></label>

@@ -1,5 +1,11 @@
 @extends('admin.layouts.header')
 @section('content')
+  @include('admin.report.partials.vendor_report_redesign')
+@endsection
+
+{{--
+@extends('admin.layouts.header')
+@section('content')
 <!-- Page Header -->
 <div class="block justify-between page-header md:flex">
   <div>
@@ -221,3 +227,4 @@
   });
 </script>
 @endpush
+--}}

@@ -36,7 +36,6 @@ class VendorRefund extends Model
         'completed_by',
 
         'created_by',
-
         'approval_status',
         'approval_decided_by',
         'approval_decided_at',

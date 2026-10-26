@@ -644,6 +644,8 @@
                      VENDOR SELECT
                      ===================================================== -->
 
+                                        <h6 class="font-semibold mb-3">Step 1 · Vendor Cancellation</h6>
+                                        <p class="text-muted mb-3">Select vendor, enter cancellation amount and reason, then Save Cancellation. It will appear in the existing Vendor Refund Queue.</p>
                                         <div class="vendor-refund-form-band mb-4">
 
                                             <label class="ti-form-label">
@@ -760,6 +762,8 @@
                      REFUND DETAILS
                      ===================================================== -->
 
+                                        <h6 class="font-semibold mt-5 mb-3">Step 2 · Vendor Refund</h6>
+                                        <p class="text-muted mb-3">Record the actual received amount after Step 1. Partial receipts are supported. Zero-refund settlements remain open for manual review.</p>
                                         <div class="vendor-refund-form-band grid grid-cols-12 gap-4 mt-5">
 
 
@@ -983,18 +987,17 @@
                                         </div>
 
 
-                                        <!-- Save -->
-
-                                        <div class="mt-4 flex justify-end">
-
-                                            <button type="submit" class="ti-btn ti-btn-primary">
-
-                                                <i class="ri-save-line me-1"></i>
-
-                                                Save Vendor Refund
-
+                                        <!-- Two independent actions; keep the same existing form and AJAX endpoint. -->
+                                        <div class="mt-4 flex flex-wrap gap-3 justify-end">
+                                            <button type="submit" class="ti-btn ti-btn-outline-primary"
+                                                id="ride-vendor-save-cancellation" data-vendor-save="cancellation">
+                                                <i class="ri-save-line me-1"></i> Save Cancellation
                                             </button>
-
+                                            <button type="submit" class="ti-btn ti-btn-primary"
+                                                id="ride-vendor-save-refund" data-vendor-save="refund" disabled
+                                                title="Save the cancellation first">
+                                                <i class="ri-refund-2-line me-1"></i> Save Refund
+                                            </button>
                                         </div>
 
                                     </form>
@@ -3331,6 +3334,10 @@
                                     0
                                 );
 
+                            $('#ride-vendor-save-refund')
+                                .prop('disabled', true)
+                                .attr('title', 'Save the cancellation first');
+
                             updateVendorRefundFields();
 
                             return;
@@ -3437,6 +3444,20 @@
                                     vendorAmount.toFixed(2)
                                 );
                         }
+
+                        const cancellationSaved =
+                            cancellationRaw !== ''
+                            && cancellationRaw !== undefined
+                            && Number.isFinite(cancellationAmount);
+
+                        $('#ride-vendor-save-refund')
+                            .prop('disabled', !cancellationSaved)
+                            .attr(
+                                'title',
+                                cancellationSaved
+                                    ? 'Record money received from the vendor'
+                                    : 'Save the cancellation first'
+                            );
 
 
                         $('#ride-vendor-refund-amount')
@@ -3706,6 +3727,11 @@
                     function (e) {
 
                         e.preventDefault();
+                        // The browser's submitter identifies which stage was requested.
+                        const stage = e.originalEvent?.submitter?.dataset?.vendorSave
+                            || window.__vendorRefundSubmitStage || 'cancellation';
+                        window.__vendorRefundSubmitStage = null;
+                        const cancellationOnly = stage === 'cancellation';
                         if (!ensureRideDetailsReady()) return;
 
                         if (!currentRideId) {
@@ -3752,7 +3778,7 @@
                             );
 
 
-                        const refundAmount =
+                        const refundAmount = cancellationOnly ? 0 :
                             parseFloat(
                                 $('#ride-vendor-refund-amount')
                                     .val()
@@ -3911,10 +3937,16 @@
                                 this
                             );
 
+                        formData.set('stage', stage);
                         formData.set(
                             'refund_amount',
                             refundAmount.toFixed(2)
                         );
+                        if (cancellationOnly) {
+                            formData.delete('refund_proof');
+                            formData.delete('refund_type');
+                            formData.delete('refund_date');
+                        }
 
                         formData.append(
                             '_token',
@@ -3922,8 +3954,10 @@
                         );
 
 
-                        const $saveBtn =
-                            $('#ride-vendor-refund-form button[type="submit"]');
+                        const $saveBtn = $('#ride-vendor-refund-form button[type="submit"]');
+                        const $clickedBtn = cancellationOnly
+                            ? $('#ride-vendor-save-cancellation')
+                            : $('#ride-vendor-save-refund');
 
 
                         $.ajax({
@@ -3957,13 +3991,18 @@
                                         'Vendor refund saved successfully.'
                                     );
 
-                                    hideVendorRefundInformationSection();
-
+                                    if (!cancellationOnly) {
+                                        hideVendorRefundInformationSection();
+                                    }
+                                    if (cancellationOnly) {
+                                        $('#ride-vendor-refund-payment-id option:selected')
+                                            .attr('data-cancellation-amount', response.cancellation_amount || cancellationAmount);
+                                        $('#ride-vendor-save-refund')
+                                            .prop('disabled', false)
+                                            .attr('title', 'Record money received from the vendor');
+                                    }
                                     if (currentRideId) {
-
-                                        loadRideDetails(
-                                            currentRideId
-                                        );
+                                        loadRideDetails(currentRideId);
                                     }
 
                                     return;
@@ -4024,8 +4063,10 @@
                                         false
                                     )
                                     .html(
-                                        '<i class="ri-save-line me-1"></i>Save Vendor Refund'
+                                        ''
                                     );
+                                $('#ride-vendor-save-cancellation').html('<i class="ri-save-line me-1"></i> Save Cancellation');
+                                $('#ride-vendor-save-refund').html('<i class="ri-refund-2-line me-1"></i> Save Refund');
                             },
                         });
                     }

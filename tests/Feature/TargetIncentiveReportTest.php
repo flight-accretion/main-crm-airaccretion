@@ -208,6 +208,31 @@ class TargetIncentiveReportTest extends LeadListFixtureTestCase
         $this->download('csv',$this->people['unconfigured']->id);
     }
 
+    public function test_accounts_default_to_configured_incentives_but_can_filter_any_active_person(): void
+    {
+        DB::table('user_types')->insert(['id' => 'accounts', 'user_type' => \App\Models\UserType::ACCOUNTS_MANAGER]);
+        $account = User::create(['name' => 'Accounts Person', 'user_type_id' => 'accounts', 'status' => 1]);
+        auth()->setUser($account);
+
+        $report = function (array $filters) use ($account) {
+            $request = Request::create('/admin/report/incentives', 'GET', $filters);
+            $request->setUserResolver(fn () => $account);
+            app()->instance('request', $request);
+
+            return (new TargetController(new TargetIncentiveService()))->accountIncentives($request)->getData();
+        };
+
+        $default = $report(['year' => 2026, 'month' => 10]);
+        $this->assertTrue($default['isAccountReadOnly']);
+        $this->assertEqualsCanonicalizing(
+            [$this->people['sales']->id, $this->people['manager']->id, $this->people['operations']->id],
+            collect($default['rows'])->pluck('id')->all()
+        );
+
+        $filtered = $report(['year' => 2026, 'month' => 10, 'person_id' => $this->people['unconfigured']->id]);
+        $this->assertSame([$this->people['unconfigured']->id], collect($filtered['rows'])->pluck('id')->all());
+    }
+
     public function test_product_overlap_is_not_double_paid_and_all_products_includes_every_sale(): void
     {
         $second=(string)Str::uuid(); DB::table('products')->insert(['id'=>$second,'product'=>'Yacht']);

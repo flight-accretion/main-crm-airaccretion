@@ -1071,6 +1071,32 @@ class ReportController extends Controller
                 });
             }
 
+            if ($request->filled('service_date_from')) {
+                $serviceDateFrom = Carbon::parse($request->service_date_from)->startOfDay();
+                $query->whereHas('lead.rideSegments', function ($q) use ($serviceDateFrom) {
+                    $q->where('from_date', '>=', $serviceDateFrom);
+                });
+            }
+            if ($request->filled('service_date_to')) {
+                $serviceDateTo = Carbon::parse($request->service_date_to)->endOfDay();
+                $query->whereHas('lead.rideSegments', function ($q) use ($serviceDateTo) {
+                    $q->where('from_date', '<=', $serviceDateTo);
+                });
+            }
+
+            if ($request->filled('search')) {
+                $search = trim((string) $request->search);
+                $query->where(function ($recordQuery) use ($search) {
+                    $recordQuery->whereHas('lead.client', function ($clientQuery) use ($search) {
+                        $clientQuery->where('name', 'like', "%{$search}%")
+                            ->orWhere('contact_number', 'like', "%{$search}%");
+                    })->orWhereHas('vendor', function ($vendorQuery) use ($search) {
+                        $vendorQuery->where('name', 'like', "%{$search}%")
+                            ->orWhere('contact_number', 'like', "%{$search}%");
+                    });
+                });
+            }
+
             if ($request->filled('client_id')) {
                 $query->whereHas('lead.client', function ($q) use ($request) {
                     $q->where('id', $request->client_id);
@@ -1131,9 +1157,12 @@ class ReportController extends Controller
                 // service date from first ride
                 $firstRide = $lead->rideSegments->first();
                 $serviceDate = 'N/A';
+                $serviceDateValue = null;
                 if ($firstRide && $firstRide->from_date) {
                     try {
-                        $serviceDate = Carbon::parse($firstRide->from_date)->format('d M Y');
+                        $serviceDateObject = Carbon::parse($firstRide->from_date);
+                        $serviceDate = $serviceDateObject->format('d M Y');
+                        $serviceDateValue = $serviceDateObject->toDateString();
                     } catch (\Exception $e) {
                         $serviceDate = $firstRide->from_date;
                     }
@@ -1230,17 +1259,36 @@ class ReportController extends Controller
                     'paid_date' => $paidDate,
                     'ride_status' => $rideStatus,
                     'service_date' => $serviceDate,
+                    'service_date_value' => $serviceDateValue,
                     'booking_date' => $bookingDate,
                     'manager_name' => $managerName,
                 ];
             });
+
+            $monthStart = now()->startOfMonth();
+            $monthEnd = now()->endOfMonth();
+            $monthlyRows = $rows->filter(function ($row) use ($monthStart, $monthEnd) {
+                if (empty($row->service_date_value)) {
+                    return false;
+                }
+
+                return Carbon::parse($row->service_date_value)->betweenIncluded($monthStart, $monthEnd);
+            });
+            $monthlySummary = [
+                'month_label' => $monthStart->format('F Y'),
+                'record_count' => $monthlyRows->count(),
+                'final_vendor_payable' => round((float) $monthlyRows->sum('vendor_service_cost'), 2),
+                'net_paid_to_vendors' => round((float) $monthlyRows->sum('paid_amount'), 2),
+                'vendor_payments_outstanding' => round((float) $monthlyRows->sum('balance_amount'), 2),
+                'refunds_to_recover' => round((float) $monthlyRows->sum('refund_due_amount'), 2),
+            ];
 
             // Lists for filters
             $services = Service::where('status', 1)->get();
             $vendors = \App\Models\Vendor::where('status', 1)->orderBy('name')->get();
             $clients = \App\Models\Client::where('status', 1)->orderBy('name')->get();
 
-            return view('admin.report.vendor_report', compact('rows', 'services', 'vendors', 'clients'));
+            return view('admin.report.vendor_report', compact('rows', 'services', 'vendors', 'clients', 'monthlySummary'));
         } catch (\Exception $e) {
             Log::error('Error loading vendor report: ' . $e->getMessage());
             return redirect()->back()->with('error', 'Error loading vendor report');
@@ -1265,6 +1313,11 @@ class ReportController extends Controller
                 'vendor_id' => $request->get('vendor_id'),
                 'service_id' => $request->get('service_id'),
                 'status' => $request->get('status'),
+                'from_payment_date' => $request->get('from_payment_date'),
+                'to_payment_date' => $request->get('to_payment_date'),
+                'service_date_from' => $request->get('service_date_from'),
+                'service_date_to' => $request->get('service_date_to'),
+                'search' => $request->get('search'),
             ];
 
             $format = $request->get('format', 'xlsx');
@@ -1434,6 +1487,8 @@ class ReportController extends Controller
         $managers = User::whereIn('user_type_id', $parentTypeIds)->where('status', 1)->orderBy('name')->get();
 
         $allData = $this->reportPageRows($query);
+        $productNames = Product::pluck('product', 'id');
+        $serviceNames = Service::pluck('service', 'id');
 
         $allLeadIds = $allData->pluck('lead_id')->unique();
 
@@ -1456,7 +1511,7 @@ class ReportController extends Controller
             ->unique()
             ->values();
         // Process profit/loss data
-        $profitLossData = $allData->groupBy('lead_id')->map(function ($group) use ($statusArray, $approvedLeadIds) {
+        $profitLossData = $allData->groupBy('lead_id')->map(function ($group) use ($statusArray, $approvedLeadIds, $productNames, $serviceNames) {
             $latest = $group->sortByDesc('created_at')->first();
 
             // ONLY show leads that have at least one approved payment
@@ -1523,6 +1578,15 @@ class ReportController extends Controller
                 ? Carbon::parse($lastPaidDate->paid_date)->format('d M Y')
                 : 'N/A';
 
+            $productName = collect($latest->enquiry?->product_ids_array ?? [])
+                ->map(fn ($id) => $productNames->get($id))
+                ->filter()
+                ->implode(', ') ?: 'Unassigned product';
+            $serviceName = collect($latest->service_ids_array ?? [])
+                ->map(fn ($id) => $serviceNames->get($id))
+                ->filter()
+                ->implode(', ') ?: 'No service recorded';
+
             return (object) [
                 'followup_id' => $latest->id,
                 'lead_id' => $latest->lead_id,
@@ -1535,10 +1599,30 @@ class ReportController extends Controller
                 'profit_loss_percent' => $profitLossPercent,
                 'sales_person_name' => $salesPersonName,
                 'manager_name' => $managerName,
+                'product_name' => $productName,
+                'service_name' => $serviceName,
                 'status' => $latest->status,
                 'created_at' => $latest->created_at,
             ];
         })->filter()->values();
+
+        $revenue = (float) $profitLossData->sum('client_received_amount');
+        $vendorCost = (float) $profitLossData->sum('vendor_amount');
+        $grossProfit = $revenue - $vendorCost;
+        $profitSummary = [
+            'revenue' => $revenue,
+            'vendor_cost' => $vendorCost,
+            'gross_profit' => $grossProfit,
+            'gross_margin' => $revenue > 0 ? ($grossProfit / $revenue) * 100 : 0,
+            'record_count' => $profitLossData->count(),
+        ];
+        $productBreakdown = $profitLossData->groupBy('product_name')->map(function ($rows, $product) {
+            return (object) ['product' => $product, 'profit' => (float) $rows->sum('profit_loss')];
+        })->sortByDesc('profit')->values()->take(5);
+        $marginCounts = [
+            'loss' => $profitLossData->where('profit_loss', '<', 0)->count(),
+            'low' => $profitLossData->filter(fn ($row) => $row->profit_loss >= 0 && $row->profit_loss_percent < 15)->count(),
+        ];
 
         // Get services and products for filter dropdown
         $services = Service::select('id', 'service')->get();
@@ -1558,7 +1642,10 @@ class ReportController extends Controller
             'staff',
             'statusArray',
             'representatives',
-            'managers'
+            'managers',
+            'profitSummary',
+            'productBreakdown',
+            'marginCounts'
         ));
     }
 

@@ -12,7 +12,7 @@
         $date = fn($value) => $value ? \Carbon\Carbon::parse($value)->format('d M') : 'None pending';
         $vendorUrl = route('admin.operations.vendor-followups.index', $team ? [] : ['assigned_to' => auth()->id()]);
     @endphp
-    <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/operations-home.css') }}?v=2">
+    <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/operations-home.css') }}?v=3">
     <main class="oh-dashboard">
         <header class="oh-heading">
             <div>
@@ -77,7 +77,7 @@
                 <p>Outstanding balance &#8377;{{ number_format($partPaidBalance, 2) }}<br>Latest CRM follow-up amounts</p>
             </a></div>
         <div class="oh-label">
-            <h2>My standing</h2><span>{{ $team ? 'Personal KPI not selected' : 'Existing KPI score' }}</span>
+            <h2>My standing</h2><span>{{ $personalKpi ? 'Existing KPI score' : 'Personal KPI not selected' }}</span>
         </div>
         <div class="oh-standing"><a class="oh-panel" href="{{ route('admin.operations.kpi') }}">
                 <div class="oh-panel-head">
@@ -90,16 +90,25 @@
                         aria-hidden="true"></i></p>
             </a>
 
+            @if(($incentive['status'] ?? null) === 'configured')
             <aside class="oh-incentive">
-                <h2><i class="ri-sparkling-line" aria-hidden="true"></i> Incentive &middot; {{ now()->format('F Y') }}</h2>
-                @if($incentive['status'] === 'configured')
-                    <strong>&#8377;{{ number_format($incentive['amount'], 2) }} <small>estimated</small></strong>
-                    <p>Based on your active CRM incentive settings and qualifying sales. Estimate only, not a confirmed payout.</p>
-                @else
-                    <strong>{{ $incentive['status'] === 'duplicate' ? 'Check configuration' : ($team ? 'Personal view required' : 'Not configured') }}</strong>
-                    <p>{{ $incentive['status'] === 'duplicate' ? 'Multiple active targets exist for this month. Ask HR or Super Admin to resolve them.' : ($team ? 'Individual incentives are shown in the employee Operations dashboard.' : 'No active incentive configured for this month.') }}</p>
-                @endif
+                <h2>
+                    <i class="ri-sparkling-line" aria-hidden="true"></i>
+                    Incentive &middot; {{ now()->format('F Y') }}
+                </h2>
+
+                <strong>
+                    &#8377;{{ number_format($incentive['amount'] ?? 0, 2) }}
+                    <small>estimated</small>
+                </strong>
+
+                <p>
+                    Based on your active CRM incentive settings
+                    and qualifying sales. Estimate only,
+                    not a confirmed payout.
+                </p>
             </aside>
+            @endif
 
         </div>
         <div class="oh-columns">

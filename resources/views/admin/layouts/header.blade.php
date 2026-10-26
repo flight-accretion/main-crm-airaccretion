@@ -697,13 +697,60 @@
                             true
                         );
                 };
+                // Accounts gets one purpose-built tree. Other roles retain the existing shared navigation below.
+                $isAccountsSidebar = $canAccess($userType, $accountRoles) && !$canAccess($userType, $adminRoles);
             @endphp
                     <ul class="main-menu" data-navigation-role="{{ $userType }}" data-navigation-user="{{ auth()->id() }}">
                         <!-- Start::slide__category -->
                         <li class="slide__category"><span class="category-name">Main</span></li>
                         <!-- End::slide__category -->
 
+                        @if($isAccountsSidebar)
+                            <li class="slide {{ Route::is('admin.account.dashboard') ? 'active' : '' }}">
+                                <a href="{{ route('admin.account.dashboard') }}" class="side-menu__item"><i class="ri-dashboard-line side-menu__icon" aria-hidden="true"></i><span class="side-menu__label">Accounts Dashboard</span></a>
+                            </li>
+
+                            <li class="slide__category"><span class="category-name">Work Queues</span></li>
+                            <li class="slide {{ Route::is('admin.account.payment-review*') ? 'active' : '' }}">
+                                <a href="{{ route('admin.account.payment-review') }}" class="side-menu__item"><i class="bx bx-wallet side-menu__icon"></i><span class="side-menu__label">Payment Review</span>@include('admin.layouts.partials.pending-count', ['queue' => 'payment_approval'])</a>
+                            </li>
+                            <li class="slide has-sub {{ Route::is('admin.refunds.*') || Route::is('admin.account.vendor-refunds') ? 'active open' : '' }}">
+                                <a href="javascript:void(0);" class="side-menu__item"><i class="ri-refund-2-line side-menu__icon"></i><span class="side-menu__label">Refund Queue</span><i class="fe fe-chevron-right side-menu__angle"></i></a>
+                                <ul class="slide-menu child1">
+                                    <li class="slide"><a href="{{ route('admin.refunds.index') }}" class="side-menu__item {{ Route::is('admin.refunds.*') ? 'active' : '' }}">Customer Refund@include('admin.layouts.partials.pending-count', ['queue' => 'customer_refund'])</a></li>
+                                    <li class="slide"><a href="{{ route('admin.account.vendor-refunds') }}" class="side-menu__item {{ Route::is('admin.account.vendor-refunds') ? 'active' : '' }}">Vendor Refund@include('admin.layouts.partials.pending-count', ['queue' => 'account_vendor_refund'])</a></li>
+                                </ul>
+                            </li>
+                            <li class="slide {{ Route::is('admin.account.exceptional*') ? 'active' : '' }}"><a href="{{ route('admin.account.exceptional') }}" class="side-menu__item"><i class="bx bx-error-alt side-menu__icon"></i><span class="side-menu__label">Exceptional Dashboard</span></a></li>
+                            <li class="slide {{ Route::is('admin.account.invoices*') ? 'active' : '' }}"><a href="{{ route('admin.account.invoices') }}" class="side-menu__item"><i class="bx bx-receipt side-menu__icon"></i><span class="side-menu__label">Invoices</span>@include('admin.layouts.partials.pending-count', ['queue' => 'invoice'])</a></li>
+                            <li class="slide {{ Route::is('admin.account.vendor-payments*') ? 'active' : '' }}"><a href="{{ route('admin.account.vendor-payments') }}" class="side-menu__item"><i class="bx bx-credit-card side-menu__icon"></i><span class="side-menu__label">Vendor Payments</span></a></li>
+
+                            <li class="slide__category"><span class="category-name">Reports</span></li>
+                            <li class="slide has-sub {{ Route::is('admin.report.vendor') || Route::is('admin.report.profit-loss') || Route::is('admin.report.incentives') ? 'active open' : '' }}">
+                                <a href="javascript:void(0);" class="side-menu__item"><i class="bx bx-file side-menu__icon"></i><span class="side-menu__label">Accounts Reports</span><i class="fe fe-chevron-right side-menu__angle"></i></a>
+                                <ul class="slide-menu child1">
+                                    <li class="slide {{ Route::is('admin.report.vendor') ? 'active' : '' }}"><a href="{{ route('admin.report.vendor') }}" class="side-menu__item">Vendor Report</a></li>
+                                    <li class="slide {{ Route::is('admin.report.profit-loss') ? 'active' : '' }}"><a href="{{ route('admin.report.profit-loss') }}" class="side-menu__item">Profit / Loss</a></li>
+                                    <li class="slide {{ Route::is('admin.report.incentives') ? 'active' : '' }}"><a href="{{ route('admin.report.incentives') }}" class="side-menu__item">Incentive Report</a></li>
+                                </ul>
+                            </li>
+
+                            <li class="slide__category"><span class="category-name">Other Tools</span></li>
+                            <li class="slide has-sub {{ Route::is('admin.kpi.*') ? 'active open' : '' }}"><a href="javascript:void(0);" class="side-menu__item"><i class="bx bx-bar-chart-alt-2 side-menu__icon"></i><span class="side-menu__label">KPI</span><i class="fe fe-chevron-right side-menu__angle"></i></a><ul class="slide-menu child1"><li class="slide"><a href="{{ route('admin.kpi.index') }}" class="side-menu__item {{ Route::is('admin.kpi.index') ? 'active' : '' }}">KPI Dashboard</a></li></ul></li>
+                            <li class="slide {{ Route::is('admin.lead-tracking.*') ? 'active' : '' }}"><a href="{{ route('admin.lead-tracking.index') }}" class="side-menu__item"><i class="bx bx-search-alt side-menu__icon"></i><span class="side-menu__label">Lead Tracking</span></a></li>
+                            <li class="slide has-sub {{ Route::is('admin.vendors.*') ? 'active open' : '' }}"><a href="javascript:void(0);" class="side-menu__item"><i class="bx bx-store side-menu__icon"></i><span class="side-menu__label">Vendors</span><i class="fe fe-chevron-right side-menu__angle"></i></a><ul class="slide-menu child1"><li class="slide"><a href="{{ route('admin.vendors.index') }}" class="side-menu__item {{ Route::is('admin.vendors.index') ? 'active' : '' }}">View Vendors</a></li></ul></li>
+                            <li class="slide {{ Route::is('admin.rides.ride-status') ? 'active' : '' }}"><a href="{{ route('admin.rides.ride-status') }}" class="side-menu__item"><i class="bx bx-list-check side-menu__icon"></i><span class="side-menu__label">Ride Status</span></a></li>
+                        @else
+
                         <!-- Sales Dashboard Section -->
+                        @if ($canAccess($userType, $accountRoles) || $canAccess($userType, $adminRoles))
+                            <li class="slide {{ Route::is('admin.account.dashboard') ? 'active' : '' }}">
+                                <a href="{{ route('admin.account.dashboard') }}" class="side-menu__item">
+                                    <i class="ri-dashboard-line side-menu__icon" aria-hidden="true"></i>
+                                    <span class="side-menu__label">Accounts Dashboard</span>
+                                </a>
+                            </li>
+                        @endif
                         @if ($canAccess($userType, $adminRoles) || $canAccess($userType, $salesRoles))
                             <li class="slide {{ Route::is('admin.sales-dashboard') ? 'active' : '' }}">
                                 <a href="{{ route('admin.sales-dashboard') }}" class="side-menu__item">
@@ -1598,7 +1645,6 @@
                         @php
                         $canViewSalesReport =
                             $canAccess($userType, $adminRoles) ||
-                            $canAccess($userType, $accountRoles) ||
                             $canAccess($userType, $salesRoles);
 
                         $canViewAccountReports =
@@ -1613,6 +1659,7 @@
                             ($canViewAccountReports && (
                                 Route::is('admin.report.vendor') ||
                                 Route::is('admin.report.profit-loss') ||
+                                Route::is('admin.report.incentives') ||
                                 Route::is('admin.report.kpi')
                             ));
                     @endphp
@@ -1639,6 +1686,10 @@
 
                                     <li class="slide {{ Route::is('admin.report.profit-loss') ? 'active' : '' }}">
                                         <a href="{{ route('admin.report.profit-loss') }}" class="side-menu__item">Profit/Loss Report</a>
+                                    </li>
+
+                                    <li class="slide {{ Route::is('admin.report.incentives') ? 'active' : '' }}">
+                                        <a href="{{ route('admin.report.incentives') }}" class="side-menu__item">Incentive Report</a>
                                     </li>
 
                                     <li class="slide {{ Route::is('admin.report.kpi') ? 'active' : '' }}">
@@ -1722,6 +1773,7 @@
                                     </li>
                                 </ul>
                             </li>
+                        @endif
                         @endif
                     </ul>
                     <div class="slide-right" id="slide-right">

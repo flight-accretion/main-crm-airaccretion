@@ -389,6 +389,90 @@ class VendorRefundFromRideStatusTest extends TestCase
         $this->assertSame('paid', $vendorRow['payment_status']);
     }
 
+    public function test_same_ride_status_form_requires_cancellation_before_refund_and_keeps_existing_queue_record(): void
+    {
+        [$ride, $payment] = $this->createVendorPaymentScenario(['vendor_amount' => 70000, 'paid_amount' => 30000]);
+
+        try {
+            $this->saveVendorRefund($ride->id, [
+                'stage' => 'refund',
+                'lead_vendor_payment_id' => $payment->id,
+                'cancellation_amount' => 10000,
+                'refund_amount' => 5000,
+                'refund_type' => 'Bank Transfer',
+                'refund_date' => now()->toDateString(),
+                'refund_reason' => 'Vendor receipt',
+                'refund_proof' => UploadedFile::fake()->create('receipt.pdf', 10, 'application/pdf'),
+            ]);
+            $this->fail('A refund receipt must require a saved cancellation.');
+        } catch (\Illuminate\Validation\ValidationException $exception) {
+            $this->assertArrayHasKey('stage', $exception->errors());
+        }
+
+        $cancellationResponse = $this->saveVendorRefund($ride->id, [
+            'stage' => 'cancellation',
+            'lead_vendor_payment_id' => $payment->id,
+            'cancellation_amount' => 10000,
+            'refund_amount' => 0,
+            'refund_reason' => 'Cancelled flight',
+        ]);
+        $this->assertTrue($cancellationResponse->getData(true)['success']);
+
+        $this->assertDatabaseHas('vendor_refunds', [
+            'lead_vendor_payment_id' => $payment->id,
+            'cancellation_amount' => 10000,
+            'refund_amount' => 0,
+        ]);
+        $this->assertSame(1, VendorRefund::where('lead_vendor_payment_id', $payment->id)->count());
+
+        $refundResponse = $this->saveVendorRefund($ride->id, [
+            'stage' => 'refund',
+            'lead_vendor_payment_id' => $payment->id,
+            'cancellation_amount' => 0,
+            'refund_amount' => 5000,
+            'refund_type' => 'Bank Transfer',
+            'refund_date' => now()->toDateString(),
+            'refund_reason' => 'Vendor receipt',
+            'refund_proof' => UploadedFile::fake()->create('receipt.pdf', 10, 'application/pdf'),
+        ]);
+        $this->assertTrue($refundResponse->getData(true)['success']);
+
+        $this->assertDatabaseHas('vendor_refunds', [
+            'lead_vendor_payment_id' => $payment->id,
+            'cancellation_amount' => 10000,
+            'refund_amount' => 5000,
+        ]);
+    }
+
+    public function test_same_form_cancellation_cannot_change_after_a_refund_receipt(): void
+    {
+        [$ride, $payment] = $this->createVendorPaymentScenario(['vendor_amount' => 70000, 'paid_amount' => 30000]);
+
+        $cancellationResponse = $this->saveVendorRefund($ride->id, [
+            'stage' => 'cancellation', 'lead_vendor_payment_id' => $payment->id,
+            'cancellation_amount' => 10000, 'refund_amount' => 0, 'refund_reason' => 'Cancelled flight',
+        ]);
+        $this->assertTrue($cancellationResponse->getData(true)['success']);
+        $refundResponse = $this->saveVendorRefund($ride->id, [
+            'stage' => 'refund', 'lead_vendor_payment_id' => $payment->id,
+            'cancellation_amount' => 10000, 'refund_amount' => 5000,
+            'refund_type' => 'Bank Transfer', 'refund_date' => now()->toDateString(),
+            'refund_reason' => 'Vendor receipt',
+            'refund_proof' => UploadedFile::fake()->create('receipt.pdf', 10, 'application/pdf'),
+        ]);
+        $this->assertTrue($refundResponse->getData(true)['success']);
+
+        try {
+            $this->saveVendorRefund($ride->id, [
+                'stage' => 'cancellation', 'lead_vendor_payment_id' => $payment->id,
+                'cancellation_amount' => 0, 'refund_amount' => 0, 'refund_reason' => 'Changed cancellation',
+            ]);
+            $this->fail('Cancellation must be locked after a refund receipt.');
+        } catch (\Illuminate\Validation\ValidationException $exception) {
+            $this->assertArrayHasKey('stage', $exception->errors());
+        }
+    }
+
     private function saveVendorRefund(string $rideId, array $data)
     {
         $file = $data['refund_proof'] ?? null;

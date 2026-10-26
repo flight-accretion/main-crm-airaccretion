@@ -695,10 +695,6 @@ class OperationsVendorRefundController extends Controller
             ->latest('created_at')
             ->first();
 
-        /*
-         * The financial update must not fail merely because the
-         * Operations case does not exist.
-         */
         if (!$case) {
             return;
         }

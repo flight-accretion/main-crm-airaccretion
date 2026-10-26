@@ -21,9 +21,9 @@
             [route('admin.rides.upcoming'), 'ri-calendar-event-line', 'Upcoming Rides'],
         ],
         'accounts' => [
-            [route('admin.account.payment-review'), 'ri-bank-card-line', 'Payments'],
-            [route('admin.account.vendor-payments'), 'ri-wallet-3-line', 'Vendors'],
-            [route('admin.rides.ride-status'), 'ri-calendar-check-line', 'Rides'],
+            [route('admin.account.dashboard'), 'ri-home-4-line', 'Dashboard'],
+            [route('admin.account.payment-review'), 'ri-bank-card-line', 'Payment Review'],
+            [route('admin.account.invoices'), 'ri-receipt-line', 'Invoices'],
         ],
         'sales' => [
             [route('admin.sales-dashboard'), 'ri-home-4-line', 'Dashboard'],

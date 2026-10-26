@@ -1,202 +1,6 @@
 @extends('admin.layouts.header')
 @section('content')
-@php $tableProductNames = app(\App\Services\LeadTableProducts::class)->forRecords($vouchers); @endphp
-    <!-- Page Header -->
-    <div class="block justify-between page-header md:flex">
-
-    </div>
-    <!-- Page Header Close -->
-
-    <div class="grid grid-cols-12">
-        <div class="xl:col-span-12  col-span-12">
-            <div class="box">
-                <div class="hs-accordion-group">
-                    <div class="hs-accordion" id="invoice-accordion">
-                        <div class="box-header" style="display: block; padding-top: 10px; padding-bottom: 10px;">
-                            <div class="flex items-center">
-                                <div class="me-4 gap-0">
-                                    <span class="avatar avatar-sm !rounded-full bg-theme m-0">
-                                        <i class="ri-money-rupee-circle-line"></i>
-                                    </span>
-                                </div>
-                                <div class="flex-grow">
-                                    <div class="flex items-center justify-between">
-                                        <h5 class="font-semibold mb-0 leading-none text-[1.25rem]">Invoices</h5>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="box">
-        <div class="box-header">
-            <div class="box-title">Search Filters</div>
-            <button type="button" class="ti-btn ti-btn-sm ti-btn-outline-primary" id="toggle-filters">
-                <i class="ti ti-chevron-up" id="filter-icon"></i>
-            </button>
-        </div>
-        <div class="box-body" id="filter-section">
-            <form method="GET" action="{{ route('admin.account.invoices') }}" id="filter-form">
-                <div class="grid grid-cols-12 gap-4">
-                    <div class="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                        <label class="ti-form-label">Service Date</label>
-                        <div class="input-group">
-                            <input type="date" class="ti-form-input form-control-sm rounded-sm" name="service_date"
-                                id="service_date" value="{{ request('service_date') }}">
-                        </div>
-                    </div>
-
-                    <div class="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                        <label class="ti-form-label">Service Name</label>
-                        <select class="js-example-basic-single w-full form-control-sm" name="service_name"
-                            id="service_name">
-                            <option value="">Select service...</option>
-                            @foreach ($services as $service)
-                                <option value="{{ $service->id }}"
-                                    {{ request('service_name') == $service->id ? 'selected' : '' }}>{{ $service->service }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-
-                    <div class="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                        <label class="ti-form-label">Invoice Status</label>
-                        <select class="ti-form-select form-control-sm rounded-sm" name="status" id="status">
-                            <option value="">Select status...</option>
-                            <option value="1" {{ request('status') == '1' ? 'selected' : '' }}>Active</option>
-                            <option value="2" {{ request('status') == '2' ? 'selected' : '' }}>Completed</option>
-                            <!-- <option value="paid" {{ request('status') == 'paid' ? 'selected' : '' }}>Full Paid</option>
-                                                                                                                            <option value="partial" {{ request('status') == 'partial' ? 'selected' : '' }}>Partial Paid</option>
-                                                                                                                            <option value="unpaid" {{ request('status') == 'unpaid' ? 'selected' : '' }}>Unpaid</option> -->
-                        </select>
-                    </div>
-
-                    <div class  ="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                        <label class="ti-form-label">Client Name</label>
-                        <select class="js-example-basic-single w-full form-control-sm" name="client_id" id="client_id">
-                            <option value="">All Clients</option>
-                            @foreach ($clients as $client)
-                                <option value="{{ $client->id }}"
-                                    {{ request('client_id') == $client->id ? 'selected' : '' }}>
-                                    {{ $client->name }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-
-                    <div class="xl:col-span-12 lg:col-span-12 md:col-span-12 sm:col-span-12 col-span-12">
-                        <div class="flex gap-2">
-                            <button type="submit" class="ti-btn bg-theme ti-btn-primary-full !py-1 !px-2">Apply
-                                Filters</button>
-                            <button type="button" class="ti-btn ti-btn-outline-secondary !py-1 !px-2" id="reset-filters"><i
-                                    class="ri-refresh-line"></i></button>
-                        </div>
-                    </div>
-                </div>
-            </form>
-        </div>
-    </div>
-    <div class="grid grid-cols-12 gap-6">
-        <div class="xl:col-span-12 col-span-12">
-            <div class="box custom-box">
-                <div class="box-header justify-between flex">
-                    <div class="box-title">
-                        Invoice List
-                    </div>
-                </div>
-                <div class="box-body">
-                    <div class="table-responsive">
-                        <table class="table display responsive nowrap table-datatable server-paginated" width="100%"
-                            data-empty-msg="No invoice record found">
-                            <thead class="bg-primary text-white">
-                                <tr class="border-b border-defaultborder">
-                                    <th data-priority="1">S.No</th>
-                                    <th data-priority="2">Name</th>
-                                    <th data-priority="3">Company Name</th>
-                                    <th data-priority="4">GST Number</th>
-                                    <th data-priority="5">Sales Person</th>
-                                    <th data-priority="6">Phone</th>
-                                    <th data-priority="7">Service Date</th>
-                                    <th data-priority="8">Product</th>
-                                    <th data-priority="9">Amount</th>
-                                    <th data-priority="10">Profit/Loss</th>
-                                    <th data-priority="11">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @forelse($invoicesData as $index => $invoice)
-                                    <tr>
-                                        <td class="text-center">{{ (isset($vouchers) && $vouchers->firstItem() ? $vouchers->firstItem() : 1) + $index }}</td>
-                                        <td>{{ $invoice['client']['name'] ?? 'N/A' }}</td>
-                                        <td>{{ $invoice['invoice_company_name'] ?? 'N/A' }}</td>
-                                        <td>{{ $invoice['invoice_gst_number'] ?? 'N/A' }}</td>
-                                        <td>{{ $invoice['sales_person_name'] ?? 'N/A' }}</td>
-                                        <td class="text-center">{{ $invoice['client']['phone'] ?? 'N/A' }}</td>
-                                        <td class="text-center">
-                                            {{ $invoice['ride']['from_date'] ? \Carbon\Carbon::parse($invoice['ride']['from_date'])->format('d-m-Y') : '-' }}
-                                        </td>
-                                        <td>
-                                            {{ ($tableProductNames[$vouchers->firstWhere('id', $invoice['id'])?->lead_id] ?? '') ?: 'Not specified' }}
-                                        </td>
-                                        <td class="text-center">
-                                            ₹{{ number_format($invoice['payment']['total_amount'] ?? 0, 2) }}</td>
-                                        <td class="text-center">
-                                            <span
-                                                class="badge !rounded-full {{ $invoice['profit_loss'] >= 0 ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger' }}">₹{{ number_format(abs($invoice['profit_loss'] ?? 0), 2) }}</span>
-                                        </td>
-                                        <td>
-                                            <!-- <a aria-label="anchor"
-                                                href="{{ route('admin.account.invoices.pdf', $invoice['id']) }}"
-                                                target="_blank" class="ti-btn ti-btn-icon ti-btn-sm ti-btn-dark-full"
-                                                title="Download Invoice"><i class="ri-download-2-line"></i></a> -->
-                                            <a aria-label="anchor"
-                                                class="ti-btn ti-btn-icon ti-btn-sm ti-btn-primary-full view-invoice-btn"
-                                                data-invoice-id="{{ $invoice['id'] }}" title="Invoice Preview"><i
-                                                    class="ri-eye-line"></i></a>
-                                            <button type="button"
-                                                class="ti-btn ti-btn-icon ti-btn-sm ti-btn-info-full invoice-actions-btn"
-                                                data-invoice-id="{{ $invoice['id'] }}"
-                                                data-client-name="{{ $invoice['client']['name'] ?? 'N/A' }}"
-                                                data-service-name="{{ $invoice['service']['service_names'] ?: $invoice['service']['service_names'] ?? '-' }}"
-                                                title="Invoice Options">
-                                                <i class="ri-file-text-line"></i>
-                                            </button>
-                                            <!-- Quick generate invoice button -->
-                                            <button type="button"
-                                                class="ti-btn ti-btn-icon ti-btn-sm ti-btn-secondary generate-invoice-btn {{ !empty($invoice['existing_invoice']) ? 'opacity-50 cursor-not-allowed' : '' }}"
-                                                data-invoice-id="{{ $invoice['id'] }}"
-                                                data-client-name="{{ $invoice['client']['name'] ?? '' }}"
-                                                data-company-name="{{ $invoice['client']['company_name'] ?? '' }}"
-                                                data-gst-number="{{ $invoice['client']['gst_number'] ?? '' }}"
-                                                data-existing-invoice="{{ $invoice['existing_invoice'] ? '1' : '0' }}"
-                                                title="{{ !empty($invoice['existing_invoice']) ? 'Invoice already generated' : 'Generate Invoice' }}"
-                                                {{ !empty($invoice['existing_invoice']) ? 'disabled' : '' }}>
-                                                <i class="ri-file-3-line"></i>
-                                            </button>
-                                            <button type="button"
-                                                class="ti-btn ti-btn-icon ti-btn-sm ti-btn-success finalize-invoice-btn"
-                                                data-invoice-id="{{ $invoice['id'] }}" title="Finalize Invoice">
-                                                <i class="ri-checkbox-circle-line"></i>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                @empty
-                                @endforelse
-                            </tbody>
-                        </table>
-                    </div>
-                    @if(isset($vouchers) && $vouchers->hasPages())
-                    <div class="mt-4">
-                        {{ $vouchers->appends(request()->except('page'))->links() }}
-                    </div>
-                    @endif
-                </div>
-            </div>
-        </div>
-    </div>
+@include('admin.account.invoices.queue')
     <a id="open-view-invoice" data-hs-overlay="#view-invoice" style="display:none"></a>
     @include('admin.partials.modals.success-error-modals')
 
@@ -237,7 +41,8 @@
             </div>
         </div>
     </div>
-    <div id="view-invoice" class="view-invoice hs-overlay hidden ti-offcanvas ti-offcanvas-right" tabindex="-1">
+    <div id="view-invoice" class="view-invoice hs-overlay hidden ti-modal ai-detail-modal" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="invoice-detail-title">
+        <div class="ti-modal-box ai-detail-box"><div class="ti-modal-content ai-detail-content">
         <div class="ti-offcanvas-header">
             <div class="flex items-center">
                 <div class="me-4 gap-0">
@@ -247,7 +52,7 @@
                 </div>
                 <div class="flex-grow">
                     <div class="flex items-center justify-between">
-                        <h5 class="font-semibold mb-0 leading-none text-[1rem]">Invoice Preview – <span
+                        <h5 id="invoice-detail-title" class="font-semibold mb-0 leading-none text-[1rem]">Invoice details – <span
                                 class="text-primary" id="modal-client-name">-</span></h5>
                         <div class="text-danger font-semibold">
                             <button type="button"
@@ -460,58 +265,56 @@
             </div>
         </div>
     </div>
+        </div></div>
 @endsection
 
 @push('scripts')
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Attach click listeners for view and generate buttons
-            document.querySelectorAll('.view-invoice-btn').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const id = this.getAttribute('data-invoice-id');
-                    if (!id) return;
-                    loadInvoiceDetails(id);
-                    // open offcanvas
-                    document.querySelector('[data-hs-overlay="#view-invoice"]')?.click?.();
+            document.querySelectorAll('.ai-invoice-row').forEach(row => {
+                const open = () => openInvoiceDetails(row.dataset.invoiceId);
+                row.addEventListener('click', event => {
+                    if (!event.target.closest('a,button,input,select') && !window.getSelection()?.toString()) open();
+                });
+                row.addEventListener('keydown', event => {
+                    if (event.target === row && ['Enter', ' '].includes(event.key)) { event.preventDefault(); open(); }
                 });
             });
-
-            // Finalize invoice (green tick) handler — no browser confirm; using shared success modal
-            document.querySelectorAll('.finalize-invoice-btn').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const id = this.getAttribute('data-invoice-id');
-                    if (!id) return;
-
-                    fetch(`{{ url('admin/account/invoices') }}/${id}/finalize`, {
-                        method: 'POST',
-                        headers: {
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                            'X-Requested-With': 'XMLHttpRequest',
-                            'Accept': 'application/json'
-                        },
-                        credentials: 'same-origin'
-                    }).then(r => r.json()).then(res => {
-                        if (res && res.success) {
-                            // Use the shared success modal partial
-                            const clientName = btn.closest('tr')?.querySelector(
-                                'td:nth-child(2)')?.textContent?.trim() || '';
-                            const serviceName = btn.closest('tr')?.querySelector(
-                                'td:nth-child(5)')?.textContent?.trim() || '';
-                            showSuccessMessage('Invoice marked as finalized!',
-                                `Client: ${clientName} | Service: ${serviceName}`);
-
-                            // remove the row from the table so it disappears from listing
-                            const row = btn.closest('tr');
-                            if (row) row.remove();
-                        } else {
-                            showErrorModal('Finalize failed', res.message ||
-                                'Failed to finalize invoice');
-                        }
-                    }).catch(e => {
-                        console.error(e);
-                        showErrorModal('Finalize failed', 'Failed to finalize invoice');
-                    });
+            document.querySelectorAll('.ai-gst-btn').forEach(button => {
+                button.addEventListener('click', () => openInvoiceDetails(button.dataset.invoiceId, true));
+            });
+            document.querySelectorAll('.finalize-invoice-btn').forEach(button => {
+                button.addEventListener('click', () => {
+                    if (document.getElementById('invoice-finalize-save').disabled) return;
+                    document.getElementById('invoice-finalize-id').value = button.dataset.invoiceId;
+                    document.getElementById('invoice-finalize-client').textContent = button.dataset.clientName || '';
+                    document.getElementById('invoice-finalize-date').value = @json(now()->toDateString());
+                    document.getElementById('invoice-finalize-error').hidden = true;
+                    window.HSOverlay.open(document.getElementById('invoice-finalize-modal'));
+                    document.getElementById('invoice-finalize-date').focus();
                 });
+            });
+            document.getElementById('invoice-finalize-form').addEventListener('submit', async event => {
+                event.preventDefault();
+                const button = document.getElementById('invoice-finalize-save');
+                if (button.disabled) return;
+                const id = document.getElementById('invoice-finalize-id').value;
+                const date = document.getElementById('invoice-finalize-date').value;
+                const error = document.getElementById('invoice-finalize-error');
+                button.disabled = true; error.hidden = true;
+                try {
+                    const response = await fetch(`{{ url('admin/account/invoices') }}/${id}/finalize`, {
+                        method: 'POST', credentials: 'same-origin',
+                        headers: {'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json'},
+                        body: JSON.stringify({finalized_date: date})
+                    });
+                    const result = await response.json();
+                    if (!response.ok || !result.success) throw new Error(result.message || 'Failed to finalize invoice.');
+                    window.HSOverlay.close(document.getElementById('invoice-finalize-modal'));
+                    showSuccessMessage('Invoice finalized successfully', result.message);
+                    setTimeout(() => window.location.reload(), 1200);
+                } catch (failure) { error.textContent = failure.message; error.hidden = false; }
+                finally { button.disabled = false; }
             });
 
             document.querySelectorAll('.generate-invoice-btn').forEach(btn => {
@@ -613,10 +416,12 @@
                         filterSection.style.display = 'block';
                         filterIcon.classList.remove('ti-chevron-down');
                         filterIcon.classList.add('ti-chevron-up');
+                        toggleFilters.setAttribute('aria-expanded', 'true');
                     } else {
                         filterSection.style.display = 'none';
                         filterIcon.classList.remove('ti-chevron-up');
                         filterIcon.classList.add('ti-chevron-down');
+                        toggleFilters.setAttribute('aria-expanded', 'false');
                     }
                 });
             }
@@ -637,19 +442,31 @@
                 const openId = params.get('open_invoice');
                 if (openId) {
                     // load and open invoice details
-                    loadInvoiceDetails(openId);
-                    // open offcanvas if the overlay helper exists
-                    setTimeout(() => {
-                        document.querySelector('[data-hs-overlay="#view-invoice"]')?.click?.();
-                    }, 200);
+                    document.addEventListener('DOMContentLoaded', () => openInvoiceDetails(openId), {once: true});
                 }
             } catch (e) {
                 console.error('Failed to auto-open invoice', e);
             }
         })();
 
-        function loadInvoiceDetails(id) {
-            fetch(`{{ url('admin/account/invoices') }}/${id}`, {
+        let invoiceDetailRequest = 0;
+        function invoiceHtml(value) {
+            if (Array.isArray(value)) return value.map(invoiceHtml);
+            if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, invoiceHtml(item)]));
+            if (typeof value !== 'string') return value;
+            return value.replace(/[&<>"']/g, character => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[character]));
+        }
+        function openInvoiceDetails(id, editBilling = false) {
+            if (!id) return;
+            const popup = document.getElementById('view-invoice');
+            popup.setAttribute('aria-busy', 'true');
+            document.getElementById('modal-client-name').textContent = 'Loading...';
+            window.HSOverlay.open(popup);
+            return loadInvoiceDetails(id, editBilling);
+        }
+        function loadInvoiceDetails(id, editBilling = false) {
+            const requestId = ++invoiceDetailRequest;
+            return fetch(`{{ url('admin/account/invoices') }}/${id}`, {
                     method: 'GET',
                     headers: {
                         'X-Requested-With': 'XMLHttpRequest',
@@ -662,6 +479,7 @@
                     return r.json();
                 })
                 .then(resp => {
+                    if (requestId !== invoiceDetailRequest) return;
                     if (!resp || !resp.success) throw new Error((resp && resp.message) ? resp.message :
                         'Error fetching invoice');
                     const data = resp.data || {};
@@ -732,14 +550,21 @@
 
                     // Payment history
                     renderClientPaymentHistory(paymentHistory || []);
+                    const locked = Number(data.existingInvoice?.status) === 2;
+                    document.getElementById('edit-gst-btn').hidden = locked;
+                    document.getElementById('view-invoice').removeAttribute('aria-busy');
+                    if (editBilling && !locked) document.getElementById('edit-gst-btn').click();
                 })
                 .catch(err => {
+                    if (requestId !== invoiceDetailRequest) return;
                     console.error(err);
-                    alert('Failed to load invoice details');
+                    window.HSOverlay.close(document.getElementById('view-invoice'));
+                    showErrorModal('Unable to load invoice', err.message || 'Please try again.');
                 });
         }
 
         function renderClientInfo(client) {
+            client = invoiceHtml(client);
             const html = `
         <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Full Name</label>
@@ -774,9 +599,10 @@
         }
 
         function renderGstInfo(invoice, existingInvoice, client, voucher) {
-            const company = existingInvoice?.company_name || client?.company_name || invoice?.company_name || '';
-            const gst = existingInvoice?.gst_number || client?.gst_number || invoice?.gst_number || '';
-            const billing = existingInvoice?.billing_address || invoice?.billing_address || client.address || '';
+            invoice = invoiceHtml(invoice); existingInvoice = invoiceHtml(existingInvoice); client = invoiceHtml(client);
+            const company = existingInvoice ? (existingInvoice.company_name ?? '') : (client?.company_name || invoice?.company_name || '');
+            const gst = existingInvoice ? (existingInvoice.gst_number ?? '') : (client?.gst_number || invoice?.gst_number || '');
+            const billing = existingInvoice ? (existingInvoice.billing_address ?? '') : (invoice?.billing_address || client.address || '');
 
             const html = `
         <div class="xl:col-span-12 col-span-12">
@@ -804,7 +630,7 @@
                             <div class="text-danger text-sm mt-1" id="gst-company-error" style="display:none"></div>
                         </div>
                         <div class="xl:col-span-4 col-span-12">
-                            <label class="ti-form-label">GST Number</label>
+                            <label class="ti-form-label">GSTIN (optional)</label>
                             <input type="text" id="gst-number-input" class="ti-form-input" value="${gst}">
                             <div class="text-danger text-sm mt-1" id="gst-number-error" style="display:none"></div>
                         </div>
@@ -824,10 +650,10 @@
             document.getElementById('gst-info').innerHTML = html;
 
             // Edit button handler: toggle edit form
-            document.getElementById('edit-gst-btn')?.addEventListener('click', function() {
+            document.getElementById('edit-gst-btn').onclick = function() {
                 document.getElementById('gst-display').style.display = 'none';
                 document.getElementById('gst-edit').style.display = 'block';
-            });
+            };
 
             document.getElementById('gst-cancel-btn')?.addEventListener('click', function() {
                 document.getElementById('gst-display').style.display = 'block';
@@ -835,6 +661,9 @@
             });
 
             document.getElementById('gst-save-btn')?.addEventListener('click', function() {
+                if (this.disabled) return;
+                const saveButton = this;
+                const detailRequest = invoiceDetailRequest;
                 const companyName = document.getElementById('gst-company-input').value || '';
                 const gstNumber = document.getElementById('gst-number-input').value || '';
                 const billingAddress = document.getElementById('gst-billing-input').value || '';
@@ -844,6 +673,7 @@
                     alert('Unable to determine voucher id');
                     return;
                 }
+                saveButton.disabled = true;
 
                 // clear previous errors
                 ['gst-company-error', 'gst-number-error', 'gst-billing-error'].forEach(id => {
@@ -869,6 +699,7 @@
                     }),
                     credentials: 'same-origin'
                 }).then(r => r.json()).then(res => {
+                    if (detailRequest !== invoiceDetailRequest) return;
                     if (res.success) {
                         // success
                         // re-render display view
@@ -877,6 +708,9 @@
                         document.getElementById('gst-billing').textContent = billingAddress || 'Not set';
                         document.getElementById('gst-display').style.display = 'block';
                         document.getElementById('gst-edit').style.display = 'none';
+                        window.HSOverlay.close(document.getElementById('view-invoice'));
+                        showSuccessMessage('Billing details saved', res.message || 'GST and billing details saved successfully.');
+                        setTimeout(() => window.location.reload(), 1200);
                     } else if (res.errors) {
                         // show validation errors inline
                         if (res.errors.company_name) {
@@ -899,12 +733,13 @@
                     }
                 }).catch(e => {
                     console.error(e);
-                    alert('Failed to update GST');
-                });
+                    if (detailRequest === invoiceDetailRequest) showErrorModal('Unable to save billing details', 'Please try again.');
+                }).finally(() => { saveButton.disabled = false; });
             });
         }
 
         function renderTravelInfo(allRides, fallbackRide) {
+            allRides = invoiceHtml(allRides); fallbackRide = invoiceHtml(fallbackRide);
             const container = document.getElementById('travel-info');
 
             // Use allRides if available, otherwise fallback to single ride format
@@ -1105,6 +940,7 @@
         }
 
         function renderServiceInfo(invoiceData) {
+            invoiceData = invoiceHtml(invoiceData);
             // invoiceData contains service and profit_loss (set by controller)
             const service = invoiceData.service || {};
             // Use cost price as Total Service Cost, matching preview
@@ -1165,6 +1001,7 @@
         }
 
         function renderVendorSections(vendors, perVendorHistories = {}) {
+            vendors = invoiceHtml(vendors); perVendorHistories = invoiceHtml(perVendorHistories);
             let html = '';
             vendors.forEach((v, idx) => {
                 const grossPaid = parseFloat(v.gross_paid_amount ?? perVendorHistories[v.id]?.paid_total ?? v.paid_amount ?? 0) || 0;
@@ -1221,6 +1058,7 @@
         }
 
         function renderClientPaymentHistory(history) {
+            history = invoiceHtml(history);
             const container = document.getElementById('client-payment-history');
             if (!container) return;
             if (!history || history.length === 0) {
@@ -1256,8 +1094,12 @@
             container.innerHTML = html;
         }
 
+        const generatingInvoices = new Set();
         function generateInvoice(voucherId, clientName = '', companyName = '', gstNumber = '') {
+            if (generatingInvoices.has(voucherId)) return;
             showConfirmationModal('Generate Invoice', 'Generate invoice for this voucher?', function() {
+                if (generatingInvoices.has(voucherId)) return;
+                generatingInvoices.add(voucherId);
                 fetch(`{{ url('admin/account/invoices') }}/${voucherId}/generate`, {
                     method: 'POST',
                     headers: {
@@ -1286,7 +1128,7 @@
                 }).catch(e => {
                     console.error(e);
                     showErrorModal('Invoice generation failed', 'Failed to generate invoice');
-                });
+                }).finally(() => generatingInvoices.delete(voucherId));
             });
         }
 

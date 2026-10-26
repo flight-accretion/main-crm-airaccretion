@@ -1,5 +1,9 @@
 @extends('admin.layouts.header')
 @section('content')
+  @include('admin.report.partials.profit_loss_redesign')
+@endsection
+
+{{--
 <!-- Page Header -->
 <div class="block justify-between page-header md:flex">
   <div>
@@ -249,3 +253,4 @@
 </script>
 
 @endpush
+--}}
