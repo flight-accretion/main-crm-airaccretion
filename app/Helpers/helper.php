@@ -45,6 +45,7 @@ function getRepresentativeIds($currentUser)
         !$userType
         || in_array($userType->user_type, UserType::ADMIN_ROLES)
         || $userType->user_type === UserType::HR
+        || $userType->user_type === UserType::OWNER
         || in_array($userType->user_type, UserType::OPERATIONS_ROLES)
     ) {
         return null;

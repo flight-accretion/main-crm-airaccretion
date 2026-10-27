@@ -3718,11 +3718,11 @@ return [
             ]);
 
             $waType       = 2; // Document header
-            $skipWhatsApp = empty($waFileUrl);
+            // A proof is attached when available, but it is not allowed to suppress
+            // the payment notification itself.
+            $skipWhatsApp = false;
 
-            if ($skipWhatsApp) {
-                Log::warning('sendRefundEmail: WhatsApp skipped — no proof file', ['ride_id' => $rideId]);
-            } else {
+            if (!empty($waFileUrl)) {
                 Log::info('sendRefundEmail: WhatsApp template selected', [
                     'template'  => $customerWaTemplate,
                     'file_type' => $isImageFile ? 'IMAGE' : ($isPdfFile ? 'PDF' : 'OTHER'),
@@ -3769,25 +3769,16 @@ return [
             $smc    = new SendMessageController();
             $errors = [];
 
-            // ════════════════════════════════════════════════════════════════════
-            // ROLE CHECK — Only Super Admin, Admin, Accounts can send notifications
-            // Operations can save/see popup but notifications are NOT sent
-            // ════════════════════════════════════════════════════════════════════
-            $currentUser     = \Illuminate\Support\Facades\Auth::user();
-            $currentUserType = $currentUser?->userType?->user_type;
-
-            $canSendNotifications = $currentUserType && in_array($currentUserType, array_merge(
-                [\App\Models\UserType::SUPER_ADMIN, \App\Models\UserType::ADMIN],
-                \App\Models\UserType::ACCOUNTS_ROLES
-            ));
-
-            Log::info('sendRefundEmail: role check', [
-                'user_id'               => $currentUser?->id,
-                'user_type'             => $currentUserType,
-                'can_send_notifications' => $canSendNotifications,
+            // Refund notifications must be delivered no matter which authorised
+            // CRM role processes the refund.  Operations creates customer refund
+            // cases as part of the normal workflow, so restricting delivery to
+            // Accounts silently prevented both the customer and Notification
+            // Master recipients (including Operations) from receiving updates.
+            Log::info('sendRefundEmail: dispatching customer and internal notifications', [
+                'user_id' => \Illuminate\Support\Facades\Auth::id(),
+                'refund_id' => $refund->id,
+                'notification_master_count' => $notificationMasters->count(),
             ]);
-
-            if ($canSendNotifications) {
 
                 // ════════════════════════════════════════════════════════════════
                 // CUSTOMER — Blade Email
@@ -3881,9 +3872,10 @@ return [
                     // $smc->sendMsg91Email('refund_processed_customer', $nmEmail, $nm->name ?? 'Team', $customerMsg91Vars);
 
                     // WhatsApp
-                    $nmPhone = !empty($nm->contact_country_code)
-                        ? $nm->contact_country_code . '-' . $nm->mobile_number
-                        : $nm->mobile_number;
+                    $nmPhone = WhatsAppPhoneNumber::e164(
+                        $nm->mobile_number,
+                        $nm->contact_country_code ?: null
+                    );
 
                     if ($skipWhatsApp) {
                         Log::warning('sendRefundEmail: skipping NM WhatsApp', ['nm_id' => $nm->id]);
@@ -3917,13 +3909,6 @@ return [
                         }
                     }
                 }
-            } else {
-                // Role not permitted to send notifications — log and skip silently
-                Log::info('sendRefundEmail: notifications skipped — user role not permitted', [
-                    'user_id'   => $currentUser?->id,
-                    'user_type' => $currentUserType,
-                ]);
-            }
 
             // ── 10. Mark refund status=1 (notifications sent, pending in Refund Notes) ──
             // status=1 = processed/notified → shows in Refund Notes PENDING tab
@@ -5260,6 +5245,25 @@ private function sendVendorRefundNotifications(string $vendorRefundId): void
         ?? $vendor->contact_number
         ?? $vendor->phone
         ?? null;
+    $customerEmail = $client->email ?? null;
+    $customerPhone = $client->alternate_number ?? $client->contact_number ?? null;
+
+    try {
+        $customerPhone = $customerPhone
+            ? WhatsAppPhoneNumber::e164(
+                $customerPhone,
+                $client->whatsapp_country_code
+                    ?? $client->contact_country_code
+                    ?? null
+            )
+            : null;
+    } catch (\InvalidArgumentException $exception) {
+        Log::warning('Vendor refund customer WhatsApp number is invalid', [
+            'vendor_refund_id' => $vendorRefund->id,
+            'client' => $clientName,
+        ]);
+        $customerPhone = null;
+    }
 
     $proofFilePath = null;
     $proofFileUrl = null;
@@ -5321,6 +5325,32 @@ private function sendVendorRefundNotifications(string $vendorRefundId): void
         ]);
     }
 
+    if (!empty($customerEmail) && filter_var($customerEmail, FILTER_VALIDATE_EMAIL)) {
+        try {
+            Mail::to($customerEmail)->send(new RefundMail(
+                'emails.refund-vendor',
+                'Vendor Refund Notification - ' . $clientName . ' - ' . $serviceName,
+                $vendorEmailData,
+                $proofFilePath
+            ));
+            Log::info('Vendor refund customer email sent', [
+                'vendor_refund_id' => $vendorRefund->id,
+                'to' => $customerEmail,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Vendor refund customer email failed', [
+                'vendor_refund_id' => $vendorRefund->id,
+                'to' => $customerEmail,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    } else {
+        Log::warning('Vendor refund customer email missing/invalid', [
+            'vendor_refund_id' => $vendorRefund->id,
+            'client' => $clientName,
+        ]);
+    }
+
     $smc = new SendMessageController();
     $waBodyData = [
         $vendorName,
@@ -5334,7 +5364,7 @@ private function sendVendorRefundNotifications(string $vendorRefundId): void
         $vendorRefund->refund_type ?? 'N/A',
     ];
 
-    if (!empty($vendorPhone) && $proofFileUrl) {
+    if (!empty($vendorPhone)) {
         try {
             $waResult = $smc->sendWhatsCrmVendorRefundMessage(
                 $vendorPhone,
@@ -5353,6 +5383,32 @@ private function sendVendorRefundNotifications(string $vendorRefundId): void
                 'error' => $e->getMessage(),
             ]);
         }
+    }
+
+    if (!empty($customerPhone)) {
+        try {
+            $customerWaResult = $smc->sendWhatsCrmVendorRefundMessage(
+                $customerPhone,
+                $waBodyData,
+                $proofFileUrl,
+                $proofFilename
+            );
+            Log::info('Vendor refund customer WhatsApp response', [
+                'vendor_refund_id' => $vendorRefund->id,
+                'to' => $customerPhone,
+                'success' => $customerWaResult['success'] ?? null,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Vendor refund customer WhatsApp exception', [
+                'vendor_refund_id' => $vendorRefund->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    } else {
+        Log::warning('Vendor refund customer WhatsApp number missing', [
+            'vendor_refund_id' => $vendorRefund->id,
+            'client' => $clientName,
+        ]);
     }
 
     $notificationMasters = \App\Models\NotificationMaster::activeInternalRecipients(
@@ -5397,11 +5453,16 @@ private function sendVendorRefundNotifications(string $vendorRefundId): void
             }
         }
 
-        $nmPhone = !empty($nm->contact_country_code)
-            ? $nm->contact_country_code . $nm->mobile_number
-            : $nm->mobile_number;
+        try {
+            $nmPhone = WhatsAppPhoneNumber::e164(
+                $nm->mobile_number,
+                $nm->contact_country_code ?: null
+            );
+        } catch (\InvalidArgumentException $exception) {
+            $nmPhone = '';
+        }
 
-        if (!empty($nm->mobile_number) && $proofFileUrl) {
+        if (!empty($nmPhone)) {
             try {
                 $nmWaResult = $smc->sendWhatsCrmVendorRefundMessage(
                     $nmPhone,

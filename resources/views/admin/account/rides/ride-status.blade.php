@@ -506,7 +506,7 @@
                                                     <input type="number"
                                                         class="form-control {{ $isAccounts ? 'bg-gray-100 text-gray-600' : '' }}"
                                                         id="ride-original-amount" name="original_amount" step="0.01" {{ $isAccounts
-        ? 'readonly' : '' }}>
+                                                  ? 'readonly' : '' }}>
                                                 </div>
                                                 <small class="text-muted">Auto-calculated from payments</small>
                                             </div>
@@ -526,7 +526,7 @@
                                                 <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Refund
                                                     Type<span class="text-danger">*</span></label>
                                                 <select class="form-control" id="ride-refund-type" name="refund_type" {{
-        ($isAccounts || $isAdmin) ? '' : 'disabled' }}>
+                                                   ($isAccounts || $isAdmin) ? '' : 'disabled' }}>
                                                     <option value="">Select refund type...</option>
                                                     <option value="Bank Transfer">Bank Transfer</option>
                                                     <option value="UPI Payment">UPI Payment</option>
@@ -549,7 +549,7 @@
                                                     Date<span class="text-danger">*</span></label>
                                                 <input type="date" class="form-control" id="ride-refund-date"
                                                     name="refund_date" {{
-        ($isAccounts || $isAdmin) ? '' : 'readonly' }}>
+                                               ($isAccounts || $isAdmin) ? '' : 'readonly' }}>
                                                 @if(!$isAccounts && !$isAdmin)
                                                     <small class="text-muted">Only Accounts can enter refund date.</small>
                                                 @endif
@@ -562,7 +562,7 @@
                                                 <div class="flex items-center gap-3">
                                                     <input type="file" class="form-control" id="ride-refund-proof"
                                                         name="refund_proof" accept=".pdf,.jpg,.jpeg,.png" {{ ($isAccounts ||
-        $isAdmin) ? '' : 'disabled' }}>
+                                                 $isAdmin) ? '' : 'disabled' }}>
                                                     <button type="button" id="ride-preview-proof-btn"
                                                         class="ti-btn ti-btn-outline-secondary" style="width: 20%;">
                                                         Preview
@@ -604,12 +604,12 @@
                             </div>
 
                             <!-- =========================================================
-                VENDOR REFUND / SETTLEMENT
-                ========================================================= -->
+                            VENDOR REFUND / SETTLEMENT
+                            ========================================================= -->
 
-                            <!-- =========================================================
-                VENDOR REFUND / SETTLEMENT
-                ========================================================= -->
+                                        <!-- =========================================================
+                            VENDOR REFUND / SETTLEMENT
+                            ========================================================= -->
 
                             <div class="box" id="vendor-refund-information-section" style="display:none;">
 
@@ -621,8 +621,8 @@
                                         </h5>
 
                                         <!-- <p class="text-xs text-gray-500 mb-0 mt-1">
-                    Record vendor cancellation charges and money returned by the vendor against this lead.
-                </p> -->
+                                            Record vendor cancellation charges and money returned by the vendor against this lead.
+                                        </p> -->
                                     </div>
 
                                     <button type="button" class="ti-btn ti-btn-outline-secondary"
@@ -641,8 +641,8 @@
 
 
                                         <!-- =====================================================
-                     VENDOR SELECT
-                     ===================================================== -->
+                                        VENDOR SELECT
+                                        ===================================================== -->
 
                                         <h6 class="font-semibold mb-3">Step 1 · Vendor Cancellation</h6>
                                         <p class="text-muted mb-3">Select vendor, enter cancellation amount and reason, then Save Cancellation. It will appear in the existing Vendor Refund Queue.</p>
@@ -670,8 +670,8 @@
 
 
                                         <!-- =====================================================
-                     AMOUNTS
-                     ===================================================== -->
+                                        AMOUNTS
+                                        ===================================================== -->
 
                                         <div class="vendor-refund-form-band grid grid-cols-12 gap-4">
 
@@ -759,8 +759,8 @@
 
 
                                         <!-- =====================================================
-                     REFUND DETAILS
-                     ===================================================== -->
+                                        REFUND DETAILS
+                                        ===================================================== -->
 
                                         <h6 class="font-semibold mt-5 mb-3">Step 2 · Vendor Refund</h6>
                                         <p class="text-muted mb-3">Record the actual received amount after Step 1. Partial receipts are supported. Zero-refund settlements remain open for manual review.</p>

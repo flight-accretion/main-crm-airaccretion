@@ -48,7 +48,7 @@
         <td data-label="Age" data-order="{{ $age ?? -1 }}"><span class="lq-pill {{ $age !== null && $age > 90 ? 'lq-score-hot' : 'lq-score-neutral' }}">{{ $age === null ? 'Unknown' : $age.' days' }}</span></td>
         <td data-label="Product">{{ ($tableProductNames[$lead->id] ?? '') ?: 'N/A' }}</td>
         <td data-label="Action"><div class="lq-actions"><a class="ti-btn" href="{{ $isHr ? route('admin.clients.view',$lead->client_id) : route('admin.leads.view',$lead->id) }}" title="View lead" aria-label="View lead"><i class="ri-eye-line"></i></a>
-        @unless($isHr)<a class="ti-btn lq-edit" href="{{ route('admin.leads.edit',$lead->id) }}" title="Edit lead" aria-label="Edit lead"><i class="ri-edit-line"></i></a>@endunless</div></td></tr>
+        </div></td></tr>
     @endforeach
     </tbody></table>
     @include('admin.pages.leads.partials.queue-table-footer')

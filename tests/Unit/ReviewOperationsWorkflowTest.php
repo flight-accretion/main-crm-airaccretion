@@ -46,11 +46,11 @@ class ReviewOperationsWorkflowTest extends TestCase
 
         $case = $service->open(
             $lead,
-            'review',
+            'customer_call',
             ['source' => 'test'],
             $salesUser->id
         );
-        $duplicate = $service->open($lead, 'review', ['source' => 'test-again']);
+        $duplicate = $service->open($lead, 'customer_call', ['source' => 'test-again']);
         $started = $service->start($case, $operationsUser);
         $completed = $service->complete($started, $operationsUser, 'Handled by operations.');
 

@@ -143,13 +143,24 @@ Route::get('/forgot-password', [UserController::class, 'showForgotPasswordForm']
 
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [UserController::class, 'logout'])->name('logout');
+
+    /*
+    |--------------------------------------------------------------------------
+    | OWNER DASHBOARD (read-only oversight)
+    |--------------------------------------------------------------------------
+    */
+    Route::get('/owner/dashboard', [\App\Http\Controllers\OwnerDashboardController::class, 'index'])
+        ->middleware('role:OWNER')
+        ->name('admin.owner.dashboard');
+
     Route::get('/admin/hr', [HrDashboardController::class, 'index'])
-        ->middleware('role:HR,SUPER_ADMIN')
+        ->middleware('role:HR,SUPER_ADMIN,OWNER')
         ->name('admin.hr.dashboard');
     Route::prefix('/admin/hr/operations-manual-kpi')
         ->middleware('role:HR,SUPER_ADMIN,OPERATIONS_ROLES')
         ->group(function () {
             Route::get('/', [OperationsManualKpiController::class, 'index'])
+                ->middleware('role:HR,SUPER_ADMIN,OPERATIONS_ROLES,OWNER')
                 ->name('admin.hr.operations-manual-kpi.index');
             Route::post('/', [OperationsManualKpiController::class, 'store'])
                 ->name('admin.hr.operations-manual-kpi.store');
@@ -201,8 +212,12 @@ Route::get(
 */
 
 
+Route::get('admin/lead-chat', [\App\Http\Controllers\LeadChatOverviewController::class, 'index'])
+    ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,OWNER')
+    ->name('admin.lead-chat.overview');
+
 Route::prefix('admin/lead-chat')
-    ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')
+    ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,OWNER')
     ->name('admin.lead-chat.')
     ->group(function () {
         Route::get('/lead/{lead}/google/options', [\App\Http\Controllers\LeadGoogleChatConnectionController::class, 'options'])
@@ -330,7 +345,7 @@ Route::prefix('admin/lead-chat')
 */
 
 Route::prefix('admin/chat-notifications')
-    ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')
+    ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,OWNER')
     ->name('admin.chat-notifications.')
     ->group(function () {
 
@@ -398,21 +413,21 @@ Route::prefix('admin/chat-notifications')
     });
 
     // Sales Dashboard
-    Route::get('/sales-dashboard', [DashboardController::class, 'getSalesDashboard'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard');
-    Route::get('/sales-dashboard/target-progress', [DashboardController::class, 'getTargetProgressData'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard.target-progress');
-    Route::get('/sales-dashboard/overview-data', [DashboardController::class, 'getSalesDashboardOverviewData'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard.overview-data');
-    Route::get('/sales-dashboard/product-summary', [DashboardController::class, 'getProductSummaryData'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard.product-summary');
-    Route::get('/sales-dashboard/today-followups', [DashboardController::class, 'getTodayFollowUpsData'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard.today-followups');
+    Route::get('/sales-dashboard', [DashboardController::class, 'getSalesDashboard'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OWNER')->name('admin.sales-dashboard');
+    Route::get('/sales-dashboard/target-progress', [DashboardController::class, 'getTargetProgressData'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OWNER')->name('admin.sales-dashboard.target-progress');
+    Route::get('/sales-dashboard/overview-data', [DashboardController::class, 'getSalesDashboardOverviewData'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OWNER')->name('admin.sales-dashboard.overview-data');
+    Route::get('/sales-dashboard/product-summary', [DashboardController::class, 'getProductSummaryData'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OWNER')->name('admin.sales-dashboard.product-summary');
+    Route::get('/sales-dashboard/today-followups', [DashboardController::class, 'getTodayFollowUpsData'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OWNER')->name('admin.sales-dashboard.today-followups');
     Route::post('/sales-dashboard/popup/accept', [DashboardController::class, 'acceptPopup'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard.popup.accept');
     Route::post('/sales-dashboard/popup/decline', [DashboardController::class, 'declinePopup'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard.popup.decline');
     Route::post('/sales-dashboard/daily-update', [DashboardController::class, 'storeDailyUpdate'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('admin.sales-dashboard.daily-update.store');
 
     Route::get('/admin/kpi', [KpiDashboardController::class, 'index'])
-        ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES,HR')
+        ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES,HR,OWNER')
         ->name('admin.kpi.index');
 
     Route::get('/admin/kpi/details/{metric}', [KpiDashboardController::class, 'details'])
-        ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES,HR')
+        ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES,HR,OWNER')
         ->name('admin.kpi.details');
 
 
@@ -426,11 +441,11 @@ Route::prefix('admin/chat-notifications')
         Route::delete('/calendar/swaps/{swap}', [\App\Http\Controllers\AttendanceCalendarController::class, 'destroySwap'])
             ->middleware('role:HR,SUPER_ADMIN')->name('admin.attendance.calendar.swaps.destroy');
         Route::get('/import', [AttendanceImportController::class, 'index'])
-            ->middleware('role:ATTENDANCE_IMPORT_ROLES')
+            ->middleware('role:ATTENDANCE_IMPORT_ROLES,OWNER')
             ->name('admin.attendance.import.index');
 
         Route::get('/import/sample', [AttendanceImportController::class, 'downloadSample'])
-            ->middleware('role:ATTENDANCE_IMPORT_ROLES')
+            ->middleware('role:ATTENDANCE_IMPORT_ROLES,OWNER')
             ->name('admin.attendance.import.sample');
 
         Route::post('/import/preview', [AttendanceImportController::class, 'preview'])
@@ -442,7 +457,7 @@ Route::prefix('admin/chat-notifications')
             ->name('admin.attendance.import.confirm');
 
         Route::get('/import/{import}', [AttendanceImportController::class, 'show'])
-            ->middleware('role:ATTENDANCE_IMPORT_ROLES')->name('admin.attendance.import.show');
+            ->middleware('role:ATTENDANCE_IMPORT_ROLES,OWNER')->name('admin.attendance.import.show');
 
         Route::get('/settings', [AttendanceSettingsController::class, 'index'])
             ->middleware('role:ADMIN_ROLES,HR')
@@ -482,7 +497,7 @@ Route::get(
     ]
 )
     ->middleware(
-        'role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES,HR'
+        'role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES,HR,OWNER'
     )
     ->name(
         'admin.kpi.outreach.index'
@@ -549,7 +564,7 @@ Route::prefix(
     });
 
     Route::prefix('admin/kpi/work-done')
-        ->middleware('role:SALES_ROLES,ADMIN_ROLES,HR')
+        ->middleware('role:SALES_ROLES,ADMIN_ROLES,HR,OWNER')
         ->group(function () {
             Route::get('/', [KpiWorkDoneController::class, 'index'])
                 ->name('admin.kpi.work-done.index');
@@ -558,9 +573,9 @@ Route::prefix(
         });
 
     Route::get('admin/kpi-history', [\App\Http\Controllers\HistoricPerformanceController::class, 'index'])
-        ->middleware('role:SUPER_ADMIN,HR')->name('admin.kpi.history.index');
+        ->middleware('role:SUPER_ADMIN,HR,OWNER')->name('admin.kpi.history.index');
     Route::get('admin/kpi-history/download', [\App\Http\Controllers\HistoricPerformanceController::class, 'download'])
-        ->middleware('role:SUPER_ADMIN,HR')->name('admin.kpi.history.download');
+        ->middleware('role:SUPER_ADMIN,HR,OWNER')->name('admin.kpi.history.download');
 
     Route::get('admin/kpi-management', [KpiManagementController::class, 'index'])
         ->middleware('role:SUPER_ADMIN,HR')
@@ -597,7 +612,7 @@ Route::prefix(
         });
 
     Route::prefix('admin/whatsapp')
-        ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')
+        ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,OWNER')
         ->name('admin.whatsapp.')
         ->group(function () {
 
@@ -751,7 +766,7 @@ Route::prefix(
 
 
         Route::prefix('admin/operations/vendor-refunds')
-    ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
+    ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,OWNER')
     ->name('admin.operations.vendor-refunds.')
     ->group(function () {
 
@@ -820,44 +835,44 @@ Route::prefix(
     });
 
     Route::prefix('admin/lead')->group(function () {
-        Route::get('/', [ClientController::class, 'index'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,HR')->name('admin.clients.index');
+        Route::get('/', [ClientController::class, 'index'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,HR,OWNER')->name('admin.clients.index');
         Route::get('/create', [ClientController::class, 'create'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.clients.create');
 
         Route::post('/', [ClientController::class, 'store'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.clients.store');
         Route::get('/{client}/edit', [ClientController::class, 'edit'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.clients.edit');
         Route::put('/{client}', [ClientController::class, 'update'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.clients.update');
-        Route::get('/{client}', [ClientController::class, 'view'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,HR')->name('admin.clients.view');
+        Route::get('/{client}', [ClientController::class, 'view'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,HR,OWNER')->name('admin.clients.view');
         Route::delete('/{client}', [ClientController::class, 'destroy'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.clients.destroy');
         Route::patch('/toggle-status/{client}', [ClientController::class, 'toggleStatus'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.clients.toggle-status');
         Route::get('/{client}/follow-up/create', [ClientController::class, 'createFollowUp'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.clients.follow-up.create');
         Route::post('/{client}/follow-up', [ClientController::class, 'storeFollowUp'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.clients.follow-up.store');
         Route::post('/{client}/generate-passenger-registration-link', [ClientController::class, 'generatePassengerRegistrationLink'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.clients.generate-passenger-registration-link');
-        Route::get('/{client}/get-passenger-registration-link', [ClientController::class, 'getPassengerRegistrationLink'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,HR')->name('admin.clients.get-passenger-registration-link');
+        Route::get('/{client}/get-passenger-registration-link', [ClientController::class, 'getPassengerRegistrationLink'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,HR,OWNER')->name('admin.clients.get-passenger-registration-link');
         // Route::post('/get-extra-services-by-services', [ClientController::class, 'getExtraServicesByServices']);
     });
     Route::get('/fetch-services/{productId}', [ClientController::class, 'fetchServices'])
-        ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
+        ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,OWNER')
         ->name('admin.clients.fetch-services');
 
     // Lead Tracking Routes
     Route::prefix('admin/lead-tracking')->group(function () {
         Route::get('/', [LeadTrackingController::class, 'index'])
-            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES')
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OWNER')
             ->name('admin.lead-tracking.index');
         Route::get('/{id}', [LeadTrackingController::class, 'show'])
-            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES')
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OWNER')
             ->name('admin.lead-tracking.show');
     });
 
     // Accounts may inspect Ride Status bookings; the controller enforces booking eligibility.
     Route::get('/admin/leads/{lead}', [ClientController::class, 'viewLead'])
         ->whereUuid('lead')
-        ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES')
+        ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES,OWNER')
         ->name('admin.leads.view');
 
     // Separate route group for lead-specific operations
     Route::prefix('admin/leads')
-        ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')
+        ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,OWNER')
         ->group(function () {
 
  /*
@@ -1066,8 +1081,8 @@ Route::post(
         ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')
         ->name('admin.airpoints.check-user-points');
 
-    Route::get('admin/dnp-leads', [ClientController::class, 'getDnpLeads'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,HR')->name('admin.leads.dnp');
-    Route::get('admin/dnp-leads/export', [ClientController::class, 'exportDnpLeads'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.leads.dnp.export');
+    Route::get('admin/dnp-leads', [ClientController::class, 'getDnpLeads'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,HR,OWNER')->name('admin.leads.dnp');
+    Route::get('admin/dnp-leads/export', [ClientController::class, 'exportDnpLeads'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,OWNER')->name('admin.leads.dnp.export');
 
     // Separate follow-ups group
     Route::prefix('admin/followups')->group(function () {
@@ -1083,7 +1098,7 @@ Route::post(
     // ===============================
     // Vendor Routes
     // ===============================
-    Route::prefix('admin/vendors')->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')->group(function () {
+    Route::prefix('admin/vendors')->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')->group(function () {
         Route::get('/', [VendorController::class, 'index'])->name('admin.vendors.index');
         Route::get('/create', [VendorController::class, 'create'])->name('admin.vendors.create');
         Route::post('/', [VendorController::class, 'store'])->name('admin.vendors.store');
@@ -1119,7 +1134,7 @@ Route::post(
     });
 
     Route::get('/get-cities/{countryId}', [ClientController::class, 'getCitiesByCountry'])
-        ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES');
+        ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,OWNER');
 
     Route::post('/change-password', [UserController::class, 'updatePassword'])->name('user.password.update');
     Route::get('change-password', [UserController::class, 'showChangePasswordForm'])->name('password.change');
@@ -1147,37 +1162,37 @@ Route::post(
     // Payment Review Routes
     Route::prefix('admin/account')->group(function () {
         Route::get('/dashboard', [AccountsHomeController::class, 'index'])
-            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES')
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OWNER')
             ->name('admin.account.dashboard');
         // Exceptional Dashboard
-        Route::get('/exceptional', [ExceptionalController::class, 'index'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')->name('admin.account.exceptional');
-        Route::post('/exceptional/{followupId}/update-total', [ExceptionalController::class, 'updateTotal'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')->name('admin.account.exceptional.update-total');
-        Route::post('/exceptional/create-refund-note', [ExceptionalController::class, 'createRefundNote'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')->name('admin.account.exceptional.create-refund-note');
-        Route::post('/exceptional/{followupId}/add-to-sales', [ExceptionalController::class, 'addToSales'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')->name('admin.account.exceptional.add-to-sales');
-        Route::get('/payment-review', [PaymentReviewController::class, 'index'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')->name('admin.account.payment-review');
+        Route::get('/exceptional', [ExceptionalController::class, 'index'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')->name('admin.account.exceptional');
+        Route::post('/exceptional/{followupId}/update-total', [ExceptionalController::class, 'updateTotal'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')->name('admin.account.exceptional.update-total');
+        Route::post('/exceptional/create-refund-note', [ExceptionalController::class, 'createRefundNote'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')->name('admin.account.exceptional.create-refund-note');
+        Route::post('/exceptional/{followupId}/add-to-sales', [ExceptionalController::class, 'addToSales'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')->name('admin.account.exceptional.add-to-sales');
+        Route::get('/payment-review', [PaymentReviewController::class, 'index'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')->name('admin.account.payment-review');
         Route::get('/payment-review/{id}', [PaymentReviewController::class, 'show'])
-            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')
             ->name('admin.account.payment-review.show');
         Route::post('/payment-review/{id}/approve', [PaymentReviewController::class, 'approve'])
-            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')
             ->name('admin.account.payment-review.approve');
         Route::post('/payment-review/{id}/reject', [PaymentReviewController::class, 'reject'])
-            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')
             ->name('admin.account.payment-review.reject');
         Route::post('/payment-review/{id}/approve-all', [PaymentReviewController::class, 'approveAll'])
-            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')
             ->name('admin.account.payment-review.approve-all');
         Route::post('/payment-review/{id}/reject-all', [PaymentReviewController::class, 'rejectAll'])
-            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')
             ->name('admin.account.payment-review.reject-all');
         Route::post('/payment-history/{id}/approve', [PaymentReviewController::class, 'approveHistory'])
-            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')
             ->name('admin.account.payment-history.approve');
         Route::post('/payment-history/{id}/reject', [PaymentReviewController::class, 'rejectHistory'])
-            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')
             ->name('admin.account.payment-history.reject');
         Route::get('/payment-review-export', [PaymentReviewController::class, 'export'])
-            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')
             ->name('admin.account.payment-review.export');
 
 
@@ -1192,15 +1207,15 @@ Route::post(
         
         // Vendor Payments Routes
        Route::get('/vendor-payments', [VendorPaymentController::class, 'index'])
-    ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES')
+    ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES,OWNER')
     ->name('admin.account.vendor-payments');
 
         Route::get('/vendor-payments/export', [VendorPaymentController::class, 'export'])
-            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES')
+            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES,OWNER')
             ->name('admin.account.vendor-payments.export');
 
         Route::get('/vendor-payments/{id}', [VendorPaymentController::class, 'show'])
-            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES')
+            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES,OWNER')
             ->name('admin.account.vendor-payments.show');
 
         Route::post('/vendor-payments', [VendorPaymentController::class, 'storePayment'])
@@ -1212,27 +1227,27 @@ Route::post(
             ->name('admin.account.vendor-payments.update-amount');
 
         // Invoice Routes
-        Route::get('/invoices', [InvoiceController::class, 'index'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')->name('admin.account.invoices');
+        Route::get('/invoices', [InvoiceController::class, 'index'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')->name('admin.account.invoices');
         Route::get('/invoices/{id}', [InvoiceController::class, 'show'])
-            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')
             ->name('admin.account.invoices.show');
         Route::post('/invoices/{id}/generate', [InvoiceController::class, 'generateInvoice'])
-            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')
             ->name('admin.account.invoices.generate');
         Route::put('/invoices/{id}/gst-info', [InvoiceController::class, 'updateGstInfo'])
-            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')
             ->name('admin.account.invoices.update-gst-info');
         Route::post('/invoices/{id}/finalize', [InvoiceController::class, 'finalizeInvoice'])
-            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')
             ->name('admin.account.invoices.finalize');
         Route::get('/invoices/{id}/pdf', [InvoiceController::class, 'generatePDF'])
-            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')
             ->name('admin.account.invoices.pdf');
         Route::get('/invoices/{id}/download', [InvoiceController::class, 'downloadPDF'])
-            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')
             ->name('admin.account.invoices.download');
         Route::get('/invoices/{id}/preview', [InvoiceController::class, 'previewHTML'])
-            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')
             ->name('admin.account.invoices.preview');
     });
 
@@ -1294,24 +1309,24 @@ Route::post(
     });
 
     Route::get('admin/operations/dashboard', [\App\Http\Controllers\OperationsHomeController::class, 'index'])
-        ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES')
+        ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES,OWNER')
         ->name('admin.operations.dashboard');
 
     Route::get('admin/operations/work-details', [OperationsDashboardController::class, 'workDetails'])
-        ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES,HR')
+        ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES,HR,OWNER')
         ->name('admin.operations.work-details');
 
     Route::get('admin/operations', [OperationsDashboardController::class, 'index'])
-        ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES,HR')
+        ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES,HR,OWNER')
         ->name('admin.operations.index');
 
     Route::get('admin/operations/reschedule-assessments', [\App\Http\Controllers\RescheduleAssessmentController::class, 'index'])
-        ->middleware('role:OPERATIONS_ROLES,ACCOUNTS_ROLES,ADMIN_ROLES')->name('admin.operations.reschedule-assessments.index');
+        ->middleware('role:OPERATIONS_ROLES,ACCOUNTS_ROLES,ADMIN_ROLES,OWNER')->name('admin.operations.reschedule-assessments.index');
     Route::post('admin/operations/reschedule-assessments/{case}', [\App\Http\Controllers\RescheduleAssessmentController::class, 'update'])
         ->middleware('role:OPERATIONS_ROLES,ACCOUNTS_ROLES,ADMIN_ROLES')->name('admin.operations.reschedule-assessments.update');
 
     Route::prefix('admin/operations')
-        ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES')
+        ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES,OWNER')
         ->group(function () {
             Route::get(
                 '/queue/{type}',
@@ -1422,15 +1437,15 @@ Route::post(
         ->name('admin.operations.vendor-followups.')
         ->group(function () {
             Route::get('/', [OperationsVendorFollowupController::class, 'index'])
-                ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES,HR')
+                ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES,HR,OWNER')
                 ->name('index');
 
             Route::get('/export', [OperationsVendorFollowupController::class, 'export'])
-                ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES,HR')
+                ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES,HR,OWNER')
                 ->name('export');
 
             Route::get('/{case}', [OperationsVendorFollowupController::class, 'show'])
-                ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES,HR')
+                ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES,HR,OWNER')
                 ->name('show');
 
             Route::get('/lead/{lead}', [OperationsVendorFollowupController::class, 'redirectCreate'])
@@ -1458,7 +1473,7 @@ Route::post(
                 ->name('cancel');
         });
     Route::prefix('admin/client')
-        ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')
+        ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,OWNER')
         ->group(function () {
         Route::get('/', [ClientController::class, 'indexClient'])->name('admin.client.index');
         Route::get('/create', [ClientController::class, 'createClient'])
@@ -1496,7 +1511,7 @@ Route::post(
     // Admin Follow-Up Status Routes
     // ===============================
     Route::prefix('admin/upcoming-follow-up')->group(function () {
-        Route::get('/', [UpcomingFollowUpController::class, 'index'])->middleware('role:ADMIN_ROLES,SALES_ROLES,HR')->name('admin.upcoming-follow-up.index');
+        Route::get('/', [UpcomingFollowUpController::class, 'index'])->middleware('role:ADMIN_ROLES,SALES_ROLES,HR,OWNER')->name('admin.upcoming-follow-up.index');
         Route::post('/toggle', [UpcomingFollowUpController::class, 'toggleStatus'])
             ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')
             ->name('admin.upcoming-follow-up.toggle');
@@ -1504,9 +1519,9 @@ Route::post(
 
 
     Route::prefix('admin/users')
-    ->middleware('role:ADMIN_ROLES')
+    ->middleware('role:ADMIN_ROLES,OWNER')
     ->group(function () {
-        Route::get('/', [UserController::class, 'index'])->name('admin.users.index');
+        Route::get('/', [UserController::class, 'index'])->middleware('role:ADMIN_ROLES,OWNER')->name('admin.users.index');
         Route::get('/create', [UserController::class, 'create'])->name('admin.users.create');
         Route::post('/', [UserController::class, 'store'])->name('admin.users.store');
         Route::get('/get-user-for-edit', [UserController::class, 'getUserforEdit'])->name('admin.users.getUserforEdit');
@@ -1619,11 +1634,11 @@ Route::post(
 
     Route::prefix('admin/vouchers')->group(function () {
         Route::get('/', [VoucherController::class, 'index'])
-            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
+            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,OWNER')
             ->name('admin.vouchers.index');
 
         Route::get('/{voucher_id}/pdf', [VoucherController::class, 'generateVoucherPdf'])
-            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
+            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,OWNER')
             ->name('admin.vouchers.pdf');
 
         Route::get('/generate/{lead_id}', [VoucherController::class, 'showVoucherForm'])
@@ -1664,12 +1679,12 @@ Route::post(
     });
 
     Route::prefix('admin/rides')->group(function () {
-        Route::get('/upcoming-ride', [RideController::class, 'upcomingRides'])->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,SALES_ROLES')->name('admin.rides.upcoming');
+        Route::get('/upcoming-ride', [RideController::class, 'upcomingRides'])->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,SALES_ROLES,OWNER')->name('admin.rides.upcoming');
         Route::get('/api/calendar-events', [RideController::class, 'getCalendarEvents'])
-            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES,SALES_ROLES')
+            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES,SALES_ROLES,OWNER')
             ->name('admin.rides.calendar.events');
         Route::get('/api/ride-details/{rideId}', [RideController::class, 'getRideDetails'])
-            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,SENIOR_SALES_MANAGER,SALES_MANAGER')
+            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,SENIOR_SALES_MANAGER,SALES_MANAGER,OWNER')
             ->name('admin.rides.details');
         if (app()->environment('local')) {
             Route::get('/debug/test-data', [RideController::class, 'debugTestData'])
@@ -1678,11 +1693,11 @@ Route::post(
         }
 
         // Ride Status Routes
-        Route::get('/ride-status', [RideController::class, 'rideStatus'])->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES')->name('admin.rides.ride-status');
-        Route::get('/ride-status/export', [RideController::class, 'exportRideStatus'])->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES')->name('admin.rides.ride-status.export');
+        Route::get('/ride-status', [RideController::class, 'rideStatus'])->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES,OWNER')->name('admin.rides.ride-status');
+        Route::get('/ride-status/export', [RideController::class, 'exportRideStatus'])->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES,OWNER')->name('admin.rides.ride-status.export');
 
         Route::get('/ride-status/{rideId}/details', [RideController::class, 'getRideStatusDetails'])
-    ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES')
+    ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES,OWNER')
     ->name('admin.rides.ride-status.details');
 
         Route::post('/ride-status/{rideId}/update-status', [RideController::class, 'updateRideStatus'])
@@ -1694,23 +1709,23 @@ Route::post(
             ->name('admin.rides.ride-status.update-dates');
 
         Route::post('/ride-status/{rideId}/generate-refund', [RideController::class, 'generateRefundNote'])
-            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')
             ->name('admin.rides.ride-status.generate-refund');
 
         Route::post('/rides/{rideId}/send-refund-email', [RideController::class, 'sendRefundEmail'])
-            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')
             ->name('admin.rides.ride-status.send-refund-email');
 
         Route::post('/ride-status/{rideId}/generate-invoice', [RideController::class, 'generateInvoice'])
             ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES')
             ->name('admin.rides.ride-status.generate-invoice');
-        Route::post('/ride-status/{rideId}/save-refund', [RideController::class, 'saveRefundFromRideStatus'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')->name('admin.rides.ride-status.save-refund');
+        Route::post('/ride-status/{rideId}/save-refund', [RideController::class, 'saveRefundFromRideStatus'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')->name('admin.rides.ride-status.save-refund');
     Route::post(
     '/ride-status/{rideId}/save-vendor-refund',
     [RideController::class, 'saveVendorRefundFromRideStatus']
 )
 ->middleware(
-    'role:ADMIN_ROLES,OPERATIONS_ROLES'
+    'role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES'
 )
 ->name(
     'admin.rides.ride-status.save-vendor-refund'
@@ -1726,14 +1741,14 @@ Route::post(
 )
 // Operations use Operations > Vendor Refund instead of this account list.
 ->middleware(
-    'role:ADMIN_ROLES,ACCOUNTS_ROLES'
+    'role:ADMIN_ROLES,ACCOUNTS_ROLES,OWNER'
 )
 ->name(
     'admin.account.vendor-refunds'
 );
 
  Route::prefix('admin/refunds')
-    ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES')
+    ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')
     ->group(function () {
         Route::get('/', [RefundController::class, 'index'])->name('admin.refunds.index');
         Route::get('/{followupId}/details', [RefundController::class, 'show'])->name('admin.refunds.show');
@@ -1750,7 +1765,7 @@ Route::post(
     });
 
     Route::prefix('admin/report')
-        ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,SALES_ROLES,HR')
+        ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER,SALES_ROLES,HR')
         ->group(function () {
         // Reports page: Super Admin only. Sales / Vendor / Profit-Loss / KPI reports keep the group's roles.
         Route::get('/', [ReportController::class, 'index'])->middleware('role:SUPER_ADMIN')->name('admin.report');

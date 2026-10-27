@@ -53,11 +53,6 @@
                                             class="ti-btn ti-btn-icon ti-btn-sm ti-btn-secondary-full" target="_blank"
                                             title="Create New Lead for Same Customer"><i class="ri-add-circle-line"></i></a>
                                         @endif
-                                        @if($canWriteLeads)
-                                        <a aria-label="anchor" href="{{ route('admin.leads.edit', $enquiry->id) }}"
-                                            class="ti-btn ti-btn-icon ti-btn-sm ti-btn-info-full" title="Edit Lead"><i
-                                                class="ri-edit-line"></i></a>
-                                        @endif
                                                 @if ($isSuperAdmin ?? false)
 
 <a

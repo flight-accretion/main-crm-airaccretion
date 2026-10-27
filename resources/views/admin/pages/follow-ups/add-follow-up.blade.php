@@ -7,6 +7,7 @@
             ? route('admin.operations.followups.store', $operationCase)
             : (isset($lead) ? route('admin.leads.follow-up.store', $lead->id) : route('admin.clients.follow-up.store', $client->id));
     @endphp
+    <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/leads/lead-workspace.css') }}?v={{ filemtime(public_path('assets/admin/css/crm/leads/lead-workspace.css')) }}">
     <!-- Page Header -->
     <div class="block justify-between page-header md:flex">
         <div class="flex items-center gap-3 flex-wrap">
@@ -14,7 +15,7 @@
     <h3
         class="!text-defaulttextcolor dark:!text-defaulttextcolor/70 dark:text-white dark:hover:text-white text-[1.125rem] font-semibold"
     >
-        {{ $operationsMode ? 'Operations Follow Up' : 'Add Follow Up' }}
+        {{ $operationsMode ? 'Operations Follow Up' : 'Lead Workspace' }}
     </h3>
 
     @include(
@@ -33,7 +34,7 @@
             </li>
             <li class="text-[0.813rem] text-defaulttextcolor font-semibold hover:text-primary dark:text-[#8c9097] dark:text-white/50 "
                 aria-current="page">
-                {{ $operationsMode ? 'Operations Follow Up' : 'Add Follow Up' }}
+                {{ $operationsMode ? 'Operations Follow Up' : 'Lead Workspace' }}
             </li>
         </ol>
     </div>
@@ -54,28 +55,70 @@
             {{ session('error') }}
         </div>
     @endif
-    <div class="grid grid-cols-12 text-defaultsize">
-        <div class="xl:col-span-12 col-span-12">
-            <div class="box">
-                <div class="box-header">
+    <div class="crm-lead-workspace">
+    @unless($operationsMode)
+        @php
+            $contactParts = explode('-', (string) $client->contact_number, 2);
+            $alternateParts = explode('-', (string) $client->alternate_number, 2);
+            $contactCountryCode = count($contactParts) === 2 ? $contactParts[0] : '+91';
+            $contactNumber = count($contactParts) === 2 ? $contactParts[1] : $contactParts[0];
+            $whatsappCountryCode = count($alternateParts) === 2 ? $alternateParts[0] : '+91';
+            $alternateNumber = count($alternateParts) === 2 ? $alternateParts[1] : '';
+            $primaryTrip = $workspaceTrips->first();
+            $topPlace = $primaryTrip
+                ? trim(($primaryTrip['from_place'] ?: 'Not set') . ' → ' . ($primaryTrip['to_place'] ?: 'Not set'))
+                : 'Not scheduled';
+        @endphp
+        <section class="lw-card lw-lead-hero unified-followup-page">
+            <div class="lw-lead-identity">
+                <div class="lw-lead-avatar" aria-hidden="true">{{ strtoupper(mb_substr($client->name ?: 'C', 0, 1)) }}</div>
+                <div class="lw-lead-copy">
+                    <h1 class="lw-lead-name">{{ $client->name }}</h1>
+                    <div class="lw-lead-meta">
+                        <span><strong>Product:</strong> {{ $clientInfo['products'] ?? 'Not selected' }}</span>
+                        <span><strong>Service:</strong> {{ $clientInfo['services'] ?? 'Not selected' }}</span>
+                        <span><strong>Place:</strong> {{ $topPlace }}</span>
+                        <span><strong>Travel:</strong> {{ $clientInfo['trip_from'] ?? 'Not scheduled' }}</span>
+                    </div>
+                    <div class="lw-lead-badges">
+                        <span class="lw-pill lw-pill--green">{{ $lead->status ?? 'Active' }}</span>
+                        <span class="lw-pill lw-pill--blue">{{ $clientInfo['passengers'] ?? 0 }} passengers</span>
+                        @if(!empty($clientInfo['occasion']) && $clientInfo['occasion'] !== 'N/A')
+                            <span class="lw-pill lw-pill--amber">{{ $clientInfo['occasion'] }}</span>
+                        @endif
+                    </div>
+                </div>
+            </div>
+            <div class="lw-lead-hero-action"><a class="lw-btn lw-btn--primary" href="#followup-form">Add Follow-up</a></div>
+
+        </section>
+    @endunless
+    @php
+        $workspaceUser = auth()->user();
+        $showLeadChat = $workspaceUser && isset($lead)
+            ? app(\App\Services\LeadChat\LeadChatAccessService::class)->canAccess($workspaceUser, $lead)
+            : false;
+    @endphp
+    <div class="lead-workspace-layout lw-workspace">
+        <div class="lead-workspace-registration">
+            <div class="box lw-card lw-passenger-card">
+                <div class="box-header !p-0 border-0">
                     <h5 class="box-title">Passenger Registration</h5>
                 </div>
                 <div class="box-body">
                     <div class="grid grid-cols-12 gap-6">
                         <div class="xl:col-span-12 col-span-12">
-                            <p class="text-sm text-gray-600 mb-3">Generate a registration link to collect passenger details
-                                before
-                                creating voucher.</p>
+                            <p class="text-sm text-gray-600 mb-3">Booking communication and passenger details.</p>
 
-                            <div class="flex gap-2 mb-3">
+                            <div class="flex gap-2 mb-3 lw-passenger-actions">
+                                <button type="button" id="send-booking-confirmation-email-btn"
+                                    class="lw-btn lw-btn--primary" data-lead-id="{{ $lead->id }}">
+                                    Send Booking Email
+                                </button>
                                 <button type="button" id="generate-registration-link-btn"
-                                    class="ti-btn ti-btn-secondary ti-btn" data-client-id="{{ $client->id }}"
+                                    class="lw-btn" data-client-id="{{ $client->id }}"
                                     data-lead-id="{{ $lead->id }}">
                                     Generate Registration Link
-                                </button>
-                                <button type="button" id="send-booking-confirmation-email-btn"
-                                    class="ti-btn ti-btn-primary ti-btn" data-lead-id="{{ $lead->id }}">
-                                    Send Booking Email
                                 </button>
                                 <button type="button" id="copy-registration-link-btn" class="ti-btn ti-btn-info ti-btn"
                                     style="display: none;">
@@ -104,16 +147,34 @@
                 </div>
             </div>
         </div>
-        <div class="xl:col-span-12 col-span-12">
+        @unless($operationsMode)
+            <aside class="lead-workspace-right-rail">
+                @if($showLeadChat)
+                    <div class="lead-workspace-chat">
+                        @include('admin.pages.follow-ups.partials.lead-chat')
+                    </div>
+                @endif
+                <section class="lw-card lw-section lead-workspace-actions" aria-label="Lead actions">
+                    <div class="lw-section-head"><h2>Lead Actions</h2></div>
+                    <div class="lw-section-body">
+                        <div class="lw-lead-actions">
+                            <a class="lw-btn" href="{{ route('admin.leads.transfers.index') }}">Transfer Lead</a>
+                            <button type="button" class="lw-btn lw-btn--danger" data-workspace-cancel-lead>Cancel Lead</button>
+                        </div>
+                        <p class="lw-action-help">Only actions permitted for your role are available.</p>
+                    </div>
+                </section>
+            </aside>
+        @endunless
+        <div class="xl:col-span-12 col-span-12 lead-workspace-client-details">
             <div class="box">
                 <div class="box-header justify-between">
                     <div class="box-title">
-                        Client Detail
+                        Client Details
                     </div>
                     <div class="ms-2">
-                        <a aria-label="anchor" href="{{ route('admin.leads.edit', $lead->id) }}"
-                            class="ti-btn ti-btn-icon ti-btn-sm ti-btn-info-full edit-client-btn" title="Edit Lead"><i
-                                class="ri-edit-line"></i></a>
+                        <button type="button" class="ti-btn ti-btn-sm ti-btn-light lead-workspace-edit-link"
+                            data-workspace-editor="client-details-editor">Edit Client</button>
                     </div>
                 </div>
                 <div class="box-body">
@@ -131,31 +192,145 @@
                             <p class="text-gray-800 dark:text-white">{{ $clientInfo['phone'] }}</p>
                         </div>
                         <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Date - Place From</label>
-                            <p class="text-gray-800 dark:text-white">{{ $clientInfo['trip_from'] }}</p>
+                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Company / GST</label>
+                            <p class="text-gray-800 dark:text-white">{{ $client->company_name ?: ($client->gst_number ?: 'Not provided') }}</p>
                         </div>
                         <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Date - Place To</label>
-                            <p class="text-gray-800 dark:text-white">{{ $clientInfo['trip_to'] }}</p>
+                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Location</label>
+                            <p class="text-gray-800 dark:text-white">{{ $client->country_id ? 'Country selected' : 'Not set' }}{{ $client->city_id ? ' · City selected' : '' }}</p>
                         </div>
                         <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Number OF Passengers</label>
-                            <p class="text-gray-800 dark:text-white">{{ $clientInfo['passengers'] }}</p>
-                        </div>
-                        <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Occasion</label>
-                            <p class="text-gray-800 dark:text-white">{{ $clientInfo['occasion'] }}</p>
+                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Representative</label>
+                            <p class="text-gray-800 dark:text-white">{{ $lead->representative?->name ?: 'Unassigned' }}</p>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
-        <div class="xl:col-span-12 col-span-12">
-            <div class="box">
-                <div class="box-header justify-between">
-                    <div class="box-title">
-                        Services and Extra Services
+            <div id="client-details-editor" class="lw-edit-panel {{ $errors->any() ? 'is-open' : '' }}">
+                <form method="POST" action="{{ route('admin.leads.update', $lead) }}">
+                    @csrf
+                    @method('PUT')
+                    <input type="hidden" name="contact_country_code" value="{{ $contactCountryCode }}">
+                    <input type="hidden" name="whatsapp_country_code" value="{{ $whatsappCountryCode }}">
+                    <input type="hidden" name="company_name" value="{{ $client->company_name }}">
+                    <input type="hidden" name="gst_number" value="{{ $client->gst_number }}">
+                    <input type="hidden" name="country_id" value="{{ $client->country_id }}">
+                    <input type="hidden" name="city" value="{{ $client->city_id }}">
+                    <input type="hidden" name="address" value="{{ $client->address }}">
+                    <input type="hidden" name="date_of_birth" value="{{ $client->date_of_birth ? \Illuminate\Support\Carbon::parse($client->date_of_birth)->format('Y-m-d') : '' }}">
+                    <input type="hidden" name="number_of_passengers" value="{{ $lead->number_of_passengers }}">
+                    <input type="hidden" name="occasion" value="{{ $lead->occasion }}">
+                    <input type="hidden" name="representative_user_id" value="{{ $lead->representative_user_id }}">
+                    <input type="hidden" name="requirement_description" value="{{ $lead->description }}">
+                    @foreach($workspaceProductIds as $productId)<input type="hidden" name="product_ids[]" value="{{ $productId }}">@endforeach
+                    @foreach($workspaceServiceIds as $serviceId)<input type="hidden" name="service_ids[]" value="{{ $serviceId }}">@endforeach
+                    @foreach($workspaceTrips as $tripIndex => $trip)
+                        <input type="hidden" name="trips[{{ $tripIndex }}][id]" value="{{ $trip['id'] }}">
+                        <input type="hidden" name="trips[{{ $tripIndex }}][from_date]" value="{{ \Illuminate\Support\Carbon::parse($trip['from_date'])->format('Y-m-d H:i') }}">
+                        <input type="hidden" name="trips[{{ $tripIndex }}][to_date]" value="{{ \Illuminate\Support\Carbon::parse($trip['to_date'])->format('Y-m-d H:i') }}">
+                        <input type="hidden" name="trips[{{ $tripIndex }}][from_place]" value="{{ $trip['from_place'] }}">
+                        <input type="hidden" name="trips[{{ $tripIndex }}][to_place]" value="{{ $trip['to_place'] }}">
+                    @endforeach
+                    <div class="lw-grid-2">
+                        <div class="lw-field"><label for="client-editor-name">Name</label><input id="client-editor-name" name="name" value="{{ old('name', $client->name) }}" required></div>
+                        <div class="lw-field"><label for="client-editor-phone">Phone</label><input id="client-editor-phone" name="contact_number" inputmode="numeric" value="{{ old('contact_number', $contactNumber) }}" required></div>
+                        <div class="lw-field"><label for="client-editor-email">Email</label><input id="client-editor-email" name="email" type="email" value="{{ old('email', $client->email) }}"></div>
+                        <div class="lw-field"><label for="client-editor-whatsapp">WhatsApp</label><input id="client-editor-whatsapp" name="alternate_number" inputmode="numeric" value="{{ old('alternate_number', $alternateNumber) }}"></div>
                     </div>
+                    <div class="lw-edit-actions">
+                        <button type="submit" class="lw-btn lw-btn--primary">Save Client Details</button>
+                        <button type="button" class="lw-btn" data-close-workspace-editor="client-details-editor">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <div class="lead-workspace-travel">
+            <div class="box lw-card lw-section">
+                <div class="box-header lw-section-head justify-between">
+                    <div class="box-title">Travel Details</div>
+                    <button type="button" class="lw-btn lw-btn--small" data-workspace-editor="travel-details-editor">Edit Travel</button>
+                </div>
+                <div class="box-body lw-section-body">
+                    <div class="lw-summary-grid">
+                        <div class="lw-info"><small>Passengers</small><strong>{{ $clientInfo['passengers'] ?? 'N/A' }}</strong></div>
+                        <div class="lw-info"><small>Occasion</small><strong>{{ $clientInfo['occasion'] ?? 'N/A' }}</strong></div>
+                        <div class="lw-info"><small>Segments</small><strong>{{ $workspaceTrips->count() }} travel {{ Illuminate\Support\Str::plural('segment', $workspaceTrips->count()) }}</strong></div>
+                    </div>
+                    <div class="lw-travel-list mt-3">
+                        @foreach($workspaceTrips as $trip)
+                            <div class="lw-travel-segment">
+                                <div><small>From date</small><strong>{{ \Illuminate\Support\Carbon::parse($trip['from_date'])->format('d M · H:i') }}</strong></div>
+                                <div><small>From</small><strong>{{ $trip['from_place'] ?: 'Not set' }}</strong></div>
+                                <div><small>To date</small><strong>{{ \Illuminate\Support\Carbon::parse($trip['to_date'])->format('d M · H:i') }}</strong></div>
+                                <div><small>To</small><strong>{{ $trip['to_place'] ?: 'Not set' }}</strong></div>
+                                <div class="lw-segment-actions"><button type="button" class="lw-btn lw-btn--small" data-workspace-editor="travel-details-editor">Edit</button></div>
+                            </div>
+                        @endforeach
+                    </div>
+                    <button type="button" class="lw-btn lw-btn--small lw-add-travel" data-workspace-editor="travel-details-editor">+ Add Travel Segment</button>
+                </div>
+            </div>
+            @unless($operationsMode)
+                <div id="travel-details-editor" class="lw-edit-panel">
+                    <form method="POST" action="{{ route('admin.leads.update', $lead) }}">
+                        @csrf
+                        @method('PUT')
+                        <input type="hidden" name="name" value="{{ $client->name }}">
+                        <input type="hidden" name="email" value="{{ $client->email }}">
+                        <input type="hidden" name="contact_number" value="{{ $contactNumber }}">
+                        <input type="hidden" name="alternate_number" value="{{ $alternateNumber }}">
+                        <input type="hidden" name="contact_country_code" value="{{ $contactCountryCode }}">
+                        <input type="hidden" name="whatsapp_country_code" value="{{ $whatsappCountryCode }}">
+                        <input type="hidden" name="company_name" value="{{ $client->company_name }}">
+                        <input type="hidden" name="gst_number" value="{{ $client->gst_number }}">
+                        <input type="hidden" name="country_id" value="{{ $client->country_id }}">
+                        <input type="hidden" name="city" value="{{ $client->city_id }}">
+                        <input type="hidden" name="address" value="{{ $client->address }}">
+                        <input type="hidden" name="date_of_birth" value="{{ $client->date_of_birth ? \Illuminate\Support\Carbon::parse($client->date_of_birth)->format('Y-m-d') : '' }}">
+                        <input type="hidden" name="representative_user_id" value="{{ $lead->representative_user_id }}">
+                        <input type="hidden" name="requirement_description" value="{{ $lead->description }}">
+                        @foreach($workspaceProductIds as $productId)<input type="hidden" name="product_ids[]" value="{{ $productId }}">@endforeach
+                        @foreach($workspaceServiceIds as $serviceId)<input type="hidden" name="service_ids[]" value="{{ $serviceId }}">@endforeach
+                        <div class="lw-grid-2">
+                            <div class="lw-field"><label for="travel-editor-passengers">Passengers</label><input id="travel-editor-passengers" type="number" min="1" max="100" name="number_of_passengers" value="{{ old('number_of_passengers', $lead->number_of_passengers) }}" required></div>
+                            <div class="lw-field"><label for="travel-editor-occasion">Occasion</label><input id="travel-editor-occasion" name="occasion" value="{{ old('occasion', $lead->occasion) }}"></div>
+                        </div>
+                        <div class="lw-trip-editor-list">
+                            @foreach($workspaceTrips as $tripIndex => $trip)
+                                <fieldset class="lw-trip-editor">
+                                    <legend>Travel segment {{ $loop->iteration }}</legend>
+                                    <input type="hidden" name="trips[{{ $tripIndex }}][id]" value="{{ $trip['id'] }}">
+                                    <div class="lw-grid-2">
+                                        <div class="lw-field"><label for="trip-{{ $tripIndex }}-from-date">From date</label><input id="trip-{{ $tripIndex }}-from-date" type="datetime-local" name="trips[{{ $tripIndex }}][from_date]" value="{{ $trip['from_date'] }}" required></div>
+                                        <div class="lw-field"><label for="trip-{{ $tripIndex }}-to-date">To date</label><input id="trip-{{ $tripIndex }}-to-date" type="datetime-local" name="trips[{{ $tripIndex }}][to_date]" value="{{ $trip['to_date'] }}" required></div>
+                                        <div class="lw-field"><label for="trip-{{ $tripIndex }}-from-place">From</label><input id="trip-{{ $tripIndex }}-from-place" name="trips[{{ $tripIndex }}][from_place]" value="{{ $trip['from_place'] }}" required></div>
+                                        <div class="lw-field"><label for="trip-{{ $tripIndex }}-to-place">To</label><input id="trip-{{ $tripIndex }}-to-place" name="trips[{{ $tripIndex }}][to_place]" value="{{ $trip['to_place'] }}" required></div>
+                                    </div>
+                                </fieldset>
+                            @endforeach
+                        </div>
+                        <div class="lw-edit-actions">
+                            <button type="submit" class="lw-btn lw-btn--primary">Save Travel Details</button>
+                            <button type="button" class="lw-btn" data-close-workspace-editor="travel-details-editor">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            @endunless
+        </div>
+        <div class="xl:col-span-12 col-span-12 lead-workspace-followup">
+            <div class="box lw-followup-card">
+                <div class="box-header lw-section-head justify-between">
+                    <div class="box-title">
+                        Products, Services &amp; Requirement
+                    </div>
+                    <button type="button" class="lw-btn lw-btn--small" data-workspace-editor="services-details-editor">Edit Services</button>
+                </div>
+                <div class="lw-section-body lw-product-summary">
+                    <div class="lw-summary-grid">
+                        <div class="lw-info"><small>Products</small><strong>{{ $clientInfo['products'] ?? 'Not selected' }}</strong></div>
+                        <div class="lw-info"><small>Services</small><strong>{{ $clientInfo['services'] ?? 'Not selected' }}</strong></div>
+                    </div>
+                    <div class="lw-info lw-requirement-summary"><small>Latest requirement / call note</small><strong>{{ $lead->description ?: 'No requirement recorded.' }}</strong></div>
                 </div>
                 @php
                     // Compute approved paid amount across all followups for this lead
@@ -177,7 +352,7 @@
                     $pendingAmount = max(0, $lastTotalAmountForPending - $approvedPaidSum);
                 @endphp
 
-                <form class="ti-custom-validation" method="POST"
+                <form id="followup-form" class="ti-custom-validation" method="POST"
                     action="{{ $followupFormAction }}"
                     enctype="multipart/form-data" novalidate>
                     @csrf
@@ -255,18 +430,23 @@
                     </div>
             </div>
         </div>
-        <div class="xl:col-span-12 col-span-12">
-            <div class="box">
-                <div class="box-header justify-between">
+        <div class="xl:col-span-12 col-span-12 lead-workspace-add-followup">
+            <div class="box lw-followup-card">
+                <div class="box-header lw-followup-head justify-between">
                     <div class="box-title">
                         Add Follow Up
                     </div>
                 </div>
-                <div class="box-body">
+                <div class="box-body lw-followup-body">
+                    <div class="lw-followup-options" aria-label="Follow-up note helpers">
+                        @foreach(['Pricing Shared', 'Call Back Later', 'Interested', 'No Answer', 'Payment Follow-up'] as $quickNote)
+                            <button type="button" class="lw-quick-option" data-followup-note="{{ $quickNote }}">{{ $quickNote }}</button>
+                        @endforeach
+                    </div>
                     <div class="grid grid-cols-12 gap-6">
                         <div class="xl:col-span-12 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
                             <label for="notes" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Notes</label>
-                            <textarea class="form-control" id="notes" name="notes" rows="3" required maxlength="1000"
+                            <textarea class="form-control" id="notes" name="notes" rows="3" required maxlength="1000" placeholder="What happened on this call? Add requirement, objection, price discussed and next action..."
                                 title="Please enter letters and numbers only; at least one letter is required">{{ old('notes') }}</textarea>
                             @error('notes')
                                 <p class="text-danger mt-1">{{ $message }}</p>
@@ -534,24 +714,90 @@
 
 
                 <div class="box-footer">
-                    <button type="submit" class="ti-btn ti-btn-primary-full ti-custom-validate-btn">Submit</button>
+                    <div class="lw-followup-actions">
+                        <button type="submit" class="ti-btn ti-btn-primary-full ti-custom-validate-btn">Save Follow-up</button>
+                        <button type="reset" class="lw-btn" style="width: auto;">Clear</button>
+                    </div>
                 </div>
                 </form>
             </div>
         </div>
-      <div class="xl:col-span-12 col-span-12">
+        @unless($operationsMode)
+            <div class="lead-workspace-services-editor">
+                <div id="services-details-editor" class="lw-edit-panel">
+                    <form method="POST" action="{{ route('admin.leads.update', $lead) }}">
+                        @csrf
+                        @method('PUT')
+                        <input type="hidden" name="name" value="{{ $client->name }}">
+                        <input type="hidden" name="email" value="{{ $client->email }}">
+                        <input type="hidden" name="contact_number" value="{{ $contactNumber }}">
+                        <input type="hidden" name="alternate_number" value="{{ $alternateNumber }}">
+                        <input type="hidden" name="contact_country_code" value="{{ $contactCountryCode }}">
+                        <input type="hidden" name="whatsapp_country_code" value="{{ $whatsappCountryCode }}">
+                        <input type="hidden" name="company_name" value="{{ $client->company_name }}">
+                        <input type="hidden" name="gst_number" value="{{ $client->gst_number }}">
+                        <input type="hidden" name="country_id" value="{{ $client->country_id }}">
+                        <input type="hidden" name="city" value="{{ $client->city_id }}">
+                        <input type="hidden" name="address" value="{{ $client->address }}">
+                        <input type="hidden" name="date_of_birth" value="{{ $client->date_of_birth ? \Illuminate\Support\Carbon::parse($client->date_of_birth)->format('Y-m-d') : '' }}">
+                        <input type="hidden" name="representative_user_id" value="{{ $lead->representative_user_id }}">
+                        <input type="hidden" name="number_of_passengers" value="{{ $lead->number_of_passengers }}">
+                        <input type="hidden" name="occasion" value="{{ $lead->occasion }}">
+                        @foreach($workspaceTrips as $tripIndex => $trip)
+                            <input type="hidden" name="trips[{{ $tripIndex }}][id]" value="{{ $trip['id'] }}">
+                            <input type="hidden" name="trips[{{ $tripIndex }}][from_date]" value="{{ str_replace('T', ' ', $trip['from_date']) }}">
+                            <input type="hidden" name="trips[{{ $tripIndex }}][to_date]" value="{{ str_replace('T', ' ', $trip['to_date']) }}">
+                            <input type="hidden" name="trips[{{ $tripIndex }}][from_place]" value="{{ $trip['from_place'] }}">
+                            <input type="hidden" name="trips[{{ $tripIndex }}][to_place]" value="{{ $trip['to_place'] }}">
+                        @endforeach
+                        <div class="lw-grid-2">
+                            <div class="lw-field"><label for="services-editor-products">Products</label><select id="services-editor-products" name="product_ids[]" multiple required>@foreach($workspaceProducts as $product)<option value="{{ $product->id }}" {{ in_array($product->id, $workspaceProductIds) ? 'selected' : '' }}>{{ $product->product }}</option>@endforeach</select></div>
+                            <div class="lw-field"><label for="services-editor-services">Services</label><select id="services-editor-services" name="service_ids[]" multiple>@foreach($workspaceServices as $service)<option value="{{ $service->id }}" {{ in_array($service->id, $workspaceServiceIds) ? 'selected' : '' }}>{{ $service->service }}</option>@endforeach</select></div>
+                        </div>
+                        <div class="lw-field"><label for="services-editor-requirement">Requirement / call note</label><textarea id="services-editor-requirement" name="requirement_description" rows="3">{{ $lead->description }}</textarea></div>
+                        <div class="lw-edit-actions">
+                            <button type="submit" class="lw-btn lw-btn--primary">Save Services</button>
+                            <button type="button" class="lw-btn" data-close-workspace-editor="services-details-editor">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        @endunless
+      <div class="lead-workspace-history">
+    <div class="lw-card lw-section lead-workspace-history-summary">
+        <div class="lw-section-head justify-between">
+            <h2>Follow-up History</h2>
+            <button type="button" class="lw-btn lw-btn--small" id="lead-history-toggle">Show More</button>
+        </div>
+        <div class="lw-section-body lw-history lw-history-scroll" id="lead-history-list">
+            <div class="lw-history-timeline">
+                @forelse($followups as $followup)
+                    <article class="lw-history-item {{ $loop->iteration > 3 ? 'lw-history-item--extra' : '' }}">
+                        <strong>{{ \Illuminate\Support\Str::limit(strip_tags((string) $followup->followup_note), 120) ?: 'Follow-up recorded' }}</strong>
+                        @if($followup->customer_not_picked_up)
+                            <span class="lw-pill lw-pill--amber">No Answer</span>
+                        @endif
+                        <span class="lw-history-meta">{{ optional($followup->followedBy)->name ?? 'System' }} · {{ optional($followup->created_at)->format('d M Y, H:i') }}</span>
+                    </article>
+                @empty
+                    <p class="text-sm text-gray-500 mb-0">No follow-up history found.</p>
+                @endforelse
+            </div>
+        </div>
+    </div>
+    <details class="lead-workspace-history-legacy">
+        <summary>View detailed follow-up history</summary>
 
-    <div class="box custom-box">
+    <div class="box custom-box lw-card lw-section">
 
         {{-- =========================================================
              ONE HEADER ONLY
              ========================================================= --}}
-        <div class="box-header justify-between">
+        <div class="box-header lw-section-head justify-between">
 
             <div class="box-title">
                 Follow-up History
             </div>
-
         </div>
 
 
@@ -560,14 +806,6 @@
             {{-- =========================================================
                  CHAT ACCESS
                  ========================================================= --}}
-            @php
-                $splitUser = auth()->user();
-                $showLeadChat = $splitUser && isset($lead)
-                    ? app(\App\Services\LeadChat\LeadChatAccessService::class)->canAccess($splitUser, $lead)
-                    : false;
-            @endphp
-
-
             {{--
             |--------------------------------------------------------------------------
             | IMPORTANT
@@ -586,25 +824,13 @@
             |
             --}}
 
-            <div
-                class="{{
-                    $showLeadChat
-                        ? 'grid grid-cols-12 gap-4 items-start'
-                        : ''
-                }}"
-            >
+            <div class="lw-history lw-history-scroll" id="lead-history-legacy-list">
 
 
                 {{-- =====================================================
                      LEFT — EXISTING FOLLOW-UP HISTORY
                      ===================================================== --}}
-                <div
-                    class="{{
-                        $showLeadChat
-                            ? 'xl:col-span-6 lg:col-span-6 col-span-12'
-                            : 'w-full'
-                    }}"
-                >
+                <div class="w-full">
 
                     <div class="tab-content">
 
@@ -614,11 +840,11 @@
                             aria-labelledby="mon-1"
                         >
 
-                            <ul class="list-unstyled mb-0 upcoming-events-list">
+                            <ul class="list-unstyled mb-0 upcoming-events-list lw-history-timeline">
 
                                 @forelse($followups as $followup)
 
-                                    <li>
+                                    <li class="lw-history-item {{ $loop->iteration > 3 ? 'lw-history-item--extra' : '' }}">
 
                                         @php
 
@@ -1804,7 +2030,7 @@
 
                                 @empty
 
-                                    <li>
+                                    <li class="lw-history-item">
 
                                         <div class="text-center text-gray-500 py-4">
 
@@ -1824,32 +2050,12 @@
 
                 </div>
 
-
-                {{-- =====================================================
-                     RIGHT — SALES ↔ OPERATIONS CHAT
-                     ===================================================== --}}
-                @if($showLeadChat)
-
-                    <div
-                        class="
-                            xl:col-span-6
-                            lg:col-span-6
-                            col-span-12
-                        "
-                    >
-
-                        @include(
-                            'admin.pages.follow-ups.partials.lead-chat'
-                        )
-
-                    </div>
-
-                @endif
-
             </div>
 
         </div>
 
+    </div>
+    </details>
     </div>
 
 </div>
@@ -5679,5 +5885,64 @@ document
                 }
             }, 3000);
         }
+    </script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const history = document.getElementById('lead-history-list');
+            const historyToggle = document.getElementById('lead-history-toggle');
+
+            if (history && historyToggle) {
+                historyToggle.addEventListener('click', function () {
+                    const expanded = history.classList.toggle('is-expanded');
+                    historyToggle.textContent = expanded ? 'Show Less' : 'Show More';
+                });
+            }
+
+            document.querySelectorAll('[data-workspace-editor]').forEach(function (trigger) {
+                trigger.addEventListener('click', function () {
+                    const editor = document.getElementById(trigger.dataset.workspaceEditor);
+                    if (editor) {
+                        editor.classList.add('is-open');
+                        editor.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }
+                });
+            });
+
+            document.querySelectorAll('[data-close-workspace-editor]').forEach(function (trigger) {
+                trigger.addEventListener('click', function () {
+                    document.getElementById(trigger.dataset.closeWorkspaceEditor)?.classList.remove('is-open');
+                });
+            });
+
+            document.querySelector('[data-workspace-cancel-lead]')?.addEventListener('click', function () {
+                const status = document.getElementById('status');
+                if (!status || !window.confirm('Mark this lead as cancelled? Add a note, then save the follow-up to confirm.')) return;
+
+                status.value = '2';
+                document.getElementById('followup-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                window.setTimeout(function () { document.getElementById('notes')?.focus({ preventScroll: true }); }, 350);
+            });
+
+            document.querySelectorAll('[data-followup-note]').forEach(function (chip) {
+                chip.addEventListener('click', function () {
+                    const notes = document.getElementById('notes');
+                    if (!notes) return;
+
+                    const note = chip.dataset.followupNote;
+                    notes.value = notes.value.trim() ? notes.value.trim() + '\n' + note : note;
+                    notes.focus();
+                    chip.classList.add('is-active');
+                });
+            });
+
+            const addFollowup = document.querySelector('a[href="#followup-form"]');
+            if (addFollowup) {
+                addFollowup.addEventListener('click', function () {
+                    window.setTimeout(function () {
+                        document.getElementById('notes')?.focus({ preventScroll: true });
+                    }, 350);
+                });
+            }
+        });
     </script>
 @endpush

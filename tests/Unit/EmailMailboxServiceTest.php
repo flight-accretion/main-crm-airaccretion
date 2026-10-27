@@ -89,6 +89,15 @@ class EmailMailboxImapFake
 
     public static function mimeHeaderDecode(string $value): array
     {
+        if (preg_match('/^=\?([^?]+)\?Q\?(.+)\?=$/i', $value, $matches)) {
+            return [
+                (object) [
+                    'text' => quoted_printable_decode(str_replace('_', ' ', $matches[2])),
+                    'charset' => $matches[1],
+                ],
+            ];
+        }
+
         return [
             (object) [
                 'text' => $value,

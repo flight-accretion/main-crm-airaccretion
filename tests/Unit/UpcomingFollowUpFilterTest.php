@@ -314,6 +314,18 @@ class UpcomingFollowUpFilterTest extends TestCase
             $table->timestamps();
         });
 
+        // The dynamic upcoming feed loads ride segments for its service/date
+        // summary, so this focused schema must provide that relation.
+        Schema::create('lead_rides', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('lead_id')->index();
+            $table->timestamp('from_date')->nullable();
+            $table->timestamp('to_date')->nullable();
+            $table->string('from_place')->nullable();
+            $table->string('to_place')->nullable();
+            $table->timestamps();
+        });
+
         Schema::create('lead_followups', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('lead_id');

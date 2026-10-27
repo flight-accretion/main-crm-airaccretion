@@ -15,6 +15,7 @@ use App\Models\PaymentAuditTrail;
 use App\Services\LeadAllocationService;
 use App\Services\SalesAmountCalculator;
 use App\Models\SalesDailyUpdate;
+use App\Models\KpiOutreachAssignment;
 use Illuminate\Http\Request;
 use App\Services\SalespersonPresenceService;
 use function App\Helpers\getRepresentativeIds;
@@ -127,7 +128,10 @@ class DashboardController extends Controller
         ];
     }
 
-    private function calculateAchievedAmountForRepIds(array $repIds, int $year, int $month, ?Carbon $paidDate = null): float
+    /**
+     * Public: also used by OwnerDashboardService for manager attainment.
+     */
+    public function calculateAchievedAmountForRepIds(array $repIds, int $year, int $month, ?Carbon $paidDate = null): float
     {
         $repIds = array_values(array_filter(array_unique($repIds)));
         if (empty($repIds)) {
@@ -224,7 +228,10 @@ class DashboardController extends Controller
         });
     }
 
-  private function calculateTargetProgressForRepIds(
+  /**
+   * Public: also used by OwnerDashboardService for manager attainment.
+   */
+  public function calculateTargetProgressForRepIds(
     array $repIds,
     int $year,
     int $month,
@@ -758,6 +765,33 @@ class DashboardController extends Controller
             'percentageChange' => $percentageChange,
         ];
 
+        $todayFreshLeadCount = (clone $leadQuery)
+            ->whereDate('created_at', $currentDate)
+            ->count();
+
+        $outreachCompletedToday = 0;
+        $outreachPendingCount = 0;
+        $outreachTarget = 0;
+
+        try {
+            $outreachQuery = KpiOutreachAssignment::query()
+                ->where('user_id', $currentUser->id);
+
+            $outreachCompletedToday = (clone $outreachQuery)
+                ->where('status', 'completed')
+                ->whereDate('completed_at', $currentDate)
+                ->count();
+
+            $outreachPendingCount = (clone $outreachQuery)
+                ->where('status', 'pending')
+                ->count();
+
+            $outreachTarget = app(\App\Services\Kpi\KpiOutreachService::class)
+                ->dailyTarget($currentUser);
+        } catch (\Throwable $exception) {
+            // The dashboard remains usable while an older environment is pending KPI migrations.
+        }
+
         // Get upcoming followups
         $services = Service::where('status', 1)->get();
 
@@ -956,7 +990,7 @@ class DashboardController extends Controller
                 ->get();
         }
 
-        return view('admin.pages.dashboards.sales-dashboard', compact('currentMonth', 'leads', 'todayFollowUps', 'todayFollowUpsCount', 'services', 'dnpLeads', 'nextWeekDnpLeads', 'productSummary', 'currentMonthTarget', 'targetProgress', 'assignedExecutives', 'teamTargetProgress', 'teamMemberProgress', 'assignedExecutivesAll', 'assignedExecutivesToday', 'popupData', 'salesPresenceRows', 'canViewAllSalesPresence', 'dailyUpdate', 'managerUpdates', 'manager'));
+        return view('admin.pages.dashboards.sales-dashboard', compact('currentMonth', 'leads', 'todayFollowUps', 'todayFollowUpsCount', 'services', 'dnpLeads', 'nextWeekDnpLeads', 'productSummary', 'currentMonthTarget', 'targetProgress', 'assignedExecutives', 'teamTargetProgress', 'teamMemberProgress', 'assignedExecutivesAll', 'assignedExecutivesToday', 'popupData', 'salesPresenceRows', 'canViewAllSalesPresence', 'dailyUpdate', 'managerUpdates', 'manager', 'todayFreshLeadCount', 'outreachCompletedToday', 'outreachPendingCount', 'outreachTarget'));
     }
 
     public function acceptPopup(Request $request)

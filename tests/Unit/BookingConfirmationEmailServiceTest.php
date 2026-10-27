@@ -267,10 +267,10 @@ class BookingConfirmationEmailServiceTest extends TestCase
         Mail::fake();
 
         config()->set(
-            'whatcrm.send_message_url',
-            'https://web.airaccretion.com/api/v1/send-message'
+            'whatcrm.template_message_url',
+            'https://web.airaccretion.com/api/v1/send-template'
         );
-        config()->set('whatcrm.send_message_token', 'booking-token');
+        config()->set('whatcrm.template_message_token', 'booking-token');
         config()->set('whatcrm.default_country_code', '91');
         config()->set(
             'services.booking_whatsapp.company_number',
@@ -278,7 +278,7 @@ class BookingConfirmationEmailServiceTest extends TestCase
         );
 
         Http::fake([
-            'https://web.airaccretion.com/api/v1/send-message*' =>
+            'https://web.airaccretion.com/api/v1/send-template*' =>
                 Http::response(
                     [
                         'success' => true,
@@ -363,17 +363,14 @@ class BookingConfirmationEmailServiceTest extends TestCase
 
         Http::assertSent(function ($request) use ($result) {
             $payload = $request->data();
-            $body = data_get($payload, 'messageObject.text.body');
-
             return str_contains(
                     $request->url(),
-                    'https://web.airaccretion.com/api/v1/send-message?token=booking-token'
+                    'https://web.airaccretion.com/api/v1/send-template'
                 )
-                && data_get($payload, 'messageObject.to') === '919123456780'
-                && data_get($payload, 'messageObject.type') === 'text'
-                && str_contains($body, 'Your booking confirmation has been sent')
-                && str_contains($body, '+91 95753 40786')
-                && str_contains($body, $result['short_link'] ?: $result['registration_link']);
+                && data_get($payload, 'sendTo') === '+919123456780'
+                && data_get($payload, 'templetName') === 'booking_confirmation'
+                && data_get($payload, 'token') === 'booking-token'
+                && count((array) data_get($payload, 'exampleArr')) === 7;
         });
 
         $this->assertDatabaseHas('whatsapp_contacts', [
@@ -390,7 +387,7 @@ class BookingConfirmationEmailServiceTest extends TestCase
             'provider_message_id' => 'wamid.BOOKING-CONFIRM-1',
             'direction' => 'outgoing',
             'sender_user_id' => $agent->id,
-            'message_type' => 'text',
+            'message_type' => 'template',
         ]);
     }
 
@@ -1087,6 +1084,18 @@ class BookingConfirmationEmailServiceTest extends TestCase
             $table->string('password')->nullable();
             $table->uuid('user_type_id')->nullable();
             $table->integer('status')->default(1);
+            $table->timestamps();
+        });
+
+        // BookingSalesContactResolver checks an agent's active manager
+        // assignment when building CC recipients.
+        Schema::create('sales_executive_assignments', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('manager_id');
+            $table->uuid('sales_executive_id')->index();
+            $table->timestamp('assigned_date')->nullable();
+            $table->text('notes')->nullable();
+            $table->tinyInteger('status')->default(1);
             $table->timestamps();
         });
 

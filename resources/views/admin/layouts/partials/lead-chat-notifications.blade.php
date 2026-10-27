@@ -39,9 +39,6 @@
         py-[1rem]
         md:px-[0.65rem]
         px-2
-        hs-dropdown
-        ti-dropdown
-        [--placement:bottom-right]
     "
 
     data-list-url="{{
@@ -67,9 +64,7 @@
         id="lead-chat-notification-button"
         type="button"
         class="
-            hs-dropdown-toggle
             relative
-            ti-dropdown-toggle
             !p-0
             !border-0
             !shadow-none
@@ -106,20 +101,24 @@
 
 
     <div
+        id="lead-chat-notification-drawer"
         class="
-            main-header-dropdown
-            hs-dropdown-menu
-            ti-dropdown-menu
-            bg-white
-            !w-[25rem]
-            border
-            border-defaultborder
             hidden
-            !m-0
-            !p-0
+            lead-chat-notification-modal
         "
+        tabindex="-1"
+        aria-labelledby="lead-chat-notification-title"
     >
-
+        <div class="lead-chat-notification-modal__backdrop" aria-hidden="true"></div>
+        <div class="lead-chat-notification-modal__box">
+        <div class="ti-offcanvas-header border-b border-defaultborder">
+            <div>
+                <div id="lead-chat-notification-title" class="font-semibold text-[1rem]">Google Chat notifications</div>
+                <div id="lead-chat-notification-unread-label" class="text-xs text-gray-500">0 unread</div>
+            </div>
+            <button type="button" id="lead-chat-notification-close" class="ti-btn flex-shrink-0 p-0 !mb-0" aria-label="Close notifications"><i class="ri-close-line text-lg"></i></button>
+        </div>
+        <div class="ti-offcanvas-body !p-0">
         <div
             class="
                 p-4
@@ -131,25 +130,6 @@
                 border-defaultborder
             "
         >
-
-            <div>
-
-                <div
-                    class="font-semibold text-[1rem]"
-                >
-                    Notifications
-                </div>
-
-
-                <div
-                    id="lead-chat-notification-unread-label"
-                    class="text-xs text-gray-500"
-                >
-                    0 unread
-                </div>
-
-            </div>
-
 
             <div class="flex gap-2">
 
@@ -179,7 +159,8 @@
 
         <div
             id="lead-chat-notification-list"
-            class="max-h-[420px] overflow-y-auto"
+            class="overflow-y-auto"
+            style="max-height: calc(100vh - 150px);"
         >
 
             <div
@@ -189,7 +170,8 @@
             </div>
 
         </div>
-
+        </div>
+        </div>
     </div>
 
 </div>
@@ -246,6 +228,44 @@
         document.getElementById(
             'lead-chat-clear-all'
         );
+
+    const notificationButton = document.getElementById('lead-chat-notification-button');
+    const notificationDrawer = document.getElementById('lead-chat-notification-drawer');
+    const notificationCloseButton = document.getElementById('lead-chat-notification-close');
+
+    function closeNotificationDrawer()
+    {
+        notificationDrawer?.classList.remove('open');
+        notificationDrawer?.classList.add('hidden');
+        document.body.style.overflow = '';
+
+        // Remove a backdrop that could have been left behind by the old
+        // shared overlay implementation before this page was refreshed.
+        document
+            .getElementById('lead-chat-notification-drawer-backdrop')
+            ?.remove();
+    }
+
+    notificationButton?.addEventListener('click', function () {
+        notificationDrawer?.classList.remove('hidden');
+        notificationDrawer?.classList.add('open');
+        document.body.style.overflow = 'hidden';
+        loadNotifications();
+    });
+
+    notificationCloseButton?.addEventListener('click', closeNotificationDrawer);
+
+    notificationDrawer?.addEventListener('click', function (event) {
+        if (event.target === notificationDrawer || event.target.classList.contains('lead-chat-notification-modal__backdrop')) {
+            closeNotificationDrawer();
+        }
+    });
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && notificationDrawer?.classList.contains('open')) {
+            closeNotificationDrawer();
+        }
+    });
 
 
     /*

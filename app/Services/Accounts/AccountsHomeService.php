@@ -88,7 +88,7 @@ class AccountsHomeService
         return compact('month', 'pending', 'invoices', 'approval', 'money', 'previous', 'chart', 'chartStart', 'chartEnd');
     }
 
-    private function cashForMonth(Carbon $month): array
+    public function cashForMonth(Carbon $month): array
     {
         $next = $month->copy()->addMonth();
         $collected = (float) PaymentAuditTrail::where('payment_status', PaymentAuditTrail::STATUS_APPROVED)

@@ -988,8 +988,10 @@ class SendMessageController extends Controller
         ?string $filename = null,
         ?string $templateName = 'refund_cust_notify_v2'
     ) {
-        $apiUrl   = config('services.whatscrm_vouchers.api_url');   // WHATSCRM_API_URL
-        $apiToken = config('services.whatscrm_vouchers.api_token'); // WHATSCRM_API_TOKEN
+        // Refunds are operational payment notifications.  They must leave from
+        // the Operations WhatsApp/IVR account, not the separate voucher account.
+        $apiUrl   = config('services.whatscrm.api_url');
+        $apiToken = config('services.whatscrm.api_token');
 
         // WhatsCRM expects + prefix e.g. +919405059038
         $toNumber = WhatsAppPhoneNumber::e164($toNumber);

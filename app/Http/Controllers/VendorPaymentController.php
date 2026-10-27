@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Models\VendorRefund;
 use App\Services\ActivityAuditService;
+use App\Support\WhatsAppPhoneNumber;
 
 class VendorPaymentController extends Controller
 {
@@ -1582,6 +1583,24 @@ $balanceAmount =
                     $clientName  = $client->name  ?? 'Customer';
                     $vendorPhone = $vendor->whatsapp_number ?? $vendor->alternate_number ?? $vendor->contact_number ?? $vendor->phone ?? null;
                     $vendorEmail = $vendor->email ?? null;
+                    $clientPhone = $client->alternate_number ?? $client->contact_number ?? null;
+                    $clientEmail = $client->email ?? null;
+
+                    try {
+                        $clientPhone = $clientPhone
+                            ? WhatsAppPhoneNumber::e164(
+                                $clientPhone,
+                                $client->whatsapp_country_code
+                                    ?? $client->contact_country_code
+                                    ?? null
+                            )
+                            : null;
+                    } catch (\InvalidArgumentException $exception) {
+                        Log::warning('storePayment: customer WhatsApp number is invalid', [
+                            'client' => $clientName,
+                        ]);
+                        $clientPhone = null;
+                    }
 
                     // Receipt file paths
                     $waFileUrl        = $receiptPath
@@ -1606,7 +1625,7 @@ $balanceAmount =
                         $request->payment_method ?? 'N/A',
                     ];
 
-                    if (!empty($vendorPhone) && $waFileUrl) {
+                    if (!empty($vendorPhone)) {
                         $cleanVendorPhone = preg_replace('/[^0-9]/', '', $vendorPhone);
 
                         $waResult = $smc->sendWhatsCrmMessage(
@@ -1622,8 +1641,28 @@ $balanceAmount =
                         ]);
                     } elseif (empty($vendorPhone)) {
                         Log::warning('storePayment: vendor WhatsApp number missing', ['vendor' => $vendorName]);
-                    } elseif (!$waFileUrl) {
-                        Log::warning('storePayment: no receipt URL — WhatsApp skipped');
+                    }
+
+                    if (!empty($clientPhone)) {
+                        try {
+                            $customerWaResult = $smc->sendWhatsCrmMessage(
+                                $clientPhone,
+                                $waBodyData,
+                                $waFileUrl,
+                                $receiptFilename
+                            );
+                            Log::info('VENDOR PAYMENT ► Customer WhatsApp', [
+                                'To' => $clientPhone,
+                                'Status' => ($customerWaResult['success'] ?? false) ? '✓ Sent' : '✗ Failed',
+                            ]);
+                        } catch (\Throwable $e) {
+                            Log::error('storePayment: customer WhatsApp failed', [
+                                'client' => $clientName,
+                                'error' => $e->getMessage(),
+                            ]);
+                        }
+                    } else {
+                        Log::warning('storePayment: customer WhatsApp number missing', ['client' => $clientName]);
                     }
 
                     $vendorEmailData = [
@@ -1661,6 +1700,25 @@ $balanceAmount =
                         ]);
                     }
 
+                    if (!empty($clientEmail) && filter_var($clientEmail, FILTER_VALIDATE_EMAIL)) {
+                        try {
+                            \Illuminate\Support\Facades\Mail::to($clientEmail)->send(new \App\Mail\RefundMail(
+                                'emails.refund-vendor',
+                                'Vendor Payment Notification – ' . $clientName . ' – ' . $serviceName,
+                                $vendorEmailData,
+                                $receiptLocalPath
+                            ));
+                            Log::info('storePayment: customer blade email sent', ['to' => $clientEmail]);
+                        } catch (\Throwable $e) {
+                            Log::error('storePayment: customer email failed', [
+                                'to' => $clientEmail,
+                                'error' => $e->getMessage(),
+                            ]);
+                        }
+                    } else {
+                        Log::warning('storePayment: customer email missing/invalid', ['client' => $clientName]);
+                    }
+
                     $notificationMasters = \App\Models\NotificationMaster::activeInternalRecipients(
                         [$vendorEmail, $client->email ?? null],
                         [
@@ -1694,19 +1752,21 @@ $balanceAmount =
                             }
                         }
 
-                        $nmPhone = !empty($nm->contact_country_code)
-                            ? $nm->contact_country_code . $nm->mobile_number
-                            : $nm->mobile_number;
+                        try {
+                            $nmPhone = WhatsAppPhoneNumber::e164(
+                                $nm->mobile_number,
+                                $nm->contact_country_code ?: null
+                            );
+                        } catch (\InvalidArgumentException $exception) {
+                            $nmPhone = '';
+                        }
 
-                        if (empty($nm->mobile_number)) {
-                            Log::warning('storePayment: NM phone missing', ['nm_id' => $nm->id]);
-                        } elseif (!$waFileUrl) {
-                            Log::warning('storePayment: NM WhatsApp skipped — no receipt URL', ['nm_id' => $nm->id]);
+                        if (empty($nmPhone)) {
+                            Log::warning('storePayment: NM company number missing/invalid', ['nm_id' => $nm->id]);
                         } else {
                             try {
-                                $cleanNmPhone = preg_replace('/[^0-9]/', '', $nmPhone);
                                 $nmWaResult = $smc->sendWhatsCrmMessage(
-                                    $cleanNmPhone,
+                                    $nmPhone,
                                     $waBodyData,
                                     $waFileUrl,
                                     $receiptFilename

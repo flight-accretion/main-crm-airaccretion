@@ -41,6 +41,12 @@ class LeadChatAccessService
             return true;
         }
 
+        // Owners are read-only observers. OwnerReadOnly rejects any message,
+        // task, reaction, or other write, but they may inspect every lead chat.
+        if ($role === UserType::OWNER) {
+            return true;
+        }
+
 
         /*
         |--------------------------------------------------------------------------
@@ -146,6 +152,10 @@ class LeadChatAccessService
         ) {
 
             return 'admin';
+        }
+
+        if ($role === UserType::OWNER) {
+            return 'owner';
         }
 
 

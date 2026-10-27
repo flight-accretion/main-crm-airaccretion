@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr" data-nav-layout="vertical" class="light" data-header-styles="light"
+    data-menu-styles="light" data-toggled="close">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Owner Dashboard — Accretion Aviation</title>
+
+    <!-- Theme CSS (real CRM assets) -->
+    <link rel="stylesheet" href="../public/assets/admin/css/style.css">
+    <link rel="stylesheet" href="../public/assets/admin/css/responsive.css">
+    <link rel="stylesheet" href="../public/assets/admin/css/custom.css">
+    <link rel="stylesheet" href="../public/assets/admin/css/crm/navigation.css">
+    <!-- Mobile bottom tabs (real CRM component: operations-mobile-nav) -->
+    <link rel="stylesheet" href="../public/assets/admin/css/crm/operations-mobile-nav.css">
+    <!-- Icon fonts (real CRM assets) -->
+    <link rel="stylesheet" href="../public/assets/admin/iconfonts/RemixIcons/fonts/remixicon.css">
+    <link rel="stylesheet" href="../public/assets/admin/iconfonts/tabler-icons/iconfont/tabler-icons.min.css">
+    <link rel="stylesheet" href="../public/assets/admin/iconfonts/feather/feather.css">
+
+    <style>
+        /* ==========================================================================
+           OWNER DASHBOARD v2 — design tokens
+           (ships as public/assets/admin/css/crm/dashboards/owner-dashboard.css)
+           ========================================================================== */
+        :root{
+            --ow-bg:#f4f6fa; --ow-card:#ffffff; --ow-border:#e8ecf1;
+            --ow-text:#101828; --ow-muted:#667085; --ow-faint:#98a2b3;
+            --ow-brand:#102e49; --ow-blue:#2f6fed; --ow-blue-soft:#eaf1fe;
+            --ow-green:#178a4c; --ow-green-soft:#e7f6ee;
+            --ow-red:#e5484d;   --ow-red-soft:#fdecec;
+            --ow-amber:#d97706; --ow-amber-soft:#fdf3e3;
+            --ow-violet:#7c3aed; --ow-violet-soft:#f1ebfd;
+            --ow-slate-soft:#f2f4f7;
+            --ow-shadow:0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.06);
+            --ow-shadow-lg:0 10px 28px rgba(16,46,73,.12);
+            --ow-radius:14px;
+        }
+        .main-content{background:var(--ow-bg)!important}
+        .od2{font:13.5px/1.5 "Segoe UI",Arial,sans-serif;color:var(--ow-text);min-width:0}
+        .od2 *{box-sizing:border-box;min-width:0;letter-spacing:0}
+        .od2 :is(h1,h2,h3,h4,p){margin:0}
+        .od2 a{text-decoration:none;color:inherit}
+        .od2 a:focus-visible,.od2 button:focus-visible{outline:2px solid var(--ow-blue);outline-offset:3px;border-radius:6px}
+        .od2 [data-tnum]{font-variant-numeric:tabular-nums}
+
+        .ow-wrap{max-width:1460px;margin:0 auto;padding:8px 6px 56px}
+
+        /* ---------- greeting header ---------- */
+        .ow-head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;margin:8px 2px 22px}
+        .ow-head h1{font-size:23px;font-weight:700;letter-spacing:-.2px;display:flex;align-items:center;gap:10px}
+        .ow-head h1 .ri-vip-crown-line{color:var(--ow-violet);font-size:21px}
+        .ow-head p{color:var(--ow-muted);font-size:12.5px;margin-top:5px}
+        .ow-head-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+        .ow-live{display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:650;color:var(--ow-green);background:var(--ow-green-soft);border:1px solid #c4e5d2;padding:7px 13px;border-radius:99px;white-space:nowrap}
+        .ow-live::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--ow-green);animation:ow-pulse 1.8s infinite}
+        @keyframes ow-pulse{0%,100%{opacity:1}50%{opacity:.3}}
+        .ow-month{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ow-muted)}
+        .ow-month input{height:38px;border:1px solid var(--ow-border);border-radius:10px;background:#fff;color:var(--ow-text);padding:7px 12px;font:inherit;font-size:12.5px}
+        .ow-month button{height:38px;width:38px;flex:0 0 38px;border:1px solid var(--ow-border);border-radius:10px;background:#fff;color:var(--ow-brand);font-size:17px;cursor:pointer;transition:.15s}
+        .ow-month button:hover{background:var(--ow-brand);color:#fff;border-color:var(--ow-brand)}
+
+        /* ---------- grid + cards ---------- */
+        .ow-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px}
+        .ow-card{background:var(--ow-card);border:1px solid var(--ow-border);border-radius:var(--ow-radius);box-shadow:var(--ow-shadow);padding:20px 22px;min-width:0}
+        a.ow-card{transition:transform .16s ease,box-shadow .16s ease}
+        a.ow-card:hover{transform:translateY(-2px);box-shadow:var(--ow-shadow-lg)}
+        .s3{grid-column:span 3}.s4{grid-column:span 4}.s5{grid-column:span 5}
+        .s7{grid-column:span 7}.s8{grid-column:span 8}.s12{grid-column:span 12}
+        .ow-row{margin-top:16px}
+        .ow-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px}
+        .ow-card-head h2{font-size:14.5px;font-weight:650}
+        .ow-card-head p{font-size:12px;color:var(--ow-muted);margin-top:3px}
+        .ow-pill{font-size:11px;font-weight:600;color:var(--ow-muted);background:var(--ow-slate-soft);border-radius:99px;padding:5px 11px;white-space:nowrap}
+
+        /* ---------- KPI cards ---------- */
+        .ow-kpi{display:flex;flex-direction:column;gap:12px}
+        .ow-kpi-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+        .ow-kpi-label{font-size:11px;font-weight:650;text-transform:uppercase;letter-spacing:.6px;color:var(--ow-faint)}
+        .ow-kpi-ico{width:30px;height:30px;flex:0 0 30px;border-radius:9px;display:grid;place-items:center;font-size:16px}
+        .ow-kpi-ico.brand{background:var(--ow-blue-soft);color:var(--ow-blue)}
+        .ow-kpi-ico.green{background:var(--ow-green-soft);color:var(--ow-green)}
+        .ow-kpi-ico.red{background:var(--ow-red-soft);color:var(--ow-red)}
+        .ow-kpi-ico.violet{background:var(--ow-violet-soft);color:var(--ow-violet)}
+        .ow-kpi-mid{display:flex;align-items:flex-end;justify-content:space-between;gap:10px}
+        .ow-kpi-value{font-size:30px;font-weight:700;letter-spacing:-.5px;line-height:1.1}
+        .ow-kpi-value small{font-size:16px;font-weight:650;color:var(--ow-muted)}
+        .ow-spark{flex:0 0 auto}
+        .ow-spark svg{display:block}
+        .ow-delta{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:650;padding:3px 9px;border-radius:99px}
+        .ow-delta.up{color:var(--ow-green);background:var(--ow-green-soft)}
+        .ow-delta.down{color:var(--ow-red);background:var(--ow-red-soft)}
+        .ow-delta.flat{color:var(--ow-muted);background:var(--ow-slate-soft)}
+        .ow-kpi-foot{font-size:11.5px;color:var(--ow-muted)}
+
+        /* ---------- attention cards ---------- */
+        .ow-att{display:flex;flex-direction:column;gap:10px;border-top:3px solid transparent}
+        .ow-att.amber{border-top-color:var(--ow-amber)}
+        .ow-att.red{border-top-color:var(--ow-red)}
+        .ow-att-top{display:flex;align-items:center;gap:12px}
+        .ow-att-ico{width:38px;height:38px;flex:0 0 38px;border-radius:11px;display:grid;place-items:center;font-size:19px}
+        .ow-att.amber .ow-att-ico{background:var(--ow-amber-soft);color:var(--ow-amber)}
+        .ow-att.red .ow-att-ico{background:var(--ow-red-soft);color:var(--ow-red)}
+        .ow-att-num{font-size:24px;font-weight:700;letter-spacing:-.4px;line-height:1.05}
+        .ow-att-amt{font-size:12px;color:var(--ow-muted);font-weight:600}
+        .ow-att h3{font-size:12.5px;font-weight:600}
+        .ow-att-sub{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--ow-muted)}
+        .ow-tag{font-size:10.5px;font-weight:650;padding:2px 8px;border-radius:99px;background:var(--ow-slate-soft);color:var(--ow-muted)}
+        .ow-att.amber .ow-tag.hot{background:var(--ow-amber-soft);color:var(--ow-amber)}
+        .ow-att.red .ow-tag.hot{background:var(--ow-red-soft);color:var(--ow-red)}
+        .ow-att-link{margin-top:auto;display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:650;color:var(--ow-blue)}
+        a.ow-att:hover .ow-att-link{text-decoration:underline}
+
+        /* ---------- charts ---------- */
+        .ow-chart-box{min-height:300px}
+        .ow-donut-wrap{position:relative}
+        .ow-donut-center{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;text-align:center}
+        .ow-donut-center strong{display:block;font-size:24px;font-weight:700;letter-spacing:-.5px}
+        .ow-donut-center span{font-size:11px;color:var(--ow-muted)}
+        .ow-legend{display:flex;flex-direction:column;gap:9px;margin-top:14px}
+        .ow-legend-row{display:flex;align-items:center;gap:9px;font-size:12.5px}
+        .ow-legend-row i{width:10px;height:10px;border-radius:3px;flex:0 0 10px}
+        .ow-legend-row span{color:var(--ow-muted)}
+        .ow-legend-row b{margin-left:auto;font-weight:650}
+
+        /* ---------- funnel ---------- */
+        .ow-funnel{display:flex;flex-direction:column;gap:9px}
+        .ow-funnel-row{display:grid;grid-template-columns:86px 1fr 56px;align-items:center;gap:12px}
+        .ow-funnel-row>span{font-size:12px;color:var(--ow-muted)}
+        .ow-funnel-row>b{font-size:13px;font-weight:700;text-align:right}
+        .ow-funnel-track{height:26px;background:var(--ow-slate-soft);border-radius:8px;overflow:hidden}
+        .ow-funnel-fill{height:100%;border-radius:8px;background:linear-gradient(90deg,var(--ow-blue),#6a97f5);display:flex;align-items:center;justify-content:flex-end;padding-right:10px;color:#fff;font-size:11px;font-weight:700;min-width:44px}
+
+        /* ---------- team attainment ---------- */
+        .ow-team{display:flex;flex-direction:column;gap:4px;margin-top:16px;padding-top:14px;border-top:1px dashed var(--ow-border)}
+        .ow-team-head{font-size:11px;font-weight:650;text-transform:uppercase;letter-spacing:.6px;color:var(--ow-faint);margin-bottom:8px}
+        .ow-team-row{display:grid;grid-template-columns:34px 1fr 44px;align-items:center;gap:11px;padding:6px 0}
+        .ow-avatar{width:32px;height:32px;flex:0 0 32px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;color:#fff}
+        .ow-team-meta{min-width:0}
+        .ow-team-name{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .ow-team-name small{font-weight:500;color:var(--ow-faint);font-size:10.5px;margin-left:6px}
+        .ow-team-track{height:7px;background:var(--ow-slate-soft);border-radius:99px;overflow:hidden;margin-top:5px}
+        .ow-team-fill{height:100%;border-radius:99px}
+        .ow-team-pct{font-size:12.5px;font-weight:700;text-align:right}
+
+        /* ---------- ops & people ---------- */
+        .ow-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+        .ow-stat{background:var(--ow-slate-soft);border-radius:11px;padding:12px 14px}
+        .ow-stat h4{font-size:10.5px;font-weight:650;text-transform:uppercase;letter-spacing:.5px;color:var(--ow-faint)}
+        .ow-stat strong{display:block;font-size:20px;font-weight:700;margin-top:3px;letter-spacing:-.3px}
+        .ow-stat strong small{font-size:11.5px;color:var(--ow-muted);font-weight:600}
+        .ow-stagebar{display:flex;height:14px;border-radius:99px;overflow:hidden;margin-top:8px}
+        .ow-stagebar span{min-width:0}
+        .ow-stages{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:10px}
+        .ow-stages div{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--ow-muted)}
+        .ow-stages i{width:9px;height:9px;border-radius:3px;flex:0 0 9px}
+        .ow-stages b{color:var(--ow-text);font-weight:650}
+        .ow-pills{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:9px}
+        .ow-pill-stat{text-align:center;border-radius:11px;padding:10px 4px}
+        .ow-pill-stat b{display:block;font-size:19px;font-weight:700;letter-spacing:-.3px}
+        .ow-pill-stat span{font-size:10.5px;font-weight:600}
+        .ow-pill-stat.ok{background:var(--ow-green-soft);color:var(--ow-green)}
+        .ow-pill-stat.bad{background:var(--ow-red-soft);color:var(--ow-red)}
+        .ow-pill-stat.lv{background:var(--ow-amber-soft);color:var(--ow-amber)}
+        .ow-kpirow{display:flex;align-items:center;gap:16px;margin-top:16px;padding-top:14px;border-top:1px dashed var(--ow-border)}
+        .ow-ring{width:74px;height:74px;flex:0 0 74px;border-radius:50%;background:conic-gradient(var(--ow-blue) 0 78%,var(--ow-slate-soft) 78% 100%);display:grid;place-items:center}
+        .ow-ring>div{width:56px;height:56px;border-radius:50%;background:#fff;display:grid;place-items:center;font-size:16px;font-weight:700}
+        .ow-ring-meta{flex:1;min-width:0}
+        .ow-ring-meta h4{font-size:12px;font-weight:650}
+        .ow-ring-meta p{font-size:11.5px;color:var(--ow-muted);margin-top:2px}
+        .ow-ring-meta .ow-mini-track{height:6px;background:var(--ow-slate-soft);border-radius:99px;overflow:hidden;margin-top:8px;max-width:220px}
+        .ow-ring-meta .ow-mini-fill{height:100%;background:var(--ow-green);border-radius:99px}
+
+        /* ---------- automation ---------- */
+        .ow-auto{display:flex;flex-direction:column}
+        .ow-auto-row{display:flex;align-items:center;gap:13px;padding:11px 2px;border-bottom:1px dashed var(--ow-border)}
+        .ow-auto-row:last-child{border-bottom:0;padding-bottom:2px}
+        .ow-auto-ico{width:34px;height:34px;flex:0 0 34px;border-radius:10px;background:var(--ow-slate-soft);color:var(--ow-brand);display:grid;place-items:center;font-size:17px}
+        .ow-auto-row strong{font-size:12.5px;font-weight:600}
+        .ow-auto-row p{font-size:11.5px;color:var(--ow-muted);margin-top:1px}
+        .ow-auto-state{margin-left:auto;text-align:right;flex:0 0 auto}
+        .ow-auto-state b{display:block;font-size:13px;font-weight:700}
+        .ow-status{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;letter-spacing:.2px}
+        .ow-status::before{content:"";width:7px;height:7px;border-radius:50%}
+        .ow-status.ok{color:var(--ow-green)}.ow-status.ok::before{background:var(--ow-green);animation:ow-pulse 1.8s infinite}
+        .ow-status.warn{color:var(--ow-amber)}.ow-status.warn::before{background:var(--ow-amber)}
+
+        /* ---------- quick links ---------- */
+        .ow-links{display:flex;flex-direction:column;gap:6px}
+        .ow-link-row{display:flex;align-items:center;gap:13px;padding:10px 12px;border-radius:11px;transition:background .14s}
+        .ow-link-row:hover{background:var(--ow-slate-soft)}
+        .ow-link-ico{width:34px;height:34px;flex:0 0 34px;border-radius:10px;display:grid;place-items:center;font-size:16px}
+        .ow-link-row strong{font-size:12.5px;font-weight:600}
+        .ow-link-row p{font-size:11.5px;color:var(--ow-muted);margin-top:1px}
+        .ow-link-row>i:last-child{margin-left:auto;color:var(--ow-faint);font-size:15px}
+        .ow-link-badge{margin-left:auto;font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:99px;background:var(--ow-red-soft);color:var(--ow-red)}
+        .ow-link-row .chev{margin-left:auto}
+
+        /* ---------- sales scope switcher ---------- */
+        .ow-seg{display:inline-flex;background:var(--ow-slate-soft);border-radius:10px;padding:3px;gap:2px}
+        .ow-seg-btn{border:0;background:transparent;padding:6px 14px;font:inherit;font-size:12px;font-weight:600;color:var(--ow-muted);border-radius:8px;cursor:pointer;transition:.15s;white-space:nowrap}
+        .ow-seg-btn:hover{color:var(--ow-text)}
+        .ow-seg-btn.active{background:#fff;color:var(--ow-text);box-shadow:0 1px 3px rgba(16,24,40,.14)}
+        .ow-person-select{height:33px;border:1px solid var(--ow-border);border-radius:9px;background:#fff;color:var(--ow-text);font:inherit;font-size:12px;padding:4px 9px;max-width:200px}
+
+        /* ---------- dark mode ---------- */
+        .dark{--ow-bg:#12161d;--ow-card:#1b212b;--ow-border:#2a3342;--ow-text:#e8eaee;--ow-muted:#9aa5b4;--ow-faint:#7b8698;--ow-slate-soft:#232b37;--ow-shadow:none;--ow-shadow-lg:0 10px 28px rgba(0,0,0,.4)}
+        .dark .ow-month input,.dark .ow-month button{background:var(--ow-card);color:var(--ow-text);border-color:var(--ow-border)}
+        .dark .ow-month button:hover{background:var(--ow-blue);border-color:var(--ow-blue);color:#fff}
+        .dark .ow-ring>div{background:var(--ow-card)}
+
+        /* ---------- responsive ---------- */
+        @media(max-width:1200px){
+            .s3,.s4{grid-column:span 6}
+            .s5,.s7,.s8{grid-column:span 12}
+        }
+        @media(max-width:680px){
+            .ow-wrap{padding:6px 2px 90px}
+            .s3,.s4{grid-column:span 12}
+            .ow-card{padding:16px 16px}
+            .ow-head h1{font-size:20px}
+            .ow-kpi-value{font-size:26px}
+        }
+
+        /* preview-only */
+        .preview-note{position:sticky;top:0;z-index:1000;background:linear-gradient(90deg,#102e49,#1c4a75);color:#fff;font:12px "Segoe UI",sans-serif;padding:8px 16px;display:flex;gap:14px;align-items:center}
+        .preview-note b{color:#ffd166}
+    </style>
+</head>
+
+<body class="crm-operations-mobile-page">
+    <div class="preview-note"><span><b>DESIGN PREVIEW v2</b> — Owner Dashboard (static mockup, sample data, charts are interactive)</span><span style="margin-left:auto;opacity:.75">docs/owner-dashboard-preview.html</span></div>
+
+    <!-- Start::app-sidebar -->
+    <aside class="app-sidebar" id="sidebar" style="top:33px">
+        <div class="main-sidebar-header">
+            <a href="javascript:void(0)" class="header-logo">
+                <img src="../public/assets/admin/images/logo.png" alt="logo" class="desktop-logo">
+                <img src="../public/assets/admin/images/logo.png" alt="logo" class="toggle-logo">
+                <span class="crm-sidebar-brand">Accretion Aviation</span>
+            </a>
+        </div>
+        <div class="main-sidebar" id="sidebar-scroll">
+            <nav class="main-menu-container nav nav-pills flex-column sub-open">
+                <ul class="main-menu">
+                    <!-- ================= OWNER MENU (proposed) ================= -->
+                    <li class="slide__category"><span class="category-name">Main</span></li>
+                    <li class="slide active">
+                        <a href="./owner-dashboard" class="side-menu__item active">
+                            <i class="ri-vip-crown-line side-menu__icon"></i>
+                            <span class="side-menu__label">Owner Dashboard</span>
+                        </a>
+                    </li>
+
+                    <li class="slide__category"><span class="category-name">Business Overview</span></li>
+                    <li class="slide"><a href="javascript:void(0);" class="side-menu__item"><i class="ri-line-chart-line side-menu__icon"></i><span class="side-menu__label">Sales Dashboard</span></a></li>
+                    <li class="slide"><a href="javascript:void(0);" class="side-menu__item"><i class="ri-truck-line side-menu__icon"></i><span class="side-menu__label">Operations Dashboard</span></a></li>
+                    <li class="slide"><a href="javascript:void(0);" class="side-menu__item"><i class="ri-bank-card-line side-menu__icon"></i><span class="side-menu__label">Accounts Dashboard</span></a></li>
+                    <li class="slide"><a href="./kpi" class="side-menu__item"><i class="ri-bar-chart-grouped-line side-menu__icon"></i><span class="side-menu__label">KPI Dashboard</span></a></li>
+                    <li class="slide"><a href="javascript:void(0);" class="side-menu__item"><i class="ri-home-heart-line side-menu__icon"></i><span class="side-menu__label">HR Dashboard</span></a></li>
+
+                    <li class="slide__category"><span class="category-name">Sales</span></li>
+                    <li class="slide"><a href="./leads" class="side-menu__item"><i class="ri-user-search-line side-menu__icon"></i><span class="side-menu__label">Leads</span></a></li>
+                    <li class="slide"><a href="javascript:void(0);" class="side-menu__item"><i class="ri-phone-missed-line side-menu__icon"></i><span class="side-menu__label">DNP Leads</span></a></li>
+                    <li class="slide"><a href="javascript:void(0);" class="side-menu__item"><i class="ri-calendar-event-line side-menu__icon"></i><span class="side-menu__label">Upcoming Follow-ups</span></a></li>
+
+                    <li class="slide__category"><span class="category-name">Operations</span></li>
+                    <li class="slide"><a href="javascript:void(0);" class="side-menu__item"><i class="ri-plane-line side-menu__icon"></i><span class="side-menu__label">Upcoming Rides</span></a></li>
+                    <li class="slide"><a href="javascript:void(0);" class="side-menu__item"><i class="ri-list-check-2 side-menu__icon"></i><span class="side-menu__label">Ride Status</span></a></li>
+                    <li class="slide"><a href="javascript:void(0);" class="side-menu__item"><i class="ri-calendar-2-line side-menu__icon"></i><span class="side-menu__label">Reschedules</span></a></li>
+                    <li class="slide"><a href="javascript:void(0);" class="side-menu__item"><i class="ri-store-2-line side-menu__icon"></i><span class="side-menu__label">Vendor Follow-ups</span></a></li>
+
+                    <li class="slide__category"><span class="category-name">Accounts</span></li>
+                    <li class="slide"><a href="javascript:void(0);" class="side-menu__item"><i class="ri-wallet-3-line side-menu__icon"></i><span class="side-menu__label">Payment Review</span><span class="badge bg-danger/10 text-danger ms-auto">12</span></a></li>
+                    <li class="slide has-sub">
+                        <a href="javascript:void(0);" class="side-menu__item"><i class="ri-refund-2-line side-menu__icon"></i><span class="side-menu__label">Refunds</span><i class="fe fe-chevron-right side-menu__angle"></i></a>
+                        <ul class="slide-menu child1">
+                            <li class="slide"><a href="javascript:void(0);" class="side-menu__item">Customer Refund <span class="badge bg-danger/10 text-danger ms-auto">4</span></a></li>
+                            <li class="slide"><a href="javascript:void(0);" class="side-menu__item">Vendor Refund <span class="badge bg-danger/10 text-danger ms-auto">3</span></a></li>
+                        </ul>
+                    </li>
+                    <li class="slide"><a href="javascript:void(0);" class="side-menu__item"><i class="ri-receipt-line side-menu__icon"></i><span class="side-menu__label">Invoices</span><span class="badge bg-danger/10 text-danger ms-auto">7</span></a></li>
+                    <li class="slide"><a href="javascript:void(0);" class="side-menu__item"><i class="ri-bank-line side-menu__icon"></i><span class="side-menu__label">Vendor Payments</span></a></li>
+                    <li class="slide"><a href="javascript:void(0);" class="side-menu__item"><i class="ri-error-warning-line side-menu__icon"></i><span class="side-menu__label">Exceptional</span></a></li>
+
+                    <li class="slide__category"><span class="category-name">Insights</span></li>
+                    <li class="slide"><a href="javascript:void(0);" class="side-menu__item"><i class="ri-file-chart-line side-menu__icon"></i><span class="side-menu__label">Sales Report</span></a></li>
+                    <li class="slide"><a href="javascript:void(0);" class="side-menu__item"><i class="ri-bar-chart-2-line side-menu__icon"></i><span class="side-menu__label">KPI Report</span></a></li>
+                    <li class="slide"><a href="javascript:void(0);" class="side-menu__item"><i class="ri-file-list-3-line side-menu__icon"></i><span class="side-menu__label">Vendor Report</span></a></li>
+                    <li class="slide"><a href="javascript:void(0);" class="side-menu__item"><i class="ri-funds-line side-menu__icon"></i><span class="side-menu__label">Profit / Loss</span></a></li>
+                    <li class="slide"><a href="javascript:void(0);" class="side-menu__item"><i class="ri-award-line side-menu__icon"></i><span class="side-menu__label">Incentive Report</span></a></li>
+
+                    <li class="slide__category"><span class="category-name">People</span></li>
+                    <li class="slide"><a href="javascript:void(0);" class="side-menu__item"><i class="ri-team-line side-menu__icon"></i><span class="side-menu__label">Staff</span></a></li>
+                    <li class="slide"><a href="javascript:void(0);" class="side-menu__item"><i class="ri-calendar-check-line side-menu__icon"></i><span class="side-menu__label">Attendance</span></a></li>
+
+                    <li class="slide__category"><span class="category-name">More</span></li>
+                    <li class="slide"><a href="javascript:void(0);" class="side-menu__item"><i class="ri-building-4-line side-menu__icon"></i><span class="side-menu__label">Vendors</span></a></li>
+                    <li class="slide"><a href="javascript:void(0);" class="side-menu__item"><i class="ri-coupon-3-line side-menu__icon"></i><span class="side-menu__label">Vouchers</span></a></li>
+                    <li class="slide"><a href="javascript:void(0);" class="side-menu__item"><i class="ri-whatsapp-line side-menu__icon"></i><span class="side-menu__label">WhatsApp Inbox</span></a></li>
+                    <li class="slide"><a href="javascript:void(0);" class="side-menu__item"><i class="ri-chat-3-line side-menu__icon"></i><span class="side-menu__label">Lead Chat</span></a></li>
+                </ul>
+            </nav>
+        </div>
+    </aside>
+
+    <!-- Start::Header -->
+    <header class="app-header" style="top:33px">
+        <div class="main-header-container container-fluid">
+            <div class="header-content-left">
+                <div class="header-element">
+                    <a href="javascript:void(0);" class="sidebar-toggle sidebar-toggle-btn sidemenu-toggle"><i class="ri-menu-2-line header-link-icon"></i></a>
+                </div>
+            </div>
+            <div class="header-content-right" style="display:flex;align-items:center;gap:14px">
+                <div class="header-element">
+                    <a href="javascript:void(0);" class="header-link">
+                        <i class="ri-notification-3-line header-link-icon"></i>
+                        <span class="badge bg-danger rounded-full header-icon-badge">6</span>
+                    </a>
+                </div>
+                <div class="header-element">
+                    <a href="javascript:void(0);" class="header-link d-flex align-items-center gap-2">
+                        <span class="avatar avatar-xs avatar-rounded bg-primary/10 text-primary font-semibold">OW</span>
+                        <span class="hidden sm:block">
+                            <span class="block font-semibold text-[13px]">Owner User</span>
+                            <span class="opacity-[0.7] font-normal text-[#536485] block text-[0.6875rem]">Owner</span>
+                        </span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Start::main-content -->
+    <div class="main-content" style="padding-top:33px">
+        <div class="od2">
+            <div class="ow-wrap">
+
+                <!-- ============ GREETING ============ -->
+                <header class="ow-head">
+                    <div>
+                        <h1><i class="ri-vip-crown-line" aria-hidden="true"></i> <span id="ow-greeting">Good afternoon</span>, Owner</h1>
+                        <p>Here's how Accretion Aviation is doing &middot; Friday, 25 October 2025</p>
+                    </div>
+                    <div class="ow-head-controls">
+                        <span class="ow-live">Live &middot; all systems healthy</span>
+                        <label class="ow-month">
+                            <span>Month</span>
+                            <input type="month" value="2025-10" min="2000-01" max="2099-12">
+                            <button type="button" title="Apply month"><i class="ri-check-line" aria-hidden="true"></i></button>
+                        </label>
+                    </div>
+                </header>
+
+                <!-- ============ KPI ROW ============ -->
+                <section class="ow-grid" aria-label="Business health">
+                    <div class="ow-card ow-kpi s3">
+                        <div class="ow-kpi-top">
+                            <span class="ow-kpi-label">Net Inflow</span>
+                            <span class="ow-kpi-ico green"><i class="ri-funds-line" aria-hidden="true"></i></span>
+                        </div>
+                        <div class="ow-kpi-mid">
+                            <span class="ow-kpi-value" data-tnum>&#8377;48.2<small>L</small></span>
+                            <span class="ow-spark" aria-hidden="true">
+                                <svg width="96" height="36" viewBox="0 0 96 36" fill="none">
+                                    <path d="M1 30 L13 27 L25 28 L37 22 L49 24 L61 17 L73 14 L85 15 L95 8 V36 H1 Z" fill="#178a4c" opacity=".1"/>
+                                    <path d="M1 30 L13 27 L25 28 L37 22 L49 24 L61 17 L73 14 L85 15 L95 8" stroke="#178a4c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </span>
+                        </div>
+                        <div><span class="ow-delta up"><i class="ri-arrow-up-line"></i>12.4%</span> <span class="ow-kpi-foot">vs Sep &middot; after vendors &amp; refunds</span></div>
+                    </div>
+
+                    <div class="ow-card ow-kpi s3">
+                        <div class="ow-kpi-top">
+                            <span class="ow-kpi-label">Collected</span>
+                            <span class="ow-kpi-ico brand"><i class="ri-bank-card-line" aria-hidden="true"></i></span>
+                        </div>
+                        <div class="ow-kpi-mid">
+                            <span class="ow-kpi-value" data-tnum>&#8377;61.0<small>L</small></span>
+                            <span class="ow-spark" aria-hidden="true">
+                                <svg width="96" height="36" viewBox="0 0 96 36" fill="none">
+                                    <path d="M1 28 L13 25 L25 26 L37 20 L49 22 L61 19 L73 12 L85 13 L95 6 V36 H1 Z" fill="#2f6fed" opacity=".1"/>
+                                    <path d="M1 28 L13 25 L25 26 L37 20 L49 22 L61 19 L73 12 L85 13 L95 6" stroke="#2f6fed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </span>
+                        </div>
+                        <div><span class="ow-delta up"><i class="ri-arrow-up-line"></i>8.1%</span> <span class="ow-kpi-foot">vs Sep &middot; approved payments</span></div>
+                    </div>
+
+                    <div class="ow-card ow-kpi s3">
+                        <div class="ow-kpi-top">
+                            <span class="ow-kpi-label">Paid Out</span>
+                            <span class="ow-kpi-ico red"><i class="ri-money-rupee-circle-line" aria-hidden="true"></i></span>
+                        </div>
+                        <div class="ow-kpi-mid">
+                            <span class="ow-kpi-value" data-tnum>&#8377;14.6<small>L</small></span>
+                            <span class="ow-spark" aria-hidden="true">
+                                <svg width="96" height="36" viewBox="0 0 96 36" fill="none">
+                                    <path d="M1 18 L13 20 L25 17 L37 21 L49 16 L61 19 L73 15 L85 18 L95 14 V36 H1 Z" fill="#e5484d" opacity=".08"/>
+                                    <path d="M1 18 L13 20 L25 17 L37 21 L49 16 L61 19 L73 15 L85 18 L95 14" stroke="#e5484d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </span>
+                        </div>
+                        <div><span class="ow-delta flat"><i class="ri-subtract-line"></i>3.2%</span> <span class="ow-kpi-foot">vs Sep &middot; vendors &#8377;12.8L + refunds &#8377;1.8L</span></div>
+                    </div>
+
+                    <div class="ow-card ow-kpi s3">
+                        <div class="ow-kpi-top">
+                            <span class="ow-kpi-label">Active Bookings</span>
+                            <span class="ow-kpi-ico violet"><i class="ri-plane-line" aria-hidden="true"></i></span>
+                        </div>
+                        <div class="ow-kpi-mid">
+                            <span class="ow-kpi-value" data-tnum>214</span>
+                            <span class="ow-spark" aria-hidden="true">
+                                <svg width="96" height="36" viewBox="0 0 96 36" fill="none">
+                                    <path d="M1 32 L13 30 L25 27 L37 25 L49 21 L61 18 L73 13 L85 9 L95 4 V36 H1 Z" fill="#7c3aed" opacity=".1"/>
+                                    <path d="M1 32 L13 30 L25 27 L37 25 L49 21 L61 18 L73 13 L85 9 L95 4" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </span>
+                        </div>
+                        <div><span class="ow-delta up"><i class="ri-arrow-up-line"></i>31</span> <span class="ow-kpi-foot">new this month &middot; 9 riding today</span></div>
+                    </div>
+                </section>
+
+                <!-- ============ NEEDS ATTENTION ============ -->
+                <h2 style="font-size:13px;font-weight:700;margin:24px 2px 12px;display:flex;align-items:center;gap:10px">
+                    Needs your attention
+                    <span style="font-size:11px;font-weight:650;color:var(--ow-amber);background:var(--ow-amber-soft);border-radius:99px;padding:3px 10px">4 open items</span>
+                </h2>
+                <section class="ow-grid" aria-label="Needs attention">
+                    <a class="ow-card ow-att amber s3" href="javascript:void(0)">
+                        <div class="ow-att-top">
+                            <span class="ow-att-ico"><i class="ri-wallet-3-line" aria-hidden="true"></i></span>
+                            <div><div class="ow-att-num" data-tnum>12</div><div class="ow-att-amt">&#8377;4.1L waiting</div></div>
+                        </div>
+                        <h3>Payments pending approval</h3>
+                        <div class="ow-att-sub"><span class="ow-tag hot">oldest 2 days</span><span>submitted by sales</span></div>
+                        <span class="ow-att-link">Review payments <i class="ri-arrow-right-line" aria-hidden="true"></i></span>
+                    </a>
+                    <a class="ow-card ow-att red s3" href="javascript:void(0)">
+                        <div class="ow-att-top">
+                            <span class="ow-att-ico"><i class="ri-alert-line" aria-hidden="true"></i></span>
+                            <div><div class="ow-att-num" data-tnum>6</div><div class="ow-att-amt">&#8377;2.2L overdue</div></div>
+                        </div>
+                        <h3>Vendor payments overdue</h3>
+                        <div class="ow-att-sub"><span class="ow-tag hot">past service date</span><span>4 vendors affected</span></div>
+                        <span class="ow-att-link">Vendor payments <i class="ri-arrow-right-line" aria-hidden="true"></i></span>
+                    </a>
+                    <a class="ow-card ow-att amber s3" href="javascript:void(0)">
+                        <div class="ow-att-top">
+                            <span class="ow-att-ico"><i class="ri-refund-2-line" aria-hidden="true"></i></span>
+                            <div><div class="ow-att-num" data-tnum>4</div><div class="ow-att-amt">&#8377;1.8L pending</div></div>
+                        </div>
+                        <h3>Customer refunds pending</h3>
+                        <div class="ow-att-sub"><span class="ow-tag hot">oldest 5 days</span><span>awaiting accounts action</span></div>
+                        <span class="ow-att-link">Review refunds <i class="ri-arrow-right-line" aria-hidden="true"></i></span>
+                    </a>
+                    <a class="ow-card ow-att amber s3" href="javascript:void(0)">
+                        <div class="ow-att-top">
+                            <span class="ow-att-ico"><i class="ri-bank-line" aria-hidden="true"></i></span>
+                            <div><div class="ow-att-num" data-tnum>3</div><div class="ow-att-amt">&#8377;90K due</div></div>
+                        </div>
+                        <h3>Vendor refunds due</h3>
+                        <div class="ow-att-sub"><span class="ow-tag">proof uploaded</span><span>ready to complete</span></div>
+                        <span class="ow-att-link">Vendor refunds <i class="ri-arrow-right-line" aria-hidden="true"></i></span>
+                    </a>
+                </section>
+
+                <!-- ============ REVENUE + SOURCES ============ -->
+                <section class="ow-grid ow-row" aria-label="Revenue and lead sources">
+                    <div class="ow-card s8">
+                        <div class="ow-card-head">
+                            <div><h2>Sales</h2><p>Booking value closed &middot; last 14 days</p></div>
+                            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                                <select id="ow-person-select" class="ow-person-select" style="display:none" aria-label="Choose salesperson">
+                                    <optgroup label="Ramesh Iyer's team">
+                                        <option value="ankit" selected>Ankit Sharma</option>
+                                        <option value="divya">Divya Rao</option>
+                                    </optgroup>
+                                    <optgroup label="Priya Nair's team">
+                                        <option value="vikram">Vikram Joshi</option>
+                                        <option value="neha">Neha Gupta</option>
+                                    </optgroup>
+                                </select>
+                                <div class="ow-seg" role="group" aria-label="Sales scope">
+                                    <button type="button" class="ow-seg-btn active" data-scope="company" aria-pressed="true">Company</button>
+                                    <button type="button" class="ow-seg-btn" data-scope="managers" aria-pressed="false">Managers</button>
+                                    <button type="button" class="ow-seg-btn" data-scope="people" aria-pressed="false">People</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="display:flex;align-items:baseline;gap:9px;margin:-4px 0 8px">
+                            <strong id="ow-sales-total" style="font-size:21px;font-weight:700;letter-spacing:-.3px" data-tnum>&#8377;38.2L</strong>
+                            <span id="ow-sales-total-sub" style="font-size:11.5px;color:var(--ow-muted)">total sales this fortnight &middot; all teams</span>
+                        </div>
+                        <div id="ow-sales-chart" class="ow-chart-box" aria-label="Daily sales chart"></div>
+                    </div>
+                    <div class="ow-card s4">
+                        <div class="ow-card-head">
+                            <div><h2>Lead sources</h2><p>Where enquiries come from</p></div>
+                            <span class="ow-pill">Oct 2025</span>
+                        </div>
+                        <div class="ow-donut-wrap">
+                            <div id="ow-source-chart" aria-label="Lead source donut chart"></div>
+                            <div class="ow-donut-center"><div><strong data-tnum>1,204</strong><span>leads this month</span></div></div>
+                        </div>
+                        <div class="ow-legend">
+                            <div class="ow-legend-row"><i style="background:#d97706"></i>Email <span>&middot; 12%</span><b data-tnum>144</b></div>
+                            <div class="ow-legend-row"><i style="background:#178a4c"></i>IVR calls <span>&middot; 15%</span><b data-tnum>181</b></div>
+                            <div class="ow-legend-row"><i style="background:#2f6fed"></i>Manual / Other <span>&middot; 73%</span><b data-tnum>879</b></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ============ SALES + OPS ============ -->
+                <section class="ow-grid ow-row" aria-label="Sales and operations">
+                    <div class="ow-card s7">
+                        <div class="ow-card-head">
+                            <div><h2>Sales pipeline</h2><p>October 2025 &middot; 1,204 leads</p></div>
+                            <span class="ow-pill">18% conversion</span>
+                        </div>
+                        <div class="ow-funnel">
+                            <div class="ow-funnel-row"><span>New leads</span><div class="ow-funnel-track"><div class="ow-funnel-fill" style="width:100%">100%</div></div><b data-tnum>1,204</b></div>
+                            <div class="ow-funnel-row"><span>Active</span><div class="ow-funnel-track"><div class="ow-funnel-fill" style="width:34.2%">34%</div></div><b data-tnum>412</b></div>
+                            <div class="ow-funnel-row"><span>Confirmed</span><div class="ow-funnel-track"><div class="ow-funnel-fill" style="width:17.8%">18%</div></div><b data-tnum>214</b></div>
+                            <div class="ow-funnel-row"><span>Paid in full</span><div class="ow-funnel-track"><div class="ow-funnel-fill" style="width:15.5%">16%</div></div><b data-tnum>187</b></div>
+                        </div>
+                        <div class="ow-team">
+                            <div class="ow-team-head">Manager target attainment</div>
+                            <div class="ow-team-row">
+                                <span class="ow-avatar" style="background:#2f6fed">RI</span>
+                                <div class="ow-team-meta"><div class="ow-team-name">Ramesh Iyer<small>Sr. Sales Manager</small></div><div class="ow-team-track"><span class="ow-team-fill" style="width:92%;background:#178a4c"></span></div></div>
+                                <span class="ow-team-pct" data-tnum>92%</span>
+                            </div>
+                            <div class="ow-team-row">
+                                <span class="ow-avatar" style="background:#7c3aed">PN</span>
+                                <div class="ow-team-meta"><div class="ow-team-name">Priya Nair<small>Sales Manager</small></div><div class="ow-team-track"><span class="ow-team-fill" style="width:71%;background:#2f6fed"></span></div></div>
+                                <span class="ow-team-pct" data-tnum>71%</span>
+                            </div>
+                            <div class="ow-team-row">
+                                <span class="ow-avatar" style="background:#102e49">AM</span>
+                                <div class="ow-team-meta"><div class="ow-team-name">Arjun Mehta<small>Sales Manager</small></div><div class="ow-team-track"><span class="ow-team-fill" style="width:64%;background:#2f6fed"></span></div></div>
+                                <span class="ow-team-pct" data-tnum>64%</span>
+                            </div>
+                            <div class="ow-team-row">
+                                <span class="ow-avatar" style="background:#d97706">SK</span>
+                                <div class="ow-team-meta"><div class="ow-team-name">Sana Kapoor<small>Sales Manager</small></div><div class="ow-team-track"><span class="ow-team-fill" style="width:38%;background:#e5484d"></span></div></div>
+                                <span class="ow-team-pct" data-tnum>38%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="ow-card s5">
+                        <div class="ow-card-head">
+                            <div><h2>Operations &amp; people</h2><p>Today &middot; Friday, 25 Oct</p></div>
+                            <span class="ow-pill">26 staff</span>
+                        </div>
+                        <div class="ow-stats">
+                            <div class="ow-stat"><h4>Rides today</h4><strong data-tnum>9</strong></div>
+                            <div class="ow-stat"><h4>Rides next 48h</h4><strong data-tnum>34</strong></div>
+                            <div class="ow-stat"><h4>Vendor follow-ups</h4><strong data-tnum>6 <small>open</small></strong></div>
+                            <div class="ow-stat"><h4>Reschedules due</h4><strong data-tnum>5 <small>48h</small></strong></div>
+                        </div>
+                        <div style="margin-top:16px">
+                            <h4 style="font-size:11px;font-weight:650;text-transform:uppercase;letter-spacing:.5px;color:var(--ow-faint)">Cases by stage</h4>
+                            <div class="ow-stagebar" role="img" aria-label="21 open cases: 4 review, 2 image collection, 6 vendor follow-up, 9 awaiting customer">
+                                <span style="width:19%;background:#2f6fed"></span>
+                                <span style="width:10%;background:#d97706"></span>
+                                <span style="width:28%;background:#178a4c"></span>
+                                <span style="width:43%;background:#98a2b3"></span>
+                            </div>
+                            <div class="ow-stages">
+                                <div><i style="background:#2f6fed"></i>Review <b>4</b></div>
+                                <div><i style="background:#d97706"></i>Image coll. <b>2</b></div>
+                                <div><i style="background:#178a4c"></i>Vendor FUP <b>6</b></div>
+                                <div><i style="background:#98a2b3"></i>Awaiting cust. <b>9</b></div>
+                            </div>
+                        </div>
+                        <h4 style="font-size:11px;font-weight:650;text-transform:uppercase;letter-spacing:.5px;color:var(--ow-faint);margin-top:16px">Attendance today</h4>
+                        <div class="ow-pills">
+                            <div class="ow-pill-stat ok"><b data-tnum>23</b><span>Present</span></div>
+                            <div class="ow-pill-stat bad"><b data-tnum>2</b><span>Absent</span></div>
+                            <div class="ow-pill-stat lv"><b data-tnum>1</b><span>Leave</span></div>
+                        </div>
+                        <div class="ow-kpirow">
+                            <div class="ow-ring" role="img" aria-label="Average KPI score 78 out of 100"><div data-tnum>78</div></div>
+                            <div class="ow-ring-meta">
+                                <h4>Average team KPI score</h4>
+                                <p>Morning daily updates submitted by 9 of 11 sales teams</p>
+                                <div class="ow-mini-track"><span class="ow-mini-fill" style="width:82%"></span></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ============ AUTOMATION + QUICK LINKS ============ -->
+                <section class="ow-grid ow-row" aria-label="Automation health and quick links">
+                    <div class="ow-card s7">
+                        <div class="ow-card-head">
+                            <div><h2>Automation health</h2><p>The machines working in the background</p></div>
+                            <span class="ow-pill"><span style="color:var(--ow-green)">&#9679;</span> all systems operational</span>
+                        </div>
+                        <div class="ow-auto">
+                            <div class="ow-auto-row">
+                                <span class="ow-auto-ico"><i class="ri-whatsapp-line" aria-hidden="true"></i></span>
+                                <div><strong>WhatsApp AI agents</strong><p>Auto-replying to customer enquiries</p></div>
+                                <div class="ow-auto-state"><b data-tnum>14 active</b><span class="ow-status ok">Running</span></div>
+                            </div>
+                            <div class="ow-auto-row">
+                                <span class="ow-auto-ico"><i class="ri-mic-line" aria-hidden="true"></i></span>
+                                <div><strong>Call summaries</strong><p>IVR calls transcribed into CRM</p></div>
+                                <div class="ow-auto-state"><b data-tnum>3 queued</b><span class="ow-status ok">Processing</span></div>
+                            </div>
+                            <div class="ow-auto-row">
+                                <span class="ow-auto-ico"><i class="ri-mail-unread-line" aria-hidden="true"></i></span>
+                                <div><strong>Email lead fetch</strong><p>Mailbox checked every 5 minutes</p></div>
+                                <div class="ow-auto-state"><b data-tnum>2 today</b><span class="ow-status ok">Running</span></div>
+                            </div>
+                            <div class="ow-auto-row">
+                                <span class="ow-auto-ico"><i class="ri-lead-pencil-line" aria-hidden="true"></i></span>
+                                <div><strong>Lead AI scoring</strong><p>Priority scoring of new leads</p></div>
+                                <div class="ow-auto-state"><b data-tnum>5 pending</b><span class="ow-status warn">Catching up</span></div>
+                            </div>
+                            <div class="ow-auto-row">
+                                <span class="ow-auto-ico"><i class="ri-database-2-line" aria-hidden="true"></i></span>
+                                <div><strong>Failed jobs / scheduler</strong><p>Queue &amp; cron monitor</p></div>
+                                <div class="ow-auto-state"><b data-tnum>0 failed</b><span class="ow-status ok">Healthy</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="ow-card s5">
+                        <div class="ow-card-head">
+                            <div><h2>Jump back in</h2><p>Places you'll want to check</p></div>
+                        </div>
+                        <div class="ow-links">
+                            <a class="ow-link-row" href="javascript:void(0)">
+                                <span class="ow-link-ico" style="background:var(--ow-blue-soft);color:var(--ow-blue)"><i class="ri-wallet-3-line" aria-hidden="true"></i></span>
+                                <div><strong>Payment Review</strong><p>12 payments waiting for accounts</p></div>
+                                <span class="ow-link-badge">12</span>
+                            </a>
+                            <a class="ow-link-row" href="javascript:void(0)">
+                                <span class="ow-link-ico" style="background:var(--ow-red-soft);color:var(--ow-red)"><i class="ri-refund-2-line" aria-hidden="true"></i></span>
+                                <div><strong>Customer Refunds</strong><p>4 refunds pending action</p></div>
+                                <span class="ow-link-badge">4</span>
+                            </a>
+                            <a class="ow-link-row" href="javascript:void(0)">
+                                <span class="ow-link-ico" style="background:var(--ow-green-soft);color:var(--ow-green)"><i class="ri-funds-line" aria-hidden="true"></i></span>
+                                <div><strong>Profit / Loss</strong><p>October P&amp;L report</p></div>
+                                <i class="ri-arrow-right-s-line chev" aria-hidden="true"></i>
+                            </a>
+                            <a class="ow-link-row" href="javascript:void(0)">
+                                <span class="ow-link-ico" style="background:var(--ow-violet-soft);color:var(--ow-violet)"><i class="ri-file-chart-line" aria-hidden="true"></i></span>
+                                <div><strong>Sales Report</strong><p>Team-wise numbers for October</p></div>
+                                <i class="ri-arrow-right-s-line chev" aria-hidden="true"></i>
+                            </a>
+                            <a class="ow-link-row" href="javascript:void(0)">
+                                <span class="ow-link-ico" style="background:var(--ow-amber-soft);color:var(--ow-amber)"><i class="ri-bar-chart-2-line" aria-hidden="true"></i></span>
+                                <div><strong>KPI Report</strong><p>Individual performance scores</p></div>
+                                <i class="ri-arrow-right-s-line chev" aria-hidden="true"></i>
+                            </a>
+                            <a class="ow-link-row" href="javascript:void(0)">
+                                <span class="ow-link-ico" style="background:var(--ow-slate-soft);color:var(--ow-brand)"><i class="ri-error-warning-line" aria-hidden="true"></i></span>
+                                <div><strong>Exceptional Dashboard</strong><p>Customer overpayments &amp; adjustments</p></div>
+                                <i class="ri-arrow-right-s-line chev" aria-hidden="true"></i>
+                            </a>
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Real CRM chart library -->
+    <script src="../public/assets/admin/libs/apexcharts/apexcharts.min.js"></script>
+    <script>
+        // ---------- preview-only interactivity ----------
+        (function () {
+            // greeting by time of day
+            var h = new Date().getHours();
+            var g = h < 12 ? 'Good morning' : (h < 17 ? 'Good afternoon' : 'Good evening');
+            var el = document.getElementById('ow-greeting');
+            if (el) el.textContent = g;
+
+            // sidebar submenu toggle
+            document.querySelectorAll('.side-menu__item').forEach(function (item) {
+                item.addEventListener('click', function () {
+                    var li = item.closest('li.slide');
+                    if (!li || !li.classList.contains('has-sub')) return;
+                    li.classList.toggle('open');
+                    var menu = li.querySelector('.slide-menu');
+                    if (menu) menu.style.display = li.classList.contains('open') ? 'block' : 'none';
+                });
+            });
+            document.querySelectorAll('li.slide.has-sub .slide-menu').forEach(function (m) { m.style.display = 'none'; });
+
+            if (!window.ApexCharts) {
+                document.getElementById('ow-sales-chart').innerHTML = '<p style="color:#98a2b3;font-size:12px">Chart library not found on disk.</p>';
+                return;
+            }
+
+            // ---------- sales chart (company / managers / people) ----------
+            var salesDays = ['12 Oct', '13 Oct', '14 Oct', '15 Oct', '16 Oct', '17 Oct', '18 Oct', '19 Oct', '20 Oct', '21 Oct', '22 Oct', '23 Oct', '24 Oct', '25 Oct'];
+            var salesSeries = {
+                company: [{ name: 'Company sales', data: [180000, 220000, 160000, 240000, 300000, 140000, 190000, 350000, 280000, 410000, 260000, 390000, 330000, 370000] }],
+                managers: [
+                    { name: 'Ramesh Iyer', data: [55000, 70000, 50000, 75000, 90000, 42000, 58000, 105000, 84000, 125000, 79000, 118000, 100000, 112000] },
+                    { name: 'Priya Nair', data: [45000, 55000, 42000, 60000, 75000, 35000, 47000, 85000, 68000, 100000, 64000, 95000, 81000, 90000] },
+                    { name: 'Arjun Mehta', data: [42000, 50000, 38000, 58000, 70000, 33000, 44000, 80000, 64000, 95000, 60000, 89000, 76000, 85000] },
+                    { name: 'Sana Kapoor', data: [38000, 45000, 26000, 47000, 65000, 30000, 40000, 80000, 66000, 90000, 58000, 88000, 73000, 83000] }
+                ],
+                people: {
+                    ankit: { name: 'Ankit Sharma', sub: "Ramesh Iyer's team", data: [22000, 28000, 20000, 30000, 36000, 17000, 23000, 42000, 34000, 50000, 32000, 47000, 40000, 45000] },
+                    divya: { name: 'Divya Rao', sub: "Ramesh Iyer's team", data: [18000, 22000, 16000, 24000, 28000, 14000, 18000, 34000, 27000, 40000, 25000, 38000, 32000, 36000] },
+                    vikram: { name: 'Vikram Joshi', sub: "Priya Nair's team", data: [15000, 19000, 14000, 20000, 26000, 12000, 16000, 30000, 24000, 36000, 22000, 34000, 29000, 32000] },
+                    neha: { name: 'Neha Gupta', sub: "Priya Nair's team", data: [12000, 15000, 11000, 17000, 21000, 10000, 13000, 25000, 20000, 30000, 18000, 28000, 24000, 26000] }
+                }
+            };
+            var managerColors = ['#2f6fed', '#7c3aed', '#178a4c', '#d97706'];
+            function rupeeL(v) { return '\u20B9' + (v / 100000).toFixed(1) + 'L'; }
+            function seriesTotal(s) { return s.reduce(function (a, b) { return a + b; }, 0); }
+
+            var salesChart = new ApexCharts(document.getElementById('ow-sales-chart'), {
+                chart: { type: 'area', height: 300, toolbar: { show: false }, fontFamily: '"Segoe UI", Arial, sans-serif', animations: { speed: 500 } },
+                series: salesSeries.company,
+                xaxis: {
+                    categories: salesDays,
+                    axisBorder: { show: false }, axisTicks: { show: false },
+                    labels: { style: { colors: '#98a2b3', fontSize: '11px' }, rotate: 0, hideOverlappingLabels: true }
+                },
+                yaxis: { labels: { formatter: rupeeL, style: { colors: '#98a2b3', fontSize: '11px' } } },
+                stroke: { curve: 'smooth', width: 2.5 },
+                colors: ['#102e49'],
+                fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.3, opacityTo: 0.02, stops: [0, 100] } },
+                grid: { borderColor: '#eef1f5', strokeDashArray: 4, padding: { left: 6, right: 6 } },
+                dataLabels: { enabled: false },
+                markers: { size: 0, hover: { size: 5 } },
+                tooltip: {
+                    theme: 'light', shared: true, intersect: false,
+                    style: { fontSize: '12px' },
+                    y: { formatter: function (v) { return '\u20B9' + v.toLocaleString('en-IN'); } },
+                    marker: { show: false }
+                },
+                legend: { show: false }
+            });
+            salesChart.render();
+
+            var totalEl = document.getElementById('ow-sales-total');
+            var totalSubEl = document.getElementById('ow-sales-total-sub');
+            var personSelect = document.getElementById('ow-person-select');
+
+            function setSalesScope(scope) {
+                document.querySelectorAll('.ow-seg-btn').forEach(function (b) {
+                    var on = b.getAttribute('data-scope') === scope;
+                    b.classList.toggle('active', on);
+                    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+                });
+                personSelect.style.display = scope === 'people' ? '' : 'none';
+
+                var series, colors, legend, total, sub, fillOpacity;
+                if (scope === 'company') {
+                    series = salesSeries.company; colors = ['#102e49']; legend = false; fillOpacity = 0.3;
+                    total = rupeeL(seriesTotal(series[0].data));
+                    sub = 'total sales this fortnight \u00B7 all teams';
+                } else if (scope === 'managers') {
+                    series = salesSeries.managers; colors = managerColors; legend = true; fillOpacity = 0.12;
+                    total = rupeeL(seriesTotal(series[0].data) + seriesTotal(series[1].data) + seriesTotal(series[2].data) + seriesTotal(series[3].data));
+                    sub = 'combined \u00B7 4 sales managers';
+                } else {
+                    var p = salesSeries.people[personSelect.value];
+                    series = [{ name: p.name + ' \u2014 sales', data: p.data }]; colors = ['#2f6fed']; legend = false; fillOpacity = 0.3;
+                    total = rupeeL(seriesTotal(p.data));
+                    sub = p.name + ' \u00B7 ' + p.sub;
+                }
+                salesChart.updateOptions({
+                    colors: colors,
+                    fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: fillOpacity, opacityTo: 0.02, stops: [0, 100] } },
+                    stroke: { curve: 'smooth', width: scope === 'managers' ? 2.2 : 2.5 },
+                    legend: { show: legend, position: 'top', horizontalAlign: 'left', fontSize: '11px', fontWeight: 600, markers: { radius: 99 }, itemMargin: { horizontal: 14, vertical: 4 } }
+                });
+                salesChart.updateSeries(series);
+                totalEl.textContent = total;
+                totalSubEl.textContent = sub;
+            }
+
+            document.querySelectorAll('.ow-seg-btn').forEach(function (btn) {
+                btn.addEventListener('click', function () { setSalesScope(btn.getAttribute('data-scope')); });
+            });
+            personSelect.addEventListener('change', function () { setSalesScope('people'); });
+
+            // ---------- lead sources donut ----------
+            new ApexCharts(document.getElementById('ow-source-chart'), {
+                chart: { type: 'donut', height: 235, fontFamily: '"Segoe UI", Arial, sans-serif', animations: { speed: 700 } },
+                series: [144, 181, 879],
+                labels: ['Email', 'IVR calls', 'Manual / Other'],
+                colors: ['#d97706', '#178a4c', '#2f6fed'],
+                dataLabels: { enabled: false },
+                legend: { show: false },
+                stroke: { width: 3, colors: ['#ffffff'] },
+                plotOptions: { pie: { donut: { size: '74%', labels: { show: false } } } },
+                tooltip: { style: { fontSize: '12px' }, y: { formatter: function (v) { return v + ' leads'; } } },
+                states: { hover: { filter: { type: 'none' } } }
+            }).render();
+        })();
+    </script>
+
+    <!-- ===== Mobile bottom tabs: REAL CRM component (operations-mobile-nav) ===== -->
+    <div data-operations-mobile-navigation>
+        <section class="operations-mobile-more" id="operations-mobile-more" role="dialog" aria-labelledby="operations-mobile-more-title" hidden>
+            <header><h2 id="operations-mobile-more-title">More</h2><button type="button" data-close-operations-more aria-label="Close navigation" title="Close"><i class="ri-close-line" aria-hidden="true"></i></button></header>
+            <nav data-operations-more-links aria-label="More tools"></nav>
+        </section>
+        <nav class="operations-mobile-nav" aria-label="Mobile navigation">
+            <a href="./owner-dashboard" data-operations-primary><i class="ri-vip-crown-line" aria-hidden="true"></i><span>Dashboard</span></a>
+            <a href="./leads" data-operations-primary><i class="ri-group-line" aria-hidden="true"></i><span>Leads</span></a>
+            <a href="./kpi" data-operations-primary><i class="ri-bar-chart-line" aria-hidden="true"></i><span>KPI</span></a>
+            <button type="button" data-toggle-operations-more aria-expanded="false" aria-controls="operations-mobile-more" aria-haspopup="dialog"><i class="ri-apps-line" aria-hidden="true"></i><span>More</span></button>
+        </nav>
+    </div>
+    <script src="../public/assets/admin/js/crm/navigation.js"></script>
+    <script src="../public/assets/admin/js/crm/operations-mobile-nav.js"></script>
+    <script>
+        // Preview-only: this static page's path never matches a tab, so the real JS marks "More"
+        // as current — flip the active state to Dashboard the way the server would on the real page.
+        (function () {
+            var toggle = document.querySelector('[data-toggle-operations-more]');
+            if (toggle) toggle.removeAttribute('aria-current');
+            var dash = document.querySelector('.operations-mobile-nav a[data-operations-primary]');
+            if (dash) dash.setAttribute('aria-current', 'page');
+        })();
+    </script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 @php
     $navigationRole = auth()->user()?->userType?->user_type;
     $mobileTabs = match (true) {
+        $navigationRole === \App\Models\UserType::OWNER => 'owner',
         $navigationRole === \App\Models\UserType::HR => 'hr',
         in_array($navigationRole, \App\Models\UserType::OPERATIONS_ROLES, true) => 'operations',
         in_array($navigationRole, \App\Models\UserType::ACCOUNTS_ROLES, true) => 'accounts',
@@ -9,6 +10,11 @@
     };
     // The browser also checks each primary link against the authorized sidebar.
     $mobileTabLinks = match ($mobileTabs) {
+        'owner' => [
+            [route('admin.owner.dashboard'), 'ri-vip-crown-line', 'Dashboard'],
+            [route('admin.clients.index'), 'ri-group-line', 'Leads'],
+            [route('admin.kpi.index'), 'ri-bar-chart-line', 'KPI'],
+        ],
         'hr' => [
             [route('admin.hr.dashboard'), 'ri-home-4-line', 'Dashboard'],
             [route('admin.clients.index'), 'ri-group-line', 'Leads'],
@@ -27,9 +33,8 @@
         ],
         'sales' => [
             [route('admin.sales-dashboard'), 'ri-home-4-line', 'Dashboard'],
-            [route('admin.clients.index'), 'ri-group-line', 'Leads'],
             [route('admin.upcoming-follow-up.index'), 'ri-time-line', 'Follow-up'],
-            [route('admin.kpi.index'), 'ri-bar-chart-line', 'KPI'],
+            [route('admin.clients.index'), 'ri-group-line', 'Leads'],
         ],
         default => [
             [route('admin.sales-dashboard'), 'ri-home-4-line', 'Dashboard'],

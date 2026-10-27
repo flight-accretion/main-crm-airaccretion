@@ -426,7 +426,7 @@ class LeadVisibilityAndDuplicateTest extends TestCase
             );
 
         $response->assertRedirect(
-            route('admin.leads.edit', $lead)
+            url('/admin/leads/' . $lead->id . '/follow-up/create')
         );
 
         $lead->refresh();
@@ -628,6 +628,42 @@ class LeadVisibilityAndDuplicateTest extends TestCase
             $table->timestamp('to_date')->nullable();
             $table->string('from_place')->nullable();
             $table->string('to_place')->nullable();
+            $table->timestamps();
+        });
+
+        // The lead index reads the optional AI-score configuration for its
+        // dynamic score controls. Keep this isolated schema aligned with it.
+        Schema::create('lead_ai_scoring_settings', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->boolean('enabled')->default(false);
+            $table->boolean('auto_analyse')->default(true);
+            $table->string('model')->nullable();
+            $table->longText('prompt')->nullable();
+            $table->unsignedSmallInteger('cold_max')->default(39);
+            $table->unsignedSmallInteger('neutral_max')->default(69);
+            $table->uuid('created_by')->nullable();
+            $table->uuid('updated_by')->nullable();
+            $table->uuid('ai_model_profile_id')->nullable();
+            $table->uuid('ai_agent_id')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('lead_ai_scores', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('lead_id')->index();
+            $table->uuid('followup_id')->nullable();
+            $table->uuid('previous_score_id')->nullable();
+            $table->string('status', 20)->default('completed');
+            $table->string('temperature', 20)->nullable();
+            $table->unsignedSmallInteger('score')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('salesperson_availability', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('user_id')->unique();
+            $table->boolean('is_available')->default(false);
+            $table->boolean('is_opted_in')->default(false);
             $table->timestamps();
         });
 

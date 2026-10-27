@@ -1,5 +1,6 @@
 @extends('admin.layouts.header')
 @section('content')
+<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/dashboards/sales-dashboard.css') }}?v=1">
 @php
     $tableProductNames = app(\App\Services\LeadTableProducts::class)->forLeads(
         collect($todayFollowUps)->pluck('enquiry')->merge($nextWeekDnpLeads)
@@ -33,71 +34,88 @@
         </div>
     </div>
 </div>
-{{-- ========================================================== --}}
-{{-- MORNING LEAD AVAILABILITY POPUP --}}
-{{-- Uses the single shared #assign-more-leads-modal from header.blade.php --}}
-{{-- The controller decides whether it should appear today. --}}
-{{-- ========================================================== --}}
+@php
+    $salesUser = auth()->user();
+    $salesRole = $salesUser?->userType?->user_type;
+    $salesTeamScope = in_array($salesRole, [
+        \App\Models\UserType::SALES_MANAGER,
+        \App\Models\UserType::SENIOR_SALES_MANAGER,
+        \App\Models\UserType::ADMIN,
+        \App\Models\UserType::SUPER_ADMIN,
+    ], true);
+    $salesTargetData = $salesTeamScope ? ($teamTargetProgress ?? []) : ($targetProgress ?? []);
+    $salesMonthProgress = $salesTargetData['monthly_progress'] ?? $salesTargetData['daily_progress'] ?? $salesTargetData;
+    $salesTargetPercent = min(100, max(0, (float) ($salesMonthProgress['achievement_percentage'] ?? 0)));
+    $salesAchieved = (float) ($salesMonthProgress['achieved_amount'] ?? $salesMonthProgress['sales_amount'] ?? 0);
+    $salesTarget = (float) ($salesMonthProgress['target_amount'] ?? 0);
+    $salesRemaining = (float) ($salesMonthProgress['remaining_amount'] ?? max(0, $salesTarget - $salesAchieved));
+    $salesTodayRows = collect($todayFollowUps ?? []);
+    $salesProducts = collect($productSummary['dataByProductDate'] ?? []);
+    $salesFollowupProducts = app(\App\Services\LeadTableProducts::class)->forLeads($salesTodayRows->pluck('enquiry'));
+    $salesCanReceiveMoreLeads = (bool) (($popupData['availability']->is_available ?? false) && ($popupData['availability']->is_opted_in ?? false));
+@endphp
 
-@if(($popupData['show_popup'] ?? false))
-<script>
-    document.addEventListener('DOMContentLoaded', function () {
-        setTimeout(function () {
-            var modalSelector = '#assign-more-leads-modal';
+<div class="crm-sales-dashboard" data-sales-dashboard>
+    <header class="sd-heading">
+        <div><h1>Sales Dashboard</h1><p>Today's priorities, sales progress and customer follow-ups.</p></div>
+        <div class="sd-heading-tools"><span class="sd-date">{{ now()->format('d M Y') }}</span><form method="POST" action="{{ $salesCanReceiveMoreLeads ? route('admin.sales-dashboard.popup.decline') : route('admin.sales-dashboard.popup.accept') }}" class="sd-availability"><span>Assign more leads</span>@csrf<label><input type="checkbox" role="switch" aria-label="Assign more leads" {{ $salesCanReceiveMoreLeads ? 'checked' : '' }} onchange="this.form.submit()"><i></i></label></form></div>
+    </header>
 
-            /*
-             * Preferred approach:
-             * trigger the same HS Overlay control used by the sidebar.
-             * This avoids creating a second modal/backdrop.
-             */
-            var trigger = document.querySelector(
-                '[data-hs-overlay="' + modalSelector + '"]'
-            );
+    @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
 
-            if (trigger) {
-                trigger.click();
-                return;
-            }
+    <section class="sd-stats" aria-label="Sales summary">
+        <a class="sd-stat sd-stat--navy" href="{{ route('admin.clients.index') }}"><strong id="compact-total-leads">{{ (int) ($leads['leadsCount'] ?? 0) }}</strong><span>Total Leads</span><small>{{ ($leads['percentageChange'] ?? 0) >= 0 ? '+' : '' }}{{ $leads['percentageChange'] ?? 0 }}% vs last month</small></a>
+        <a class="sd-stat sd-stat--blue" href="{{ route('admin.upcoming-follow-up.index') }}"><strong id="compact-today-followups">{{ (int) ($todayFollowUpsCount ?? 0) }}</strong><span>Today's Follow-ups</span><small>Due today and overdue follow-ups</small></a>
+        <a class="sd-stat sd-stat--amber" href="{{ route('admin.leads.dnp') }}"><strong id="compact-dnp-count">{{ count($dnpLeads ?? []) }}</strong><span>DNP / Call Backlog</span><small>Calls marked not connected this month</small></a>
+        <section class="sd-stat sd-stat--green"><strong id="compact-sales-amount">&#8377;{{ number_format($salesAchieved, 0) }}</strong><span>Sales This Month</span><small id="compact-sales-percent">{{ round($salesTargetPercent) }}% of target</small></section>
+    </section>
 
-            /*
-             * Fallback in case the sidebar trigger is not present.
-             */
-            try {
-                if (
-                    window.HSOverlay &&
-                    typeof window.HSOverlay.open === 'function'
-                ) {
-                    window.HSOverlay.open(modalSelector);
-                    return;
-                }
-            } catch (e) {
-                console.error(
-                    '[sales-dashboard] HSOverlay.open failed',
-                    e
-                );
-            }
+    <section class="sd-main-grid">
+        <section class="sd-panel">
+            <header class="sd-panel-head">
+                <h2>Sales vs Target</h2>
+                <div class="sd-target-tools">
+                    <span class="sd-pill" id="compact-target-month">{{ ($salesTargetData['month_name'] ?? now()->format('F')) }} {{ ($salesTargetData['year'] ?? now()->year) }}</span>
+                    @if($salesTeamScope)
+                        <select id="compact-sales-scope" class="sd-select" aria-label="Choose sales scope"><option value="">Team (All)</option>@foreach(($assignedExecutivesAll ?? $assignedExecutives ?? collect()) as $executive)<option value="{{ $executive->id }}">{{ $executive->name }}</option>@endforeach</select>
+                    @endif
+                </div>
+            </header>
+            <div class="sd-target-top"><div><small>ACHIEVED</small><strong id="compact-target-achieved">&#8377;{{ number_format($salesAchieved, 2) }}</strong></div><div class="sd-target-percent"><b id="compact-target-percent">{{ round($salesTargetPercent, 2) }}%</b><small>Monthly target</small></div></div>
+            <div class="sd-progress"><span id="compact-target-bar" style="width: {{ $salesTargetPercent }}%"></span></div>
+            <div class="sd-target-metrics"><div><small>Target</small><b id="compact-target-value">&#8377;{{ number_format($salesTarget, 2) }}</b></div><div><small>Remaining</small><b id="compact-target-remaining">&#8377;{{ number_format($salesRemaining, 2) }}</b></div><div><small>Required / day</small><b id="compact-target-required">&#8377;{{ number_format((float) ($salesTargetData['required_daily_target'] ?? 0), 2) }}</b></div></div>
+            <div class="sd-target-modes"><button type="button" class="is-active" data-compact-target-mode="monthly">Monthly</button><button type="button" data-compact-target-mode="daily">Daily</button></div>
+        </section>
 
-            /*
-             * Final fallback: expose the existing shared modal only.
-             * No new modal/backdrop is created.
-             */
-            var modal = document.querySelector(modalSelector);
+        <section class="sd-panel">
+            <header class="sd-panel-head"><h2>Today's Follow-ups</h2><a href="{{ route('admin.upcoming-follow-up.index') }}">View all {{ (int) ($todayFollowUpsCount ?? 0) }}</a></header>
+            <div class="sd-followups">
+                @forelse($salesTodayRows as $followup)
+                    @php $lead = $followup->enquiry; $client = $lead?->client; $product = $salesFollowupProducts[$lead?->id] ?? 'Lead follow-up'; @endphp
+                    <a class="sd-followup" href="{{ route('admin.leads.follow-up.create', $lead->id) }}"><div><strong>{{ $client?->name ?? 'Client' }} · {{ $product }}</strong><p>{{ $followup->next_followup_date?->format('h:i A') ?? 'Unscheduled' }} · {{ $client?->contact_number ?? 'No number' }}</p></div><span class="{{ ($followup->is_missed ?? false) ? 'sd-tag sd-tag--red' : 'sd-tag' }}">{{ ($followup->is_missed ?? false) ? 'Overdue' : 'Today' }}</span></a>
+                @empty <p class="sd-empty">No follow-ups are due today.</p> @endforelse
+            </div>
+        </section>
+    </section>
 
-            if (!modal) {
-                console.error(
-                    '[sales-dashboard] Shared Assign More Leads modal not found'
-                );
-                return;
-            }
+    <section class="sd-workspace">
+        <nav class="sd-tabs" aria-label="Sales dashboard sections"><button type="button" class="is-active" data-sales-tab="day">My Day</button><button type="button" data-sales-tab="products">Products</button><button type="button" data-sales-tab="presence">Team / Presence</button><button type="button" data-sales-tab="actions">Quick Actions</button></nav>
+        <div class="sd-tab-panel is-active" data-sales-panel="day">
+            @php $outreachPercent = ($outreachTarget ?? 0) > 0 ? min(100, round(($outreachCompletedToday / $outreachTarget) * 100)) : 0; @endphp
+            <div class="sd-day-grid">
+                <a class="sd-day-card" href="{{ route('admin.kpi.outreach.index') }}"><div><b>Daily Outreach</b><span>{{ $outreachPercent }}%</span></div><small>{{ (int) ($outreachCompletedToday ?? 0) }} / {{ (int) ($outreachTarget ?? 0) }} completed</small><i><em style="width: {{ $outreachPercent }}%"></em></i><small>{{ (int) ($outreachPendingCount ?? 0) }} numbers still in queue</small></a>
+                <a class="sd-day-card" href="{{ route('admin.upcoming-follow-up.index') }}"><div><b>Follow-ups</b><span>{{ count($salesTodayRows->where('is_missed', true)) }} overdue</span></div><small>{{ (int) ($todayFollowUpsCount ?? 0) }} due today</small><i><em style="width: {{ min(100, count($salesTodayRows) * 20) }}%"></em></i><small>Open each item from the queue</small></a>
+                <a class="sd-day-card" href="{{ route('admin.clients.index') }}"><div><b>Fresh Leads</b><span>Today</span></div><small>{{ (int) ($todayFreshLeadCount ?? 0) }} created today</small><i><em style="width: {{ min(100, (int) ($todayFreshLeadCount ?? 0) * 10) }}%"></em></i><small>New leads in your current scope</small></a>
+                <a class="sd-day-card" href="{{ route('admin.leads.dnp') }}"><div><b>Call Backlog</b><span>Review</span></div><small>{{ count($dnpLeads ?? []) }} DNP records</small><i><em style="width: {{ min(100, count($dnpLeads ?? []) * 5) }}%"></em></i><small>Calls not connected this month</small></a>
+            </div>
+        </div>
+        <div class="sd-tab-panel" data-sales-panel="products" hidden><div class="sd-products">@forelse($salesProducts as $product => $counts)<article><header><b>{{ $product }}</b><strong>{{ (int) ($counts['Total'] ?? 0) }}</strong></header><small>{{ (int) ($counts['Active'] ?? 0) }} active · {{ (int) ($counts['Confirmed/Complete'] ?? 0) }} completed · {{ (int) ($counts['Cancelled'] ?? 0) }} cancelled</small></article>@empty<p class="sd-empty">No product activity is available for this month.</p>@endforelse</div></div>
+        <div class="sd-tab-panel" data-sales-panel="presence" hidden>@include('admin.pages.dashboards.partials.sales-presence', ['salesPresenceRows' => $salesPresenceRows ?? collect(), 'canViewAllSalesPresence' => $canViewAllSalesPresence ?? false])</div>
+        <div class="sd-tab-panel" data-sales-panel="actions" hidden><div class="sd-actions"><a href="{{ route('admin.kpi.outreach.index') }}">Continue Daily Outreach</a><a href="{{ route('admin.upcoming-follow-up.index') }}">Open Today's Follow-ups</a><a href="{{ route('admin.clients.index') }}">View My Leads</a><a href="{{ route('admin.rides.upcoming') }}">Upcoming Rides</a></div></div>
+    </section>
+</div>
 
-            modal.classList.remove('hidden');
-            modal.classList.add('open');
-            modal.style.display = 'block';
-            modal.setAttribute('aria-hidden', 'false');
-        }, 300);
-    });
-</script>
-@endif
+<div class="sales-dashboard-legacy" aria-hidden="true">
 
 <!-- @if(Auth::user()->userType && in_array(Auth::user()->userType->user_type, [\App\Models\UserType::SALES_MANAGER, \App\Models\UserType::SENIOR_SALES_MANAGER]))
 <div class="mb-6 rounded-lg border border-defaultborder bg-white p-4 shadow-sm">
@@ -724,7 +742,7 @@
                                                 <i class="ri-eye-line"></i>
                                             </a>
                                             <!-- <a aria-label="anchor"
-                                                        href="{{ route('admin.leads.edit', $obj->enquiry->id) }}"
+                                                        href="{{ route('admin.leads.follow-up.create', $obj->enquiry->id) }}#lead-details"
                                                         class="ti-btn ti-btn-icon ti-btn-sm ti-btn-info-full"
                                                         title="Edit">
                                                         <i class="ri-edit-line"></i>
@@ -1036,6 +1054,7 @@
             </div>
         </div>
     </div>
+    </div>
     <script>
         (function() {
             var tabList = document.getElementById('product-status-summary-tabs');
@@ -1332,5 +1351,70 @@
                 renderTeamMemberProgress(teamMemberProgressState, activeTargetModes.manager);
             })();
         })();
+    </script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var root = document.querySelector('[data-sales-dashboard]');
+            if (!root) return;
+
+            root.querySelectorAll('[data-sales-tab]').forEach(function (tab) {
+                tab.addEventListener('click', function () {
+                    var name = tab.getAttribute('data-sales-tab');
+                    root.querySelectorAll('[data-sales-tab]').forEach(function (item) { item.classList.toggle('is-active', item === tab); });
+                    root.querySelectorAll('[data-sales-panel]').forEach(function (panel) {
+                        var active = panel.getAttribute('data-sales-panel') === name;
+                        panel.hidden = !active;
+                        panel.classList.toggle('is-active', active);
+                    });
+                });
+            });
+
+            var state = @json($salesTargetData);
+            var mode = 'monthly';
+            var currency = function (value) { return '\u20b9' + Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+            var write = function (id, value) { var node = document.getElementById(id); if (node) node.textContent = value; };
+            var renderTarget = function (data) {
+                state = data || {};
+                var progress = mode === 'daily' ? (state.daily_progress || state) : (state.monthly_progress || state);
+                var percent = Math.min(100, Math.max(0, Number(progress.achievement_percentage || 0)));
+                write('compact-target-percent', Math.round(percent * 100) / 100 + '%');
+                write('compact-target-achieved', currency(progress.achieved_amount || progress.sales_amount || 0));
+                write('compact-target-value', currency(progress.target_amount || 0));
+                write('compact-target-remaining', currency(progress.remaining_amount || 0));
+                write('compact-target-required', currency(state.required_daily_target || 0));
+                write('compact-target-month', ((state.month_name || '') + ' ' + (state.year || '')).trim());
+                write('compact-sales-amount', currency(progress.achieved_amount || progress.sales_amount || 0));
+                write('compact-sales-percent', Math.round(percent) + '% of target');
+                var bar = document.getElementById('compact-target-bar');
+                if (bar) bar.style.width = percent + '%';
+            };
+
+            root.querySelectorAll('[data-compact-target-mode]').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    mode = button.getAttribute('data-compact-target-mode');
+                    root.querySelectorAll('[data-compact-target-mode]').forEach(function (item) { item.classList.toggle('is-active', item === button); });
+                    renderTarget(state);
+                });
+            });
+
+            var scope = document.getElementById('compact-sales-scope');
+            if (scope) {
+                scope.addEventListener('change', function () {
+                    scope.disabled = true;
+                    var suffix = scope.value ? '?user_id=' + encodeURIComponent(scope.value) : '';
+                    fetch(@json(route('admin.sales-dashboard.overview-data')) + suffix, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                        .then(function (response) { if (!response.ok) throw new Error('Unable to refresh sales dashboard'); return response.json(); })
+                        .then(function (json) {
+                            var data = json.data || {};
+                            write('compact-total-leads', data.leads_count || 0);
+                            write('compact-today-followups', data.today_followups_count || 0);
+                            write('compact-dnp-count', data.dnp_count || 0);
+                            if (data.target_progress) renderTarget(Object.assign({}, data.target_progress, { month_name: data.target_month_name, year: data.target_month_year }));
+                        })
+                        .catch(function (error) { console.error(error); })
+                        .finally(function () { scope.disabled = false; });
+                });
+            }
+        });
     </script>
 @stop

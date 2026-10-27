@@ -61,110 +61,61 @@
         color: rgb(var(--primary));
     }
 
-    /*
-     * Existing follow-up table is reused as the popup.
-     * No new modal or duplicate table is created.
-     */
     .followup-history-popup {
         display: none !important;
         position: fixed !important;
-
-        /*
-         * Always show in the center of the browser window.
-         */
         top: 50% !important;
         left: 50% !important;
         transform: translate(-50%, -50%) !important;
-
-        z-index: 99999;
+        z-index: 100001;
         box-sizing: border-box;
-
-        width: min(1000px, calc(100vw - 40px)) !important;
+        width: min(1224px, calc(100vw - 40px)) !important;
         max-width: calc(100vw - 40px) !important;
-
-        /*
-         * Small history: no scrollbar.
-         * Large history: scrollbar appears automatically.
-         */
-        height: auto !important;
-        max-height: calc(100vh - 80px) !important;
-
-        overflow-x: auto !important;
-        overflow-y: auto !important;
-
-        padding: 16px;
-        border: 1px solid rgba(148, 163, 184, 0.35);
-        border-radius: 12px;
+        max-height: calc(100vh - 48px) !important;
+        overflow: hidden !important;
+        border: 1px solid #dbe3ee;
+        border-radius: 18px;
         background: #ffffff;
-        box-shadow:
-            0 25px 65px rgba(15, 23, 42, 0.3),
-            0 0 0 100vmax rgba(15, 23, 42, 0.25);
-
+        box-shadow: 0 28px 80px rgba(15, 23, 42, .28);
         overscroll-behavior: contain;
-        -webkit-overflow-scrolling: touch;
     }
-
     .followup-history-popup.followup-popup-visible {
-        display: block !important;
+        display: flex !important;
+        flex-direction: column;
     }
-
-    /*
-     * Full table width.
-     * On desktop, horizontal scrolling normally will not appear.
-     */
-    .followup-history-popup
-    .followup-history-inner-table {
-        width: 100% !important;
-        min-width: 100% !important;
-        margin-bottom: 0;
-        table-layout: auto !important;
-    }
-
-    /*
-     * Keep header visible while scrolling a large history.
-     */
-    .followup-history-popup thead th {
-        position: sticky;
-        top: -16px;
-        z-index: 2;
-        background: rgb(var(--primary));
-        color: #ffffff;
-    }
-
-    .followup-history-popup th,
-    .followup-history-popup td {
-        vertical-align: top;
-        white-space: nowrap;
-    }
-
-    /*
-     * Follow-up note may wrap so complete note remains readable.
-     */
-    .followup-history-popup td:first-child {
-        width: 45%;
-        min-width: 300px;
-        max-width: 480px;
-        white-space: normal !important;
-        word-break: break-word;
-        overflow-wrap: anywhere;
-    }
-
-    /*
-     * Next-follow-up date may wrap when necessary.
-     */
-    .followup-history-popup td:nth-child(3) {
-        min-width: 145px;
-        white-space: normal !important;
-    }
-
-    .dark .followup-history-popup {
-        border-color: rgba(255, 255, 255, 0.12);
-        background: rgb(var(--body-bg));
-        color: #ffffff;
-        box-shadow:
-            0 25px 65px rgba(0, 0, 0, 0.55),
-            0 0 0 100vmax rgba(0, 0, 0, 0.45);
-    }
+    .followup-history-backdrop { position:fixed; inset:0; z-index:100000; background:rgba(24,39,62,.46); backdrop-filter:blur(3px); }
+    .followup-popup-header { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; padding:22px 24px 18px; border-bottom:1px solid #e4e9f0; }
+    .followup-popup-header h2 { margin:0; color:#102b4a; font-size:24px; font-weight:750; }
+    .followup-popup-header p { margin:4px 0 0; color:#7084a2; font-size:14px; }
+    .followup-popup-close, .followup-history-clear { border:1px solid #d8e1ec; border-radius:10px; background:#fff; color:#102b4a; font-weight:700; cursor:pointer; }
+    .followup-popup-close { min-width:42px; height:42px; font-size:27px; line-height:1; }
+    .followup-popup-filters { display:grid; grid-template-columns:minmax(0,1fr) 200px auto; gap:10px; padding:14px 24px; border-bottom:1px solid #e4e9f0; }
+    .followup-popup-filters input, .followup-popup-filters select { width:100%; min-height:46px; border:1px solid #d8e1ec; border-radius:10px; background:#fff; color:#1d3557; padding:0 13px; font-size:14px; outline:none; }
+    .followup-popup-filters input:focus, .followup-popup-filters select:focus { border-color:#275eb4; box-shadow:0 0 0 3px rgba(39,94,180,.12); }
+    .followup-history-clear { min-width:72px; padding:0 16px; }
+    .followup-history-timeline { min-height:170px; max-height:min(54vh,600px); overflow:auto; background:#f8fafc; padding:0 24px; }
+    .followup-history-item { display:grid; grid-template-columns:48px minmax(0,1fr) 215px; gap:18px; padding:17px 0; border-bottom:1px solid #e2e8f0; }
+    .followup-history-item:last-of-type { border-bottom:0; }
+    .followup-history-avatar { width:46px; height:46px; border-radius:12px; display:grid; place-items:center; background:#e7eef6; color:#11355c; font-weight:800; font-size:16px; }
+    .followup-history-note { margin:1px 0 8px; color:#112f50; font-size:16px; font-weight:700; line-height:1.35; overflow-wrap:anywhere; }
+    .followup-history-meta { display:flex; flex-wrap:wrap; align-items:center; gap:7px; color:#7184a0; font-size:13px; }
+    .followup-history-meta a { color:#2467db; font-weight:700; text-decoration:none; }
+    .followup-history-by, .followup-history-status { border-radius:999px; padding:4px 8px; font-size:12px; font-weight:700; }
+    .followup-history-by { color:#2467db; background:#e9f1ff; }
+    .followup-history-status.is-active, .followup-history-status.is-success { color:#147a45; background:#e5f6ed; }
+    .followup-history-status.is-warning { color:#ae6800; background:#fff3db; }
+    .followup-history-status.is-danger { color:#bd363d; background:#ffeaeb; }
+    .followup-history-status.is-primary { color:#2467db; background:#e9f1ff; }
+    .followup-history-status.is-muted { color:#65758b; background:#edf1f5; }
+    .followup-history-dates { text-align:right; color:#789; font-size:12px; }
+    .followup-history-dates span { display:block; color:#8292a9; }
+    .followup-history-dates strong { display:block; color:#17395f; font-size:14px; margin-top:2px; }
+    .followup-history-next { border:1px solid #dbe4ee; border-radius:10px; background:#fff; margin-top:10px; padding:8px 10px; }
+    .followup-history-empty { padding:28px 0; text-align:center; color:#7184a0; }
+    .followup-popup-footer { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 24px; border-top:1px solid #e4e9f0; color:#7285a2; font-size:13px; }
+    .followup-popup-footer > div { display:flex; gap:10px; flex-shrink:0; }
+    .followup-popup-footer .followup-popup-close { min-width:auto; height:42px; padding:0 17px; font-size:15px; }
+    .followup-popup-add { display:inline-flex; align-items:center; min-height:42px; padding:0 18px; border-radius:10px; background:#102f50; color:#fff !important; font-weight:700; text-decoration:none; }
 
     @media (max-width: 767.98px) {
         .followup-history-preview {
@@ -183,13 +134,20 @@
         .followup-history-popup {
             width: calc(100vw - 24px) !important;
             max-width: calc(100vw - 24px) !important;
-            max-height: calc(100vh - 40px) !important;
-            padding: 12px;
+            max-height: calc(100vh - 24px) !important;
         }
-
-        .followup-history-popup thead th {
-            top: -12px;
-        }
+        .followup-popup-header { padding:17px 16px 14px; }
+        .followup-popup-header h2 { font-size:20px; }
+        .followup-popup-filters { grid-template-columns:1fr; padding:12px 16px; }
+        .followup-history-timeline { max-height:50vh; padding:0 16px; }
+        .followup-history-item { grid-template-columns:38px minmax(0,1fr); gap:11px; }
+        .followup-history-avatar { width:38px; height:38px; border-radius:10px; }
+        .followup-history-note { font-size:14px; }
+        .followup-history-dates { grid-column:2; text-align:left; display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+        .followup-history-next { margin:0; }
+        .followup-popup-footer { align-items:flex-start; flex-direction:column; padding:12px 16px; }
+        .followup-popup-footer > div { width:100%; }
+        .followup-popup-footer > div > * { flex:1; justify-content:center; }
     }
 </style>
 <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/leads/leads-list.css') }}?v=4">
@@ -1595,6 +1553,7 @@ $(document).ready(function () {
     document.addEventListener('DOMContentLoaded', function() {
         let activePopup = null;
         let activeTrigger = null;
+        let activeBackdrop = null;
 
         /*
          * Existing follow-up popup ki original position store karta hai.
@@ -1611,6 +1570,11 @@ $(document).ready(function () {
             popup.classList.remove(
                 'followup-popup-visible'
             );
+
+            if (activeBackdrop) {
+                activeBackdrop.remove();
+                activeBackdrop = null;
+            }
 
             /*
              * Popup ko original Follow-up History cell mein wapas rakhein.
@@ -1653,6 +1617,13 @@ $(document).ready(function () {
             activePopup = popup;
             activeTrigger = trigger;
 
+            activeBackdrop = document.createElement('div');
+            activeBackdrop.className = 'followup-history-backdrop';
+            activeBackdrop.addEventListener('click', function() {
+                restorePopup(popup);
+            });
+            document.body.appendChild(activeBackdrop);
+
             /*
              * Existing popup ko body mein move karte hain,
              * taaki DataTable container usko clip na kare.
@@ -1667,6 +1638,28 @@ $(document).ready(function () {
                 'aria-expanded',
                 'true'
             );
+
+            const closeButton = popup.querySelector('.followup-popup-close');
+            if (closeButton) {
+                closeButton.focus();
+            }
+        }
+
+        function filterHistory(popup) {
+            const search = (popup.querySelector('.followup-history-search')?.value || '').trim().toLowerCase();
+            const status = popup.querySelector('.followup-history-status')?.value || '';
+            let visibleCount = 0;
+
+            popup.querySelectorAll('.followup-history-item').forEach(function(item) {
+                const matchesSearch = !search || (item.dataset.search || '').includes(search);
+                const matchesStatus = !status || item.dataset.status === status;
+                const visible = matchesSearch && matchesStatus;
+                item.hidden = !visible;
+                if (visible) visibleCount++;
+            });
+
+            const empty = popup.querySelector('.followup-history-empty');
+            if (empty) empty.hidden = visibleCount !== 0;
         }
 
         document
@@ -1704,6 +1697,26 @@ $(document).ready(function () {
                 popupRecords.set(popup, {
                     placeholder: placeholder,
                     trigger: trigger
+                });
+
+                popup.querySelectorAll('.followup-popup-close').forEach(function(button) {
+                    button.addEventListener('click', function(event) {
+                        event.preventDefault();
+                        restorePopup(popup);
+                    });
+                });
+
+                const search = popup.querySelector('.followup-history-search');
+                const status = popup.querySelector('.followup-history-status');
+                const clear = popup.querySelector('.followup-history-clear');
+
+                if (search) search.addEventListener('input', function() { filterHistory(popup); });
+                if (status) status.addEventListener('change', function() { filterHistory(popup); });
+                if (clear) clear.addEventListener('click', function() {
+                    if (search) search.value = '';
+                    if (status) status.value = '';
+                    filterHistory(popup);
+                    search?.focus();
                 });
 
                 /*

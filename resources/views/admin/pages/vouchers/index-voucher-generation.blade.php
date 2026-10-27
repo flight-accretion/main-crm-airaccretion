@@ -337,7 +337,7 @@
                                     <span class="vg-more" aria-label="More lead actions">
                                         <a aria-label="Add Lead Followup" href="{{ route('admin.leads.follow-up.create', $enquiry->id) }}"
                                             class="vg-iconbtn" target="_blank" title="Add Lead Followup"><i class="ri-add-line"></i></a>
-                                        <a aria-label="Edit Lead" href="{{ route('admin.leads.edit', $enquiry->id) }}"
+                                        <a aria-label="Manage lead" href="{{ route('admin.leads.follow-up.create', $enquiry->id) }}#lead-details"
                                             class="vg-iconbtn" title="Edit Lead"><i class="ri-edit-line"></i></a>
                                         <a aria-label="Cancel Lead" href="javascript:void(0);"
                                             class="vg-iconbtn is-danger cancel-lead" data-lead-id="{{ $enquiry->id }}"

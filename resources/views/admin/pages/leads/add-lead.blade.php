@@ -1,5 +1,6 @@
 @extends('admin.layouts.header')
 @section('content')
+<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/leads/add-lead.css') }}?v=1">
 @php
     $repeatLead = $repeatLead ?? null;
     $repeatClient = $repeatClient ?? null;
@@ -23,24 +24,18 @@
     $defaultContactCountryCode = $contactCountryCode ?: (!empty($outreachAssignment) ? '+91' : '');
     $defaultWhatsappCountryCode = $alternateCountryCode ?: (!empty($outreachAssignment) ? '+91' : '');
 @endphp
-    <!-- Page Header -->
-                <div class="block justify-between page-header md:flex">
-                    <div>
-                        <h3 class="!text-defaulttextcolor dark:!text-defaulttextcolor/70 dark:text-white dark:hover:text-white text-[1.125rem] font-semibold"> Add Lead</h3>
-                    </div>
-                    <ol class="flex items-center whitespace-nowrap min-w-0">
-                        <li class="text-[0.813rem] ps-[0.5rem]">
-                          <a class="flex items-center text-primary hover:text-primary dark:text-primary truncate" href="javascript:void(0);">
-                            Lead
-                            <i class="ti ti-chevrons-right flex-shrink-0 text-[#8c9097] dark:text-white/50 px-[0.5rem] overflow-visible rtl:rotate-180"></i>
-                          </a>
-                        </li>
-                        <li class="text-[0.813rem] text-defaulttextcolor font-semibold hover:text-primary dark:text-[#8c9097] dark:text-white/50 " aria-current="page">
-                            Add Lead
-                        </li>
-                    </ol>
-                </div>
-                <!-- Page Header Close -->
+    <!-- Compact Add Lead Header -->
+    <header class="al-page-heading">
+        <div>
+            <h1>Add Lead</h1>
+            <p>Create the customer enquiry, travel requirement, product selection and follow-up in one workspace.</p>
+        </div>
+
+        <a href="{{ route('admin.clients.index') }}" class="al-secondary-btn">
+            <i class="ri-arrow-left-line" aria-hidden="true"></i>
+            Back to Leads
+        </a>
+    </header>
 
                 @if(session('success'))
                     <div class="alert alert-success mb-4">
@@ -55,13 +50,13 @@
                 <!-- Start::row-1 -->
                  <div class="box">
                         <div class="box-header">
-                            <h5 class="box-title">Client Selection</h5>
+                            <h5 class="box-title"><span class="al-step">1</span> Client Selection</h5>
                         </div>
                     <div class="box-body">
                         <div class="grid grid-cols-12 gap-6">
-                            <div class="xxl:col-span-4 xl:col-span-4  col-span-12">
+                            <div class="xxl:col-span-8 xl:col-span-8 col-span-12 al-client-select-wrap">
                                 <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Select Existing Client or Add New</label>
-                                <select id="clientSelect" class="ti-form-select rounded-sm form-control-sm w-1/3" name="client_id">
+                                <select id="clientSelect" class="ti-form-select rounded-sm form-control-sm w-full" name="client_id">
                                     <option value="new" {{ $selectedClientId === 'new' ? 'selected' : '' }}>+ Add New Client</option>
                                     @foreach($existingClients as $client)
                                         @php
@@ -115,12 +110,12 @@
                                     value="{{ $repeatLead->id }}"
                                 >
                             @endif
-                            <div class="box">
+                            <div class="box al-section al-basic-section">
                                 <div class="box-header">
-                                    <h5 class="box-title">Basic Information</h5>
+                                    <h5 class="box-title"><span class="al-step">2</span> Basic Information</h5>
                                 </div>
                                 <div class="box-body">
-                                    <div class="grid lg:grid-cols-2 gap-6">
+                                    <div class="grid lg:grid-cols-2 gap-6 al-basic-grid">
                                         <div class="space-y-2">
                                             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Full Name<span class="text-danger">*</span></label>
                                             <input type="hidden" name="client_id" id="client_id_field" value="{{ $selectedClientId !== 'new' ? $selectedClientId : '' }}">
@@ -217,12 +212,12 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="box">
+                            <div class="box al-section al-travel-section">
                                 <div class="box-header">
-                                    <h5 class="box-title">Travel Details</h5>
+                                    <h5 class="box-title"><span class="al-step">3</span> Travel Details</h5>
                                 </div>
                                 <div class="box-body">
-                                    <div class="grid grid-cols-12 sm:gap-6">
+                                    <div class="grid grid-cols-12 sm:gap-6 al-travel-meta">
                                         <div class="xl:col-span-3 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
                                             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Number of Passengers</label>
                                             <div class="form-control-sm bg-white border border-gray-200 rounded-sm dark:bg-bodybg dark:border-white/10"
@@ -320,12 +315,12 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="box">
+                            <div class="box al-section al-product-section">
                                 <div class="box-header">
-                                    <h5 class="box-title">Product Selection</h5>
+                                    <h5 class="box-title"><span class="al-step">4</span> Product & Requirement</h5>
                                 </div>
                                 <div class="box-body">
-                                    <div class="grid lg:grid-cols-2 gap-6">
+                                    <div class="grid lg:grid-cols-2 gap-6 al-product-grid">
                                         <div class="space-y-2">
                                             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Product<span class="text-danger">*</span></label>
                                             <select class="js-example-basic-multiple w-full form-control-sm" name="product_ids[]"
@@ -363,12 +358,12 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="box">
+                            <div class="box al-section al-followup-section">
                                 <div class="box-header">
-                                    <h5 class="box-title">Internal & Follow-up</h5>
+                                    <h5 class="box-title"><span class="al-step">5</span> Follow-up & Assignment</h5>
                                 </div>
                                 <div class="box-body">
-                                    <div class="grid grid-cols-12 sm:gap-6">
+                                    <div class="grid grid-cols-12 sm:gap-6 al-followup-grid">
                                         <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
                                             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Next Follow-up</label>
                                             <div class="form-group">
@@ -429,13 +424,76 @@
                                         </div>
                                     </div>
                                     <div class="mt-5">
-                                        <button type="submit" class="ti-btn ti-btn-primary-full ti-custom-validate-btn">Submit</button>
+                                        <button type="submit" class="ti-btn ti-btn-primary-full ti-custom-validate-btn al-original-submit">Create Lead</button>
                                     </div>
                                 </div>
                             </div>
                         </form>
                     </div>
                 </div>
+                    </div>
+
+                    <aside class="al-sidebar">
+                        <section class="al-summary-card">
+                            <div class="al-summary-head">
+                                <div>
+                                    <h2>Lead Summary</h2>
+                                    <p>Updates as you complete the form.</p>
+                                </div>
+                                <span class="al-status-pill" data-al-summary-status>Initiated</span>
+                            </div>
+
+                            <div class="al-summary-list">
+                                <div class="al-summary-item">
+                                    <small>Client</small>
+                                    <strong data-al-summary-client>New Client</strong>
+                                </div>
+
+                                <div class="al-summary-item">
+                                    <small>Phone</small>
+                                    <strong data-al-summary-phone>Not entered</strong>
+                                </div>
+
+                                <div class="al-summary-item">
+                                    <small>Product</small>
+                                    <strong data-al-summary-product>Not selected</strong>
+                                </div>
+
+                                <div class="al-summary-item">
+                                    <small>Passengers</small>
+                                    <strong data-al-summary-passengers>1 Passenger</strong>
+                                </div>
+
+                                <div class="al-summary-item">
+                                    <small>Representative</small>
+                                    <strong data-al-summary-representative>Auto allocation</strong>
+                                </div>
+
+                                <div class="al-summary-item">
+                                    <small>Next Follow-up</small>
+                                    <strong data-al-summary-followup>Not scheduled</strong>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="al-submit-card">
+                            <div class="al-submit-copy">
+                                <h2>Create Lead</h2>
+                                <p>Existing CRM validation and allocation rules remain unchanged.</p>
+                            </div>
+
+                            <button type="button" class="al-primary-btn" data-al-submit-lead>
+                                <i class="ri-add-circle-line" aria-hidden="true"></i>
+                                Create Lead
+                            </button>
+
+                            <div class="al-submit-note">
+                                <i class="ri-shield-check-line" aria-hidden="true"></i>
+                                Uses the existing lead creation route and form validation.
+                            </div>
+                        </section>
+                    </aside>
+                 </div>
 @stop
 @push('scripts')
 <script>
@@ -1502,6 +1560,118 @@ document.addEventListener('DOMContentLoaded', function () {
             tryMatchClientByPhone(whatsappVal);
         });
     }
+});
+</script>
+
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const leadForm = document.querySelector('form.ti-custom-validation');
+    if (!leadForm) return;
+
+    const summary = {
+        client: document.querySelector('[data-al-summary-client]'),
+        phone: document.querySelector('[data-al-summary-phone]'),
+        product: document.querySelector('[data-al-summary-product]'),
+        passengers: document.querySelector('[data-al-summary-passengers]'),
+        representative: document.querySelector('[data-al-summary-representative]'),
+        followup: document.querySelector('[data-al-summary-followup]'),
+        status: document.querySelector('[data-al-summary-status]')
+    };
+
+    function selectedText(select) {
+        if (!select) return '';
+        const selected = Array.from(select.selectedOptions || [])
+            .map(option => option.textContent.trim())
+            .filter(Boolean);
+        return selected.join(', ');
+    }
+
+    function updateLeadSummary() {
+        const clientSelect = document.getElementById('clientSelect');
+        const nameInput = leadForm.querySelector('input[name="name"]');
+        const phoneInput = leadForm.querySelector('input[name="contact_number"]');
+        const productSelect = document.getElementById('product_ids');
+        const passengerInput = leadForm.querySelector('input[name="number_of_passengers"]');
+        const representativeSelect = document.getElementById('staffDropdown');
+        const followupInput = leadForm.querySelector('input[name="next_follow_up"]');
+        const statusSelect = leadForm.querySelector('select[name="status"]');
+
+        if (summary.client) {
+            let clientLabel = 'New Client';
+            if (clientSelect && clientSelect.value && clientSelect.value !== 'new') {
+                clientLabel = (clientSelect.options[clientSelect.selectedIndex]?.text || '')
+                    .split(' | ')[0]
+                    .trim() || 'Existing Client';
+            } else if (nameInput && nameInput.value.trim()) {
+                clientLabel = nameInput.value.trim();
+            }
+            summary.client.textContent = clientLabel;
+        }
+
+        if (summary.phone) {
+            summary.phone.textContent =
+                phoneInput && phoneInput.value.trim()
+                    ? phoneInput.value.trim()
+                    : 'Not entered';
+        }
+
+        if (summary.product) {
+            const productLabel = selectedText(productSelect);
+            summary.product.textContent = productLabel || 'Not selected';
+        }
+
+        if (summary.passengers) {
+            const passengers = parseInt(passengerInput?.value || '1', 10) || 1;
+            summary.passengers.textContent =
+                passengers + (passengers === 1 ? ' Passenger' : ' Passengers');
+        }
+
+        if (summary.representative) {
+            const rep = selectedText(representativeSelect);
+            summary.representative.textContent = rep || 'Auto allocation';
+        }
+
+        if (summary.followup) {
+            summary.followup.textContent =
+                followupInput && followupInput.value.trim()
+                    ? followupInput.value.trim()
+                    : 'Not scheduled';
+        }
+
+        if (summary.status && statusSelect) {
+            summary.status.textContent =
+                statusSelect.options[statusSelect.selectedIndex]?.text || 'Initiated';
+
+            summary.status.classList.toggle(
+                'is-cancelled',
+                statusSelect.value === '2'
+            );
+        }
+    }
+
+    leadForm.addEventListener('input', updateLeadSummary);
+    leadForm.addEventListener('change', updateLeadSummary);
+
+    const clientSelect = document.getElementById('clientSelect');
+    if (clientSelect) {
+        clientSelect.addEventListener('change', function () {
+            setTimeout(updateLeadSummary, 0);
+        });
+    }
+
+    const submitButton = document.querySelector('[data-al-submit-lead]');
+    if (submitButton) {
+        submitButton.addEventListener('click', function () {
+            if (typeof leadForm.requestSubmit === 'function') {
+                leadForm.requestSubmit();
+            } else {
+                leadForm.submit();
+            }
+        });
+    }
+
+    updateLeadSummary();
 });
 </script>
 

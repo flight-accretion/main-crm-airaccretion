@@ -112,6 +112,33 @@ class OperationsVendorRefundFlowTest extends TestCase
         );
     }
 
+    public function test_accounts_can_submit_vendor_refund_or_cancellation_from_ride_status(): void
+    {
+        $viewer = $this->user('Accounts Vendor Refund', UserType::ACCOUNTS_EXECUTIVE);
+
+        $response = $this
+            ->actingAs($viewer)
+            ->postJson(route(
+                'admin.rides.ride-status.save-vendor-refund',
+                (string) Str::uuid()
+            ));
+
+        $response->assertUnprocessable();
+    }
+
+    public function test_sales_cannot_submit_vendor_refund_or_cancellation_from_ride_status(): void
+    {
+        $viewer = $this->user('Sales Vendor Refund', UserType::SALES_EXECUTIVE);
+
+        $this
+            ->actingAs($viewer)
+            ->postJson(route(
+                'admin.rides.ride-status.save-vendor-refund',
+                (string) Str::uuid()
+            ))
+            ->assertForbidden();
+    }
+
     public function test_multiple_refund_rows_of_one_vendor_payment_show_as_one_list_row(): void
     {
         $viewer = $this->user('Operations Group User', UserType::OPERATIONS_EXECUTIVE);

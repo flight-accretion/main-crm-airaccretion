@@ -1,9 +1,19 @@
 @extends('admin.layouts.header')
 @section('content')
-    <!-- Page Header -->
-
-    <div class="block justify-between page-header md:flex"></div>
-    <!-- Page Header Close -->
+<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/leads/view-clients.css') }}?v=1">
+    <!-- Compact Client Directory Header -->
+    <div class="crm-client-directory-heading">
+        <div>
+            <h1>Client Directory</h1>
+            <p>Search, review and manage customer records.</p>
+        </div>
+        <button type="button"
+            class="crm-client-primary-btn"
+            data-open-client-add>
+            <i class="ri-add-line" aria-hidden="true"></i>
+            Add Client
+        </button>
+    </div>
     @if (session('success'))
         <div class="alert alert-success mb-4">
             {{ session('success') }}
@@ -14,12 +24,43 @@
             {{ session('error') }}
         </div>
     @endif
+    <section class="crm-client-stats" aria-label="Client summary">
+        <article class="crm-client-stat crm-client-stat--navy">
+            <strong>{{ number_format($clientStats['total'] ?? 0) }}</strong>
+            <span>Total Clients</span>
+            <small>All customer records</small>
+        </article>
+        <article class="crm-client-stat crm-client-stat--green">
+            <strong>{{ number_format($clientStats['active'] ?? 0) }}</strong>
+            <span>Active</span>
+            <small>Currently active records</small>
+        </article>
+        <article class="crm-client-stat crm-client-stat--amber">
+            <strong>{{ number_format($clientStats['incomplete'] ?? 0) }}</strong>
+            <span>Incomplete Profiles</span>
+            <small>Missing email or GST details</small>
+        </article>
+        <article class="crm-client-stat crm-client-stat--blue">
+            <strong>{{ number_format($clientStats['added_this_month'] ?? 0) }}</strong>
+            <span>Added This Month</span>
+            <small>New records in {{ now()->format('F') }}</small>
+        </article>
+    </section>
     <div class="grid grid-cols-12">
         <div class="xl:col-span-12  col-span-12">
-            <div class="box">
+            <div class="box crm-client-add-panel" data-client-add-panel aria-hidden="true">
+                <div class="crm-client-drawer-header">
+                    <div>
+                        <h2>Add Client</h2>
+                        <p>Create a customer record without leaving the directory.</p>
+                    </div>
+                    <button type="button" class="crm-client-icon-btn" data-close-client-add aria-label="Close add client form">
+                        <i class="ri-close-line" aria-hidden="true"></i>
+                    </button>
+                </div>
                 <div class="hs-accordion-group">
                     <div class="hs-accordion" id="add-client-accordion">
-                        <div class="box-header" style="display: block; padding-top: 10px; padding-bottom: 10px;">
+                        <div class="box-header crm-client-legacy-add-header" style="display: block; padding-top: 10px; padding-bottom: 10px;">
                             <div class="flex items-center">
                                 <div class="me-4 gap-0">
                                     <span class="avatar avatar-sm !rounded-full bg-theme m-0">
@@ -83,7 +124,7 @@
                                                 Address</label>
                                             <input type="email" name="email"
                                                 class="ti-form-input rounded-sm form-control-sm"
-                                                value="{{ old('email', '') }}" required>
+                                                value="{{ old('email', '') }}">
                                             @error('email', 'add')
                                                 <span class="text-red-500 text-xs">{{ $message }}</span>
                                             @enderror
@@ -132,7 +173,7 @@
                                                 Number</label>
                                             <input id="whatsapp" type="tel" name="alternate_number"
                                                 class="ti-form-input intl-phone-input iti rounded-sm form-control-sm"
-                                                value="{{ old('alternate_number', '') }}" required>
+                                                value="{{ old('alternate_number', '') }}">
                                             <input type="hidden" name="whatsapp_country_code" id="whatsapp_country_code"
                                                 value="{{ old('whatsapp_country_code', '') }}">
                                             @error('alternate_number', 'add')
@@ -213,83 +254,210 @@
             </div>
         </div>
     </div>
+    <div class="crm-client-drawer-backdrop" data-client-add-backdrop hidden></div>
 
-    <div class="grid grid-cols-12 gap-6">
-        <div class="xl:col-span-12 col-span-12">
-            <div class="box custom-box">
-                <div class="box-body">
-                    <div class="table-responsive">
-                        <table id="" class="table display responsive nowrap table-datatable server-paginated" width="100%">
-                            <thead class="bg-primary text-white">
-                                <tr class="border-b border-defaultborder">
-                                    <th data-priority="1">S.No</th>
-                                    <th data-priority="2">Name</th>
-                                    <th data-priority="4">Company Name</th>
-                                    <th data-priority="5">GST Number</th>
-                                    <th data-priority="3">Email</th>
-                                    <th data-priority="5">Phone</th>
-                                    <th data-priority="4">City</th>
-                                    <th data-priority="1">Status</th>
-                                    <th data-priority="1">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach ($clients as $key => $client)
-                                    <tr class="border-b border-defaultborder">
-                                        <td class="text-center">{{ ($clients->firstItem() ?? 1) + $key }}</td>
-                                        <td>{{ $client->name }}</td>
-                                        <td>{{ $client->company_name ?? 'N/A' }}</td>
-                                        <td>{{ $client->gst_number ?? 'N/A' }}</td>
-                                        <td>{{ $client->email }}</td>
-                                        <td class="text-center">{{ $client->contact_number }}</td>
-                                        <td>
-                                            {{ $client->city->name ?? 'N/A' }}
-                                        </td>
-                                        <td class="text-center">
-                                            @if ($client->status == 1)
-                                                <span class="badge bg-success/10 text-success">Active</span>
-                                            @else
-                                                <span class="badge bg-danger/10 text-danger">Inactive</span>
-                                            @endif
-
-                                        </td>
-                                        <td>
-                                            <div class="hstack flex gap-3 text-[.9375rem]">
-                                                <a aria-label="anchor"
-                                                    href="{{ route('admin.client.view', $client->id) }}"
-                                                    target="_blank"
-                                                    class="ti-btn ti-btn-icon ti-btn-sm ti-btn-primary-full view-client-btn"><i
-                                                        class="ri-eye-line"></i></a>
-                                                <a aria-label="anchor"
-                                                    class="ti-btn ti-btn-icon ti-btn-sm ti-btn-info-full edit-client-btn"
-                                                    data-client-id="{{ $client->id }}"
-                                                    data-hs-overlay="#edit-client"><i class="ri-edit-line"></i></a>
-                                                <!-- <a aria-label="anchor" href="javascript:void(0);" class="ti-btn ti-btn-icon ti-btn-sm ti-btn-danger-full delete-client" data-id="{{ $client->id }}"><i class="ri-delete-bin-line"></i></a> -->
-                                                @if(auth()->check() && in_array(optional(auth()->user()->userType)->user_type, \App\Models\UserType::ADMIN_ROLES))
-                                                <a aria-label="anchor" href="javascript:void(0);"
-                                                    class="ti-btn ti-btn-icon ti-btn-sm ti-btn-success-full toggle-client-status"
-                                                    data-id="{{ $client->id }}"data-status="{{ $client->status }}"
-                                                    data-name="{{ $client->name }}"data-bs-toggle="tooltip"
-                                                    data-bs-placement="top"
-                                                    title="{{ $client->status ? 'Deactivate' : 'Activate' }}"><i
-                                                        class="{{ $client->status ? 'ri-lock-line' : 'ri-check-line' }}"></i></a>
-                                                @endif
-                                            </div>
-                                        </td>
-                                    </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                    @if($clients->hasPages())
-                    <div class="mt-4">
-                        {{ $clients->appends(request()->except('page'))->links() }}
-                    </div>
-                    @endif
-                </div>
+    <section class="crm-client-directory">
+    <div class="crm-client-directory-toolbar">
+        <form method="GET" action="{{ route('admin.client.index') }}" class="crm-client-search-form">
+            <div class="crm-client-search-field">
+                <i class="ri-search-line" aria-hidden="true"></i>
+                <input type="search" name="search" value="{{ request('search') }}"
+                    placeholder="Search name, phone, email, company, GST or city" autocomplete="off">
             </div>
+
+            <select name="per_page" aria-label="Clients per page">
+                @foreach([10, 20, 50, 100] as $size)
+                    <option value="{{ $size }}" {{ (int) request('per_page', 20) === $size ? 'selected' : '' }}>
+                        {{ $size }} per page
+                    </option>
+                @endforeach
+            </select>
+
+            <select name="status" aria-label="Client status">
+                <option value="">All status</option>
+                <option value="active" @selected(request('status') === 'active')>Active</option>
+                <option value="inactive" @selected(request('status') === 'inactive')>Inactive</option>
+            </select>
+
+            <select name="profile" aria-label="Profile completeness">
+                <option value="">All profiles</option>
+                <option value="complete" @selected(request('profile') === 'complete')>Complete</option>
+                <option value="incomplete" @selected(request('profile') === 'incomplete')>Incomplete</option>
+            </select>
+
+            <button type="submit" class="crm-client-primary-btn">Search</button>
+
+            @if(request()->filled('search') || request()->filled('per_page') || request()->filled('status') || request()->filled('profile'))
+                <a href="{{ route('admin.client.index') }}" class="crm-client-secondary-btn">Reset</a>
+            @endif
+        </form>
+
+        <div class="crm-client-result-meta">
+            <strong>{{ number_format($clients->total()) }}</strong>
+            <span>{{ request()->filled('search') ? 'matching clients' : 'total clients' }}</span>
         </div>
     </div>
+
+    <div class="crm-client-table-card">
+        <div class="crm-client-table-head">
+            <div>Client / Contact</div>
+            <div>Company / Tax</div>
+            <div>Location</div>
+            <div>Status</div>
+            <div class="text-end">Action</div>
+        </div>
+
+        <div class="crm-client-table-body">
+            @forelse ($clients as $client)
+                @php
+                    $clientName = trim((string) ($client->name ?? ''));
+                    $clientInitial = strtoupper(substr($clientName !== '' ? $clientName : 'C', 0, 1));
+                    $companyName = trim((string) ($client->company_name ?? ''));
+                    $gstNumber = trim((string) ($client->gst_number ?? ''));
+                    $email = trim((string) ($client->email ?? ''));
+                    $phone = trim((string) ($client->contact_number ?? ''));
+                    $cityName = optional($client->city)->name;
+                    $countryName = optional($client->country)->name;
+                @endphp
+
+                <article class="crm-client-row" data-client-row>
+                    <div class="crm-client-cell crm-client-identity" data-label="Client / Contact">
+                        <span class="crm-client-avatar">{{ $clientInitial }}</span>
+                        <div class="crm-client-identity-copy">
+                            <button type="button" class="crm-client-name crm-client-view-trigger"
+                                data-client-id="{{ $client->id }}">
+                                {{ $clientName !== '' ? $clientName : 'Unnamed Client' }}
+                            </button>
+
+                            <a href="{{ $phone !== '' ? 'tel:' . preg_replace('/\s+/', '', $phone) : 'javascript:void(0)' }}"
+                                class="crm-client-contact">
+                                <i class="ri-phone-line" aria-hidden="true"></i>
+                                {{ $phone !== '' ? $phone : 'No phone' }}
+                            </a>
+
+                            <span class="crm-client-contact">
+                                <i class="ri-mail-line" aria-hidden="true"></i>
+                                {{ $email !== '' ? $email : 'No email' }}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="crm-client-cell" data-label="Company / Tax">
+                        <strong>{{ $companyName !== '' ? $companyName : 'Individual' }}</strong>
+                        <small>GST: {{ $gstNumber !== '' ? $gstNumber : 'Not provided' }}</small>
+                    </div>
+
+                    <div class="crm-client-cell" data-label="Location">
+                        <strong>{{ $cityName ?: 'City not set' }}</strong>
+                        <small>{{ $countryName ?: 'Country not set' }}</small>
+                    </div>
+
+                    <div class="crm-client-cell client-status-cell" data-label="Status">
+                        @if ($client->status == 1)
+                            <span class="crm-client-badge crm-client-badge--active">Active</span>
+                        @else
+                            <span class="crm-client-badge crm-client-badge--inactive">Inactive</span>
+                        @endif
+                    </div>
+
+                    <div class="crm-client-cell crm-client-actions" data-label="Action">
+                        <button type="button" class="crm-client-icon-btn view-client-btn crm-client-view-trigger"
+                            data-client-id="{{ $client->id }}" title="View Client" aria-label="View Client">
+                            <i class="ri-eye-line" aria-hidden="true"></i>
+                        </button>
+
+                        <button type="button" class="crm-client-icon-btn edit-client-btn"
+                            data-client-id="{{ $client->id }}" data-hs-overlay="#edit-client"
+                            title="Edit Client" aria-label="Edit Client">
+                            <i class="ri-edit-line" aria-hidden="true"></i>
+                        </button>
+
+                        @if(auth()->check() && in_array(optional(auth()->user()->userType)->user_type, \App\Models\UserType::ADMIN_ROLES))
+                            <button type="button"
+                                class="crm-client-icon-btn crm-client-icon-btn--status toggle-client-status"
+                                data-id="{{ $client->id }}"
+                                data-status="{{ $client->status }}"
+                                data-name="{{ $client->name }}"
+                                data-bs-toggle="tooltip"
+                                data-bs-placement="top"
+                                title="{{ $client->status ? 'Deactivate' : 'Activate' }}"
+                                aria-label="{{ $client->status ? 'Deactivate Client' : 'Activate Client' }}">
+                                <i class="{{ $client->status ? 'ri-lock-line' : 'ri-check-line' }}"></i>
+                            </button>
+                        @endif
+                    </div>
+                </article>
+            @empty
+                <div class="crm-client-empty">
+                    <i class="ri-user-search-line" aria-hidden="true"></i>
+                    <strong>No clients found</strong>
+                    <span>Try another search or clear the filters.</span>
+                </div>
+            @endforelse
+        </div>
+
+        <footer class="crm-client-pagination">
+            <div>
+                @if($clients->total() > 0)
+                    Showing <strong>{{ number_format($clients->firstItem() ?? 0) }}</strong>
+                    to <strong>{{ number_format($clients->lastItem() ?? 0) }}</strong>
+                    of <strong>{{ number_format($clients->total()) }}</strong> clients
+                @else
+                    No clients
+                @endif
+            </div>
+
+            @if($clients->hasPages())
+                <div class="crm-client-pagination-links">
+                    {{ $clients->appends(request()->except('page'))->links() }}
+                </div>
+            @endif
+        </footer>
+    </div>
+</section>
+
+<div class="crm-client-drawer-backdrop" data-client-view-backdrop hidden></div>
+<aside class="crm-client-view-drawer" data-client-view-drawer aria-hidden="true" aria-labelledby="client-view-drawer-title">
+    <header class="crm-client-drawer-header">
+        <div>
+            <h2 id="client-view-drawer-title">Client Details</h2>
+            <p>Customer record summary</p>
+        </div>
+        <button type="button" class="crm-client-icon-btn" data-close-client-view aria-label="Close client details">
+            <i class="ri-close-line" aria-hidden="true"></i>
+        </button>
+    </header>
+    <div class="crm-client-view-profile">
+        <span class="crm-client-avatar" data-client-view-initial>C</span>
+        <div><strong data-client-view-name>Client</strong><span data-client-view-status>Loading</span></div>
+    </div>
+    <section class="crm-client-view-section">
+        <h3>Contact</h3>
+        <div class="crm-client-view-grid">
+            <div><small>Phone</small><strong data-client-view-phone>-</strong></div>
+            <div><small>Email</small><strong data-client-view-email>-</strong></div>
+            <div><small>City</small><strong data-client-view-city>-</strong></div>
+            <div><small>Address</small><strong data-client-view-address>-</strong></div>
+        </div>
+    </section>
+    <section class="crm-client-view-section">
+        <h3>Company / Tax</h3>
+        <div class="crm-client-view-grid">
+            <div><small>Company</small><strong data-client-view-company>-</strong></div>
+            <div><small>GST</small><strong data-client-view-gst>-</strong></div>
+        </div>
+    </section>
+    <section class="crm-client-view-section">
+        <h3>CRM Context</h3>
+        <div class="crm-client-view-grid">
+            <div><small>Total Leads</small><strong data-client-view-total-leads>-</strong></div>
+            <div><small>Active Leads</small><strong data-client-view-active-leads>-</strong></div>
+            <div><small>Latest Product</small><strong data-client-view-product>-</strong></div>
+            <div><small>Last Activity</small><strong data-client-view-activity>-</strong></div>
+        </div>
+    </section>
+</aside>
+
     <!-- Delete Confirmation Alert Modal -->
     <div id="custom-delete-alert"
         class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
@@ -506,6 +674,87 @@
 
 @push('scripts')
     <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const addPanel = document.querySelector('[data-client-add-panel]');
+            const addBackdrop = document.querySelector('[data-client-add-backdrop]');
+            const addForm = document.getElementById('add-client-form');
+            const openAdd = () => {
+                if (!addPanel || !addBackdrop) return;
+                addPanel.classList.add('is-open');
+                addPanel.setAttribute('aria-hidden', 'false');
+                addBackdrop.hidden = false;
+                document.body.classList.add('overflow-hidden');
+                addForm?.classList.remove('hidden');
+                addPanel.querySelector('input[name="name"]')?.focus();
+            };
+            const closeAdd = () => {
+                if (!addPanel || !addBackdrop) return;
+                addPanel.classList.remove('is-open');
+                addPanel.setAttribute('aria-hidden', 'true');
+                addBackdrop.hidden = true;
+                document.body.classList.remove('overflow-hidden');
+            };
+            document.querySelector('[data-open-client-add]')?.addEventListener('click', openAdd);
+            document.querySelector('[data-close-client-add]')?.addEventListener('click', closeAdd);
+            addBackdrop?.addEventListener('click', closeAdd);
+
+            const viewDrawer = document.querySelector('[data-client-view-drawer]');
+            const viewBackdrop = document.querySelector('[data-client-view-backdrop]');
+            const setText = (selector, value, fallback = 'Not provided') => {
+                const element = document.querySelector(selector);
+                if (element) element.textContent = value || fallback;
+            };
+            const closeView = () => {
+                viewDrawer?.classList.remove('is-open');
+                viewDrawer?.setAttribute('aria-hidden', 'true');
+                if (viewBackdrop) viewBackdrop.hidden = true;
+                document.body.classList.remove('overflow-hidden');
+            };
+            const openView = async (clientId) => {
+                if (!viewDrawer || !viewBackdrop || !clientId) return;
+                viewDrawer.classList.add('is-open');
+                viewDrawer.setAttribute('aria-hidden', 'false');
+                viewBackdrop.hidden = false;
+                document.body.classList.add('overflow-hidden');
+                setText('[data-client-view-name]', 'Loading...');
+
+                try {
+                    const url = "{{ route('admin.client.data', ':client') }}".replace(':client', encodeURIComponent(clientId));
+                    const response = await fetch(url, { headers: { Accept: 'application/json' } });
+                    if (!response.ok) throw new Error('Unable to load client details');
+                    const payload = await response.json();
+                    const client = payload.client || {};
+                    const summary = payload.lead_summary || {};
+                    setText('[data-client-view-name]', client.name, 'Unnamed Client');
+                    setText('[data-client-view-initial]', (client.name || 'C').trim().charAt(0).toUpperCase(), 'C');
+                    setText('[data-client-view-status]', Number(client.status) === 1 ? 'Active client' : 'Inactive client');
+                    setText('[data-client-view-phone]', client.contact_number);
+                    setText('[data-client-view-email]', client.email);
+                    setText('[data-client-view-city]', (payload.cities || []).find((city) => String(city.id) === String(client.city_id))?.name);
+                    setText('[data-client-view-address]', client.address);
+                    setText('[data-client-view-company]', client.company_name, 'Individual');
+                    setText('[data-client-view-gst]', client.gst_number);
+                    setText('[data-client-view-total-leads]', summary.total, '0');
+                    setText('[data-client-view-active-leads]', summary.active, '0');
+                    setText('[data-client-view-product]', summary.latest_product);
+                    setText('[data-client-view-activity]', summary.last_activity);
+                } catch (error) {
+                    setText('[data-client-view-name]', 'Could not load details');
+                    setText('[data-client-view-status]', 'Please try again');
+                }
+            };
+            document.querySelectorAll('.crm-client-view-trigger').forEach((button) => {
+                button.addEventListener('click', () => openView(button.dataset.clientId));
+            });
+            document.querySelector('[data-close-client-view]')?.addEventListener('click', closeView);
+            viewBackdrop?.addEventListener('click', closeView);
+            document.addEventListener('keydown', (event) => {
+                if (event.key !== 'Escape') return;
+                closeAdd();
+                closeView();
+            });
+        });
+
         $(document).ready(function() {
             let selectedClientId = null;
 
@@ -594,21 +843,21 @@
 
                             // Update button icon and tooltip
                             button.find('i')
-                                .removeClass(newStatus ? 'ri-lock-line' : 'ri-check-line')
-                                .addClass(newStatus ? 'ri-check-line' : 'ri-lock-line');
+                                .removeClass('ri-lock-line ri-check-line')
+                                .addClass(newStatus ? 'ri-lock-line' : 'ri-check-line');
 
                             button.attr('title', newStatus ? 'Deactivate' : 'Activate')
                                 .data('status', newStatus);
 
                             // Update status badge (10th column)
-                            const statusCell = button.closest('tr').find('td:nth-child(6)');
+                            const statusCell = button.closest('[data-client-row]').find('.client-status-cell');
                             if (newStatus) {
                                 statusCell.html(
-                                    '<span class="badge bg-success/10 text-success">Active</span>'
+                                    '<span class="crm-client-badge crm-client-badge--active">Active</span>'
                                 );
                             } else {
                                 statusCell.html(
-                                    '<span class="badge bg-danger/10 text-danger">Inactive</span>'
+                                    '<span class="crm-client-badge crm-client-badge--inactive">Inactive</span>'
                                 );
                             }
                         } else {
@@ -740,11 +989,10 @@
         document.addEventListener('DOMContentLoaded', function() {
             @if ($errors->add->any())
                 const addClientForm = document.getElementById('add-client-form');
-                const addClientButton = document.querySelector('[aria-controls="add-client-form"]');
+                const addClientButton = document.querySelector('[data-open-client-add]');
 
                 if (addClientForm && addClientButton) {
-                    addClientForm.classList.remove('hidden');
-                    addClientButton.classList.add('hs-accordion-active');
+                    addClientButton.click();
                 }
             @endif
         });

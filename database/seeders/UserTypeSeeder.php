@@ -17,23 +17,25 @@ class UserTypeSeeder extends Seeder
         // Define hierarchy
       $roleHierarchy = [
         'Super Admin' => [
-            'Admin' => [],
-            'Senior Sales Manager' => [
-                'Sales Manager' => [
-                    'Sales Executive' => []
-                ]
+            'Admin' => [
+                'Senior Sales Manager' => [
+                    'Sales Manager' => [
+                        'Sales Executive' => []
+                    ]
+                ],
+                'Senior Accounts Manager' => [
+                    'Accounts Manager' => [
+                        'Accounts Executive' => []
+                    ]
+                ],
+                'Senior Operations Manager' => [
+                    'Operations Manager' => [
+                        'Operations Executive' => []
+                    ]
+                ],
+                'Hr' => []
             ],
-            'Senior Accounts Manager' => [
-                'Accounts Manager' => [
-                    'Accounts Executive' => []
-                ]
-            ],
-            'Senior Operations Manager' => [
-                'Operations Manager' => [
-                    'Operations Executive' => []
-                ]
-            ],
-            'Hr' => []
+            'Owner' => []
         ]
     ];
 
@@ -73,27 +75,10 @@ class UserTypeSeeder extends Seeder
                 ]);
             }
 
-            // Create default user if not already exists
-            $email = strtolower(str_replace(' ', '', $role)) . '@accretion.in';
-            $existsUser = DB::table('users')->where('email', $email)->exists();
-
-
-            if (!$existsUser) {
-                $id = (string) Str::uuid();
-                DB::table('users')->insert([
-                    'id'              => $id,
-                    'name'            => $role . ' User',
-                    'email'           => $email,
-                    'password'        => Hash::make('password123'), // default password
-                    'address'         => $role . ' Office',
-                    'contact_number'  => '9999999999',
-                    'user_type_id'    => $roleId,
-                    'status'          => 1,
-                    'joining_date'    => $now,
-                    'last_login'      => $now,
-                    'created_at'      => $now,
-                    'updated_at'      => $now,
-                ]);
+            if ($role === 'Owner') {
+                $this->call(OwnerAccountSeeder::class);
+            } else {
+                $this->seedDefaultUser($role, $roleId, $now);
             }
 
             // Recursive for children
@@ -101,6 +86,29 @@ class UserTypeSeeder extends Seeder
                 $this->insertRolesAndUsers($children, $roleId, $now);
             }
         }
+    }
+
+    private function seedDefaultUser(string $role, string $roleId, Carbon $now): void
+    {
+        $email = strtolower(str_replace(' ', '', $role)) . '@accretion.in';
+        if (DB::table('users')->where('email', $email)->exists()) {
+            return;
+        }
+
+        DB::table('users')->insert([
+            'id' => (string) Str::uuid(),
+            'name' => $role . ' User',
+            'email' => $email,
+            'password' => Hash::make('AccretionGarden@098'),
+            'address' => $role . ' Office',
+            'contact_number' => '9999999999',
+            'user_type_id' => $roleId,
+            'status' => 1,
+            'joining_date' => $now,
+            'last_login' => $now,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
     }
 
     private function flattenRoles(array $roles)

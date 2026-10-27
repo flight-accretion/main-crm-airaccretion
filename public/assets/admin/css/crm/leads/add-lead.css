@@ -1,0 +1,475 @@
+/* ==========================================================================
+   Accretion CRM - Add Lead
+   Scope: /admin/lead/create
+   Folder: public/assets/admin/css/crm/leads/
+   ========================================================================== */
+
+.al-page-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.al-page-heading h1 {
+    margin: 0 0 .25rem;
+    color: #172033;
+    font-size: 1.45rem;
+    font-weight: 750;
+    line-height: 1.2;
+}
+
+.al-page-heading p {
+    margin: 0;
+    color: #7e8da3;
+    font-size: .82rem;
+}
+
+.al-primary-btn,
+.al-secondary-btn {
+    min-height: 2.35rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .4rem;
+    padding: .5rem .85rem;
+    border: 1px solid #dfe5ec;
+    border-radius: .55rem;
+    font-weight: 750;
+    transition: .15s ease;
+}
+
+.al-primary-btn {
+    width: 100%;
+    border-color: #0f2b46;
+    background: #0f2b46;
+    color: #fff;
+}
+
+.al-primary-btn:hover {
+    background: #173d60;
+    border-color: #173d60;
+    color: #fff;
+}
+
+.al-secondary-btn {
+    background: #fff;
+    color: #0f2b46;
+}
+
+.al-secondary-btn:hover {
+    background: #f8fafc;
+    border-color: #b9c4d2;
+    color: #0f2b46;
+}
+
+.al-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 19.5rem;
+    gap: .9rem;
+    align-items: start;
+}
+
+.al-main {
+    min-width: 0;
+}
+
+.al-sidebar {
+    position: sticky;
+    top: 5rem;
+    display: grid;
+    gap: .75rem;
+    min-width: 0;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+    padding-bottom: 1.5rem;
+}
+
+.al-section {
+    overflow: visible;
+    margin-bottom: .75rem;
+    border: 1px solid #dfe5ec;
+    border-radius: .75rem;
+    background: #fff;
+    box-shadow: none;
+}
+
+.al-section > .box-header {
+    min-height: 3rem;
+    display: flex;
+    align-items: center;
+    padding: .72rem .9rem;
+    border-bottom: 1px solid #e2e7ed;
+    background: #fbfcfd;
+}
+
+.al-section > .box-header .box-title {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    margin: 0;
+    color: #172033;
+    font-size: .86rem;
+    font-weight: 750;
+}
+
+.al-step {
+    width: 1.55rem;
+    height: 1.55rem;
+    display: inline-grid;
+    flex: 0 0 1.55rem;
+    place-items: center;
+    border-radius: .45rem;
+    background: #0f2b46;
+    color: #fff;
+    font-size: .66rem;
+    font-weight: 800;
+}
+
+.al-section > .box-body {
+    padding: .9rem;
+}
+
+/* Compact existing CRM fields without changing their IDs / names / JS hooks. */
+.al-section .space-y-2 {
+    margin: 0 !important;
+}
+
+.al-section .ti-form-label {
+    display: block;
+    margin-bottom: .3rem !important;
+    color: #617188;
+    font-size: .7rem;
+    font-weight: 750;
+}
+
+.al-section .ti-form-input,
+.al-section .ti-form-select,
+.al-section .form-control,
+.al-section .select2-container .select2-selection {
+    border-color: #dfe5ec !important;
+    border-radius: .5rem !important;
+}
+
+.al-section .ti-form-input,
+.al-section .ti-form-select,
+.al-section .form-control {
+    min-height: 2.4rem;
+}
+
+.al-section textarea.ti-form-input {
+    min-height: 4rem;
+}
+
+.al-section .grid.gap-6,
+.al-section .grid.sm\:gap-6 {
+    gap: .7rem !important;
+}
+
+.al-client-section .box-body {
+    padding: .8rem .9rem;
+}
+
+.al-client-select-wrap .select2-container {
+    max-width: 100%;
+}
+
+.al-client-select-wrap .select2-selection {
+    min-height: 2.55rem !important;
+    display: flex !important;
+    align-items: center;
+}
+
+.al-basic-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.al-travel-meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.al-travel-section #repeatableFieldsContainer {
+    margin-top: .15rem;
+}
+
+.al-travel-section .repeatable-row {
+    display: grid !important;
+    grid-template-columns:
+        minmax(9rem, 1fr)
+        minmax(9rem, 1fr)
+        minmax(9rem, 1fr)
+        minmax(9rem, 1fr)
+        2.6rem !important;
+    gap: .55rem !important;
+    align-items: end !important;
+    margin-top: .7rem !important;
+}
+
+.al-travel-section .repeatable-row > div {
+    grid-column: auto !important;
+    width: auto !important;
+}
+
+.al-travel-section .repeatable-row .addBtn,
+.al-travel-section .repeatable-row .removeBtn {
+    width: 2.4rem;
+    height: 2.4rem;
+    display: inline-grid;
+    place-items: center;
+    padding: 0 !important;
+    border-radius: .5rem !important;
+    line-height: 1;
+}
+
+.al-product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.al-product-grid > div:last-child {
+    grid-column: 1 / -1;
+}
+
+.al-product-section .select2-container,
+.al-basic-section .select2-container {
+    width: 100% !important;
+}
+
+.al-followup-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.al-followup-grid > div {
+    grid-column: auto !important;
+    width: auto !important;
+}
+
+.al-original-submit {
+    min-width: 8.5rem;
+}
+
+/* Sticky summary */
+.al-summary-card,
+.al-submit-card {
+    border: 1px solid #dfe5ec;
+    border-radius: .75rem;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(15, 43, 70, .03);
+}
+
+.al-summary-card {
+    padding: .9rem;
+}
+
+.al-summary-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: .6rem;
+    padding-bottom: .75rem;
+    border-bottom: 1px solid #e4e8ee;
+}
+
+.al-summary-head h2,
+.al-submit-copy h2 {
+    margin: 0;
+    color: #172033;
+    font-size: .9rem;
+    font-weight: 750;
+}
+
+.al-summary-head p,
+.al-submit-copy p {
+    margin: .18rem 0 0;
+    color: #7e8da3;
+    font-size: .66rem;
+    line-height: 1.45;
+}
+
+.al-status-pill {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    padding: .28rem .48rem;
+    border-radius: 999px;
+    background: #edf4ff;
+    color: #2f6fed;
+    font-size: .62rem;
+    font-weight: 750;
+}
+
+.al-status-pill.is-cancelled {
+    background: #fff0f2;
+    color: #d43d4c;
+}
+
+.al-summary-list {
+    display: grid;
+    gap: .48rem;
+    margin-top: .75rem;
+}
+
+.al-summary-item {
+    padding: .62rem .7rem;
+    border: 1px solid #e2e7ed;
+    border-radius: .55rem;
+    background: #fafbfd;
+}
+
+.al-summary-item small {
+    display: block;
+    margin-bottom: .12rem;
+    color: #8a98aa;
+    font-size: .59rem;
+    font-weight: 750;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+}
+
+.al-summary-item strong {
+    display: block;
+    overflow: hidden;
+    color: #172033;
+    font-size: .72rem;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.al-submit-card {
+    padding: .9rem;
+}
+
+.al-submit-card .al-primary-btn {
+    margin-top: .75rem;
+    cursor: pointer;
+}
+
+.al-submit-note {
+    display: flex;
+    align-items: flex-start;
+    gap: .4rem;
+    margin-top: .65rem;
+    padding: .58rem;
+    border-radius: .5rem;
+    background: #eef5ff;
+    color: #315f9d;
+    font-size: .63rem;
+    line-height: 1.45;
+}
+
+/* Existing Select2 */
+.al-section .select2-container--default .select2-selection--single,
+.al-section .select2-container--default .select2-selection--multiple {
+    min-height: 2.4rem;
+    border: 1px solid #dfe5ec !important;
+}
+
+.al-section .select2-container--default .select2-selection--multiple {
+    padding: .16rem .32rem;
+}
+
+.al-section .iti {
+    width: 100%;
+}
+
+/* Tablet */
+@media (max-width: 1180px) {
+    .al-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .al-sidebar {
+        position: static;
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .al-travel-section .repeatable-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+
+    .al-travel-section .repeatable-row > div:last-child {
+        grid-column: 1 / -1 !important;
+    }
+
+    .al-travel-section .repeatable-row .addBtn,
+    .al-travel-section .repeatable-row .removeBtn {
+        width: 100%;
+    }
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+    .al-page-heading {
+        display: block;
+    }
+
+    .al-page-heading .al-secondary-btn {
+        width: 100%;
+        margin-top: .7rem;
+    }
+
+    .al-sidebar {
+        grid-template-columns: 1fr;
+    }
+
+    .al-basic-grid,
+    .al-product-grid,
+    .al-followup-grid,
+    .al-travel-meta {
+        display: grid !important;
+        grid-template-columns: 1fr !important;
+    }
+
+    .al-product-grid > div:last-child {
+        grid-column: auto;
+    }
+
+    .al-followup-grid > div {
+        grid-column: auto !important;
+    }
+
+    .al-travel-section .repeatable-row {
+        display: block !important;
+    }
+
+    .al-travel-section .repeatable-row > div {
+        margin-bottom: .65rem;
+    }
+
+    .al-travel-section .repeatable-row .addBtn,
+    .al-travel-section .repeatable-row .removeBtn {
+        width: 100%;
+    }
+
+    .al-original-submit {
+        width: 100%;
+    }
+}
+
+/* Dark mode */
+.dark .al-page-heading h1,
+.dark .al-section > .box-header .box-title,
+.dark .al-summary-head h2,
+.dark .al-submit-copy h2,
+.dark .al-summary-item strong {
+    color: rgba(255, 255, 255, .9);
+}
+
+.dark .al-section,
+.dark .al-summary-card,
+.dark .al-submit-card,
+.dark .al-secondary-btn {
+    border-color: rgba(255,255,255,.1);
+    background: var(--body-bg, #111827);
+}
+
+.dark .al-section > .box-header {
+    border-color: rgba(255,255,255,.08);
+    background: rgba(255,255,255,.025);
+}
+
+.dark .al-summary-item {
+    border-color: rgba(255,255,255,.08);
+    background: rgba(255,255,255,.025);
+}

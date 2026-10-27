@@ -11,12 +11,15 @@ class KpiDashboardTableUxTest extends TestCase
         $source = file_get_contents(
             resource_path('views/admin/pages/kpi/dashboard.blade.php')
         );
+        $metricTable = file_get_contents(
+            resource_path('views/admin/pages/kpi/partials/person-metrics.blade.php')
+        );
 
         $this->assertStringContainsString('name="department"', $source);
         $this->assertStringContainsString('id="kpi-dashboard-search"', $source);
         $this->assertStringContainsString('id="kpi-dashboard-page-size"', $source);
-        $this->assertStringContainsString('data-kpi-dashboard-table', $source);
-        $this->assertStringContainsString('initializeKpiDashboardTable', $source);
+        $this->assertStringContainsString('data-kpi-dashboard-table', $metricTable);
+        $this->assertStringContainsString('kpi-dashboard.js', $source);
     }
 
     public function test_kpi_detail_and_outreach_tables_use_crm_datatable_hooks(): void

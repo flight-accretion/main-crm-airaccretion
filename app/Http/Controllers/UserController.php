@@ -55,6 +55,8 @@ class UserController extends Controller
 
         if ($userType === UserType::HR) {
             $path = 'admin/hr';
+        } elseif ($userType === UserType::OWNER) {
+            $path = '/owner/dashboard';
         } elseif (in_array($userType, UserType::ADMIN_ROLES)) {
             $path = 'admin/rides/upcoming-ride';
         } elseif (in_array($userType, UserType::OPERATIONS_ROLES)) {
@@ -302,9 +304,9 @@ class UserController extends Controller
         // Get Super Admin ID first
         $superAdmin = UserType::where('user_type', UserType::SUPER_ADMIN)->first();
 
-        // Get children of Super Admin as the first level options (excluding Admin)
+        // Get children of Super Admin as the first level options (excluding Admin & Owner — only Super Admin provisions those)
         $userTypes = UserType::where('parent_id', $superAdmin->id)
-                ->whereNotIn('user_type', [UserType::ADMIN])
+                ->whereNotIn('user_type', [UserType::ADMIN, UserType::OWNER])
                 ->where('status', 1)
                 ->orderBy('user_type', 'asc')
                 ->get();
@@ -435,9 +437,9 @@ class UserController extends Controller
         // Get Super Admin ID first
         $superAdmin = UserType::where('user_type', UserType::SUPER_ADMIN)->first();
 
-        // Get children of Super Admin as the first level options (excluding Admin)
+        // Get children of Super Admin as the first level options (excluding Admin & Owner — only Super Admin provisions those)
         $userTypes = UserType::where('parent_id', $superAdmin->id)
-                ->whereNotIn('user_type', [UserType::ADMIN])
+                ->whereNotIn('user_type', [UserType::ADMIN, UserType::OWNER])
                 ->where('status', 1)
                 ->orderBy('user_type', 'asc')
                 ->get();

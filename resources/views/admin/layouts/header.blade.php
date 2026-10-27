@@ -17,7 +17,7 @@
     <link rel="stylesheet" href="/assets/admin/css/style.css?v=1.4">
     <link rel="stylesheet" href="/assets/admin/css/responsive.css?v=1.1">
     <link rel="stylesheet" href="/assets/admin/css/custom.css?v=2.4">
-    <link rel="stylesheet" href="/assets/admin/css/crm/navigation.css?v=7">
+    <link rel="stylesheet" href="/assets/admin/css/crm/navigation.css?v=10">
     <link rel="stylesheet" href="/assets/admin/css/crm/responsive/mobile-tables.css?v=1">
 
     <!-- Simplebar Css -->
@@ -45,7 +45,40 @@
 
 </head>
 
-<body class="crm-operations-mobile-page">
+<body class="crm-operations-mobile-page {{ auth()->user()?->userType?->user_type === \App\Models\UserType::OWNER ? 'owner-readonly' : '' }}">
+
+    {{-- Owner is read-only oversight: block mutating interactions client-side (server 403s regardless). --}}
+    @if (auth()->user()?->userType?->user_type === \App\Models\UserType::OWNER)
+    <script>
+        document.addEventListener('submit', function (e) {
+            var form = e.target;
+            if (form && form.tagName === 'FORM') {
+                var method = (form.getAttribute('method') || 'GET').toUpperCase();
+                if (method !== 'GET' && !form.action.endsWith('/logout')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (window.Swal) {
+                        Swal.fire({ icon: 'info', title: 'Read-only role', text: 'The owner role is view-only.', confirmButtonText: 'OK' });
+                    } else {
+                        alert('The owner role is view-only.');
+                    }
+                }
+            }
+        }, true);
+        document.addEventListener('click', function (e) {
+            var el = e.target.closest('[data-method]');
+            if (el) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (window.Swal) {
+                    Swal.fire({ icon: 'info', title: 'Read-only role', text: 'The owner role is view-only.', confirmButtonText: 'OK' });
+                } else {
+                    alert('The owner role is view-only.');
+                }
+            }
+        }, true);
+    </script>
+    @endif
 
     <!-- ========== Switcher  ========== -->
     <div id="hs-overlay-switcher" class="hs-overlay hidden ti-offcanvas ti-offcanvas-right" tabindex="-1">
@@ -699,13 +732,105 @@
                 };
                 // Accounts gets one purpose-built tree. Other roles retain the existing shared navigation below.
                 $isAccountsSidebar = $canAccess($userType, $accountRoles) && !$canAccess($userType, $adminRoles);
+                $isSalesSidebar = $canAccess($userType, $salesRoles) && !$canAccess($userType, $adminRoles);
+                $salesCanReceiveMoreLeads = $isSalesSidebar
+                    && (bool) \App\Models\SalespersonAvailability::where('user_id', auth()->id())
+                        ->where('is_available', true)
+                        ->where('is_opted_in', true)
+                        ->exists();
             @endphp
                     <ul class="main-menu" data-navigation-role="{{ $userType }}" data-navigation-user="{{ auth()->id() }}">
+                        {{-- ================= OWNER MENU (read-only oversight) ================= --}}
+                        @if ($userType === \App\Models\UserType::OWNER)
+                        <li class="slide__category"><span class="category-name">Main</span></li>
+                        <li class="slide {{ Route::is('admin.owner.dashboard') ? 'active' : '' }}">
+                            <a href="{{ route('admin.owner.dashboard') }}" class="side-menu__item {{ Route::is('admin.owner.dashboard') ? 'active' : '' }}">
+                                <i class="ri-vip-crown-line side-menu__icon"></i>
+                                <span class="side-menu__label">Owner Dashboard</span>
+                            </a>
+                        </li>
+
+                        <li class="slide__category"><span class="category-name">Business Overview</span></li>
+                        <li class="slide {{ Route::is('admin.sales-dashboard') ? 'active' : '' }}"><a href="{{ route('admin.sales-dashboard') }}" class="side-menu__item"><i class="ri-line-chart-line side-menu__icon"></i><span class="side-menu__label">Sales Dashboard</span></a></li>
+                        <li class="slide {{ Route::is('admin.operations.dashboard') ? 'active' : '' }}"><a href="{{ route('admin.operations.dashboard') }}" class="side-menu__item"><i class="ri-truck-line side-menu__icon"></i><span class="side-menu__label">Operations Dashboard</span></a></li>
+                        <li class="slide {{ Route::is('admin.account.dashboard') ? 'active' : '' }}"><a href="{{ route('admin.account.dashboard') }}" class="side-menu__item"><i class="ri-bank-card-line side-menu__icon"></i><span class="side-menu__label">Accounts Dashboard</span></a></li>
+                        <li class="slide {{ Route::is('admin.kpi.index') ? 'active' : '' }}"><a href="{{ route('admin.kpi.index') }}" class="side-menu__item"><i class="ri-bar-chart-grouped-line side-menu__icon"></i><span class="side-menu__label">KPI Dashboard</span></a></li>
+                        <li class="slide {{ Route::is('admin.hr.*') ? 'active' : '' }}"><a href="{{ route('admin.hr.dashboard') }}" class="side-menu__item"><i class="ri-home-heart-line side-menu__icon"></i><span class="side-menu__label">HR Dashboard</span></a></li>
+
+                        <li class="slide__category"><span class="category-name">Sales</span></li>
+                        <li class="slide {{ Route::is('admin.clients.index') ? 'active' : '' }}"><a href="{{ route('admin.clients.index') }}" class="side-menu__item"><i class="ri-user-search-line side-menu__icon"></i><span class="side-menu__label">Leads</span></a></li>
+                        <li class="slide {{ Route::is('admin.leads.dnp') ? 'active' : '' }}"><a href="{{ route('admin.leads.dnp') }}" class="side-menu__item"><i class="ri-phone-missed-line side-menu__icon"></i><span class="side-menu__label">DNP Leads</span></a></li>
+                        <li class="slide {{ Route::is('admin.upcoming-follow-up.*') ? 'active' : '' }}"><a href="{{ route('admin.upcoming-follow-up.index') }}" class="side-menu__item"><i class="ri-calendar-event-line side-menu__icon"></i><span class="side-menu__label">Upcoming Follow-ups</span></a></li>
+
+                        <li class="slide__category"><span class="category-name">Operations</span></li>
+                        <li class="slide {{ Route::is('admin.rides.upcoming') ? 'active' : '' }}"><a href="{{ route('admin.rides.upcoming') }}" class="side-menu__item"><i class="ri-plane-line side-menu__icon"></i><span class="side-menu__label">Upcoming Rides</span></a></li>
+                        <li class="slide {{ Route::is('admin.rides.ride-status') ? 'active' : '' }}"><a href="{{ route('admin.rides.ride-status') }}" class="side-menu__item"><i class="ri-list-check-2 side-menu__icon"></i><span class="side-menu__label">Ride Status</span></a></li>
+                        <li class="slide {{ Route::is('admin.operations.reschedules.*') ? 'active' : '' }}"><a href="{{ route('admin.operations.reschedules.index') }}" class="side-menu__item"><i class="ri-calendar-2-line side-menu__icon"></i><span class="side-menu__label">Reschedules</span></a></li>
+                        <li class="slide {{ Route::is('admin.operations.vendor-followups.*') ? 'active' : '' }}"><a href="{{ route('admin.operations.vendor-followups.index') }}" class="side-menu__item"><i class="ri-store-2-line side-menu__icon"></i><span class="side-menu__label">Vendor Follow-ups</span></a></li>
+
+                        <li class="slide__category"><span class="category-name">Accounts</span></li>
+                        <li class="slide {{ Route::is('admin.account.payment-review*') ? 'active' : '' }}"><a href="{{ route('admin.account.payment-review') }}" class="side-menu__item"><i class="ri-wallet-3-line side-menu__icon"></i><span class="side-menu__label">Payment Review</span>@include('admin.layouts.partials.pending-count', ['queue' => 'payment_approval'])</a></li>
+                        <li class="slide has-sub {{ Route::is('admin.refunds.*') || Route::is('admin.account.vendor-refunds') ? 'active open' : '' }}">
+                            <a href="javascript:void(0);" class="side-menu__item"><i class="ri-refund-2-line side-menu__icon"></i><span class="side-menu__label">Refunds</span><i class="fe fe-chevron-right side-menu__angle"></i></a>
+                            <ul class="slide-menu child1">
+                                <li class="slide"><a href="{{ route('admin.refunds.index') }}" class="side-menu__item {{ Route::is('admin.refunds.*') ? 'active' : '' }}"><span class="side-menu__label">Customer Refund</span>@include('admin.layouts.partials.pending-count', ['queue' => 'customer_refund'])</a></li>
+                                <li class="slide"><a href="{{ route('admin.account.vendor-refunds') }}" class="side-menu__item {{ Route::is('admin.account.vendor-refunds') ? 'active' : '' }}"><span class="side-menu__label">Vendor Refund</span>@include('admin.layouts.partials.pending-count', ['queue' => 'account_vendor_refund'])</a></li>
+                            </ul>
+                        </li>
+                        <li class="slide {{ Route::is('admin.account.invoices*') ? 'active' : '' }}"><a href="{{ route('admin.account.invoices') }}" class="side-menu__item"><i class="ri-receipt-line side-menu__icon"></i><span class="side-menu__label">Invoices</span>@include('admin.layouts.partials.pending-count', ['queue' => 'invoice'])</a></li>
+                        <li class="slide {{ Route::is('admin.account.vendor-payments*') ? 'active' : '' }}"><a href="{{ route('admin.account.vendor-payments') }}" class="side-menu__item"><i class="ri-bank-line side-menu__icon"></i><span class="side-menu__label">Vendor Payments</span></a></li>
+                        <li class="slide {{ Route::is('admin.account.exceptional*') ? 'active' : '' }}"><a href="{{ route('admin.account.exceptional') }}" class="side-menu__item"><i class="ri-error-warning-line side-menu__icon"></i><span class="side-menu__label">Exceptional</span></a></li>
+
+                        <li class="slide__category"><span class="category-name">Insights</span></li>
+                        <li class="slide {{ Route::is('admin.report.sales') ? 'active' : '' }}"><a href="{{ route('admin.report.sales') }}" class="side-menu__item"><i class="ri-file-chart-line side-menu__icon"></i><span class="side-menu__label">Sales Report</span></a></li>
+                        <li class="slide {{ Route::is('admin.report.kpi*') ? 'active' : '' }}"><a href="{{ route('admin.report.kpi') }}" class="side-menu__item"><i class="ri-bar-chart-2-line side-menu__icon"></i><span class="side-menu__label">KPI Report</span></a></li>
+                        <li class="slide {{ Route::is('admin.report.vendor') ? 'active' : '' }}"><a href="{{ route('admin.report.vendor') }}" class="side-menu__item"><i class="ri-file-list-3-line side-menu__icon"></i><span class="side-menu__label">Vendor Report</span></a></li>
+                        <li class="slide {{ Route::is('admin.report.profit-loss') ? 'active' : '' }}"><a href="{{ route('admin.report.profit-loss') }}" class="side-menu__item"><i class="ri-funds-line side-menu__icon"></i><span class="side-menu__label">Profit / Loss</span></a></li>
+                        <li class="slide {{ Route::is('admin.report.incentives*') ? 'active' : '' }}"><a href="{{ route('admin.report.incentives') }}" class="side-menu__item"><i class="ri-award-line side-menu__icon"></i><span class="side-menu__label">Incentive Report</span></a></li>
+
+                        <li class="slide__category"><span class="category-name">People</span></li>
+                        <li class="slide {{ Route::is('admin.users.index') ? 'active' : '' }}"><a href="{{ route('admin.users.index') }}" class="side-menu__item"><i class="ri-team-line side-menu__icon"></i><span class="side-menu__label">Staff</span></a></li>
+                        <li class="slide {{ Route::is('admin.attendance.import.*') ? 'active' : '' }}"><a href="{{ route('admin.attendance.import.index') }}" class="side-menu__item"><i class="ri-calendar-check-line side-menu__icon"></i><span class="side-menu__label">Attendance</span></a></li>
+
+                        <li class="slide__category"><span class="category-name">More</span></li>
+                        <li class="slide {{ Route::is('admin.vendors.*') ? 'active' : '' }}"><a href="{{ route('admin.vendors.index') }}" class="side-menu__item"><i class="ri-building-4-line side-menu__icon"></i><span class="side-menu__label">Vendors</span></a></li>
+                        <li class="slide {{ Route::is('admin.vouchers.index') ? 'active' : '' }}"><a href="{{ route('admin.vouchers.index') }}" class="side-menu__item"><i class="ri-coupon-3-line side-menu__icon"></i><span class="side-menu__label">Vouchers</span></a></li>
+                        <li class="slide {{ Route::is('admin.whatsapp.index') ? 'active' : '' }}"><a href="{{ route('admin.whatsapp.index') }}" class="side-menu__item"><i class="ri-whatsapp-line side-menu__icon"></i><span class="side-menu__label">WhatsApp Inbox</span></a></li>
+                        <li class="slide {{ Route::is('admin.lead-chat.overview') ? 'active' : '' }}"><a href="{{ route('admin.lead-chat.overview') }}" class="side-menu__item"><i class="ri-chat-3-line side-menu__icon"></i><span class="side-menu__label">Lead Chat</span></a></li>
+                        @endif
                         <!-- Start::slide__category -->
                         <li class="slide__category"><span class="category-name">Main</span></li>
                         <!-- End::slide__category -->
 
-                        @if($isAccountsSidebar)
+                        @if($isSalesSidebar)
+                            <li class="slide__category"><span class="category-name">Sales</span></li>
+                            <li class="slide {{ Route::is('admin.sales-dashboard') ? 'active' : '' }}"><a href="{{ route('admin.sales-dashboard') }}" class="side-menu__item"><i class="ri-dashboard-line side-menu__icon"></i><span class="side-menu__label">Sales Dashboard</span></a></li>
+
+                            <li class="slide__category"><span class="category-name">Daily Work</span></li>
+                            <li class="slide {{ Route::is('admin.upcoming-follow-up.*') ? 'active' : '' }}"><a href="{{ route('admin.upcoming-follow-up.index') }}" class="side-menu__item"><i class="ri-time-line side-menu__icon"></i><span class="side-menu__label">Today's Follow-up</span></a></li>
+                            <li class="slide {{ Route::is('admin.kpi.outreach.*') ? 'active' : '' }}"><a href="{{ route('admin.kpi.outreach.index') }}" class="side-menu__item"><i class="ri-phone-line side-menu__icon"></i><span class="side-menu__label">Sales Daily Outreach</span></a></li>
+                            <li class="slide {{ Route::is('admin.kpi.work-done.*') ? 'active' : '' }}"><a href="{{ route('admin.kpi.work-done.index') }}" class="side-menu__item"><i class="ri-checkbox-circle-line side-menu__icon"></i><span class="side-menu__label">Daily Work Done</span></a></li>
+
+                            <li class="slide__category"><span class="category-name">Sales tools</span></li>
+                            <li class="slide {{ Route::is('admin.rides.upcoming') ? 'active' : '' }}"><a href="{{ route('admin.rides.upcoming') }}" class="side-menu__item"><i class="ri-calendar-event-line side-menu__icon"></i><span class="side-menu__label">Upcoming Rides</span></a></li>
+                            <li class="slide has-sub {{ Route::is('admin.clients.*') || Route::is('admin.leads.dnp') ? 'active open' : '' }}"><a href="javascript:void(0);" class="side-menu__item"><i class="bx bx-trending-up side-menu__icon"></i><span class="side-menu__label">Leads</span><i class="fe fe-chevron-right side-menu__angle"></i></a><ul class="slide-menu child1"><li class="slide"><a href="{{ route('admin.clients.index') }}" class="side-menu__item {{ Route::is('admin.clients.index') ? 'active' : '' }}">View Leads</a></li><li class="slide"><a href="{{ route('admin.clients.create') }}" class="side-menu__item {{ Route::is('admin.clients.create') ? 'active' : '' }}">Add Lead</a></li><li class="slide"><a href="{{ route('admin.leads.dnp') }}" class="side-menu__item {{ Route::is('admin.leads.dnp') ? 'active' : '' }}">View DNP Leads</a></li></ul></li>
+                            <li class="slide {{ Route::is('admin.leads.transfers.*') ? 'active' : '' }}"><a href="{{ route('admin.leads.transfers.index') }}" class="side-menu__item"><i class="bx bx-transfer side-menu__icon"></i><span class="side-menu__label">Requested Leads</span></a></li>
+                            <li class="slide {{ Route::is('admin.client.*') ? 'active' : '' }}"><a href="{{ route('admin.client.index') }}" class="side-menu__item"><i class="bx bx-user side-menu__icon"></i><span class="side-menu__label">View Clients</span></a></li>
+                            <li class="slide {{ Route::is('admin.whatsapp.index') ? 'active' : '' }}"><a href="{{ route('admin.whatsapp.index') }}" class="side-menu__item"><i class="bx bxl-whatsapp side-menu__icon"></i><span class="side-menu__label">WhatsApp Inbox</span></a></li>
+
+                            <li class="slide__category"><span class="category-name">KPI</span></li>
+                            <li class="slide {{ Route::is('admin.kpi.index') ? 'active' : '' }}"><a href="{{ route('admin.kpi.index') }}" class="side-menu__item"><i class="bx bx-bar-chart-alt-2 side-menu__icon"></i><span class="side-menu__label">KPI Dashboard</span></a></li>
+
+                            <li class="slide sales-lead-availability">
+                                <form method="POST" action="{{ $salesCanReceiveMoreLeads ? route('admin.sales-dashboard.popup.decline') : route('admin.sales-dashboard.popup.accept') }}">
+                                    @csrf
+                                    <label class="side-menu__item sales-lead-availability__label">
+                                        <span><i class="bx bx-trending-up side-menu__icon"></i><span class="side-menu__label">Assign more leads</span></span>
+                                        <input type="checkbox" role="switch" aria-label="Assign more leads" {{ $salesCanReceiveMoreLeads ? 'checked' : '' }} onchange="this.form.submit()">
+                                    </label>
+                                </form>
+                            </li>
+                        @elseif($isAccountsSidebar)
                             <li class="slide {{ Route::is('admin.account.dashboard') ? 'active' : '' }}">
                                 <a href="{{ route('admin.account.dashboard') }}" class="side-menu__item"><i class="ri-dashboard-line side-menu__icon" aria-hidden="true"></i><span class="side-menu__label">Accounts Dashboard</span></a>
                             </li>
@@ -2366,6 +2491,7 @@
     </div>
 
 </div>
+
 </body>
 
 </html>

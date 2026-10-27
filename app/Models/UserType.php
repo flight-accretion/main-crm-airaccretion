@@ -21,6 +21,7 @@ class UserType extends Model
     const OPERATIONS_MANAGER = 'Operations Manager';
     const OPERATIONS_EXECUTIVE = 'Operations Executive';
     const HR = 'Hr';
+    const OWNER = 'Owner';
     // const owner = 'owner';
 
     // Group roles by team or permission
@@ -50,6 +51,10 @@ class UserType extends Model
     const ADMIN_ROLES = [
         self::SUPER_ADMIN,
         self::ADMIN,
+    ];
+
+    const OWNER_ROLES = [
+        self::OWNER,
     ];
 
     const KPI_OVERSIGHT_ROLES = [

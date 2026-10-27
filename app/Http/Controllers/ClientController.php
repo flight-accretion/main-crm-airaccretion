@@ -2418,6 +2418,25 @@ $leadFollowUp = LeadFollowUp::create([
     public function indexClient(Request $request)
     {
         $perPage = min(max((int) $request->input('per_page', 20), 1), 100);
+        $statsQuery = Client::query();
+        $currentMonth = now();
+
+        $clientStats = [
+            'total' => (clone $statsQuery)->count(),
+            'active' => (clone $statsQuery)->where('status', 1)->count(),
+            'incomplete' => (clone $statsQuery)
+                ->where(function ($incompleteQuery) {
+                    $incompleteQuery->whereNull('email')
+                        ->orWhere('email', '')
+                        ->orWhereNull('gst_number')
+                        ->orWhere('gst_number', '');
+                })
+                ->count(),
+            'added_this_month' => (clone $statsQuery)
+                ->whereBetween('created_at', [$currentMonth->copy()->startOfMonth(), $currentMonth->copy()->endOfMonth()])
+                ->count(),
+        ];
+
         $query = Client::with(['city', 'country']);
 
         if ($request->filled('search')) {
@@ -2439,6 +2458,28 @@ $leadFollowUp = LeadFollowUp::create([
             });
         }
 
+        if (in_array($request->input('status'), ['active', 'inactive'], true)) {
+            $query->where('status', $request->input('status') === 'active' ? 1 : 0);
+        }
+
+        if (in_array($request->input('profile'), ['complete', 'incomplete'], true)) {
+            $query->where(function ($profileQuery) use ($request) {
+                $isIncomplete = $request->input('profile') === 'incomplete';
+
+                if ($isIncomplete) {
+                    $profileQuery->whereNull('email')
+                        ->orWhere('email', '')
+                        ->orWhereNull('gst_number')
+                        ->orWhere('gst_number', '');
+                } else {
+                    $profileQuery->whereNotNull('email')
+                        ->where('email', '!=', '')
+                        ->whereNotNull('gst_number')
+                        ->where('gst_number', '!=', '');
+                }
+            });
+        }
+
         $clients = $query->orderBy('created_at', 'desc')
             ->paginate($perPage)
             ->appends($request->query());
@@ -2449,7 +2490,7 @@ $leadFollowUp = LeadFollowUp::create([
                 ->where('status', 1)
                 ->get();
         }
-        return view('admin.pages.clients.index-client', compact('clients', 'countries', 'cities'));
+        return view('admin.pages.clients.index-client', compact('clients', 'countries', 'cities', 'clientStats'));
     }
 
     public function createClient()
@@ -2969,11 +3010,33 @@ $leadFollowUp = LeadFollowUp::create([
                 ->get();
         }
 
+        $latestLead = $client->leads()
+            ->with(['representative', 'rideSegments' => fn ($query) => $query->orderByDesc('from_date')])
+            ->latest()
+            ->first();
+
+        $latestProduct = null;
+        if ($latestLead && !empty($latestLead->product_ids)) {
+            $productIds = is_array($latestLead->product_ids)
+                ? $latestLead->product_ids
+                : (json_decode($latestLead->product_ids, true) ?: []);
+
+            $latestProduct = Product::whereIn('id', $productIds)
+                ->pluck('product')
+                ->implode(', ');
+        }
+
         return response()->json([
             'success' => true,
             'client' => $client,
             'countries' => $countries,
             'cities' => $cities,
+            'lead_summary' => [
+                'total' => $client->leads()->count(),
+                'active' => $client->leads()->where('status', 1)->count(),
+                'latest_product' => $latestProduct,
+                'last_activity' => optional($latestLead?->updated_at)->format('d M Y'),
+            ],
         ]);
     }
 
@@ -3639,6 +3702,30 @@ $leadFollowUp = LeadFollowUp::create([
     {
             $this->abortUnlessCanAccessLead($lead);
 
+        // The follow-up screen is also the lead workspace.  Load the edit data
+        // here so users do not need to leave an active follow-up to correct it.
+        $lead->loadMissing(['rideSegments', 'representative', 'client']);
+        $workspaceProducts = Product::where('status', 1)->orderBy('product')->get();
+        $workspaceServices = Service::where('status', 1)->orderBy('service')->get();
+        $workspaceStaff = $this->getUsersInHierarchy();
+        $workspaceCountries = Country::where('status', 1)->orderBy('name')->get();
+        $workspaceCities = $lead->client?->country_id
+            ? City::where('country_id', $lead->client->country_id)->where('status', 1)->orderBy('name')->get()
+            : collect();
+        $workspaceTrips = $lead->rideSegments->map(function ($segment) {
+            return [
+                'id' => $segment->id,
+                'from_date' => $segment->from_date ? Carbon::parse($segment->from_date)->format('Y-m-d\\TH:i') : '',
+                'to_date' => $segment->to_date ? Carbon::parse($segment->to_date)->format('Y-m-d\\TH:i') : '',
+                'from_place' => $segment->from_place ?? '',
+                'to_place' => $segment->to_place ?? '',
+            ];
+        })->values();
+
+        if ($workspaceTrips->isEmpty()) {
+            $workspaceTrips = collect([['id' => '', 'from_date' => '', 'to_date' => '', 'from_place' => '', 'to_place' => '']]);
+        }
+
         $leadFollowupData = $this->buildLeadFollowupViewData($lead);
 
         $clientInfo = $leadFollowupData['clientInfo'];
@@ -3714,7 +3801,15 @@ $leadFollowUp = LeadFollowUp::create([
             'lastFollowupServiceIds' => $lastFollowupServiceIds,
             'lastFollowupExtraServiceIds' => $lastFollowupExtraServiceIds,
             'extraServicePrices' => $extraServicePrices,
-            'serviceExtraServicesMap' => $serviceExtraServicesMap
+            'serviceExtraServicesMap' => $serviceExtraServicesMap,
+            'workspaceProducts' => $workspaceProducts,
+            'workspaceServices' => $workspaceServices,
+            'workspaceStaff' => $workspaceStaff,
+            'workspaceCountries' => $workspaceCountries,
+            'workspaceCities' => $workspaceCities,
+            'workspaceTrips' => $workspaceTrips,
+            'workspaceProductIds' => $this->normalizeIdList($lead->product_ids),
+            'workspaceServiceIds' => $this->normalizeIdList($lead->service_ids),
         ]);
     }
 
@@ -5397,97 +5492,8 @@ $this->abortUnlessRepresentativeInScope($staff ? $staff->id : null);
     {
             $this->abortUnlessCanAccessLead($lead);
 
-        // Load the lead with necessary relationships
-        $lead->load(['rideSegments', 'representative', 'client']);
-
-        // Get the client for this lead
-        $client = $lead->client;
-
-        $services = Service::where('status', 1)->get();
-        $products = Product::where('status', 1)->get();
-
-        // Get staff based on logged-in user hierarchy
-        $staff = $this->getUsersInHierarchy();
-
-        $countries = Country::where('status', 1)->get();
-
-        // Get cities for the client's country
-        $cities = [];
-        if ($client->country_id) {
-            $cities = City::where('country_id', $client->country_id)
-                ->where('status', 1)
-                ->get();
-        }
-
-        // A scheduled follow-up date is not the order in which lead statuses changed.
-        $followups = $lead->leadFollowups()->orderByDesc('created_at')->orderByDesc('id')->first();
-
-        // Prepare trips for the edit view
-        $trips = [];
-        // Prefer old input if available on validation redirect
-        if (old('trips')) {
-            $trips = old('trips');
-        } elseif ($lead->rideSegments && $lead->rideSegments->count() > 0) {
-            // Convert collection of rideSegments to array of arrays
-            $trips = $lead->rideSegments->map(function ($seg) {
-                return [
-                    'id' => $seg->id ?? '',
-                    'from_date' => $seg->from_date ?? '',
-                    'to_date' => $seg->to_date ?? '',
-                    'from_place' => $seg->from_place ?? '',
-                    'to_place' => $seg->to_place ?? '',
-                ];
-            })->toArray();
-        } else {
-            // No existing rideSegments - check if the lead includes Call Not Connected service
-            $isCallNotConnected = false;
-            try {
-                if (!empty($lead->service_ids)) {
-                    $serviceIds = is_string($lead->service_ids) ? json_decode($lead->service_ids, true) : $lead->service_ids;
-                    if (is_array($serviceIds) && count($serviceIds) > 0) {
-                        $isCallNotConnected = Service::whereIn('id', $serviceIds)
-                            ->whereRaw('LOWER(service) = ?', ['call not connected'])
-                            ->exists();
-                    }
-                }
-            } catch (\Exception $e) {
-                Log::warning('Error detecting Call Not Connected in editLead: ' . $e->getMessage());
-            }
-
-            if ($isCallNotConnected) {
-                $trips = [[
-                    'id' => '',
-                    'from_date' => '',
-                    'to_date' => '',
-                    'from_place' => '',
-                    'to_place' => '',
-                ]];
-            } else {
-                // Default single empty row to preserve UI when there is no data
-                $trips = [[
-                    'id' => '',
-                    'from_date' => '',
-                    'to_date' => '',
-                    'from_place' => '',
-                    'to_place' => '',
-                ]];
-            }
-        }
-
-        // Pass the lead as latestLead to maintain compatibility with the edit view
-        $latestLead = $lead;
-
-        return view('admin.pages.leads.edit-lead', compact(
-            'client',
-            'products',
-            'services',
-            'staff',
-            'followups',
-            'countries',
-            'cities',
-            'latestLead',
-            'trips'
-        ));
+        // Keep old bookmarks working, while making Follow-up the single lead workspace.
+        return redirect()->route('admin.leads.follow-up.create', $lead);
     }
 
     public function updateLead(Request $request, Lead $lead)
@@ -5568,8 +5574,8 @@ $this->abortUnlessRepresentativeInScope($staff ? $staff->id : null);
 
             // Trips Validation
             'trips' => ($isCallNotConnected ? 'nullable|array' : 'required|array|min:1'),
-            'trips.*.from_date' => ($isCallNotConnected ? 'nullable|date_format:Y-m-d H:i|after_or_equal:today' : 'required|date_format:Y-m-d H:i|after_or_equal:today'),
-            'trips.*.to_date' => ($isCallNotConnected ? 'nullable|date_format:Y-m-d H:i|after_or_equal:trips.*.from_date' : 'required|date_format:Y-m-d H:i|after_or_equal:trips.*.from_date'),
+            'trips.*.from_date' => ($isCallNotConnected ? 'nullable|date|after_or_equal:today' : 'required|date|after_or_equal:today'),
+            'trips.*.to_date' => ($isCallNotConnected ? 'nullable|date|after_or_equal:trips.*.from_date' : 'required|date|after_or_equal:trips.*.from_date'),
             'trips.*.from_place' => ($isCallNotConnected ? 'nullable|string|max:255|regex:/^[A-Za-z ]+$/' : 'required|string|max:255|regex:/^[A-Za-z ]+$/'),
             'trips.*.to_place' => ($isCallNotConnected ? 'nullable|string|max:255|regex:/^[A-Za-z ]+$/' : 'required|string|max:255|regex:/^[A-Za-z ]+$/'),
 
@@ -5829,7 +5835,7 @@ $this->abortUnlessRepresentativeInScope($staff ? $staff->id : null);
             // }
 
             DB::commit();
-            return redirect()->route('admin.leads.edit', $lead)->with('success', 'Lead updated successfully.');
+            return redirect()->route('admin.leads.follow-up.create', $lead)->with('success', 'Lead details updated successfully.');
         } catch (\Exception $e) {
             DB::rollBack();
             return back()->withInput()->with('error', 'Error updating lead: ' . $e->getMessage());

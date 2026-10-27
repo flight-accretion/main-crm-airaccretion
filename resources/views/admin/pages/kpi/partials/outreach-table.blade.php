@@ -1,28 +1,30 @@
-<div class="box">
-    <div class="box-body overflow-x-auto">
-        <table class="table display nowrap kpi-outreach-datatable whitespace-nowrap min-w-full" width="100%">
+<section class="do-queue-card">
+    <div class="do-table-wrap">
+        <table class="do-table table display kpi-outreach-datatable" width="100%">
             <thead>
                 <tr>
-                    <th>Customer</th>
-                    <th>Mobile</th>
+                    <th>Customer / Mobile</th>
                     <th>Last Called</th>
                     <th>Last Product</th>
                     <th>DNP</th>
                     <th>Remark</th>
-                    <th>Fresh Lead</th>
+                    <th>Action</th>
                 </tr>
             </thead>
             <tbody>
                 @forelse($rows as $row)
                     <tr>
-                        <td>{{ optional($row->pool)->display_name ?: 'Customer' }}</td>
-                        <td>{{ $row->normalized_phone }}</td>
-                        <td>
+                        <td data-label="Customer / Mobile">
+                            <span class="do-customer-name">{{ optional($row->pool)->display_name ?: 'Customer' }}</span>
+                            <span class="do-phone">{{ $row->normalized_phone }}</span>
+                            <button type="button" class="do-copy" data-copy-phone="{{ $row->normalized_phone }}">Copy</button>
+                        </td>
+                        <td data-label="Last Called">
                             {{ $row->last_called_at_display ? \Carbon\Carbon::parse($row->last_called_at_display)->format('d M Y, h:i A') : 'Never' }}
                         </td>
-                        <td>{{ $row->last_product_display ?: '-' }}</td>
-                        <td>
-                        <form
+                        <td data-label="Last Product">{{ $row->last_product_display ?: '-' }}</td>
+                        <td data-label="DNP">
+                        <form class="do-dnp-form"
                         method="POST"
                         action="{{ route('admin.kpi.outreach.dnp', ['assignment' => $row->id]) }}"
                     >
@@ -34,7 +36,7 @@
                             value="{{ $row->id }}"
                         >
 
-                        <label class="inline-flex items-center gap-2">
+                        <label class="do-dnp-check">
                             <input
                                 type="checkbox"
                                 id="dnp_{{ $row->id }}"
@@ -49,15 +51,15 @@
 
                         <button
                             type="submit"
-                            class="ti-btn ti-btn-warning mt-1"
+                            class="do-button"
                             {{ $locked ? 'disabled' : '' }}
                         >
                             Save
                         </button>
                     </form>
                         </td>
-                        <td style="min-width:360px;">
-                        <form
+                        <td data-label="Remark">
+                        <form class="do-remark-form"
                     method="POST"
                     action="{{ route('admin.kpi.outreach.remark', ['assignment' => $row->id]) }}"
                 >
@@ -73,7 +75,6 @@
                         id="remark_{{ $row->id }}"
                         name="remark"
                         rows="3"
-                        class="ti-form-input"
                         placeholder="Enter call outcome / remark"
                         maxlength="1000"
                         {{ $locked ? 'disabled' : '' }}
@@ -81,32 +82,34 @@
 
                     <button
                         type="submit"
-                        class="ti-btn ti-btn-info mt-1"
+                        class="do-button do-button--primary"
                         {{ $locked ? 'disabled' : '' }}
                     >
                         Save Remark
                     </button>
                 </form>
                         </td>
-                        <td>
+                        <td data-label="Action">
+                            <div class="do-action-box">
                             @if($locked)
-                                <button class="ti-btn ti-btn-success" disabled>Create Fresh Lead</button>
+                                <button class="do-button do-button--success" disabled>Create Fresh Lead</button>
                             @else
                                 <a
-                                    class="ti-btn ti-btn-success"
+                                    class="do-button do-button--success"
                                     href="{{ route('admin.kpi.outreach.create-lead', $row) }}"
                                 >
                                     Create Fresh Lead
                                 </a>
                             @endif
+                            </div>
                         </td>
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="7" class="text-center text-muted">No outreach numbers available.</td>
+                        <td colspan="6" class="text-center text-muted">No outreach numbers available.</td>
                     </tr>
                 @endforelse
             </tbody>
         </table>
     </div>
-</div>
+</section>

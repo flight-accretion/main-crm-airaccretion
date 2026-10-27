@@ -2,6 +2,8 @@
 
 @section('content')
 
+<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/kpi/daily-outreach.css') }}?v=1">
+
 @php
     $isAdminMonitor =
         $isAdminMonitor ?? false;
@@ -14,9 +16,18 @@
         $selectedSalesUser
         ?? null;
 @endphp
-<div class="block justify-between page-header md:flex">
+@php
+    $standardCount = $standard->count();
+    $extraCount = $extra->count();
+    $completionPercent = $dailyTarget > 0
+        ? min(100, (int) round(($standardCompletedToday / $dailyTarget) * 100))
+        : 0;
+@endphp
+
+<div class="crm-daily-outreach">
+<div class="do-page-head">
     <div>
-        <h3 class="text-[1.125rem] font-semibold">Daily Customer Outreach</h3>
+        <h1>Daily Customer Outreach</h1>
         @if($isAdminMonitor)
 
     <div class="box mb-4">
@@ -128,8 +139,8 @@
     </div>
 
 @endif
-        <p class="text-sm text-gray-500">
-            Standard completed today: {{ (int) $standardCompletedToday }} / {{ (int) $dailyTarget }}
+        <p class="do-muted">
+            Complete verified customer outreach from your rolling queue.
         </p>
     </div>
 
@@ -140,7 +151,7 @@
 )
         <form method="POST" action="{{ route('admin.kpi.outreach.extra') }}">
             @csrf
-            <button class="ti-btn ti-btn-primary">
+            <button class="do-button do-button--primary">
                 Get More Numbers (+{{ (int) $extraBatchSize }})
             </button>
         </form>
@@ -161,9 +172,32 @@
     </div>
 @endif
 
-<div class="box mb-4">
-    <div class="box-body">
-        <form method="GET" action="{{ route('admin.kpi.outreach.index') }}" class="grid grid-cols-12 gap-3 items-end">
+<div class="do-notice">
+    Save the DNP or remark action on a queue row. Existing call-verification rules continue to decide when an action counts toward the KPI.
+</div>
+
+<section class="do-summary" aria-label="Daily outreach progress">
+    <div class="do-summary-card">
+        <span class="do-muted">Today's standard target</span>
+        <strong>{{ (int) $standardCompletedToday }} / {{ (int) $dailyTarget }}</strong>
+        <div class="do-progress" aria-label="{{ $completionPercent }} percent complete"><span style="width: {{ $completionPercent }}%"></span></div>
+        <small>{{ max(0, (int) $dailyTarget - (int) $standardCompletedToday) }} remaining</small>
+    </div>
+    <div class="do-summary-card">
+        <strong>{{ (int) $standardCompletedToday }}</strong>
+        <small>Completed today</small>
+    </div>
+    <div class="do-summary-card">
+        <strong>{{ (int) $standardCount }}</strong>
+        <small>Standard numbers in queue</small>
+    </div>
+    <div class="do-summary-card">
+        <strong>{{ (int) $extraCount }}</strong>
+        <small>Extra numbers in queue</small>
+    </div>
+</section>
+
+<form method="GET" action="{{ route('admin.kpi.outreach.index') }}" class="do-filter">
             @if(
     $isAdminMonitor
     &&
@@ -179,49 +213,77 @@
     >
 
 @endif
-            <div class="col-span-12 md:col-span-4">
-                <label class="form-label">Mobile Number</label>
+            <div class="do-field">
+                <label for="outreach-number">Mobile Number</label>
                 <input
                     type="text"
+                    id="outreach-number"
                     name="number"
                     value="{{ $filters['number'] ?? '' }}"
-                    class="ti-form-input"
                     placeholder="Search mobile number"
                 >
             </div>
 
-            <div class="col-span-12 md:col-span-3">
-                <label class="form-label">Outreach Date</label>
+            <div class="do-field">
+                <label for="outreach-date">Outreach Date</label>
                 <input
                     type="date"
+                    id="outreach-date"
                     name="date"
                     value="{{ $filters['date'] ?? '' }}"
-                    class="ti-form-input"
                 >
             </div>
 
-            <div class="col-span-12 md:col-span-5 flex gap-2">
-                <button class="ti-btn ti-btn-primary">Filter</button>
-                <a href="{{ route('admin.kpi.outreach.index') }}" class="ti-btn ti-btn-light">
+            <div class="do-filter-actions">
+                <button class="do-button do-button--primary">Filter</button>
+                <a href="{{ route('admin.kpi.outreach.index') }}" class="do-button">
                     Reset
                 </a>
             </div>
         </form>
-    </div>
-</div>
 
-<h5 class="font-semibold mb-2">Standard Rolling Queue ({{ $standard->count() }})</h5>
+<div class="do-queue-head">
+    <div>
+        <h2>Standard Rolling Queue</h2>
+        <p class="do-muted">Search, pagination, and queue actions are kept from the existing page.</p>
+    </div>
+    <span class="do-muted">{{ $standardCount }} assigned</span>
+</div>
 @include('admin.pages.kpi.partials.outreach-table', ['rows' => $standard, 'locked' => $standardLocked])
 
 @if($extra->isNotEmpty())
-    <h5 class="font-semibold mb-2 mt-6">Extra Batch ({{ $extra->count() }} remaining)</h5>
+    <div class="do-queue-head mt-6">
+        <div>
+            <h2>Extra Batch</h2>
+            <p class="do-muted">{{ $extraCount }} remaining</p>
+        </div>
+    </div>
     @include('admin.pages.kpi.partials.outreach-table', ['rows' => $extra, 'locked' => false])
 @endif
+</div>
 @endsection
 
 @push('scripts')
     <script>
         document.addEventListener('DOMContentLoaded', function () {
+            document.querySelectorAll('[data-copy-phone]').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    var phone = button.getAttribute('data-copy-phone');
+
+                    if (!phone || !navigator.clipboard) {
+                        return;
+                    }
+
+                    navigator.clipboard.writeText(phone).then(function () {
+                        var original = button.textContent;
+                        button.textContent = 'Copied';
+                        window.setTimeout(function () {
+                            button.textContent = original;
+                        }, 1200);
+                    });
+                });
+            });
+
             if (!window.jQuery || !$.fn.DataTable) {
                 return;
             }

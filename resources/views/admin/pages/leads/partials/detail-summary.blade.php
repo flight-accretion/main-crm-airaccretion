@@ -31,7 +31,7 @@
     <div class="ld-identity"><span class="ld-avatar">{{ strtoupper(substr($client->name ?: 'L', 0, 2)) }}</span><div><h1>{{ $client->name }}</h1><span class="ld-tag">{{ $latestFollowup ? $latestFollowup->statusLabel() : ($client->status == 1 ? 'Active' : 'Inactive') }}</span>@if($detailSource)<span class="ld-tag">{{ $detailSource }}</span>@endif
         <p>@if($detailPhone)<a href="tel:{{ $detailPhone }}">{{ $detailPhone }}</a> &middot; @endif Created {{ optional($latestLead?->created_at)->format('d M Y') ?: '--' }} &middot; Owner: {{ $latestLead?->representative?->name ?: 'Unassigned' }}</p></div></div>
     @if($latestLead && $detailCanAct)<div class="ld-actions">
-        <a class="ld-button" href="{{ route('admin.leads.edit', $latestLead) }}"><i class="ti ti-pencil" aria-hidden="true"></i> Edit</a>
+        <a class="ld-button" href="{{ route('admin.leads.follow-up.create', $latestLead) }}"><i class="ti ti-pencil" aria-hidden="true"></i> Manage lead</a>
         <a class="ld-button" href="{{ route('admin.leads.follow-up.create', $latestLead) }}"><i class="ti ti-plus" aria-hidden="true"></i> Note</a>
         <a class="ld-button ld-primary" href="{{ route('admin.leads.follow-up.create', $latestLead) }}">Schedule follow-up</a>
     </div>@endif
@@ -45,7 +45,7 @@
 </header>
 <section class="box" id="ld-owner"><div class="box-header"><h2>Ownership &amp; next step</h2></div><div class="box-body">
     <dl><dt>Assigned to</dt><dd>{{ $latestLead?->representative?->name ?: 'Unassigned' }}</dd><dt>Next follow-up</dt><dd class="{{ !$detailNext ? 'ld-danger' : '' }}">{{ $detailNext ? \Carbon\Carbon::parse($detailNext)->format('d M Y, H:i') : 'None scheduled' }}</dd></dl>
-    @if($latestLead && $detailCanAct)<a class="ld-button" href="{{ route('admin.leads.edit', $latestLead) }}">Manage assignment</a>@endif
+    @if($latestLead && $detailCanAct)<a class="ld-button" href="{{ route('admin.leads.follow-up.create', $latestLead) }}#lead-details">Manage assignment</a>@endif
     @if($detailScore?->suggested_action)<p class="ld-suggestion">{{ $detailScore->suggested_action }}</p>@endif
 </div></section>
 <div id="ld-completeness"><div class="ld-missing">@foreach(collect($detailContacts)->diffKeys($detailFilled) as $name => $value)<span class="ld-tag">Missing: {{ $name }}</span>@endforeach</div>
