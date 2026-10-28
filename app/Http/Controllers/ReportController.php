@@ -99,16 +99,14 @@ class ReportController extends Controller
 
             // If current user is in accounts role, admin, or super admin, return all sales and managers
             if (
+                $currentUserType === \App\Models\UserType::OWNER ||
                 in_array($currentUserType, \App\Models\UserType::ACCOUNTS_ROLES) ||
                 in_array($currentUserType, \App\Models\UserType::ADMIN_ROLES)
             ) {
-                // Get all users with sales or manager roles
+                // Sales reports must only offer active users who can own sales.
                 return User::where('status', 1)
                     ->whereHas('userType', function ($q) {
-                        $q->whereIn('user_type', array_merge(
-                            \App\Models\UserType::SALES_ROLES,
-                            \App\Models\UserType::ADMIN_ROLES
-                        ));
+                        $q->whereIn('user_type', \App\Models\UserType::SALES_ROLES);
                     })
                     ->orderBy('name')
                     ->get();
@@ -648,6 +646,19 @@ class ReportController extends Controller
             return redirect()->route('login');
         }
 
+        // A direct report visit should be useful immediately. Preserve every
+        // explicitly supplied filter; only apply the current month when none
+        // of the report filters was requested.
+        if (!$request->filled('month') && !$request->filled('year') && !$request->filled('service_name')
+            && !$request->filled('status') && !$request->filled('name') && !$request->filled('email')
+            && !$request->filled('phone') && !$request->filled('representative_user_id')
+            && !$request->filled('manager_user_id') && !$request->filled('product_id')) {
+            $request->merge([
+                'month' => now()->month,
+                'year' => now()->year,
+            ]);
+        }
+
         $currentUser = auth()->user();
         $representatives = getRepresentativeIds($currentUser);
 
@@ -1014,9 +1025,11 @@ class ReportController extends Controller
             $staff = $authUser ? collect([$authUser]) : collect();
         }
 
-        // Build manager list
-        $parentTypeIds = \App\Models\UserType::whereNotNull('parent_id')->pluck('parent_id')->unique();
-        $managers = User::whereIn('user_type_id', $parentTypeIds)->where('status', 1)->orderBy('name')->get();
+        // Only genuine Sales Manager roles belong in the manager filter.
+        $managers = User::where('status', 1)
+            ->whereHas('userType', fn ($query) => $query->whereIn('user_type', [UserType::SENIOR_SALES_MANAGER, UserType::SALES_MANAGER]))
+            ->orderBy('name')
+            ->get();
 
         return view('admin.report.sales_report', compact(
             'salesData',

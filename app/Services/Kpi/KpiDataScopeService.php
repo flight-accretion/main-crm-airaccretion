@@ -40,7 +40,14 @@ class KpiDataScopeService
 
     public function isHrOversight(User $user): bool
     {
-        return ($user->userType->user_type ?? '') === UserType::HR;
+        // HR and Owner are read-only oversight roles for KPI dashboards.  Their
+        // navigation is intentionally more limited than Super Admin, but they
+        // must be able to open the dashboard and drill into configured staff.
+        return in_array(
+            $user->userType->user_type ?? '',
+            [UserType::HR, UserType::OWNER],
+            true
+        );
     }
 
     public function allowedUsers(
@@ -54,10 +61,13 @@ class KpiDataScopeService
             $roles = match ($requestedDepartment) {
                 'sales' => UserType::SALES_ROLES,
                 'operations' => UserType::OPERATIONS_ROLES,
-                'accounts' => $this->isHrOversight($current)
+                // HR does not supervise Accounts KPIs. Owner is the company-wide
+                // oversight role and therefore uses the same KPI population as
+                // Super Admin for read-only dashboard views.
+                'accounts' => $this->isHrOversight($current) && $role !== UserType::OWNER
                     ? []
                     : UserType::ACCOUNTS_ROLES,
-                default => $this->isHrOversight($current)
+                default => $this->isHrOversight($current) && $role !== UserType::OWNER
                     ? array_merge(
                         UserType::SALES_ROLES,
                         UserType::OPERATIONS_ROLES

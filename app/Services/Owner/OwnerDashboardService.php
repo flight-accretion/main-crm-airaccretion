@@ -141,7 +141,10 @@ class OwnerDashboardService
         $start = $end->copy()->subDays(13);
 
         $managers = $this->salesManagers();
-        $people = $this->salesExecutives();
+        // People is individual ownership, not only the executive role. Sales
+        // managers can also own and close leads, so they must be visible here
+        // without changing the separate manager-team aggregation.
+        $people = $this->salesPeople();
 
         $managerSeries = [];
         foreach ($managers as $manager) {
@@ -218,27 +221,28 @@ class OwnerDashboardService
             ->all();
     }
 
-    private function salesExecutives(): array
+    private function salesPeople(): array
     {
-        $executives = User::where('status', 1)
+        $people = User::where('status', 1)
             ->whereHas('userType', function ($q) {
-                $q->where('user_type', UserType::SALES_EXECUTIVE);
+                $q->whereIn('user_type', UserType::SALES_ROLES);
             })
             ->orderBy('name')
             ->get();
 
         $assignments = SalesExecutiveAssignment::where('status', 1)
-            ->whereIn('sales_executive_id', $executives->pluck('id'))
+            ->whereIn('sales_executive_id', $people->pluck('id'))
             ->get()
             ->keyBy('sales_executive_id');
 
         $list = [];
-        foreach ($executives as $executive) {
-            $managerId = $assignments->get($executive->id)?->manager_id;
+        foreach ($people as $person) {
+            $managerId = $assignments->get($person->id)?->manager_id;
+            $isManager = in_array($person->userType?->user_type, [UserType::SENIOR_SALES_MANAGER, UserType::SALES_MANAGER], true);
             $list[] = [
-                'id' => $executive->id,
-                'name' => $executive->name,
-                'group' => $managerId ? (User::find($managerId)?->name ?? 'Sales Executives') : 'Sales Executives',
+                'id' => $person->id,
+                'name' => $person->name,
+                'group' => $isManager ? 'Sales managers' : ($managerId ? (User::find($managerId)?->name ?? 'Sales Executives') : 'Sales Executives'),
             ];
         }
         return $list;

@@ -783,7 +783,6 @@
 
                         <li class="slide__category"><span class="category-name">Insights</span></li>
                         <li class="slide {{ Route::is('admin.report.sales') ? 'active' : '' }}"><a href="{{ route('admin.report.sales') }}" class="side-menu__item"><i class="ri-file-chart-line side-menu__icon"></i><span class="side-menu__label">Sales Report</span></a></li>
-                        <li class="slide {{ Route::is('admin.report.kpi*') ? 'active' : '' }}"><a href="{{ route('admin.report.kpi') }}" class="side-menu__item"><i class="ri-bar-chart-2-line side-menu__icon"></i><span class="side-menu__label">KPI Report</span></a></li>
                         <li class="slide {{ Route::is('admin.report.vendor') ? 'active' : '' }}"><a href="{{ route('admin.report.vendor') }}" class="side-menu__item"><i class="ri-file-list-3-line side-menu__icon"></i><span class="side-menu__label">Vendor Report</span></a></li>
                         <li class="slide {{ Route::is('admin.report.profit-loss') ? 'active' : '' }}"><a href="{{ route('admin.report.profit-loss') }}" class="side-menu__item"><i class="ri-funds-line side-menu__icon"></i><span class="side-menu__label">Profit / Loss</span></a></li>
                         <li class="slide {{ Route::is('admin.report.incentives*') ? 'active' : '' }}"><a href="{{ route('admin.report.incentives') }}" class="side-menu__item"><i class="ri-award-line side-menu__icon"></i><span class="side-menu__label">Incentive Report</span></a></li>

@@ -492,8 +492,9 @@ class TargetController extends Controller
     }
 
     /**
-     * Read-only monthly incentive report for Accounts. Target configuration remains
-     * restricted to HR and Super Admin through the existing incentives page.
+     * Read-only monthly incentive report for Accounts and Owner oversight. Target
+     * configuration remains restricted to HR and Super Admin through the existing
+     * incentives page.
      */
     public function accountIncentives(Request $request)
     {
@@ -616,7 +617,8 @@ class TargetController extends Controller
     {
         $role = optional(auth()->user()?->userType)->user_type;
 
-        return in_array($role, array_merge(UserType::ACCOUNTS_ROLES, UserType::ADMIN_ROLES), true);
+        return $role === UserType::OWNER
+            || in_array($role, array_merge(UserType::ACCOUNTS_ROLES, UserType::ADMIN_ROLES), true);
     }
 
     private function getAccountIncentiveStaff()

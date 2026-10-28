@@ -103,6 +103,7 @@ class WhatsAppConversationVisibilityService
 
         if (
             $role === UserType::SUPER_ADMIN
+            || $role === UserType::OWNER
             || in_array($role, UserType::ADMIN_ROLES, true)
             || in_array($role, UserType::OPERATIONS_ROLES, true)
         ) {

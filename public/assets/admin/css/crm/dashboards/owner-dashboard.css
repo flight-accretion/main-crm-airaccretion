@@ -64,7 +64,7 @@ a.ow-card:hover{transform:translateY(-2px);box-shadow:var(--ow-shadow-lg)}
 .ow-kpi-ico.red{background:var(--ow-red-soft);color:var(--ow-red)}
 .ow-kpi-ico.violet{background:var(--ow-violet-soft);color:var(--ow-violet)}
 .ow-kpi-mid{display:flex;align-items:flex-end;justify-content:space-between;gap:10px}
-.ow-kpi-value{font-size:30px;font-weight:700;letter-spacing:-.5px;line-height:1.1}
+.ow-kpi-value{font-size:30px;font-weight:700;letter-spacing:-.5px;line-height:1.1;white-space:nowrap}
 .ow-kpi-value small{font-size:16px;font-weight:650;color:var(--ow-muted)}
 .ow-spark{flex:0 0 auto}
 .ow-spark svg{display:block}

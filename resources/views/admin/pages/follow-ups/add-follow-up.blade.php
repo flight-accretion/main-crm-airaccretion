@@ -2690,6 +2690,10 @@
         // Store service breakdown data
         let serviceBreakdownData = {};
         let originalExtraServiceOptions = null;
+        // Existing follow-ups can contain selected extras that were saved before the
+        // workspace selector was introduced.  Keep those rows through the first
+        // selector sync so the payment breakdown still reflects the stored booking.
+        let isInitialExtraServiceSync = true;
 
         function getSelectedValues(selectElement) {
             if (!selectElement) {
@@ -2712,6 +2716,23 @@
             });
 
             return mappedIds;
+        }
+
+        function getStoredExtraServiceIds() {
+            const ids = Array.isArray(lastFollowupExtraServiceIds)
+                ? lastFollowupExtraServiceIds.map(String)
+                : [];
+
+            (lastFollowupServiceDetails || []).forEach(detail => {
+                if (detail && detail.type === 'extra_service' && detail.id !== undefined && detail.id !== null) {
+                    const id = String(detail.id);
+                    if (!ids.includes(id)) {
+                        ids.push(id);
+                    }
+                }
+            });
+
+            return ids;
         }
 
         function normalizeFeePercent(value) {
@@ -2780,11 +2801,13 @@
             const mappedExtraServiceIds = getMappedExtraServiceIds(selectedServiceIds);
             const currentSelectedExtraIds = getSelectedValues(extraServicesSelect);
             const hasServiceFilter = selectedServiceIds.length > 0;
+            const storedExtraIds = isInitialExtraServiceSync ? getStoredExtraServiceIds() : [];
             const allowedIds = hasServiceFilter
-                ? Array.from(new Set(mappedExtraServiceIds.map(String)))
+                ? Array.from(new Set([...mappedExtraServiceIds.map(String), ...storedExtraIds]))
                 : [];
             const selectedIds = preserveSelected
-                ? currentSelectedExtraIds.filter(id => allowedIds.includes(id))
+                ? Array.from(new Set([...currentSelectedExtraIds, ...storedExtraIds]))
+                    .filter(id => allowedIds.includes(id))
                 : [];
 
             extraServicesSelect.innerHTML = '';
@@ -2801,6 +2824,8 @@
             if (typeof $ !== 'undefined' && $.fn.select2) {
                 $('#extra_services').trigger('change.select2');
             }
+
+            isInitialExtraServiceSync = false;
         }
 
         // NEW: Build service breakdown table
@@ -2935,7 +2960,7 @@
                     `₹${item.original_amount.toFixed(2)}`;
 
                 row.innerHTML = `
-                    <td>${item.name}</td>
+                    <td>${item.type === 'extra_service' ? 'Extra service · ' : ''}${item.name}</td>
                     <td class="text-end">${originalCellHtml}</td>
                         <td class="text-end discount-amount">₹${item.discount_amount.toFixed(2)}</td>
                         <td class="text-end">
@@ -3150,6 +3175,9 @@
 
         // Function to handle extra service selection changes
         function handleExtraServiceChange() {
+            // A user change is authoritative; never re-add a legacy selected extra
+            // after it has been removed from the current form.
+            isInitialExtraServiceSync = false;
             buildServiceBreakdownTable();
         }
 

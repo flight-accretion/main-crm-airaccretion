@@ -541,7 +541,8 @@ class WhatsAppInboxController extends Controller
                 $role,
                 UserType::OPERATIONS_ROLES,
                 true
-            ),
+            )
+            || $role === UserType::OWNER,
             403
         );
     }

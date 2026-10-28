@@ -29,6 +29,15 @@
         $attBar = fn($pct) => $pct === null ? '#98a2b3' : ($pct >= 80 ? '#178a4c' : ($pct >= 50 ? '#2f6fed' : '#e5484d'));
         $casePalette = ['#2f6fed', '#d97706', '#178a4c', '#7c3aed', '#e5484d', '#0ea5e9'];
         $heartStale = $automation['heartbeat_stale'] ?? true;
+        $failedJobs = (int) ($automation['failed_jobs'] ?? 0);
+        $failedWarn = (int) config('crm.failed_jobs_warning', 50);
+        $automationHealth = $heartStale
+            ? ['label' => 'scheduler stale', 'tone' => 'warn']
+            : ($failedJobs === 0
+                ? ['label' => 'all systems operational', 'tone' => 'ok']
+                : ($failedJobs > $failedWarn
+                    ? ['label' => 'action required', 'tone' => 'warn']
+                    : ['label' => 'operational with warnings', 'tone' => 'warn']));
         $ownerDashboardName = config('crm.owner_dashboard_name', 'Rahul');
         $attentionCount = array_sum(array_map(fn($item) => (int) ($item['count'] ?? 0), $attention));
     @endphp
@@ -42,7 +51,7 @@
                 <div>
                     <h1><i class="ri-vip-crown-line" aria-hidden="true"></i> <span id="ow-greeting">Good day</span>, Owner
                         {{ $ownerDashboardName }} ji</h1>
-                    <p>Live executive snapshot &middot; &#8377;{{ $rupees($health['profit_loss']) }} commission This Month
+                    <p>Live executive snapshot &middot; &#8377;{{ $rupees($health['net']) }} net cash inflow this month
                         &middot; {{ number_format($health['active_bookings']) }} active bookings &middot;
                         {{ number_format($attentionCount) }} items need attention</p>
                 </div>
@@ -60,16 +69,15 @@
             {{-- ================= KPI ROW ================= --}}
             <section class="ow-grid" aria-label="Business health">
                 <div class="ow-card ow-kpi s3">
-                    <div class="ow-kpi-top"><span class="ow-kpi-label">commission</span><span
+                    <div class="ow-kpi-top"><span class="ow-kpi-label">Net Inflow</span><span
                             class="ow-kpi-ico green"><i class="ri-funds-line" aria-hidden="true"></i></span></div>
                     <div class="ow-kpi-mid">
                         <span class="ow-kpi-value" data-tnum
-                            title="&#8377;{{ $rupees($health['profit_loss']) }}">&#8377;{!! $compact($health['profit_loss']) !!}</span>
+                            title="&#8377;{{ $rupees($health['net']) }}">&#8377;{!! $compact($health['net']) !!}</span>
                         <span
                             class="ow-spark">{!! $sparkline($salesChart['company'], $health['profit_loss_delta'] === null || $health['profit_loss_delta'] >= 0 ? '#178a4c' : '#e5484d') !!}</span>
                     </div>
-                    <div>{!! $deltaPill($health['profit_loss_delta']) !!} <span class="ow-kpi-foot">after payments and
-                            refunds</span></div>
+                    <div>{!! $deltaPill($health['net_delta']) !!} <span class="ow-kpi-foot">collected less paid out &middot; vs previous month</span></div>
                 </div>
                 <div class="ow-card ow-kpi s3">
                     <div class="ow-kpi-top"><span class="ow-kpi-label">Collected</span><span class="ow-kpi-ico brand"><i
@@ -369,8 +377,8 @@
                             <p>The machines working in the background</p>
                         </div>
                         <span class="ow-pill"><span
-                                style="color:{{ $heartStale ? 'var(--ow-amber)' : 'var(--ow-green)' }}">&#9679;</span>
-                            {{ $heartStale ? 'scheduler stale' : 'all systems operational' }}</span>
+                                style="color:{{ $automationHealth['tone'] === 'ok' ? 'var(--ow-green)' : 'var(--ow-amber)' }}">&#9679;</span>
+                            {{ $automationHealth['label'] }}</span>
                     </div>
                     <div class="ow-auto">
                         @if($automation['whatsapp_ai'] !== null)
@@ -417,15 +425,13 @@
                                 </div>
                             </div>
                         @endif
-                        @php $failedJobs = $automation['failed_jobs'] ?? 0;
-                        $failedWarn = (int) config('crm.failed_jobs_warning', 50); @endphp
                         <div class="ow-auto-row">
                             <span class="ow-auto-ico"><i class="ri-database-2-line" aria-hidden="true"></i></span>
                             <div><strong>Failed jobs / scheduler</strong>
                                 <p>vs warning threshold {{ $failedWarn }}</p>
                             </div>
                             <div class="ow-auto-state"><b data-tnum>{{ number_format($failedJobs) }} failed</b><span
-                                    class="ow-status {{ $failedJobs > $failedWarn ? 'warn' : 'ok' }}">{{ $failedJobs > $failedWarn ? 'Needs attention' : 'Healthy' }}</span>
+                                    class="ow-status {{ $failedJobs > 0 ? 'warn' : 'ok' }}">{{ $failedJobs > $failedWarn ? 'Needs attention' : ($failedJobs > 0 ? 'Warning' : 'Healthy') }}</span>
                             </div>
                         </div>
                     </div>

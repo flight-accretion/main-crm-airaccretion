@@ -24,7 +24,9 @@ class HrDashboardDataService
     public function forDashboard(User $actor, Request $request, array $filter): array
     {
         $actor->loadMissing('userType');
-        abort_unless(in_array($actor->userType->user_type ?? '', array_merge(UserType::ADMIN_ROLES, [UserType::HR]), true), 403);
+        // Owner has the same company-wide, read-only visibility as Super Admin
+        // for this dashboard. Mutating HR routes remain guarded separately.
+        abort_unless(in_array($actor->userType->user_type ?? '', array_merge(UserType::ADMIN_ROLES, [UserType::HR, UserType::OWNER]), true), 403);
         $from = $filter['from'];
         $to = $filter['to'];
         $staffIds = User::query()->where('status', 1)->pluck('id');
