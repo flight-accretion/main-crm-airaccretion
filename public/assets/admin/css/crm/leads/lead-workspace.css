@@ -390,6 +390,9 @@
     color: var(--lw-text);
     font-size: 12px;
     line-height: 1.45;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .crm-lead-workspace .lw-history-note {
@@ -427,6 +430,23 @@
 
 .crm-lead-workspace .lw-edit-panel.is-open {
     display: block;
+}
+
+.crm-lead-workspace .lw-save-feedback {
+    margin-top: 12px;
+    padding: 9px 11px;
+    border: 1px solid #bbf7d0;
+    border-radius: 8px;
+    background: #f0fdf4;
+    color: #166534;
+    font-size: 12px;
+    font-weight: 650;
+}
+
+.crm-lead-workspace .lw-save-feedback--error {
+    border-color: #fecaca;
+    background: #fef2f2;
+    color: #b91c1c;
 }
 
 .crm-lead-workspace .lw-grid-2 {
@@ -1114,12 +1134,12 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) 360px;
     grid-template-areas:
-        "followup registration"
+        "services registration"
+        "services-editor chat"
+        "followup chat"
         "history chat"
         "client chat"
-        "travel chat"
-        "services chat"
-        "services-editor chat";
+        "travel chat";
     gap: 12px;
     align-items: start;
 }
@@ -1173,8 +1193,20 @@
 .crm-lead-workspace .lw-trip-editor { min-width: 0; padding: 12px; border: 1px solid var(--lw-border); border-radius: 9px; }
 .crm-lead-workspace .lw-trip-editor legend { padding: 0 5px; color: var(--lw-muted); font-size: 11px; font-weight: 750; }
 .crm-lead-workspace .lead-workspace-services-editor .lw-edit-panel { margin-top: 0; }
+.crm-lead-workspace .lw-select-search { width: 100%; min-height: 36px; margin: 0 0 7px; padding: 7px 10px; border: 1px solid var(--lw-border); border-radius: 8px; background: #fff; color: var(--lw-text); font: inherit; font-size: 12px; }
 .crm-lead-workspace .lead-workspace-services-editor select { width: 100%; min-height: 114px; padding: 7px 10px; border: 1px solid var(--lw-border); border-radius: 8px; background: #fff; color: var(--lw-text); font: inherit; line-height: 1.45; }
+.crm-lead-workspace .lead-workspace-services-editor select:not([multiple]) { min-height: 40px; }
 .crm-lead-workspace .lead-workspace-services-editor select option { padding: 3px 0; }
+.crm-lead-workspace .lead-workspace-services-editor .select2-container,
+.crm-lead-workspace .lw-followup-service-picker .select2-container { width: 100% !important; }
+.crm-lead-workspace .lead-workspace-services-editor .select2-selection--single,
+.crm-lead-workspace .lw-followup-service-picker .select2-selection--multiple { min-height: 40px; border-color: var(--lw-border); border-radius: 8px; }
+.crm-lead-workspace .lead-workspace-services-editor .select2-selection__rendered { padding-left: 10px; line-height: 38px; color: var(--lw-text); }
+.crm-lead-workspace .lead-workspace-services-editor .select2-selection__arrow { height: 38px; right: 8px; }
+.crm-lead-workspace .lead-workspace-services-editor .select2-selection__clear { position: absolute; top: 0; right: 32px; float: none; margin: 0; line-height: 38px; color: #7b8794; font-size: 21px; }
+.crm-lead-workspace .lw-followup-service-picker { margin: 0 0 13px; }
+.crm-lead-workspace .lw-followup-service-picker select { width: 100%; min-height: 92px; border-color: var(--lw-border); border-radius: 8px; }
+.crm-lead-workspace .lw-field-help { margin: 5px 0 0; color: var(--lw-muted); font-size: 11px; line-height: 1.4; }
 .crm-lead-workspace .lead-workspace-actions .lw-section-body { padding: 12px; }
 .crm-lead-workspace .lw-lead-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .crm-lead-workspace .lw-lead-actions .lw-btn { justify-content: center; text-align: center; }
@@ -1204,7 +1236,7 @@
 @media (max-width: 1180px) {
     .crm-lead-workspace .lead-workspace-layout {
         grid-template-columns: 1fr;
-        grid-template-areas: "followup" "history" "client" "travel" "services" "services-editor" "registration" "chat";
+        grid-template-areas: "services" "services-editor" "followup" "history" "client" "travel" "registration" "chat";
     }
     .crm-lead-workspace .lead-workspace-registration,
     .crm-lead-workspace .lead-workspace-right-rail { position: static; }

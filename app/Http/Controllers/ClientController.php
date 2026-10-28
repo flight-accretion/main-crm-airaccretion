@@ -404,12 +404,10 @@ class ClientController extends Controller
                 ->all();
         }
 
+        // Keep the customer-visible catalogue available to the workspace. The browser filters
+        // it against the selected service, so a newly selected service can immediately expose
+        // its own extras without requiring a second server-rendered list.
         $allowedExtraServiceIds = array_unique(array_merge($mappedExtraServiceIds, $selectedExtraServices));
-        if (!empty($allowedExtraServiceIds)) {
-            $allExtraServices = $allExtraServices->whereIn('id', $allowedExtraServiceIds)->values();
-        } else {
-            $allExtraServices = collect();
-        }
 
         $selectedServiceModels = $services
             ->whereIn('id', $selectedServices)
@@ -3707,6 +3705,11 @@ $leadFollowUp = LeadFollowUp::create([
         $lead->loadMissing(['rideSegments', 'representative', 'client']);
         $workspaceProducts = Product::where('status', 1)->orderBy('product')->get();
         $workspaceServices = Service::where('status', 1)->orderBy('service')->get();
+        $workspaceServiceProductMap = $workspaceServices->mapWithKeys(function (Service $service) {
+            return [
+                (string) $service->id => ProductController::serviceProductIds($service->getRawOriginal('product_ids')),
+            ];
+        })->all();
         $workspaceStaff = $this->getUsersInHierarchy();
         $workspaceCountries = Country::where('status', 1)->orderBy('name')->get();
         $workspaceCities = $lead->client?->country_id
@@ -3804,6 +3807,7 @@ $leadFollowUp = LeadFollowUp::create([
             'serviceExtraServicesMap' => $serviceExtraServicesMap,
             'workspaceProducts' => $workspaceProducts,
             'workspaceServices' => $workspaceServices,
+            'workspaceServiceProductMap' => $workspaceServiceProductMap,
             'workspaceStaff' => $workspaceStaff,
             'workspaceCountries' => $workspaceCountries,
             'workspaceCities' => $workspaceCities,
@@ -5574,7 +5578,10 @@ $this->abortUnlessRepresentativeInScope($staff ? $staff->id : null);
 
             // Trips Validation
             'trips' => ($isCallNotConnected ? 'nullable|array' : 'required|array|min:1'),
-            'trips.*.from_date' => ($isCallNotConnected ? 'nullable|date|after_or_equal:today' : 'required|date|after_or_equal:today'),
+            // An existing lead can contain a completed trip.  Workspace edits submit the
+            // complete lead payload, so do not reject historical travel dates while
+            // correcting client, travel, or service details.
+            'trips.*.from_date' => ($isCallNotConnected ? 'nullable|date' : 'required|date'),
             'trips.*.to_date' => ($isCallNotConnected ? 'nullable|date|after_or_equal:trips.*.from_date' : 'required|date|after_or_equal:trips.*.from_date'),
             'trips.*.from_place' => ($isCallNotConnected ? 'nullable|string|max:255|regex:/^[A-Za-z ]+$/' : 'required|string|max:255|regex:/^[A-Za-z ]+$/'),
             'trips.*.to_place' => ($isCallNotConnected ? 'nullable|string|max:255|regex:/^[A-Za-z ]+$/' : 'required|string|max:255|regex:/^[A-Za-z ]+$/'),
@@ -5835,7 +5842,10 @@ $this->abortUnlessRepresentativeInScope($staff ? $staff->id : null);
             // }
 
             DB::commit();
-            return redirect()->route('admin.leads.follow-up.create', $lead)->with('success', 'Lead details updated successfully.');
+            return redirect()
+                ->route('admin.leads.follow-up.create', $lead)
+                ->with('success', 'Lead details updated successfully.')
+                ->with('workspace_section', $request->input('workspace_section'));
         } catch (\Exception $e) {
             DB::rollBack();
             return back()->withInput()->with('error', 'Error updating lead: ' . $e->getMessage());

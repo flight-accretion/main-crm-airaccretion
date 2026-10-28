@@ -89,7 +89,7 @@
                     </div>
                 </div>
             </div>
-            <div class="lw-lead-hero-action"><a class="lw-btn lw-btn--primary" href="#followup-form">Add Follow-up</a></div>
+            <div class="lw-lead-hero-action"><a class="lw-btn lw-btn--primary" href="#workspace-followup-form" data-focus-followup>Add Follow-up</a></div>
 
         </section>
     @endunless
@@ -98,6 +98,7 @@
         $showLeadChat = $workspaceUser && isset($lead)
             ? app(\App\Services\LeadChat\LeadChatAccessService::class)->canAccess($workspaceUser, $lead)
             : false;
+        $workspaceServiceProductMap = $workspaceServiceProductMap ?? [];
     @endphp
     <div class="lead-workspace-layout lw-workspace">
         <div class="lead-workspace-registration">
@@ -206,10 +207,11 @@
                     </div>
                 </div>
             </div>
-            <div id="client-details-editor" class="lw-edit-panel {{ $errors->any() ? 'is-open' : '' }}">
+            <div id="client-details-editor" class="lw-edit-panel {{ old('workspace_section') === 'client-details-editor' || session('workspace_section') === 'client-details-editor' ? 'is-open' : '' }}">
                 <form method="POST" action="{{ route('admin.leads.update', $lead) }}">
                     @csrf
                     @method('PUT')
+                    <input type="hidden" name="workspace_section" value="client-details-editor">
                     <input type="hidden" name="contact_country_code" value="{{ $contactCountryCode }}">
                     <input type="hidden" name="whatsapp_country_code" value="{{ $whatsappCountryCode }}">
                     <input type="hidden" name="company_name" value="{{ $client->company_name }}">
@@ -237,6 +239,11 @@
                         <div class="lw-field"><label for="client-editor-email">Email</label><input id="client-editor-email" name="email" type="email" value="{{ old('email', $client->email) }}"></div>
                         <div class="lw-field"><label for="client-editor-whatsapp">WhatsApp</label><input id="client-editor-whatsapp" name="alternate_number" inputmode="numeric" value="{{ old('alternate_number', $alternateNumber) }}"></div>
                     </div>
+                    @if (old('workspace_section') === 'client-details-editor' || session('workspace_section') === 'client-details-editor')
+                        <div class="lw-save-feedback {{ $errors->any() ? 'lw-save-feedback--error' : 'lw-save-feedback--success' }}" role="status" aria-live="polite">
+                            {{ $errors->any() ? $errors->first() : session('success') }}
+                        </div>
+                    @endif
                     <div class="lw-edit-actions">
                         <button type="submit" class="lw-btn lw-btn--primary">Save Client Details</button>
                         <button type="button" class="lw-btn" data-close-workspace-editor="client-details-editor">Cancel</button>
@@ -260,9 +267,9 @@
                         @foreach($workspaceTrips as $trip)
                             <div class="lw-travel-segment">
                                 <div><small>From date</small><strong>{{ \Illuminate\Support\Carbon::parse($trip['from_date'])->format('d M · H:i') }}</strong></div>
-                                <div><small>From</small><strong>{{ $trip['from_place'] ?: 'Not set' }}</strong></div>
+                                <div><small>From place</small><strong>{{ $trip['from_place'] ?: 'Not set' }}</strong></div>
                                 <div><small>To date</small><strong>{{ \Illuminate\Support\Carbon::parse($trip['to_date'])->format('d M · H:i') }}</strong></div>
-                                <div><small>To</small><strong>{{ $trip['to_place'] ?: 'Not set' }}</strong></div>
+                                <div><small>To place</small><strong>{{ $trip['to_place'] ?: 'Not set' }}</strong></div>
                                 <div class="lw-segment-actions"><button type="button" class="lw-btn lw-btn--small" data-workspace-editor="travel-details-editor">Edit</button></div>
                             </div>
                         @endforeach
@@ -271,10 +278,11 @@
                 </div>
             </div>
             @unless($operationsMode)
-                <div id="travel-details-editor" class="lw-edit-panel">
+                <div id="travel-details-editor" class="lw-edit-panel {{ old('workspace_section') === 'travel-details-editor' || session('workspace_section') === 'travel-details-editor' ? 'is-open' : '' }}">
                     <form method="POST" action="{{ route('admin.leads.update', $lead) }}">
                         @csrf
                         @method('PUT')
+                        <input type="hidden" name="workspace_section" value="travel-details-editor">
                         <input type="hidden" name="name" value="{{ $client->name }}">
                         <input type="hidden" name="email" value="{{ $client->email }}">
                         <input type="hidden" name="contact_number" value="{{ $contactNumber }}">
@@ -295,7 +303,7 @@
                             <div class="lw-field"><label for="travel-editor-passengers">Passengers</label><input id="travel-editor-passengers" type="number" min="1" max="100" name="number_of_passengers" value="{{ old('number_of_passengers', $lead->number_of_passengers) }}" required></div>
                             <div class="lw-field"><label for="travel-editor-occasion">Occasion</label><input id="travel-editor-occasion" name="occasion" value="{{ old('occasion', $lead->occasion) }}"></div>
                         </div>
-                        <div class="lw-trip-editor-list">
+                        <div class="lw-trip-editor-list" id="travel-segment-editor-list" data-next-trip-index="{{ $workspaceTrips->count() }}">
                             @foreach($workspaceTrips as $tripIndex => $trip)
                                 <fieldset class="lw-trip-editor">
                                     <legend>Travel segment {{ $loop->iteration }}</legend>
@@ -309,6 +317,23 @@
                                 </fieldset>
                             @endforeach
                         </div>
+                        <template id="travel-segment-template">
+                            <fieldset class="lw-trip-editor">
+                                <legend>Travel segment <span data-trip-number></span></legend>
+                                <div class="lw-grid-2">
+                                    <div class="lw-field"><label>From date</label><input type="datetime-local" name="trips[__INDEX__][from_date]" required></div>
+                                    <div class="lw-field"><label>To date</label><input type="datetime-local" name="trips[__INDEX__][to_date]" required></div>
+                                    <div class="lw-field"><label>From place</label><input name="trips[__INDEX__][from_place]" required></div>
+                                    <div class="lw-field"><label>To place</label><input name="trips[__INDEX__][to_place]" required></div>
+                                </div>
+                                <div class="lw-edit-actions"><button type="button" class="lw-btn lw-btn--small" data-remove-travel-segment>Remove segment</button></div>
+                            </fieldset>
+                        </template>
+                        @if (old('workspace_section') === 'travel-details-editor' || session('workspace_section') === 'travel-details-editor')
+                            <div class="lw-save-feedback {{ $errors->any() ? 'lw-save-feedback--error' : 'lw-save-feedback--success' }}" role="status" aria-live="polite">
+                                {{ $errors->any() ? $errors->first() : session('success') }}
+                            </div>
+                        @endif
                         <div class="lw-edit-actions">
                             <button type="submit" class="lw-btn lw-btn--primary">Save Travel Details</button>
                             <button type="button" class="lw-btn" data-close-workspace-editor="travel-details-editor">Cancel</button>
@@ -430,7 +455,7 @@
                     </div>
             </div>
         </div>
-        <div class="xl:col-span-12 col-span-12 lead-workspace-add-followup">
+        <div id="workspace-followup-form" class="xl:col-span-12 col-span-12 lead-workspace-add-followup">
             <div class="box lw-followup-card">
                 <div class="box-header lw-followup-head justify-between">
                     <div class="box-title">
@@ -443,6 +468,14 @@
                             <button type="button" class="lw-quick-option" data-followup-note="{{ $quickNote }}">{{ $quickNote }}</button>
                         @endforeach
                     </div>
+                    @unless($operationsMode)
+                        <div class="lw-followup-service-picker">
+                            <label for="workspace-extra-services-picker" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Extra services</label>
+                            <input type="search" class="lw-select-search" data-filter-select="workspace-extra-services-picker" placeholder="Search extra services">
+                            <select id="workspace-extra-services-picker" data-extra-services-proxy class="ti-form-select rounded-sm !py-2 !px-3" multiple aria-describedby="workspace-extra-services-help"></select>
+                            <p id="workspace-extra-services-help" class="lw-field-help">Only extras available for the selected service are shown. Search and select one or more for this follow-up.</p>
+                        </div>
+                    @endunless
                     <div class="grid grid-cols-12 gap-6">
                         <div class="xl:col-span-12 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
                             <label for="notes" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Notes</label>
@@ -724,10 +757,11 @@
         </div>
         @unless($operationsMode)
             <div class="lead-workspace-services-editor">
-                <div id="services-details-editor" class="lw-edit-panel">
+                <div id="services-details-editor" class="lw-edit-panel {{ old('workspace_section') === 'services-details-editor' || session('workspace_section') === 'services-details-editor' ? 'is-open' : '' }}">
                     <form method="POST" action="{{ route('admin.leads.update', $lead) }}">
                         @csrf
                         @method('PUT')
+                        <input type="hidden" name="workspace_section" value="services-details-editor">
                         <input type="hidden" name="name" value="{{ $client->name }}">
                         <input type="hidden" name="email" value="{{ $client->email }}">
                         <input type="hidden" name="contact_number" value="{{ $contactNumber }}">
@@ -751,14 +785,35 @@
                             <input type="hidden" name="trips[{{ $tripIndex }}][to_place]" value="{{ $trip['to_place'] }}">
                         @endforeach
                         <div class="lw-grid-2">
-                            <div class="lw-field"><label for="services-editor-products">Products</label><select id="services-editor-products" name="product_ids[]" multiple required>@foreach($workspaceProducts as $product)<option value="{{ $product->id }}" {{ in_array($product->id, $workspaceProductIds) ? 'selected' : '' }}>{{ $product->product }}</option>@endforeach</select></div>
-                            <div class="lw-field"><label for="services-editor-services">Services</label><select id="services-editor-services" name="service_ids[]" multiple>@foreach($workspaceServices as $service)<option value="{{ $service->id }}" {{ in_array($service->id, $workspaceServiceIds) ? 'selected' : '' }}>{{ $service->service }}</option>@endforeach</select></div>
+                            <div class="lw-field">
+                                <label for="services-editor-products">Products</label>
+                                <input type="search" class="lw-select-search" data-filter-select="services-editor-products" placeholder="Search products">
+                                @php($selectedWorkspaceProductId = old('product_ids.0', $workspaceProductIds[0] ?? null))
+                                <select id="services-editor-products" name="product_ids[]" required>@foreach($workspaceProducts as $product)<option value="{{ $product->id }}" {{ (string) $product->id === (string) $selectedWorkspaceProductId ? 'selected' : '' }}>{{ $product->product }}</option>@endforeach</select>
+                            </div>
+                            <div class="lw-field">
+                                <label for="services-editor-services">Services</label>
+                                <input type="search" class="lw-select-search" data-filter-select="services-editor-services" placeholder="Search services">
+                                @php($selectedWorkspaceServiceId = old('service_ids.0', $workspaceServiceIds[0] ?? null))
+                                <select id="services-editor-services" name="service_ids[]" {{ $selectedWorkspaceProductId ? '' : 'disabled' }}><option value="">Select a service</option>@foreach($workspaceServices as $service)<option value="{{ $service->id }}" {{ (string) $service->id === (string) $selectedWorkspaceServiceId ? 'selected' : '' }}>{{ $service->service }}</option>@endforeach</select>
+                            </div>
                         </div>
                         <div class="lw-field"><label for="services-editor-requirement">Requirement / call note</label><textarea id="services-editor-requirement" name="requirement_description" rows="3">{{ $lead->description }}</textarea></div>
+                        <div class="lw-field">
+                            <label for="services-editor-extra-services">Extra services</label>
+                            <input type="search" class="lw-select-search" data-filter-select="services-editor-extra-services" placeholder="Search extra services">
+                            <select id="services-editor-extra-services" data-extra-services-proxy multiple aria-describedby="services-editor-extra-services-help"></select>
+                            <p id="services-editor-extra-services-help" class="lw-field-help">Available extras update automatically when the service changes.</p>
+                        </div>
                         <div class="lw-edit-actions">
                             <button type="submit" class="lw-btn lw-btn--primary">Save Services</button>
                             <button type="button" class="lw-btn" data-close-workspace-editor="services-details-editor">Cancel</button>
                         </div>
+                        @if (old('workspace_section') === 'services-details-editor' || session('workspace_section') === 'services-details-editor')
+                            <div class="lw-save-feedback {{ $errors->any() ? 'lw-save-feedback--error' : 'lw-save-feedback--success' }}" role="status" aria-live="polite">
+                                {{ $errors->any() ? $errors->first() : session('success') }}
+                            </div>
+                        @endif
                     </form>
                 </div>
             </div>
@@ -773,7 +828,7 @@
             <div class="lw-history-timeline">
                 @forelse($followups as $followup)
                     <article class="lw-history-item {{ $loop->iteration > 3 ? 'lw-history-item--extra' : '' }}">
-                        <strong>{{ \Illuminate\Support\Str::limit(strip_tags((string) $followup->followup_note), 120) ?: 'Follow-up recorded' }}</strong>
+                        <strong>{{ trim(strip_tags((string) $followup->followup_note)) ?: 'Follow-up recorded' }}</strong>
                         @if($followup->customer_not_picked_up)
                             <span class="lw-pill lw-pill--amber">No Answer</span>
                         @endif
@@ -785,6 +840,9 @@
             </div>
         </div>
     </div>
+    {{-- The duplicate legacy timeline is visually hidden by the workspace design.
+         Keep its markup inert so it cannot repeat the expensive history rendering on every save. --}}
+    @verbatim
     <details class="lead-workspace-history-legacy">
         <summary>View detailed follow-up history</summary>
 
@@ -2056,6 +2114,7 @@
 
     </div>
     </details>
+    @endverbatim
     </div>
 
 </div>
@@ -5908,6 +5967,30 @@ document
                 });
             });
 
+            const travelEditorList = document.getElementById('travel-segment-editor-list');
+            const travelSegmentTemplate = document.getElementById('travel-segment-template');
+            document.querySelectorAll('.lw-add-travel').forEach(function (trigger) {
+                trigger.addEventListener('click', function () {
+                    if (!travelEditorList || !travelSegmentTemplate) return;
+
+                    const index = Number(travelEditorList.dataset.nextTripIndex || travelEditorList.children.length);
+                    const fragment = travelSegmentTemplate.content.cloneNode(true);
+                    const segment = fragment.querySelector('.lw-trip-editor');
+                    segment.querySelectorAll('[name]').forEach(function (field) {
+                        field.name = field.name.replace('__INDEX__', index);
+                    });
+                    segment.querySelector('[data-trip-number]').textContent = index + 1;
+                    travelEditorList.appendChild(fragment);
+                    travelEditorList.dataset.nextTripIndex = String(index + 1);
+                    travelEditorList.lastElementChild.querySelector('input')?.focus();
+                });
+            });
+
+            travelEditorList?.addEventListener('click', function (event) {
+                const removeButton = event.target.closest('[data-remove-travel-segment]');
+                if (removeButton) removeButton.closest('.lw-trip-editor')?.remove();
+            });
+
             document.querySelectorAll('[data-close-workspace-editor]').forEach(function (trigger) {
                 trigger.addEventListener('click', function () {
                     document.getElementById(trigger.dataset.closeWorkspaceEditor)?.classList.remove('is-open');
@@ -5935,12 +6018,138 @@ document
                 });
             });
 
-            const addFollowup = document.querySelector('a[href="#followup-form"]');
+            const addFollowup = document.querySelector('[data-focus-followup]');
             if (addFollowup) {
-                addFollowup.addEventListener('click', function () {
+                addFollowup.addEventListener('click', function (event) {
+                    event.preventDefault();
+                    document.getElementById('workspace-followup-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     window.setTimeout(function () {
                         document.getElementById('notes')?.focus({ preventScroll: true });
-                    }, 350);
+                    }, 400);
+                });
+            }
+
+            document.querySelectorAll('[data-filter-select]').forEach(function (searchInput) {
+                const select = document.getElementById(searchInput.dataset.filterSelect);
+                if (!select) return;
+
+                searchInput.addEventListener('input', function () {
+                    const query = searchInput.value.trim().toLowerCase();
+                    Array.from(select.options).forEach(function (option) {
+                        option.hidden = query !== '' && !option.textContent.toLowerCase().includes(query);
+                    });
+                });
+            });
+
+            const productEditor = document.getElementById('services-editor-products');
+            const serviceEditor = document.getElementById('services-editor-services');
+            const existingServices = document.getElementById('services');
+            const existingExtraServices = document.getElementById('extra_services');
+            const workspaceExtraServicePickers = Array.from(document.querySelectorAll('[data-extra-services-proxy]'));
+            const serviceProductMap = @json($workspaceServiceProductMap);
+            const hasSelect2 = typeof $ !== 'undefined' && $.fn.select2;
+            const initialiseSearchableSelect = function (select, placeholder) {
+                if (!hasSelect2 || !select) return;
+                const $select = $(select);
+                if ($select.hasClass('select2-hidden-accessible')) {
+                    $select.select2('destroy');
+                }
+                $select.select2({ placeholder: placeholder, allowClear: true, width: '100%' });
+            };
+
+            const refreshExtraServicePickers = function () {
+                if (!existingExtraServices) return;
+                const selectedValues = new Set(Array.from(existingExtraServices.selectedOptions).map(function (option) { return option.value; }));
+
+                workspaceExtraServicePickers.forEach(function (picker) {
+                    picker.innerHTML = existingExtraServices.innerHTML;
+                    Array.from(picker.options).forEach(function (option) {
+                        option.selected = selectedValues.has(option.value);
+                    });
+                    if (hasSelect2 && $(picker).hasClass('select2-hidden-accessible')) {
+                        $(picker).trigger('change.select2');
+                    }
+                });
+            };
+
+            if (existingExtraServices && workspaceExtraServicePickers.length) {
+                refreshExtraServicePickers();
+                workspaceExtraServicePickers.forEach(function (picker) {
+                    picker.addEventListener('change', function () {
+                        const selectedValues = new Set(Array.from(picker.selectedOptions).map(function (option) { return option.value; }));
+                        Array.from(existingExtraServices.options).forEach(function (option) {
+                            option.selected = selectedValues.has(option.value);
+                        });
+                        existingExtraServices.dispatchEvent(new Event('change', { bubbles: true }));
+                    });
+                });
+                new MutationObserver(refreshExtraServicePickers).observe(existingExtraServices, { childList: true, subtree: true, attributes: true });
+            }
+
+            if (productEditor && serviceEditor) {
+                const allServiceOptions = Array.from(serviceEditor.options).filter(function (option) { return option.value !== ''; });
+                const syncServiceWithExistingFollowup = function () {
+                    if (!existingServices) return;
+                    const selectedServiceId = serviceEditor.value;
+                    Array.from(existingServices.options).forEach(function (option) {
+                        option.selected = option.value === selectedServiceId;
+                    });
+                    existingServices.dispatchEvent(new Event('change', { bubbles: true }));
+                    window.setTimeout(refreshExtraServicePickers, 0);
+                };
+                const filterServicesForProduct = function () {
+                    const productId = productEditor.value;
+                    const selectedServiceId = serviceEditor.value;
+
+                    // Select2 keeps its own rendered choice. Destroy it before replacing
+                    // options, otherwise an old service can remain visible after a product
+                    // change even though it is no longer a valid mapped service.
+                    if (hasSelect2 && $(serviceEditor).hasClass('select2-hidden-accessible')) {
+                        $(serviceEditor).select2('destroy');
+                    }
+
+                    serviceEditor.innerHTML = '<option value="">Select a service</option>';
+                    allServiceOptions
+                        .filter(function (option) {
+                            return productId && (serviceProductMap[String(option.value)] || []).includes(String(productId));
+                        })
+                        .forEach(function (option) {
+                            serviceEditor.appendChild(option.cloneNode(true));
+                        });
+
+                    serviceEditor.disabled = !productId;
+                    if (selectedServiceId && Array.from(serviceEditor.options).some(function (option) { return option.value === selectedServiceId; })) {
+                        serviceEditor.value = selectedServiceId;
+                    }
+
+                    initialiseSearchableSelect(serviceEditor, 'Search and select a service');
+                };
+
+                filterServicesForProduct();
+                const handleProductEditorChange = function () {
+                    filterServicesForProduct();
+                    syncServiceWithExistingFollowup();
+                };
+                productEditor.addEventListener('change', handleProductEditorChange);
+                serviceEditor.addEventListener('change', syncServiceWithExistingFollowup);
+                initialiseSearchableSelect(productEditor, 'Search and select a product');
+
+                // Select2 events are bound explicitly as well as the native change event.
+                // This makes the dependent list refresh immediately for mouse, keyboard,
+                // clear-icon, and search-result selections.
+                if (hasSelect2) {
+                    $(productEditor).on('select2:select.workspace-product select2:clear.workspace-product', handleProductEditorChange);
+                    $(serviceEditor).on('select2:select.workspace-service select2:clear.workspace-service', syncServiceWithExistingFollowup);
+                }
+            }
+
+            workspaceExtraServicePickers.forEach(function (picker) {
+                initialiseSearchableSelect(picker, 'Search and select extra services');
+            });
+
+            if (hasSelect2) {
+                document.querySelectorAll('.lw-select-search').forEach(function (searchInput) {
+                    searchInput.hidden = true;
                 });
             }
         });
