@@ -16,6 +16,7 @@ use App\Models\Country;
 use App\Models\State;
 use App\Models\City;
 use App\Models\UserType;
+use App\Services\Auth\UserManagementAuthorizationService;
 use Illuminate\Support\Facades\DB;
 
 
@@ -38,6 +39,7 @@ class UserController extends Controller
         $credentials = [
             'email' => strtolower(trim($request->input('email'))),
             'password' => $request->input('password'),
+            'status' =>  1,
         ];
 
         if (!Auth::attempt($credentials, $request->filled('remember'))) {
@@ -391,6 +393,12 @@ class UserController extends Controller
 
             return back()->withErrors($validator,'add')->withInput();
         }
+
+        app(UserManagementAuthorizationService::class)->assertCanAssignRole(
+            auth()->user(),
+            UserType::findOrFail($request->user_type_id)
+        );
+
         DB::beginTransaction();
 
         try {
@@ -452,6 +460,7 @@ class UserController extends Controller
     public function edit($id)
     {
         $user = User::findOrFail($id);
+        app(UserManagementAuthorizationService::class)->assertCanManageUser(auth()->user(), $user);
         $userTypes = UserType::whereNull('parent_id')->get();
 
         return view('admin.pages.staff.edit-staff', compact('user', 'userTypes'));
@@ -459,6 +468,7 @@ class UserController extends Controller
    public function getUserforEdit(Request $request)
    {
     $user = User::with('userType')->findOrFail($request->user_id);
+    app(UserManagementAuthorizationService::class)->assertCanManageUser(auth()->user(), $user);
     if (!$user) {
             return response()->json(['error' => 'User not found'], 404);
         }
@@ -539,6 +549,8 @@ class UserController extends Controller
 // Update the user
     public function update(Request $request, User $user)
     {
+        $authorization = app(UserManagementAuthorizationService::class);
+        $authorization->assertCanManageUser(auth()->user(), $user);
         $validator = Validator::make($request->all(), [
             'name' => [
                 'required',
@@ -615,6 +627,11 @@ class UserController extends Controller
             return back()->withErrors($validator,'edit')->withInput();
         }
 
+        $authorization->assertCanAssignRole(
+            auth()->user(),
+            UserType::findOrFail($request->user_type_id)
+        );
+
         DB::beginTransaction();
 
         try {
@@ -644,6 +661,7 @@ class UserController extends Controller
     public function toggleStatus(User $user)
     {
         try {
+            app(UserManagementAuthorizationService::class)->assertCanManageUser(auth()->user(), $user);
             $user->update(['status' => !$user->status]);
             return response()->json([
                 'success' => true,
@@ -660,6 +678,7 @@ class UserController extends Controller
 
     public function show(User $user)
     {
+        app(UserManagementAuthorizationService::class)->assertCanManageUser(auth()->user(), $user);
         return view('admin.pages.staff.view-staff', compact('user'));
     }
 

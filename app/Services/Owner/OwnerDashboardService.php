@@ -19,6 +19,7 @@ use App\Models\UserType;
 use App\Models\WhatsAppAiReplyBatch;
 use App\Services\Accounts\AccountsHomeService;
 use App\Services\TargetResolverService;
+use App\Services\Reports\ProfitLossSummaryService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -32,11 +33,13 @@ class OwnerDashboardService
 {
     private AccountsHomeService $accounts;
     private TargetResolverService $targets;
+    private ProfitLossSummaryService $profitLoss;
 
-    public function __construct(AccountsHomeService $accounts, TargetResolverService $targets)
+    public function __construct(AccountsHomeService $accounts, TargetResolverService $targets, ProfitLossSummaryService $profitLoss)
     {
         $this->accounts = $accounts;
         $this->targets = $targets;
+        $this->profitLoss = $profitLoss;
     }
 
     public function overview(Carbon $month): array
@@ -44,10 +47,15 @@ class OwnerDashboardService
         $month = $month->copy()->startOfMonth();
 
         $accounts = $this->accounts->forMonth($month);
+        $profitLoss = $this->profitLoss->forPeriod($month, $month->copy()->endOfMonth());
+        $previousProfitLoss = $this->profitLoss->forPeriod(
+            $month->copy()->subMonth()->startOfMonth(),
+            $month->copy()->subMonth()->endOfMonth()
+        );
 
         return [
             'month' => $month,
-            'health' => $this->health($accounts['money'], $accounts['previous'], $month),
+            'health' => $this->health($accounts['money'], $accounts['previous'], $month, $profitLoss, $previousProfitLoss),
             'attention' => $this->attention($accounts['pending']),
             'salesChart' => $this->salesChart($month),
             'sources' => $this->leadSources($month),
@@ -62,7 +70,7 @@ class OwnerDashboardService
     /* KPI row                                                             */
     /* ------------------------------------------------------------------ */
 
-    private function health(array $money, array $previous, Carbon $month): array
+    private function health(array $money, array $previous, Carbon $month, array $profitLoss, array $previousProfitLoss): array
     {
         $paidOut = $money['vendor_paid'] + $money['customer_refunded'];
         $paidOutPrev = $previous['vendor_paid'] + $previous['customer_refunded'];
@@ -76,10 +84,8 @@ class OwnerDashboardService
             ->count('lead_id');
 
         return [
-            // Same realised money calculation used by Accounts Home:
-            // approved collections less vendor payments/refunds, plus vendor refunds.
-            'profit_loss' => $money['net'],
-            'profit_loss_delta' => $this->delta($money['net'], $previous['net']),
+            'profit_loss' => $profitLoss['commission'],
+            'profit_loss_delta' => $this->delta($profitLoss['commission'], $previousProfitLoss['commission']),
             'net' => $money['net'],
             'net_delta' => $this->delta($money['net'], $previous['net']),
             'collected' => $money['collected'],

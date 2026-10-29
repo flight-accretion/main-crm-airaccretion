@@ -141,7 +141,11 @@ Route::get('/reset-password/{token}', [UserController::class, 'showResetForm'])-
 Route::post('/reset-password', [UserController::class, 'resetPassword'])->name('password.update');
 Route::get('/forgot-password', [UserController::class, 'showForgotPasswordForm'])->name('password.request');
 
-Route::middleware('auth')->group(function () {
+Route::middleware([
+    'auth',
+    'active.user',
+])->group(function () {
+
     Route::post('/logout', [UserController::class, 'logout'])->name('logout');
 
     /*

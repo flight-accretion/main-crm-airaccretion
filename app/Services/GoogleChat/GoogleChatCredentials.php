@@ -19,8 +19,19 @@ class GoogleChatCredentials
     public function refreshToken(): string
     {
         $disk = Storage::disk('local');
-        return $disk->exists(self::PATH)
-            ? Crypt::decryptString($disk->get(self::PATH))
-            : trim((string) config('services.google_chat.refresh_token'));
+        $legacyToken = trim((string) config('services.google_chat.refresh_token'));
+
+        if (!$disk->exists(self::PATH)) {
+            return $legacyToken;
+        }
+
+        try {
+            return Crypt::decryptString($disk->get(self::PATH));
+        } catch (\Throwable $exception) {
+            // A legacy environment token remains the safe fallback when an old
+            // on-disk credential can no longer be decrypted (for example after
+            // an application-key rotation).
+            return $legacyToken;
+        }
     }
 }

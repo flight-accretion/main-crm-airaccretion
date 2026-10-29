@@ -7,6 +7,7 @@ use App\Models\LeadVendorPayment;
 use App\Models\PaymentAuditTrail;
 use App\Models\Service;
 use App\Models\User;
+use App\Services\Reports\ProfitLossSummaryService;
 use Maatwebsite\Excel\Concerns\FromGenerator;
 use App\Exports\Concerns\StreamsLeadGroups;
 use Maatwebsite\Excel\Concerns\WithHeadings;
@@ -270,6 +271,17 @@ class ProfitLossReportExport implements FromGenerator, WithHeadings, WithMapping
         });
     }
 
+    if (array_key_exists('_allowed_representative_ids', $this->filters)) {
+        $allowedRepresentativeIds = $this->filters['_allowed_representative_ids'];
+        if (empty($allowedRepresentativeIds)) {
+            $query->whereRaw('1 = 0');
+        } else {
+            $query->whereHas('enquiry', function ($q) use ($allowedRepresentativeIds) {
+                $q->whereIn('representative_user_id', $allowedRepresentativeIds);
+            });
+        }
+    }
+
         return $query;
     }
 
@@ -298,7 +310,8 @@ class ProfitLossReportExport implements FromGenerator, WithHeadings, WithMapping
         ->unique()
         ->values();
 
-    $profitLossData = $allData->groupBy('lead_id')->map(function ($group) use ($approvedLeadIds) {
+    $profitLossService = app(ProfitLossSummaryService::class);
+    $profitLossData = $allData->groupBy('lead_id')->map(function ($group) use ($approvedLeadIds, $profitLossService) {
         $latest = $group->sortByDesc('created_at')->first();
 
         // Only include leads with at least one approved payment
@@ -330,10 +343,12 @@ class ProfitLossReportExport implements FromGenerator, WithHeadings, WithMapping
             if ($vp->vendor) $vendorNames[] = $vp->vendor->name;
         }
 
-        $profitLoss = $clientReceivedAmount - $totalVendorAmount;
-        $profitLossPercent = $clientReceivedAmount > 0
-            ? ($profitLoss / $clientReceivedAmount) * 100
-            : 0;
+        $financial = $profitLossService->forFollowup($latest);
+        $clientReceivedAmount = $financial['earned_revenue'];
+        $totalVendorAmount = $financial['vendor_cost'];
+        $vendorNames = $financial['vendor_names'];
+        $profitLoss = $financial['profit'];
+        $profitLossPercent = $financial['margin'];
 
         $salesPerson = $latest->enquiry->representative ?? null;
         $salesPersonName = $salesPerson ? $salesPerson->name : 'N/A';

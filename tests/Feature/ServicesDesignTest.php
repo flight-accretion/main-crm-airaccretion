@@ -141,7 +141,7 @@ class ServicesDesignTest extends TestCase
     private function actor(string $role): void
     {
         $type = UserType::forceCreate(['id' => (string) Str::uuid(), 'user_type' => $role]);
-        $this->actingAs(User::forceCreate(['id' => (string) Str::uuid(), 'user_type_id' => $type->id, 'name' => 'Catalog user', 'email' => Str::uuid().'@example.test']));
+        $this->actingAs(User::forceCreate(['id' => (string) Str::uuid(), 'user_type_id' => $type->id, 'name' => 'Catalog user', 'email' => Str::uuid().'@example.test', 'status' => 1]));
     }
     private function product(): Product { return Product::forceCreate(['id' => (string) Str::uuid(), 'product' => 'Helicopter transfer']); }
     private function service(Product $p, array $data = []): Service { return Service::create(array_merge(['id' => (string) Str::uuid(), 'service' => 'Helicopter ride', 'product_ids' => [$p->id], 'service_amount' => 3500, 'fees_percent' => 18, 'status' => 1], $data)); }

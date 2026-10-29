@@ -8,6 +8,7 @@ use App\Models\Service;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class ExceptionalController extends Controller
 {
@@ -179,18 +180,22 @@ class ExceptionalController extends Controller
             ]);
 
             $followupId = $request->input('followup_id');
-            $refundAmount = $request->input('refund_amount');
+            $refundAmount = (float) $request->input('refund_amount');
             $refundReason = $request->input('refund_reason', 'Excess payment refund from exceptional dashboard');
 
-            $followup = LeadFollowup::with('enquiry')->findOrFail($followupId);
-
-            // Get the total amount from followup
+            DB::beginTransaction();
+            $followup = LeadFollowup::with('enquiry')
+                ->whereKey($followupId)
+                ->lockForUpdate()
+                ->firstOrFail();
             $originalAmount = (float) ($followup->total_amount ?? 0);
 
-            // Check if a refund already exists for this followup
-            $existingRefund = \App\Models\LeadRefund::where('lead_followup_id', $followupId)->first();
+            $existingRefund = \App\Models\LeadRefund::where('lead_followup_id', $followupId)
+                ->lockForUpdate()
+                ->first();
 
             if ($existingRefund) {
+                DB::commit();
                 Log::info('Refund note already exists for followup', ['followup_id' => $followupId, 'refund_id' => $existingRefund->id]);
                 return response()->json([
                     'success' => true,
@@ -198,6 +203,25 @@ class ExceptionalController extends Controller
                     'refund_id' => $existingRefund->id,
                     'followup_id' => $followupId
                 ]);
+            }
+
+            $leadFollowupIds = LeadFollowup::query()
+                ->where('lead_id', $followup->lead_id)
+                ->lockForUpdate()
+                ->pluck('id');
+            $approvedReceived = (float) PaymentAuditTrail::query()
+                ->whereIn('lead_followup_id', $leadFollowupIds)
+                ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
+                ->sum('paid_amount');
+            $availableExcess = max(0, $approvedReceived - $originalAmount);
+
+            if ($refundAmount > $availableExcess) {
+                DB::rollBack();
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Refund amount exceeds the available excess payment.',
+                ], 422);
             }
 
             // Create new refund note
@@ -209,6 +233,8 @@ class ExceptionalController extends Controller
                 'refund_reason' => $refundReason,
                 'status' => 0, // Pending status
             ]);
+
+            DB::commit();
 
             Log::info('Refund note created from exceptional dashboard', [
                 'refund_id' => $refund->id,
@@ -225,12 +251,18 @@ class ExceptionalController extends Controller
             ]);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
             Log::error('Validation failed in createRefundNote', ['errors' => $e->errors()]);
             return response()->json([
                 'success' => false,
                 'message' => $e->validator->errors()->first()
             ], 422);
         } catch (\Exception $e) {
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
             Log::error('Error creating refund note from exceptional dashboard: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString()
             ]);

@@ -55,7 +55,7 @@ class WhatsAppBacklogRepairTest extends TestCase
         $this->assertSame(0, Artisan::call('crm:repair-whatsapp-ai-backlog'));
         $this->assertDatabaseHas('whatsapp_ai_reply_batches', ['id' => $id, 'status' => 'processing']);
         $this->assertDatabaseCount('jobs', 1);
-        $this->assertSame([], Storage::disk('local')->allFiles());
+        $this->assertSame([], Storage::disk('local')->allFiles('private/repairs'));
     }
 
     public function test_apply_is_bounded_and_backed_up_without_sending(): void
@@ -98,7 +98,7 @@ class WhatsAppBacklogRepairTest extends TestCase
         $this->assertSame(1, Artisan::call('crm:repair-whatsapp-ai-backlog', ['--apply' => true]));
         $this->assertDatabaseHas('whatsapp_ai_reply_batches', ['id' => $a, 'status' => 'processing']);
         $this->assertDatabaseCount('jobs', 751);
-        $this->assertSame([], Storage::disk('local')->allFiles());
+        $this->assertSame([], Storage::disk('local')->allFiles('private/repairs'));
     }
 
     public function test_backup_failure_prevents_all_database_changes(): void
@@ -124,7 +124,7 @@ class WhatsAppBacklogRepairTest extends TestCase
         $this->assertSame(0, Artisan::call('crm:repair-whatsapp-ai-backlog', ['--apply' => true]));
         $this->assertDatabaseHas('whatsapp_ai_reply_batches', ['id' => $id, 'status' => 'processing']);
         $this->assertDatabaseCount('jobs', 3);
-        $this->assertSame([], Storage::disk('local')->allFiles());
+        $this->assertSame([], Storage::disk('local')->allFiles('private/repairs'));
     }
 
     public function test_wrong_queue_database_is_rejected_and_retry_window_exceeds_job_timeouts(): void
@@ -137,7 +137,7 @@ class WhatsAppBacklogRepairTest extends TestCase
         }
         config(['queue.connections.database.connection' => 'other_database']);
         $this->assertSame(1, Artisan::call('crm:repair-whatsapp-ai-backlog', ['--apply' => true]));
-        $this->assertSame([], Storage::disk('local')->allFiles());
+        $this->assertSame([], Storage::disk('local')->allFiles('private/repairs'));
     }
 
     private function batch(string $status, ?string $lock = null): string

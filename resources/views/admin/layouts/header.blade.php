@@ -734,6 +734,7 @@
                 $isAccountsSidebar = $canAccess($userType, $accountRoles) && !$canAccess($userType, $adminRoles);
                 $isSalesSidebar = $canAccess($userType, $salesRoles) && !$canAccess($userType, $adminRoles);
                 $salesCanReceiveMoreLeads = $isSalesSidebar
+                    && \Illuminate\Support\Facades\Schema::hasTable('salesperson_availability')
                     && (bool) \App\Models\SalespersonAvailability::where('user_id', auth()->id())
                         ->where('is_available', true)
                         ->where('is_opted_in', true)
@@ -868,7 +869,7 @@
                             </li>
 
                             <li class="slide__category"><span class="category-name">Other Tools</span></li>
-                            <li class="slide has-sub {{ Route::is('admin.kpi.*') ? 'active open' : '' }}"><a href="javascript:void(0);" class="side-menu__item"><i class="bx bx-bar-chart-alt-2 side-menu__icon"></i><span class="side-menu__label">KPI</span><i class="fe fe-chevron-right side-menu__angle"></i></a><ul class="slide-menu child1"><li class="slide"><a href="{{ route('admin.kpi.index') }}" class="side-menu__item {{ Route::is('admin.kpi.index') ? 'active' : '' }}">KPI Dashboard</a></li></ul></li>
+                            <li class="slide has-sub {{ Route::is('admin.kpi.*') ? 'active open' : '' }}"><a href="javascript:void(0);" class="side-menu__item"><i class="bx bx-bar-chart-alt-2 side-menu__icon"></i><span class="side-menu__label">KPI</span><i class="fe fe-chevron-right side-menu__angle"></i></a><ul class="slide-menu child1"><li class="slide"><a href="{{ route('admin.kpi.index') }}" class="side-menu__item {{ Route::is('admin.kpi.index') ? 'active' : '' }}">KPI Dashboard</a></li><li class="slide"><a href="{{ route('admin.kpi.outreach.index') }}" class="side-menu__item {{ Route::is('admin.kpi.outreach.*') ? 'active' : '' }}">Daily Outreach</a></li></ul></li>
                             <li class="slide {{ Route::is('admin.lead-tracking.*') ? 'active' : '' }}"><a href="{{ route('admin.lead-tracking.index') }}" class="side-menu__item"><i class="bx bx-search-alt side-menu__icon"></i><span class="side-menu__label">Lead Tracking</span></a></li>
                             <li class="slide has-sub {{ Route::is('admin.vendors.*') ? 'active open' : '' }}"><a href="javascript:void(0);" class="side-menu__item"><i class="bx bx-store side-menu__icon"></i><span class="side-menu__label">Vendors</span><i class="fe fe-chevron-right side-menu__angle"></i></a><ul class="slide-menu child1"><li class="slide"><a href="{{ route('admin.vendors.index') }}" class="side-menu__item {{ Route::is('admin.vendors.index') ? 'active' : '' }}">View Vendors</a></li></ul></li>
                             <li class="slide {{ Route::is('admin.rides.ride-status') ? 'active' : '' }}"><a href="{{ route('admin.rides.ride-status') }}" class="side-menu__item"><i class="bx bx-list-check side-menu__icon"></i><span class="side-menu__label">Ride Status</span></a></li>
@@ -1658,6 +1659,8 @@
        @if (
     $canAccess($userType, $salesRoles)
     || $canAccess($userType, $adminRoles)
+    || $canAccess($userType, $accountRoles)
+    || $canAccess($userType, $operationsRoles)
 )
                 <li class="slide {{
                     Route::is('admin.kpi.outreach.*')

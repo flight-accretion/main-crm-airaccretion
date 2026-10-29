@@ -20,6 +20,12 @@ use App\Exports\SalesReportExport;
 use App\Services\SalesAmountCalculator;
 use Illuminate\Support\Facades\Log;
 
+use Illuminate\Database\Eloquent\Builder;
+use App\Services\Sales\SalesBookingCohortService;
+use App\Services\Sales\SalesAchievementService;
+use App\Services\Reports\ProfitLossSummaryService;
+use App\Services\TargetResolverService;
+
 class ReportController extends Controller
 {
     private function abortLargeUnfilteredExport(Request $request)
@@ -49,19 +55,68 @@ class ReportController extends Controller
         return array_map('strval', (array) $ids);
     }
 
+    private function allowedRepresentativeIds(): ?array
+    {
+        $ids = getRepresentativeIds(auth()->user());
+
+        // The existing helper uses null for an unrestricted oversight role.
+        if ($ids === null) {
+            return null;
+        }
+
+        return array_values(array_unique(array_filter($this->normalizeIds($ids))));
+    }
+
     private function abortIfRepresentativeOutsideScope($representativeId): void
     {
-        $allowedRepresentativeIds = getRepresentativeIds(auth()->user());
+        $allowedRepresentativeIds = $this->allowedRepresentativeIds();
 
         if ($allowedRepresentativeIds === null) {
             return;
         }
 
-        $allowedRepresentativeIds = $this->normalizeIds($allowedRepresentativeIds);
-
         if (!in_array((string) $representativeId, $allowedRepresentativeIds, true)) {
             abort(403, 'You are not allowed to access this report data.');
         }
+    }
+
+    private function applyRepresentativeScope(Builder $query): Builder
+    {
+        $allowedRepresentativeIds = $this->allowedRepresentativeIds();
+
+        if ($allowedRepresentativeIds === null) {
+            return $query;
+        }
+
+        if (empty($allowedRepresentativeIds)) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->whereHas('enquiry', function ($leadQuery) use ($allowedRepresentativeIds) {
+            $leadQuery->whereIn('representative_user_id', $allowedRepresentativeIds);
+        });
+    }
+
+    private function scopedSalesUsers()
+    {
+        $allowedRepresentativeIds = $this->allowedRepresentativeIds();
+
+        $query = User::query()
+            ->with('userType')
+            ->where('status', 1)
+            ->whereHas('userType', function ($userTypeQuery) {
+                $userTypeQuery->whereIn('user_type', UserType::SALES_ROLES);
+            });
+
+        if ($allowedRepresentativeIds !== null) {
+            if (empty($allowedRepresentativeIds)) {
+                return collect();
+            }
+
+            $query->whereIn('id', $allowedRepresentativeIds);
+        }
+
+        return $query->orderBy('name')->get();
     }
 
     private function abortIfSalesRoleForSensitiveExport(): void
@@ -88,60 +143,15 @@ class ReportController extends Controller
     private function getUsersInHierarchy()
     {
         try {
-            $currentUser = auth()->user();
+            return $this->scopedSalesUsers();
+        } catch (\Throwable $e) {
+            Log::error('Error getting scoped Sales users for report.', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+            ]);
 
-            // If user doesn't have a user type, return all users as fallback
-            if (!$currentUser || !$currentUser->userType) {
-                return User::all();
-            }
-
-            $currentUserType = $currentUser->userType->user_type ?? '';
-
-            // If current user is in accounts role, admin, or super admin, return all sales and managers
-            if (
-                $currentUserType === \App\Models\UserType::OWNER ||
-                in_array($currentUserType, \App\Models\UserType::ACCOUNTS_ROLES) ||
-                in_array($currentUserType, \App\Models\UserType::ADMIN_ROLES)
-            ) {
-                // Sales reports must only offer active users who can own sales.
-                return User::where('status', 1)
-                    ->whereHas('userType', function ($q) {
-                        $q->whereIn('user_type', \App\Models\UserType::SALES_ROLES);
-                    })
-                    ->orderBy('name')
-                    ->get();
-            }
-
-            // Get all descendant user type IDs
-            $descendantUserTypeIds = $currentUser->userType->getDescendantIds();
-
-            // Build the query for users in hierarchy
-            $query = User::where('status', 1); // Only active users
-
-            // If the current user has descendants, include current user + descendants
-            // If no descendants, only include the current user
-            if (!empty($descendantUserTypeIds)) {
-                $query->where(function ($q) use ($currentUser, $descendantUserTypeIds) {
-                    $q->where('id', $currentUser->id) // Include current user
-                        ->orWhereIn('user_type_id', $descendantUserTypeIds); // Include descendants
-                });
-            } else {
-                // No descendants, only return current user
-                $query->where('id', $currentUser->id);
-            }
-
-            $usersInHierarchy = $query->get();
-
-            // If no users found in hierarchy, return all users as fallback
-            if ($usersInHierarchy->isEmpty()) {
-                return User::all();
-            }
-
-            return $usersInHierarchy;
-        } catch (\Exception $e) {
-            // Log the error and return all users as fallback
-            Log::error('Error getting users in hierarchy: ' . $e->getMessage());
-            return User::all();
+            // A scope-resolution failure must never expand visibility.
+            return collect();
         }
     }
 
@@ -220,6 +230,8 @@ class ReportController extends Controller
             //->whereNotNull('received_amount')
             //->where('received_amount', '>', 0)
             ->whereIn('status', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+
+        $query = $this->applyRepresentativeScope($query);
 
         if ($request->filled('from_date')) {
             $fromDate = Carbon::parse($request->from_date)->startOfDay();
@@ -698,6 +710,8 @@ class ReportController extends Controller
                 'followedBy.userType'
             ])->whereIn('status', array_keys($statusArray));
 
+            $query = $this->applyRepresentativeScope($query);
+
             // Apply month/year filter based on PAID DATE (from PaymentAuditTrail)
             // Only show leads that received approved payment in the selected month/year
             // if ($request->filled('month') || $request->filled('year')) {
@@ -713,57 +727,66 @@ class ReportController extends Controller
             //     $query->whereIn('lead_id', $paidLeadIds);
             // }
 
-            if ($request->filled('month') || $request->filled('year')) {
-                // Get all approved payments in the selected month/year
-                $paidDateQuery = \App\Models\PaymentAuditTrail::where('payment_status', PaymentAuditTrail::STATUS_APPROVED);
-                if ($request->filled('month')) {
-                    $paidDateQuery->whereMonth('paid_date', $request->month);
+                    if (
+                $request->filled('month')
+                ||
+                $request->filled('year')
+            ) {
+                $filterYear =
+                    $request->filled('year')
+                        ? (int) $request->year
+                        : (int) now()->year;
+
+                $filterMonth =
+                    $request->filled('month')
+                        ? (int) $request->month
+                        : null;
+
+                if ($filterMonth) {
+
+                    $periodStart =
+                        Carbon::create(
+                            $filterYear,
+                            $filterMonth,
+                            1
+                        )
+                        ->startOfMonth();
+
+                    $periodEnd =
+                        $periodStart
+                            ->copy()
+                            ->endOfMonth();
+
+                } else {
+
+                    $periodStart =
+                        Carbon::create(
+                            $filterYear,
+                            1,
+                            1
+                        )
+                        ->startOfYear();
+
+                    $periodEnd =
+                        $periodStart
+                            ->copy()
+                            ->endOfYear();
                 }
-                if ($request->filled('year')) {
-                    $paidDateQuery->whereYear('paid_date', $request->year);
-                }
 
-                $paidFollowupIds = $paidDateQuery->pluck('lead_followup_id')->unique();
-                $candidateLeadIds = \App\Models\LeadFollowup::whereIn('id', $paidFollowupIds)
-                    ->pluck('lead_id')->unique();
+                $paidLeadIds =
+                    app(
+                        SalesBookingCohortService::class
+                    )
+                    ->leadIdsForPeriod(
+                        $periodStart,
+                        $periodEnd,
+                        $this->allowedRepresentativeIds()
+                    );
 
-                // Only keep leads whose FIRST EVER approved payment falls in the selected month/year
-                // This prevents partial payment leads from appearing in multiple months
-                $allFollowupIdsByLead = \App\Models\LeadFollowup::whereIn('lead_id', $candidateLeadIds)
-                    ->get(['id', 'lead_id'])
-                    ->groupBy('lead_id')
-                    ->map(fn($group) => $group->pluck('id'));
-
-                $allFollowupIdsFlat = $allFollowupIdsByLead->flatten()->unique();
-
-                // Get the FIRST approved payment per lead (single query, no loop)
-                $firstPaymentPerLead = \App\Models\PaymentAuditTrail::whereIn('lead_followup_id', $allFollowupIdsFlat)
-                    ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
-                    ->orderBy('paid_date')
-                    ->get()
-                    ->groupBy(function ($payment) use ($allFollowupIdsByLead) {
-                        foreach ($allFollowupIdsByLead as $leadId => $followupIds) {
-                            if ($followupIds->contains($payment->lead_followup_id)) {
-                                return $leadId;
-                            }
-                        }
-                        return null;
-                    })
-                    ->map(fn($payments) => $payments->sortBy('paid_date')->first());
-
-                // Filter: only leads whose first payment is in the selected month/year
-                $filterMonth = $request->filled('month') ? (int) $request->month : null;
-                $filterYear  = $request->filled('year')  ? (int) $request->year  : null;
-
-                $paidLeadIds = $firstPaymentPerLead->filter(function ($firstPayment) use ($filterMonth, $filterYear) {
-                    if (!$firstPayment || empty($firstPayment->paid_date)) return false;
-                    $pd = \Carbon\Carbon::parse($firstPayment->paid_date);
-                    if ($filterMonth && $pd->month !== $filterMonth) return false;
-                    if ($filterYear  && $pd->year  !== $filterYear)  return false;
-                    return true;
-                })->keys();
-
-                $query->whereIn('lead_id', $paidLeadIds);
+                $query->whereIn(
+                    'lead_id',
+                    $paidLeadIds
+                );
             }
 
             // Sales Manager Filter
@@ -1026,10 +1049,50 @@ class ReportController extends Controller
         }
 
         // Only genuine Sales Manager roles belong in the manager filter.
-        $managers = User::where('status', 1)
-            ->whereHas('userType', fn ($query) => $query->whereIn('user_type', [UserType::SENIOR_SALES_MANAGER, UserType::SALES_MANAGER]))
-            ->orderBy('name')
-            ->get();
+      $managerQuery =
+    User::query()
+        ->with('userType')
+        ->where('status', 1)
+        ->whereHas(
+            'userType',
+            function ($query) {
+                $query->whereIn(
+                    'user_type',
+                    [
+                        UserType::SENIOR_SALES_MANAGER,
+                        UserType::SALES_MANAGER,
+                    ]
+                );
+            }
+        );
+
+            $allowedRepresentativeIds =
+                $this->allowedRepresentativeIds();
+
+            if (
+                $allowedRepresentativeIds !== null
+            ) {
+                if (
+                    empty(
+                        $allowedRepresentativeIds
+                    )
+                ) {
+                    $managerQuery
+                        ->whereRaw(
+                            '1 = 0'
+                        );
+                } else {
+                    $managerQuery->whereIn(
+                        'id',
+                        $allowedRepresentativeIds
+                    );
+                }
+            }
+
+            $managers =
+                $managerQuery
+                    ->orderBy('name')
+                    ->get();
 
         return view('admin.report.sales_report', compact(
             'salesData',
@@ -1346,28 +1409,93 @@ class ReportController extends Controller
     /**
      * Export Sales Report to Excel/CSV
      */
-    public function exportSalesReport(Request $request)
-    {
-        $this->abortIfSalesRoleForSensitiveExport();
+            public function exportSalesReport(
+            Request $request
+        ) {
+            $this
+                ->abortIfSalesRoleForSensitiveExport();
 
-        $format = $request->get('format', 'xlsx');
-        $filters = $request->except('format');
-        if ($response = $this->abortLargeUnfilteredExport($request)) {
-            return $response;
+            $format =
+                $request->get(
+                    'format',
+                    'xlsx'
+                );
+
+            $filters =
+                $request->except(
+                    'format'
+                );
+
+            if (
+                $response =
+                    $this
+                        ->abortLargeUnfilteredExport(
+                            $request
+                        )
+            ) {
+                return $response;
+            }
+
+            if (
+                !empty(
+                    $filters[
+                        'representative_user_id'
+                    ]
+                )
+            ) {
+                $this
+                    ->abortIfRepresentativeOutsideScope(
+                        $filters[
+                            'representative_user_id'
+                        ]
+                    );
+            }
+
+            if (
+                !empty(
+                    $filters[
+                        'manager_user_id'
+                    ]
+                )
+            ) {
+                $this
+                    ->abortIfRepresentativeOutsideScope(
+                        $filters[
+                            'manager_user_id'
+                        ]
+                    );
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Carry mandatory server-side scope into export
+            |--------------------------------------------------------------------------
+            */
+
+            $filters[
+                '_allowed_representative_ids'
+            ] =
+                $this
+                    ->allowedRepresentativeIds();
+
+            $fileName =
+                'sales_report_'
+                .
+                date(
+                    'Y-m-d_His'
+                )
+                .
+                '.'
+                .
+                $format;
+
+            return Excel::download(
+                new SalesReportExport(
+                    $filters
+                ),
+                $fileName
+            );
         }
-
-        if (!empty($filters['representative_user_id'])) {
-            $this->abortIfRepresentativeOutsideScope($filters['representative_user_id']);
-        }
-
-        if (!empty($filters['manager_user_id'])) {
-            $this->abortIfRepresentativeOutsideScope($filters['manager_user_id']);
-        }
-
-        $fileName = 'sales_report_' . date('Y-m-d_His') . '.' . $format;
-
-        return Excel::download(new SalesReportExport($filters), $fileName);
-    }
 
     /**
      * Profit/Loss Report - Display profit/loss data with customer, vendor, and salesperson details
@@ -1409,20 +1537,61 @@ class ReportController extends Controller
             'followedBy.userType'
         ])->whereIn('status', [2, 3, 4, 5, 6, 7, 8]);
 
-        // Apply filters
-        if ($request->filled('from_payment_date')) {
-            $fromDate = Carbon::parse($request->from_payment_date)->startOfDay();
-            $query->whereHas('paymentAuditTrail', function ($q) use ($fromDate) {
-                $q->where('paid_date', '>=', $fromDate);
-            });
-        }
+        $query = $this->applyRepresentativeScope($query);
 
-        if ($request->filled('to_payment_date')) {
-            $toDate = Carbon::parse($request->to_payment_date)->endOfDay();
-            $query->whereHas('paymentAuditTrail', function ($q) use ($toDate) {
-                $q->where('paid_date', '<=', $toDate);
-            });
-        }
+        // Apply filters
+     if (
+    $request->filled(
+        'from_payment_date'
+    )
+    ||
+    $request->filled(
+        'to_payment_date'
+    )
+) {
+    $fromDate =
+        $request->filled(
+            'from_payment_date'
+        )
+            ? Carbon::parse(
+                $request
+                    ->from_payment_date
+            )
+            ->startOfDay()
+            : Carbon::create(
+                1970,
+                1,
+                1
+            )
+            ->startOfDay();
+
+    $toDate =
+        $request->filled(
+            'to_payment_date'
+        )
+            ? Carbon::parse(
+                $request
+                    ->to_payment_date
+            )
+            ->endOfDay()
+            : now()
+                ->endOfDay();
+
+    $periodLeadIds =
+        app(
+            SalesBookingCohortService::class
+        )
+        ->leadIdsForPeriod(
+            $fromDate,
+            $toDate,
+            $this->allowedRepresentativeIds()
+        );
+
+    $query->whereIn(
+        'lead_id',
+        $periodLeadIds
+    );
+}
 
         if ($request->filled('manager_user_id')) {
             $managerUserId = $request->manager_user_id;
@@ -1524,7 +1693,8 @@ class ReportController extends Controller
             ->unique()
             ->values();
         // Process profit/loss data
-        $profitLossData = $allData->groupBy('lead_id')->map(function ($group) use ($statusArray, $approvedLeadIds, $productNames, $serviceNames) {
+        $profitLossService = app(ProfitLossSummaryService::class);
+        $profitLossData = $allData->groupBy('lead_id')->map(function ($group) use ($statusArray, $approvedLeadIds, $productNames, $serviceNames, $profitLossService) {
             $latest = $group->sortByDesc('created_at')->first();
 
             // ONLY show leads that have at least one approved payment
@@ -1562,12 +1732,15 @@ class ReportController extends Controller
                 }
 
             }
-            // Calculate profit/loss
-            $profitLoss = $clientReceivedAmount - $totalVendorAmount;
-            $profitLossPercent = 0;
-            if ($clientReceivedAmount > 0) {
-                $profitLossPercent = ($profitLoss / $clientReceivedAmount) * 100;
-            }
+
+            // Use the shared financial definition: customer overpayments are not
+            // revenue and approved refunds reduce the revenue that is earned.
+            $financial = $profitLossService->forFollowup($latest);
+            $clientReceivedAmount = $financial['earned_revenue'];
+            $totalVendorAmount = $financial['vendor_cost'];
+            $vendorNames = $financial['vendor_names'];
+            $profitLoss = $financial['profit'];
+            $profitLossPercent = $financial['margin'];
 
             // Get sales person (representative)
             $salesPerson = $latest->enquiry->representative ?? null;
@@ -1605,6 +1778,9 @@ class ReportController extends Controller
                 'lead_id' => $latest->lead_id,
                 'customer_name' => $client->name ?? 'N/A',
                 'client_received_amount' => $clientReceivedAmount,
+                'cash_received_amount' => $financial['cash_received'],
+                'overpayment_amount' => $financial['overpayment'],
+                'customer_refunded_amount' => $financial['customer_refunded'],
                 'paid_date' => $paidDateFormatted,
                 'vendor_name' => !empty($vendorNames) ? implode(', ', $vendorNames) : 'N/A',
                 'vendor_amount' => $totalVendorAmount,
@@ -1677,6 +1853,8 @@ class ReportController extends Controller
         $targetPeriod = $this->resolveTargetPeriod($request);
         $query = LeadFollowup::with(['enquiry.representative.userType', 'enquiry.rideSegments'])
             ->whereIn('status', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+
+        $query = $this->applyRepresentativeScope($query);
 
         if ($request->filled('month')) {
 
@@ -1791,38 +1969,44 @@ class ReportController extends Controller
             $groupedByRep->put($repId, $counts);
         }
 
-        $kpiData = $groupedByRep->map(function ($group, $repId) use ($targetPeriod) {
-            $rep = $group['representative'];
-            $repName = $rep ? $rep->name : 'N/A';
+        $kpiUsers = $this->scopedSalesUsers();
 
-            $totalLeads = $group['total_leads'];
-            $activeCount = $group['active'];
-            $cancelledCount = $group['cancelled'];
-            $completedCount = $group['completed'];
+        if ($request->filled('representative_user_id')) {
+            $kpiUsers = $kpiUsers->where('id', (string) $request->representative_user_id)->values();
+        }
 
-            $conversionRate = 0;
-            if ($totalLeads > 0) {
-                $conversionRate = ($completedCount / $totalLeads) * 100;
-            }
+        if ($request->filled('manager_user_id')) {
+            $managerTeamIds = \App\Models\SalesExecutiveAssignment::getSalesExecutivesForManager(
+                $request->manager_user_id
+            )->pluck('id')->map('strval')->push((string) $request->manager_user_id)->unique();
 
-            $targetStats = [
-                'target_amount' => 0,
-                'achieved_amount' => 0,
-                'remaining_amount' => 0,
-            ];
+            $kpiUsers = $kpiUsers->filter(
+                fn (User $user) => $managerTeamIds->contains((string) $user->id)
+            )->values();
+        }
 
-            if ($rep && $repId !== 'no_rep') {
-                $targetStats = $this->getTargetStatsForRepresentative($rep->id, $targetPeriod['year'], $targetPeriod['month']);
-            }
+        $kpiData = $kpiUsers->map(function (User $rep) use ($groupedByRep, $targetPeriod) {
+            $group = $groupedByRep->get($rep->id, [
+                'total_leads' => 0,
+                'active' => 0,
+                'cancelled' => 0,
+                'completed' => 0,
+            ]);
+            $totalLeads = (int) $group['total_leads'];
+            $targetStats = $this->getTargetStatsForRepresentative(
+                $rep->id,
+                $targetPeriod['year'],
+                $targetPeriod['month']
+            );
 
             return (object) [
-                'representative_id' => $repId !== 'no_rep' ? $repId : null,
-                'employee' => $repName,
+                'representative_id' => $rep->id,
+                'employee' => $rep->name,
                 'total_leads' => $totalLeads,
-                'active' => $activeCount,
-                'cancelled' => $cancelledCount,
-                'completed' => $completedCount,
-                'conversion_rate' => $conversionRate,
+                'active' => (int) $group['active'],
+                'cancelled' => (int) $group['cancelled'],
+                'completed' => (int) $group['completed'],
+                'conversion_rate' => $totalLeads > 0 ? ((int) $group['completed'] / $totalLeads) * 100 : 0,
                 'target_amount' => $targetStats['target_amount'],
                 'achieved_amount' => $targetStats['achieved_amount'],
                 'remaining_amount' => $targetStats['remaining_amount'],
@@ -1944,6 +2128,8 @@ class ReportController extends Controller
                 $this->abortIfRepresentativeOutsideScope($filters['manager_user_id']);
             }
 
+            $filters['_allowed_representative_ids'] = $this->allowedRepresentativeIds();
+
             $fileName = 'profit_loss_report_' . date('Y-m-d_His') . '.' . $format;
 
             return Excel::download(new \App\Exports\ProfitLossReportExport($filters), $fileName);
@@ -2064,84 +2250,49 @@ class ReportController extends Controller
     //     ];
     // }
 
-    private function getTargetStatsForRepresentative($repId, int $year, int $month): array
-    {
-        $targetAmount = Target::where('sales_executive_id', $repId)
-            ->where('year', $year)
-            ->where('month', $month)
-            ->where('status', 'active')
-            ->sum('target_amount');
+ private function getTargetStatsForRepresentative(
+    $repId,
+    int $year,
+    int $month
+): array {
+    $targetAmount =
+        app(
+            TargetResolverService::class
+        )
+        ->amountForUsers(
+            [
+                (string) $repId,
+            ],
+            $year,
+            $month
+        );
 
-        // Mirror dashboard logic exactly:
-        // Step 1: paid followup IDs in this period
-        $paidFollowupIds = \App\Models\PaymentAuditTrail::where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
-            ->whereYear('paid_date', $year)
-            ->whereMonth('paid_date', $month)
-            ->pluck('lead_followup_id')->unique();
+    $achievedAmount =
+        app(
+            SalesAchievementService::class
+        )
+        ->amountForUsers(
+            [
+                (string) $repId,
+            ],
+            $year,
+            $month
+        );
 
-        if ($paidFollowupIds->isEmpty()) {
-            return [
-                'target_amount'    => (float) $targetAmount,
-                'achieved_amount'  => 0.0,
-                'remaining_amount' => (float) $targetAmount,
-            ];
-        }
+    return [
+        'target_amount' =>
+            (float) $targetAmount,
 
-        // Step 2: lead IDs scoped to this rep
-        $paidLeadIds = LeadFollowup::whereIn('id', $paidFollowupIds)
-            ->whereHas('enquiry', function ($q) use ($repId) {
-                $q->where('representative_user_id', $repId);
-            })
-            ->pluck('lead_id')->unique();
+        'achieved_amount' =>
+            (float) $achievedAmount,
 
-        if ($paidLeadIds->isEmpty()) {
-            return [
-                'target_amount'    => (float) $targetAmount,
-                'achieved_amount'  => 0.0,
-                'remaining_amount' => (float) $targetAmount,
-            ];
-        }
-
-        // Step 3: ALL followups for those leads
-        $allFollowups = LeadFollowup::whereIn('lead_id', $paidLeadIds)
-            ->whereHas('enquiry', function ($q) use ($repId) {
-                $q->where('representative_user_id', $repId);
-            })
-            ->get();
-
-        // Step 4: batch-load followup IDs per lead
-        $allFollowupIdsByLead = $allFollowups->groupBy('lead_id')
-            ->map(fn($group) => $group->pluck('id'));
-
-        $allFollowupIdsFlat = $allFollowupIdsByLead->flatten();
-
-        // Step 5: batch-load all refunds in one query
-        $refundsByFollowupId = \App\Models\LeadRefund::whereIn('lead_followup_id', $allFollowupIdsFlat)
-            ->whereIn('status', [1, 2])
-            ->get()
-            ->groupBy('lead_followup_id');
-
-        // Step 6: per-lead latest qualifying followup, subtract refunds
-        $achievedAmount = $allFollowups->groupBy('lead_id')->map(function ($group) use ($allFollowupIdsByLead, $refundsByFollowupId) {
-            $qualifying = $group->filter(fn($f) => in_array((int) $f->status, LeadFollowup::salesAmountStatuses(), true));
-            $latest = $qualifying->sortByDesc('created_at')->first();
-
-            if (!$latest) return 0;
-
-            $leadFollowupIds = $allFollowupIdsByLead->get($latest->lead_id, collect());
-            $refund = $leadFollowupIds->sum(function ($fid) use ($refundsByFollowupId) {
-                return $refundsByFollowupId->get($fid, collect())->sum('refund_amount');
-            });
-
-            return SalesAmountCalculator::salesAmountForFollowup($latest, (float) $refund);
-        })->sum();
-
-        $remainingAmount = max(0, (float) $targetAmount - (float) $achievedAmount);
-
-        return [
-            'target_amount' => (float) $targetAmount,
-            'achieved_amount' => (float) $achievedAmount,
-            'remaining_amount' => (float) $remainingAmount,
-        ];
-    }
+        'remaining_amount' =>
+            max(
+                0,
+                (float) $targetAmount
+                -
+                (float) $achievedAmount
+            ),
+    ];
+}
 }

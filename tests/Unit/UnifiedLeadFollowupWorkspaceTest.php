@@ -33,7 +33,9 @@ class UnifiedLeadFollowupWorkspaceTest extends TestCase
         $this->assertStringContainsString('lead-history-toggle', $view);
         $this->assertStringContainsString('lw-history-scroll', $view);
         $this->assertStringNotContainsString('Str::limit(strip_tags((string) $followup->followup_note), 120)', $view);
-        $this->assertStringContainsString('workspace-extra-services-picker', $view);
+        $this->assertStringContainsString('id="extra_services"', $view);
+        $this->assertStringNotContainsString('workspace-extra-services-picker', $view);
+        $this->assertStringContainsString('syncServiceWithExistingFollowup();', $view);
         $this->assertStringContainsString('data-filter-select="services-editor-products"', $view);
         $this->assertStringContainsString('data-filter-select="services-editor-services"', $view);
         $this->assertStringContainsString('serviceProductMap', $view);

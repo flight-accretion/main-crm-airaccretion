@@ -37,7 +37,7 @@ class ServiceAddressesDesignTest extends TestCase
     {
         $id = (string) Str::uuid();
         DB::table('user_types')->insert(['id' => $id, 'user_type' => $role]);
-        $this->actingAs(User::forceCreate(['id' => (string) Str::uuid(), 'user_type_id' => $id, 'name' => 'Address user', 'email' => Str::uuid().'@example.test']));
+        $this->actingAs(User::forceCreate(['id' => (string) Str::uuid(), 'user_type_id' => $id, 'name' => 'Address user', 'email' => Str::uuid().'@example.test', 'status' => 1]));
     }
 
     public function seedAddress(array $overrides = []): ServiceAddress

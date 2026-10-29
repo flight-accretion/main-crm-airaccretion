@@ -423,7 +423,10 @@ class KpiWorkDoneService
          * Super Admin / Admin:
          * all active Sales users.
          */
-        if (in_array($role, UserType::ADMIN_ROLES, true) || $role === UserType::HR) {
+        // HR and Owner both have company-wide, read-only dashboard oversight.
+        // They need the same sales-user scope when the HR dashboard renders
+        // an individual sales row, otherwise the selected row is rejected.
+        if (in_array($role, UserType::ADMIN_ROLES, true) || in_array($role, [UserType::HR, UserType::OWNER], true)) {
             return User::query()
                 ->with('userType')
                 ->where('status', 1)

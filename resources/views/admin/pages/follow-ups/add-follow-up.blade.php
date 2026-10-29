@@ -75,6 +75,7 @@
                 <div class="lw-lead-copy">
                     <h1 class="lw-lead-name">{{ $client->name }}</h1>
                     <div class="lw-lead-meta">
+                        <span><strong>Phone:</strong> {{ $clientInfo['phone'] ?? 'Not selected' }}</span>
                         <span><strong>Product:</strong> {{ $clientInfo['products'] ?? 'Not selected' }}</span>
                         <span><strong>Service:</strong> {{ $clientInfo['services'] ?? 'Not selected' }}</span>
                         <span><strong>Place:</strong> {{ $topPlace }}</span>
@@ -430,27 +431,6 @@
                                 @enderror
                             </div>
 
-                            <!-- In your blade view, update the extra services dropdown section -->
-                            <div class="xl:col-span-6 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                <label for="extra_services" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Extra
-                                    Services</label>
-                                <select class="ti-form-select rounded-sm !py-2 !px-3" name="extra_services[]"
-                                    id="extra_services" multiple {{ $operationsMode ? 'disabled' : '' }}>
-                                    @php
-                                        $selectedExtraServicesOld = old('extra_services', $selectedExtraServices);
-                                    @endphp
-                                    @foreach ($allExtraServices as $extraService)
-                                        <option value="{{ $extraService->id }}"
-                                            {{ in_array($extraService->id, $selectedExtraServicesOld) ? 'selected' : '' }}>
-                                            {{ $extraService->extra_service }}
-                                            (₹{{ number_format($extraService->extra_service_amount, 2) }})
-                                        </option>
-                                    @endforeach
-                                </select>
-                                @error('extra_services')
-                                    <p class="text-danger mt-1">{{ $message }}</p>
-                                @enderror
-                            </div>
                         </div>
                     </div>
             </div>
@@ -468,14 +448,29 @@
                             <button type="button" class="lw-quick-option" data-followup-note="{{ $quickNote }}">{{ $quickNote }}</button>
                         @endforeach
                     </div>
-                    @unless($operationsMode)
-                        <div class="lw-followup-service-picker">
-                            <label for="workspace-extra-services-picker" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Extra services</label>
-                            <input type="search" class="lw-select-search" data-filter-select="workspace-extra-services-picker" placeholder="Search extra services">
-                            <select id="workspace-extra-services-picker" data-extra-services-proxy class="ti-form-select rounded-sm !py-2 !px-3" multiple aria-describedby="workspace-extra-services-help"></select>
-                            <p id="workspace-extra-services-help" class="lw-field-help">Only extras available for the selected service are shown. Search and select one or more for this follow-up.</p>
-                        </div>
-                    @endunless
+                    <div class="lw-followup-service-picker">
+                        <label for="extra_services" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Extra services</label>
+                        <select class="ti-form-select rounded-sm !py-2 !px-3" name="extra_services[]"
+                            id="extra_services" multiple {{ $operationsMode ? 'disabled' : '' }}
+                            aria-describedby="extra-services-help">
+                            @php
+                                $selectedExtraServicesOld = old('extra_services', $selectedExtraServices);
+                            @endphp
+                            @foreach ($allExtraServices as $extraService)
+                                <option value="{{ $extraService->id }}"
+                                    data-extra-service-name="{{ $extraService->extra_service }}"
+                                    data-extra-service-amount="{{ $extraService->extra_service_amount }}"
+                                    {{ in_array($extraService->id, $selectedExtraServicesOld) ? 'selected' : '' }}>
+                                    {{ $extraService->extra_service }}
+                                    (₹{{ number_format($extraService->extra_service_amount, 2) }})
+                                </option>
+                            @endforeach
+                        </select>
+                        <p id="extra-services-help" class="lw-field-help">Only extras available for the selected service are shown. Search and select one or more for this follow-up.</p>
+                        @error('extra_services')
+                            <p class="text-danger mt-1">{{ $message }}</p>
+                        @enderror
+                    </div>
                     <div class="grid grid-cols-12 gap-6">
                         <div class="xl:col-span-12 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
                             <label for="notes" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Notes</label>
@@ -2784,6 +2779,8 @@
             originalExtraServiceOptions = Array.from(extraServicesSelect.options).map(option => ({
                 value: option.value,
                 text: option.text,
+                name: option.dataset.extraServiceName || option.text,
+                amount: option.dataset.extraServiceAmount || '',
             }));
         }
 
@@ -2818,6 +2815,8 @@
                 }
 
                 const option = new Option(optionData.text, optionData.value, false, selectedIds.includes(value));
+                option.dataset.extraServiceName = optionData.name;
+                option.dataset.extraServiceAmount = optionData.amount;
                 extraServicesSelect.appendChild(option);
             });
 
@@ -2896,9 +2895,24 @@
 
             // Add extra services
             selectedExtraServices.forEach(extraServiceId => {
-                const extraService = extraServicesData.find(es => es.id == extraServiceId);
+                // The selected <option> is the source of truth.  Select2 can retain a
+                // selected option while its in-memory catalogue has been refreshed, so
+                // use its data attributes as a safe fallback rather than dropping the
+                // extra-service payment row.
+                const selectedOption = Array.from(extraServicesSelect.options).find(option =>
+                    String(option.value) === String(extraServiceId)
+                );
+                const extraService = extraServicesData.find(es => String(es.id) === String(extraServiceId)) ||
+                    (selectedOption ? {
+                        id: selectedOption.value,
+                        extra_service: selectedOption.dataset.extraServiceName || selectedOption.textContent.trim(),
+                    } : null);
                 if (extraService) {
-                    const originalAmount = parseFloat(extraServicePrices[extraServiceId] || 0);
+                    const originalAmount = parseFloat(
+                        extraServicePrices[extraServiceId] ??
+                        (selectedOption ? selectedOption.dataset.extraServiceAmount : 0) ??
+                        0
+                    ) || 0;
 
                     // Check if we have previous values for this extra service
                     let previousDiscount = 0;
@@ -6154,6 +6168,10 @@ document
                 };
 
                 filterServicesForProduct();
+                // The workspace displays the lead's current service.  Make the
+                // submitted follow-up selector match it immediately, so the original
+                // Add Follow-up extra-service picker filters against the same service.
+                syncServiceWithExistingFollowup();
                 const handleProductEditorChange = function () {
                     filterServicesForProduct();
                     syncServiceWithExistingFollowup();

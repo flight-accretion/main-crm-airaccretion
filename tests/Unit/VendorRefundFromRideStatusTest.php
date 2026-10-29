@@ -93,7 +93,7 @@ class VendorRefundFromRideStatusTest extends TestCase
         ]);
     }
 
-    public function test_vendor_refund_sends_email_to_vendor_and_account_notification_members(): void
+    public function test_vendor_refund_sends_to_vendor_and_ccs_account_notification_members(): void
     {
         Mail::fake();
 
@@ -128,9 +128,14 @@ class VendorRefundFromRideStatusTest extends TestCase
                 && $mail->template === 'emails.refund-vendor';
         });
 
-        Mail::assertSent(RefundMail::class, function (RefundMail $mail) {
-            return $mail->hasTo('suraj.jaiswal@example.test')
+        Mail::assertSent(RefundMail::class, function (RefundMail $mail) use ($vendor) {
+            return $mail->hasTo($vendor->email)
+                && $mail->hasCc('suraj.jaiswal@example.test')
                 && $mail->template === 'emails.refund-vendor';
+        });
+
+        Mail::assertNotSent(RefundMail::class, function (RefundMail $mail) {
+            return $mail->hasTo('suraj.jaiswal@example.test');
         });
     }
 

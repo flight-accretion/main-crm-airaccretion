@@ -114,7 +114,9 @@ class LeadQueueDesignTest extends KpiFeatureTestCase
                 $dnp=$method->invoke(app(\App\Http\Controllers\ClientController::class),$leads,collect(),collect([$this->sales,$this->outside]))->render();
                 $this->assertSame($role!=='sales',str_contains($dnp,'Pending DNP by staff'));
                 $this->assertSame($role!=='hr',str_contains($dnp,'data-export-dnp'));
-                $this->assertSame($role!=='hr',str_contains($dnp,'aria-label="Edit lead"'));
+                // Lead editing now happens inside the unified follow-up workspace;
+                // the legacy table action must stay removed for every role.
+                $this->assertFalse(str_contains($dnp,'aria-label="Edit lead"'));
                 $this->assertSame($role==='hr',str_contains($dnp,'Outside Customer'));
                 if(getenv('CRM_QUEUE_PREVIEW_DIR')){file_put_contents(getenv('CRM_QUEUE_PREVIEW_DIR').'/follow-'.$role.'.html',$follow);file_put_contents(getenv('CRM_QUEUE_PREVIEW_DIR').'/dnp-'.$role.'.html',$dnp);}
             }

@@ -12,6 +12,9 @@ class CustomerRefundNotificationFlowTest extends TestCase
             app_path('Http/Controllers/RideController.php')
         );
 
+        $this->assertStringContainsString('$mail->cc($notificationMasterCcEmails);', $controller);
+        $this->assertStringContainsString('$vendorEmails = $lead->leadVendorPayments', $controller);
+        $this->assertStringContainsString('$vendorPhones = $lead->leadVendorPayments', $controller);
         $this->assertStringContainsString(
             'NotificationMaster::activeInternalRecipients',
             $controller

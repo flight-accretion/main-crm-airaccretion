@@ -95,15 +95,28 @@ class SalesExecutiveManagementController extends Controller
             ]);
         }
 
-        /*
-         * One Sales Executive can have only one active manager.
-         * If this executive is active under another manager,
-         * deactivate that old assignment before assigning the new manager.
-         */
-        SalesExecutiveAssignment::where('sales_executive_id', $request->sales_executive_id)
+        $existingAssignment = SalesExecutiveAssignment::query()
+            ->where('sales_executive_id', $request->sales_executive_id)
             ->where('status', 1)
-            ->where('manager_id', '!=', $request->manager_id)
-            ->update(['status' => 0]);
+            ->lockForUpdate()
+            ->first();
+
+        $isAdmin = in_array($userType, [UserType::SUPER_ADMIN, UserType::ADMIN], true);
+        if (
+            $existingAssignment
+            && (string) $existingAssignment->manager_id !== (string) $request->manager_id
+            && !$isAdmin
+        ) {
+            DB::rollBack();
+
+            return back()->withErrors([
+                'sales_executive_id' => 'This sales executive is assigned to another manager.',
+            ]);
+        }
+
+        if ($existingAssignment && (string) $existingAssignment->manager_id !== (string) $request->manager_id) {
+            $existingAssignment->update(['status' => 0]);
+        }
 
         /*
          * If same manager + same executive row already exists,

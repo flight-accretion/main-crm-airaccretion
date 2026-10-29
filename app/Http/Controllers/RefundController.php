@@ -100,10 +100,15 @@ class RefundController extends Controller
                 });
             }
 
+            $validated = $request->validate([
+                'service_id' => ['nullable', 'uuid', 'exists:services,id'],
+            ]);
+            $serviceIdFilter = $validated['service_id'] ?? null;
+
             if ($serviceIdFilter) {
                 $query->where(function ($q) use ($serviceIdFilter) {
-                    $q->whereRaw("JSON_CONTAINS(service_ids, '[\"" . $serviceIdFilter . "\"]')")
-                        ->orWhereRaw("JSON_CONTAINS(service_ids, '\"" . $serviceIdFilter . "\"')");
+                    $q->whereRaw('JSON_CONTAINS(service_ids, ?)', [json_encode([$serviceIdFilter])])
+                        ->orWhereRaw('JSON_CONTAINS(service_ids, ?)', [json_encode($serviceIdFilter)]);
                 });
             }
 
@@ -117,7 +122,7 @@ class RefundController extends Controller
                     
                     if (!empty($serviceIds)) {
                         foreach ($serviceIds as $id) {
-                            $q->orWhereRaw("JSON_CONTAINS(service_ids, '\"" . $id . "\"')");
+                            $q->orWhereRaw('JSON_CONTAINS(service_ids, ?)', [json_encode($id)]);
                         }
                     }
                     
@@ -128,7 +133,7 @@ class RefundController extends Controller
                     
                     if (!empty($extraServiceIds)) {
                         foreach ($extraServiceIds as $id) {
-                            $q->orWhereRaw("JSON_CONTAINS(extra_service_ids, '\"" . $id . "\"')");
+                            $q->orWhereRaw('JSON_CONTAINS(extra_service_ids, ?)', [json_encode($id)]);
                         }
                     }
                 });

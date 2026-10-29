@@ -1583,24 +1583,24 @@ $balanceAmount =
                     $clientName  = $client->name  ?? 'Customer';
                     $vendorPhone = $vendor->whatsapp_number ?? $vendor->alternate_number ?? $vendor->contact_number ?? $vendor->phone ?? null;
                     $vendorEmail = $vendor->email ?? null;
-                    $clientPhone = $client->alternate_number ?? $client->contact_number ?? null;
-                    $clientEmail = $client->email ?? null;
+                    // $clientPhone = $client->alternate_number ?? $client->contact_number ?? null;
+                    // $clientEmail = $client->email ?? null;
 
-                    try {
-                        $clientPhone = $clientPhone
-                            ? WhatsAppPhoneNumber::e164(
-                                $clientPhone,
-                                $client->whatsapp_country_code
-                                    ?? $client->contact_country_code
-                                    ?? null
-                            )
-                            : null;
-                    } catch (\InvalidArgumentException $exception) {
-                        Log::warning('storePayment: customer WhatsApp number is invalid', [
-                            'client' => $clientName,
-                        ]);
-                        $clientPhone = null;
-                    }
+                    // try {
+                    //     $clientPhone = $clientPhone
+                    //         ? WhatsAppPhoneNumber::e164(
+                    //             $clientPhone,
+                    //             $client->whatsapp_country_code
+                    //                 ?? $client->contact_country_code
+                    //                 ?? null
+                    //         )
+                    //         : null;
+                    // } catch (\InvalidArgumentException $exception) {
+                    //     Log::warning('storePayment: customer WhatsApp number is invalid', [
+                    //         'client' => $clientName,
+                    //     ]);
+                    //     $clientPhone = null;
+                    // }
 
                     // Receipt file paths
                     $waFileUrl        = $receiptPath
@@ -1643,27 +1643,27 @@ $balanceAmount =
                         Log::warning('storePayment: vendor WhatsApp number missing', ['vendor' => $vendorName]);
                     }
 
-                    if (!empty($clientPhone)) {
-                        try {
-                            $customerWaResult = $smc->sendWhatsCrmMessage(
-                                $clientPhone,
-                                $waBodyData,
-                                $waFileUrl,
-                                $receiptFilename
-                            );
-                            Log::info('VENDOR PAYMENT ► Customer WhatsApp', [
-                                'To' => $clientPhone,
-                                'Status' => ($customerWaResult['success'] ?? false) ? '✓ Sent' : '✗ Failed',
-                            ]);
-                        } catch (\Throwable $e) {
-                            Log::error('storePayment: customer WhatsApp failed', [
-                                'client' => $clientName,
-                                'error' => $e->getMessage(),
-                            ]);
-                        }
-                    } else {
-                        Log::warning('storePayment: customer WhatsApp number missing', ['client' => $clientName]);
-                    }
+                    // if (!empty($clientPhone)) {
+                    //     try {
+                    //         $customerWaResult = $smc->sendWhatsCrmMessage(
+                    //             $clientPhone,
+                    //             $waBodyData,
+                    //             $waFileUrl,
+                    //             $receiptFilename
+                    //         );
+                    //         Log::info('VENDOR PAYMENT ► Customer WhatsApp', [
+                    //             'To' => $clientPhone,
+                    //             'Status' => ($customerWaResult['success'] ?? false) ? '✓ Sent' : '✗ Failed',
+                    //         ]);
+                    //     } catch (\Throwable $e) {
+                    //         Log::error('storePayment: customer WhatsApp failed', [
+                    //             'client' => $clientName,
+                    //             'error' => $e->getMessage(),
+                    //         ]);
+                    //     }
+                    // } else {
+                    //     Log::warning('storePayment: customer WhatsApp number missing', ['client' => $clientName]);
+                    // }
 
                     $vendorEmailData = [
                         'vendor_name'    => $vendorName,
@@ -1678,9 +1678,35 @@ $balanceAmount =
                         'refund_reason'  => '',
                     ];
 
+                    $notificationMasters = \App\Models\NotificationMaster::activeInternalRecipients(
+                        [$vendorEmail, $client->email ?? null],
+                        [
+                            $vendorPhone,
+                            $vendor->whatsapp_number ?? null,
+                            $vendor->alternate_number ?? null,
+                            $vendor->contact_number ?? null,
+                            $vendor->phone ?? null,
+                            $client->contact_number ?? null,
+                            $client->alternate_number ?? null,
+                        ]
+                    );
+                    $notificationMasterCcEmails = $notificationMasters
+                        ->pluck('email_id')
+                        ->map(fn ($email) => trim((string) $email))
+                        ->filter(fn ($email) => filter_var($email, FILTER_VALIDATE_EMAIL))
+                        ->unique(fn ($email) => strtolower($email))
+                        ->values()
+                        ->all();
+                    Log::info('storePayment: notification masters', ['count' => $notificationMasters->count()]);
+
                     if (!empty($vendorEmail) && filter_var($vendorEmail, FILTER_VALIDATE_EMAIL)) {
                         try {
-                            \Illuminate\Support\Facades\Mail::to($vendorEmail)->send(new \App\Mail\RefundMail(
+                            $mail = \Illuminate\Support\Facades\Mail::to($vendorEmail);
+                            if (!empty($notificationMasterCcEmails)) {
+                                $mail->cc($notificationMasterCcEmails);
+                            }
+
+                            $mail->send(new \App\Mail\RefundMail(
                                 'emails.refund-vendor',
                                 'Payment Notification – ' . $clientName . ' – ' . $serviceName,
                                 $vendorEmailData,
@@ -1700,58 +1726,26 @@ $balanceAmount =
                         ]);
                     }
 
-                    if (!empty($clientEmail) && filter_var($clientEmail, FILTER_VALIDATE_EMAIL)) {
-                        try {
-                            \Illuminate\Support\Facades\Mail::to($clientEmail)->send(new \App\Mail\RefundMail(
-                                'emails.refund-vendor',
-                                'Vendor Payment Notification – ' . $clientName . ' – ' . $serviceName,
-                                $vendorEmailData,
-                                $receiptLocalPath
-                            ));
-                            Log::info('storePayment: customer blade email sent', ['to' => $clientEmail]);
-                        } catch (\Throwable $e) {
-                            Log::error('storePayment: customer email failed', [
-                                'to' => $clientEmail,
-                                'error' => $e->getMessage(),
-                            ]);
-                        }
-                    } else {
-                        Log::warning('storePayment: customer email missing/invalid', ['client' => $clientName]);
-                    }
-
-                    $notificationMasters = \App\Models\NotificationMaster::activeInternalRecipients(
-                        [$vendorEmail, $client->email ?? null],
-                        [
-                            $vendorPhone,
-                            $vendor->whatsapp_number ?? null,
-                            $vendor->alternate_number ?? null,
-                            $vendor->contact_number ?? null,
-                            $vendor->phone ?? null,
-                            $client->contact_number ?? null,
-                            $client->alternate_number ?? null,
-                        ]
-                    );
-                    Log::info('storePayment: notification masters', ['count' => $notificationMasters->count()]);
+                    // if (!empty($clientEmail) && filter_var($clientEmail, FILTER_VALIDATE_EMAIL)) {
+                    //     try {
+                    //         \Illuminate\Support\Facades\Mail::to($clientEmail)->send(new \App\Mail\RefundMail(
+                    //             'emails.refund-vendor',
+                    //             'Vendor Payment Notification – ' . $clientName . ' – ' . $serviceName,
+                    //             $vendorEmailData,
+                    //             $receiptLocalPath
+                    //         ));
+                    //         Log::info('storePayment: customer blade email sent', ['to' => $clientEmail]);
+                    //     } catch (\Throwable $e) {
+                    //         Log::error('storePayment: customer email failed', [
+                    //             'to' => $clientEmail,
+                    //             'error' => $e->getMessage(),
+                    //         ]);
+                    //     }
+                    // } else {
+                    //     Log::warning('storePayment: customer email missing/invalid', ['client' => $clientName]);
+                    // }
 
                     foreach ($notificationMasters as $nm) {
-                        $nmEmail = $nm->email_id ?? null;
-                        if (!empty($nmEmail) && filter_var($nmEmail, FILTER_VALIDATE_EMAIL)) {
-                            try {
-                                \Illuminate\Support\Facades\Mail::to($nmEmail)->send(new \App\Mail\RefundMail(
-                                    'emails.refund-vendor',
-                                    'Vendor Payment Notification – ' . $clientName . ' – ' . $serviceName,
-                                    $vendorEmailData,
-                                    $receiptLocalPath
-                                ));
-                                Log::info('storePayment: NM blade email sent', ['to' => $nmEmail, 'nm_id' => $nm->id]);
-                            } catch (\Throwable $e) {
-                                Log::error('storePayment: NM email failed', [
-                                    'nm_id' => $nm->id,
-                                    'error' => $e->getMessage(),
-                                ]);
-                            }
-                        }
-
                         try {
                             $nmPhone = WhatsAppPhoneNumber::e164(
                                 $nm->mobile_number,

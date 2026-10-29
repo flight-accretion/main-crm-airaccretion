@@ -9,6 +9,7 @@ use App\Models\ExtraService;
 use App\Models\Product;
 use App\Models\User;
 use App\Services\SalesAmountCalculator;
+use App\Services\Sales\SalesBookingCohortService;
 use function App\Helpers\extractPhoneWithoutCountryCode;
 use Maatwebsite\Excel\Concerns\FromGenerator;
 use Maatwebsite\Excel\Concerns\WithHeadings;
@@ -50,19 +51,33 @@ class SalesReportExport implements FromGenerator, WithHeadings, WithMapping, Wit
             'followedBy.userType'
         ])->whereIn('status', array_keys($statusArray));
 
-        // Apply month/year filter based on PAID DATE (from PaymentAuditTrail)
-        // Only show leads that received approved payment in the selected month/year
+        $allowedRepresentativeIds = $this->filters['_allowed_representative_ids'] ?? null;
+        if (array_key_exists('_allowed_representative_ids', $this->filters)) {
+            if (empty($allowedRepresentativeIds) && $allowedRepresentativeIds !== null) {
+                $query->whereRaw('1 = 0');
+            } elseif ($allowedRepresentativeIds !== null) {
+                $query->whereHas('enquiry', function ($leadQuery) use ($allowedRepresentativeIds) {
+                    $leadQuery->whereIn('representative_user_id', $allowedRepresentativeIds);
+                });
+            }
+        }
+
         if (!empty($this->filters['month']) || !empty($this->filters['year'])) {
-            $paidDateQuery = \App\Models\PaymentAuditTrail::where('payment_status', PaymentAuditTrail::STATUS_APPROVED);
-            if (!empty($this->filters['month'])) {
-                $paidDateQuery->whereMonth('paid_date', $this->filters['month']);
-            }
-            if (!empty($this->filters['year'])) {
-                $paidDateQuery->whereYear('paid_date', $this->filters['year']);
-            }
-            $paidFollowupIds = $paidDateQuery->select('lead_followup_id');
-            $paidLeadIds = LeadFollowup::whereIn('id', $paidFollowupIds)->select('lead_id');
-            $query->whereIn('lead_id', $paidLeadIds);
+            $year = !empty($this->filters['year']) ? (int) $this->filters['year'] : (int) now()->year;
+            $month = !empty($this->filters['month']) ? (int) $this->filters['month'] : null;
+            $from = $month
+                ? Carbon::create($year, $month, 1)->startOfMonth()
+                : Carbon::create($year, 1, 1)->startOfYear();
+            $to = $month ? $from->copy()->endOfMonth() : $from->copy()->endOfYear();
+
+            $query->whereIn(
+                'lead_id',
+                app(SalesBookingCohortService::class)->leadIdsForPeriod(
+                    $from,
+                    $to,
+                    $allowedRepresentativeIds
+                )
+            );
         }
 
         // Sales Manager Filter

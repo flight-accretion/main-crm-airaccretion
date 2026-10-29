@@ -49,8 +49,7 @@
             {{-- ================= GREETING ================= --}}
             <header class="ow-head">
                 <div>
-                    <h1><i class="ri-vip-crown-line" aria-hidden="true"></i> <span id="ow-greeting">Good day</span>, Owner
-                        {{ $ownerDashboardName }} ji</h1>
+                    <h1><i class="ri-vip-crown-line" aria-hidden="true"></i> <span id="ow-greeting">Good day</span>, Owner {{ $ownerDashboardName }} ji</h1>
                     <p>Live executive snapshot &middot; &#8377;{{ $rupees($health['net']) }} net cash inflow this month
                         &middot; {{ number_format($health['active_bookings']) }} active bookings &middot;
                         {{ number_format($attentionCount) }} items need attention</p>
@@ -69,15 +68,15 @@
             {{-- ================= KPI ROW ================= --}}
             <section class="ow-grid" aria-label="Business health">
                 <div class="ow-card ow-kpi s3">
-                    <div class="ow-kpi-top"><span class="ow-kpi-label">Net Inflow</span><span
+                    <div class="ow-kpi-top"><span class="ow-kpi-label">Net Profit / Loss</span><span
                             class="ow-kpi-ico green"><i class="ri-funds-line" aria-hidden="true"></i></span></div>
                     <div class="ow-kpi-mid">
                         <span class="ow-kpi-value" data-tnum
-                            title="&#8377;{{ $rupees($health['net']) }}">&#8377;{!! $compact($health['net']) !!}</span>
+                            title="&#8377;{{ $rupees($health['profit_loss']) }}">&#8377;{!! $compact($health['profit_loss']) !!}</span>
                         <span
                             class="ow-spark">{!! $sparkline($salesChart['company'], $health['profit_loss_delta'] === null || $health['profit_loss_delta'] >= 0 ? '#178a4c' : '#e5484d') !!}</span>
                     </div>
-                    <div>{!! $deltaPill($health['net_delta']) !!} <span class="ow-kpi-foot">collected less paid out &middot; vs previous month</span></div>
+                    <div>{!! $deltaPill($health['profit_loss_delta']) !!} <span class="ow-kpi-foot">earned revenue less vendor cost &middot; refunds applied &middot; vs previous month</span></div>
                 </div>
                 <div class="ow-card ow-kpi s3">
                     <div class="ow-kpi-top"><span class="ow-kpi-label">Collected</span><span class="ow-kpi-ico brand"><i

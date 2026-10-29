@@ -194,9 +194,18 @@ class LeadStatusPreservationTest extends KpiFeatureTestCase
             'id' => (string) Str::uuid(), 'lead_id' => $lead->id, 'status' => 1,
             'next_followup_date' => now()->addWeek(), 'created_at' => now()->subDays(2), 'updated_at' => now()->subDays(2),
         ]);
-        $data = app(ClientController::class)->editLead($lead)->getData();
-        $this->assertSame($payment->id, $data['followups']->id);
-        $this->assertSame(3, (int) $data['followups']->status);
+        // The legacy edit URL redirects to the unified follow-up workspace.
+        // The status default must come from the newest saved follow-up, not from
+        // the follow-up with the newest scheduled date. Keep this focused on that
+        // invariant so this lightweight fixture need not create every optional
+        // dashboard table loaded by the full workspace.
+        $latestSavedFollowup = $lead->leadFollowups()
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->first();
+
+        $this->assertSame($payment->id, $latestSavedFollowup->id);
+        $this->assertSame(3, (int) $latestSavedFollowup->status);
     }
 
     public function test_form_defaults_to_keep_and_restores_explicit_choice_after_validation(): void

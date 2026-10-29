@@ -49,6 +49,7 @@ use App\Services\Kpi\KpiOutreachService;
 use App\Services\Kpi\KpiActivityRecorder;
 use App\Services\ActivityAuditService;
 use App\Models\ActivityAudit;
+use Illuminate\Database\Eloquent\Builder;
 
 class ClientController extends Controller
 {
@@ -307,16 +308,18 @@ class ClientController extends Controller
                 );
         }])->get();
 
-        $allExtraServices = ExtraService::customerVisible()
-            ->select(
-                'id',
-                'extra_service',
-                'description',
-                'extra_service_amount',
-                'status',
-                'usage_scope'
-            )
-            ->get();
+        $allExtraServices = \Illuminate\Support\Facades\Schema::hasTable('extra_services')
+            ? ExtraService::customerVisible()
+                ->select(
+                    'id',
+                    'extra_service',
+                    'description',
+                    'extra_service_amount',
+                    'status',
+                    'usage_scope'
+                )
+                ->get()
+            : collect();
 
         $leadServiceIds = $this->normalizeIdList($lead->service_ids);
 
@@ -366,21 +369,23 @@ class ClientController extends Controller
         $availableServiceIds = $services->pluck('id')->map(fn ($id) => (string) $id)->toArray();
         $availableExtraServiceIds = $allExtraServices->pluck('id')->map(fn ($id) => (string) $id)->toArray();
 
-        if ($lastFollowupWithAmount) {
-            $followupServiceIds = $this->normalizeIdList($lastFollowupWithAmount->service_ids);
+        // Restore the most recently saved service configuration, not just the last
+        // follow-up that contained an amount.  A sales user can select an extra
+        // service and save a normal follow-up before selecting a payment status;
+        // the next payment breakdown must still include that saved extra.
+        $latestConfiguredFollowup = $followups->first(function ($followup) {
+            return !empty($this->normalizeIdList($followup->service_ids))
+                || !empty($this->normalizeIdList($followup->extra_service_ids));
+        });
+        $selectionFollowup = $latestConfiguredFollowup ?: $lastFollowupWithAmount;
+
+        if ($selectionFollowup) {
+            $followupServiceIds = $this->normalizeIdList($selectionFollowup->service_ids);
             $selectedServices = !empty($followupServiceIds)
                 ? array_values(array_intersect($followupServiceIds, $availableServiceIds))
                 : $leadServiceIds;
 
-            $followupExtraServiceIds = $this->normalizeIdList($lastFollowupWithAmount->extra_service_ids);
-            $selectedExtraServices = array_values(array_intersect($followupExtraServiceIds, $availableExtraServiceIds));
-        } elseif ($latestFollowup) {
-            $followupServiceIds = $this->normalizeIdList($latestFollowup->service_ids);
-            $selectedServices = !empty($followupServiceIds)
-                ? array_values(array_intersect($followupServiceIds, $availableServiceIds))
-                : $leadServiceIds;
-
-            $followupExtraServiceIds = $this->normalizeIdList($latestFollowup->extra_service_ids);
+            $followupExtraServiceIds = $this->normalizeIdList($selectionFollowup->extra_service_ids);
             $selectedExtraServices = array_values(array_intersect($followupExtraServiceIds, $availableExtraServiceIds));
         } else {
             $selectedServices = $leadServiceIds;
@@ -449,9 +454,9 @@ class ClientController extends Controller
             ? $this->normalizeIdList($lastFollowupWithAmount->service_ids)
             : [];
 
-        $lastFollowupExtraServiceIds = $lastFollowupWithAmount
-            ? $this->normalizeIdList($lastFollowupWithAmount->extra_service_ids)
-            : [];
+        // The browser uses this value to rebuild payment rows.  It must mirror the
+        // saved selection above, including extras saved by a non-payment follow-up.
+        $lastFollowupExtraServiceIds = $selectedExtraServices;
 
         $totalServiceAmount = $selectedServiceModels->sum('service_amount');
         $totalExtraServiceAmount = $selectedExtraServiceModels->sum('extra_service_amount');
@@ -2416,7 +2421,9 @@ $leadFollowUp = LeadFollowUp::create([
     public function indexClient(Request $request)
     {
         $perPage = min(max((int) $request->input('per_page', 20), 1), 100);
-        $statsQuery = Client::query();
+        // Apply the identical ownership boundary to summary cards and rows.
+        // Without this, a restricted user could infer other teams' client totals.
+        $statsQuery = $this->applyClientDirectoryScope(Client::query());
         $currentMonth = now();
 
         $clientStats = [
@@ -2435,7 +2442,7 @@ $leadFollowUp = LeadFollowUp::create([
                 ->count(),
         ];
 
-        $query = Client::with(['city', 'country']);
+        $query = $this->applyClientDirectoryScope(Client::with(['city', 'country']));
 
         if ($request->filled('search')) {
             $search = trim($request->input('search'));
@@ -3321,6 +3328,55 @@ $leadFollowUp = LeadFollowUp::create([
                     ? json_decode($request->service_details, true)
                     : $request->service_details;
                 $serviceDetails = is_array($serviceDetails) ? $serviceDetails : [];
+
+                // The browser sends service_details for the visible payment rows.  Keep
+                // the selected extra-service IDs authoritative as well: a Select2
+                // catalogue refresh can otherwise leave a selected extra out of that
+                // JSON despite it being present in extra_services[].
+                if (!empty($serviceDetails) && !empty($extraServices)) {
+                    $detailExtraIds = collect($serviceDetails)
+                        ->filter(fn ($detail) => is_array($detail) && ($detail['type'] ?? null) === 'extra_service')
+                        ->pluck('id')
+                        ->filter()
+                        ->map(fn ($id) => (string) $id)
+                        ->all();
+
+                    $selectedExtras = ExtraService::whereIn('id', $extraServices)
+                        ->get(['id', 'extra_service', 'extra_service_amount'])
+                        ->keyBy(fn (ExtraService $extraService) => (string) $extraService->id);
+
+                    $extraParentServiceIds = Service::whereIn('id', $services)
+                        ->with('extraServices:id')
+                        ->get()
+                        ->flatMap(function (Service $service) {
+                            return $service->extraServices->mapWithKeys(
+                                fn (ExtraService $extraService) => [(string) $extraService->id => (string) $service->id]
+                            );
+                        })
+                        ->all();
+
+                    foreach ($extraServices as $extraServiceId) {
+                        $extraServiceId = (string) $extraServiceId;
+                        if (in_array($extraServiceId, $detailExtraIds, true)) {
+                            continue;
+                        }
+
+                        $extraService = $selectedExtras->get($extraServiceId);
+                        if (!$extraService) {
+                            continue;
+                        }
+
+                        $serviceDetails[] = [
+                            'id' => $extraServiceId,
+                            'type' => 'extra_service',
+                            'parent_service_id' => $extraParentServiceIds[$extraServiceId] ?? null,
+                            'name' => $extraService->extra_service,
+                            'original_amount' => (float) $extraService->extra_service_amount,
+                            'discount_amount' => 0,
+                            'final_amount' => (float) $extraService->extra_service_amount,
+                        ];
+                    }
+                }
 
                 $detailServiceIds = array_values(array_unique(array_filter(array_merge(
                     $services,
@@ -6390,4 +6446,47 @@ public function destroyLead(Lead $lead)
             ], 500);
         }
     }
+
+ private function applyClientDirectoryScope(
+    Builder $query
+): Builder {
+    $currentUser =
+        auth()->user();
+
+
+    $representativeIds =
+        getRepresentativeIds(
+            $currentUser
+        );
+
+
+    if ($representativeIds !== null) {
+        if ($representativeIds instanceof \Illuminate\Support\Collection) {
+            $representativeIds = $representativeIds->all();
+        }
+
+        $representativeIds = array_values(array_filter((array) $representativeIds));
+
+        if (empty($representativeIds)) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        $query->whereHas(
+            'leads',
+            function (
+                Builder $leadQuery
+            ) use (
+                $representativeIds
+            ) {
+                $leadQuery->whereIn(
+                    'representative_user_id',
+                    $representativeIds
+                );
+            }
+        );
+    }
+
+
+    return $query;
+}
 }

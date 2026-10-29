@@ -3756,14 +3756,44 @@ return [
             ];
 
             // ── 9. Notification masters ──────────────────────────────────────────
+            $vendorEmails = $lead->leadVendorPayments
+                ->map(fn ($payment) => $payment->vendor?->email)
+                ->filter()
+                ->values()
+                ->all();
+            $vendorPhones = $lead->leadVendorPayments
+                ->flatMap(function ($payment) {
+                    $vendor = $payment->vendor;
+
+                    return $vendor ? [
+                        $vendor->whatsapp_number,
+                        $vendor->alternate_number,
+                        $vendor->contact_number,
+                        $vendor->phone,
+                    ] : [];
+                })
+                ->filter()
+                ->values()
+                ->all();
+
             $notificationMasters = \App\Models\NotificationMaster::activeInternalRecipients(
-                [$client->email ?? null],
-                [
-                    $customerWhatsApp ?? null,
-                    $client->contact_number ?? null,
-                    $client->alternate_number ?? null,
-                ]
+                array_merge([$client->email ?? null], $vendorEmails),
+                array_merge(
+                    [
+                        $customerWhatsApp ?? null,
+                        $client->contact_number ?? null,
+                        $client->alternate_number ?? null,
+                    ],
+                    $vendorPhones
+                )
             );
+            $notificationMasterCcEmails = $notificationMasters
+                ->pluck('email_id')
+                ->map(fn ($email) => trim((string) $email))
+                ->filter(fn ($email) => filter_var($email, FILTER_VALIDATE_EMAIL))
+                ->unique(fn ($email) => strtolower($email))
+                ->values()
+                ->all();
             Log::info('sendRefundEmail: notification masters', ['count' => $notificationMasters->count()]);
 
             $smc    = new SendMessageController();
@@ -3786,7 +3816,12 @@ return [
                 $customerEmail = $client->email ?? null;
                 if (!empty($customerEmail) && filter_var($customerEmail, FILTER_VALIDATE_EMAIL)) {
                     try {
-                        Mail::to($customerEmail)->send(new \App\Mail\RefundMail(
+                        $mail = Mail::to($customerEmail);
+                        if (!empty($notificationMasterCcEmails)) {
+                            $mail->cc($notificationMasterCcEmails);
+                        }
+
+                        $mail->send(new \App\Mail\RefundMail(
                             'emails.refund-customer',
                             'Refund Processed for Your Booking – ' . $serviceName,
                             $customerEmailData,
@@ -3848,28 +3883,6 @@ return [
                         $refundAmountFormatted,         // {{4}}
                         $refundDateFormatted,           // {{5}}
                     ]);
-
-                    // Blade Email
-                    $nmEmail = $nm->email_id ?? null;
-                    if (!empty($nmEmail) && filter_var($nmEmail, FILTER_VALIDATE_EMAIL)) {
-                        try {
-                            Mail::to($nmEmail)->send(new \App\Mail\RefundMail(
-                                'emails.refund-customer',
-                                'Refund Notification – ' . $serviceName . ' – ' . ($client->name ?? 'Customer'),
-                                $customerEmailData,
-                                $proofFilePath
-                            ));
-                            Log::info('sendRefundEmail: NM blade email sent', ['to' => $nmEmail, 'nm_id' => $nm->id]);
-                        } catch (\Exception $e) {
-                            Log::error('sendRefundEmail: NM email failed', [
-                                'nm_id' => $nm->id,
-                                'error' => $e->getMessage(),
-                            ]);
-                        }
-                    }
-
-                    // MSG91 NM email — commented, use when auth key available
-                    // $smc->sendMsg91Email('refund_processed_customer', $nmEmail, $nm->name ?? 'Team', $customerMsg91Vars);
 
                     // WhatsApp
                     $nmPhone = WhatsAppPhoneNumber::e164(
@@ -5298,9 +5311,33 @@ private function sendVendorRefundNotifications(string $vendorRefundId): void
         'refund_reason' => $vendorRefund->refund_reason ?? '',
     ];
 
+    $notificationMasters = \App\Models\NotificationMaster::activeInternalRecipients(
+        [$vendorEmail, $client->email ?? null],
+        [
+            $vendorPhone,
+            $vendor->contact_number ?? null,
+            $vendor->alternate_number ?? null,
+            $vendor->whatsapp_number ?? null,
+            $client->contact_number ?? null,
+            $client->alternate_number ?? null,
+        ]
+    );
+    $notificationMasterCcEmails = $notificationMasters
+        ->pluck('email_id')
+        ->map(fn ($email) => trim((string) $email))
+        ->filter(fn ($email) => filter_var($email, FILTER_VALIDATE_EMAIL))
+        ->unique(fn ($email) => strtolower($email))
+        ->values()
+        ->all();
+
     if (!empty($vendorEmail) && filter_var($vendorEmail, FILTER_VALIDATE_EMAIL)) {
         try {
-            Mail::to($vendorEmail)->send(new RefundMail(
+            $mail = Mail::to($vendorEmail);
+            if (!empty($notificationMasterCcEmails)) {
+                $mail->cc($notificationMasterCcEmails);
+            }
+
+            $mail->send(new RefundMail(
                 'emails.refund-vendor',
                 'Vendor Refund Notification - ' . $clientName . ' - ' . $serviceName,
                 $vendorEmailData,
@@ -5325,31 +5362,31 @@ private function sendVendorRefundNotifications(string $vendorRefundId): void
         ]);
     }
 
-    if (!empty($customerEmail) && filter_var($customerEmail, FILTER_VALIDATE_EMAIL)) {
-        try {
-            Mail::to($customerEmail)->send(new RefundMail(
-                'emails.refund-vendor',
-                'Vendor Refund Notification - ' . $clientName . ' - ' . $serviceName,
-                $vendorEmailData,
-                $proofFilePath
-            ));
-            Log::info('Vendor refund customer email sent', [
-                'vendor_refund_id' => $vendorRefund->id,
-                'to' => $customerEmail,
-            ]);
-        } catch (\Throwable $e) {
-            Log::error('Vendor refund customer email failed', [
-                'vendor_refund_id' => $vendorRefund->id,
-                'to' => $customerEmail,
-                'error' => $e->getMessage(),
-            ]);
-        }
-    } else {
-        Log::warning('Vendor refund customer email missing/invalid', [
-            'vendor_refund_id' => $vendorRefund->id,
-            'client' => $clientName,
-        ]);
-    }
+    // if (!empty($customerEmail) && filter_var($customerEmail, FILTER_VALIDATE_EMAIL)) {
+    //     try {
+    //         Mail::to($customerEmail)->send(new RefundMail(
+    //             'emails.refund-vendor',
+    //             'Vendor Refund Notification - ' . $clientName . ' - ' . $serviceName,
+    //             $vendorEmailData,
+    //             $proofFilePath
+    //         ));
+    //         Log::info('Vendor refund customer email sent', [
+    //             'vendor_refund_id' => $vendorRefund->id,
+    //             'to' => $customerEmail,
+    //         ]);
+    //     } catch (\Throwable $e) {
+    //         Log::error('Vendor refund customer email failed', [
+    //             'vendor_refund_id' => $vendorRefund->id,
+    //             'to' => $customerEmail,
+    //             'error' => $e->getMessage(),
+    //         ]);
+    //     }
+    // } else {
+    //     Log::warning('Vendor refund customer email missing/invalid', [
+    //         'vendor_refund_id' => $vendorRefund->id,
+    //         'client' => $clientName,
+    //     ]);
+    // }
 
     $smc = new SendMessageController();
     $waBodyData = [
@@ -5385,43 +5422,31 @@ private function sendVendorRefundNotifications(string $vendorRefundId): void
         }
     }
 
-    if (!empty($customerPhone)) {
-        try {
-            $customerWaResult = $smc->sendWhatsCrmVendorRefundMessage(
-                $customerPhone,
-                $waBodyData,
-                $proofFileUrl,
-                $proofFilename
-            );
-            Log::info('Vendor refund customer WhatsApp response', [
-                'vendor_refund_id' => $vendorRefund->id,
-                'to' => $customerPhone,
-                'success' => $customerWaResult['success'] ?? null,
-            ]);
-        } catch (\Throwable $e) {
-            Log::error('Vendor refund customer WhatsApp exception', [
-                'vendor_refund_id' => $vendorRefund->id,
-                'error' => $e->getMessage(),
-            ]);
-        }
-    } else {
-        Log::warning('Vendor refund customer WhatsApp number missing', [
-            'vendor_refund_id' => $vendorRefund->id,
-            'client' => $clientName,
-        ]);
-    }
-
-    $notificationMasters = \App\Models\NotificationMaster::activeInternalRecipients(
-        [$vendorEmail, $client->email ?? null],
-        [
-            $vendorPhone,
-            $vendor->contact_number ?? null,
-            $vendor->alternate_number ?? null,
-            $vendor->whatsapp_number ?? null,
-            $client->contact_number ?? null,
-            $client->alternate_number ?? null,
-        ]
-    );
+    // if (!empty($customerPhone)) {
+    //     try {
+    //         $customerWaResult = $smc->sendWhatsCrmVendorRefundMessage(
+    //             $customerPhone,
+    //             $waBodyData,
+    //             $proofFileUrl,
+    //             $proofFilename
+    //         );
+    //         Log::info('Vendor refund customer WhatsApp response', [
+    //             'vendor_refund_id' => $vendorRefund->id,
+    //             'to' => $customerPhone,
+    //             'success' => $customerWaResult['success'] ?? null,
+    //         ]);
+    //     } catch (\Throwable $e) {
+    //         Log::error('Vendor refund customer WhatsApp exception', [
+    //             'vendor_refund_id' => $vendorRefund->id,
+    //             'error' => $e->getMessage(),
+    //         ]);
+    //     }
+    // } else {
+    //     Log::warning('Vendor refund customer WhatsApp number missing', [
+    //         'vendor_refund_id' => $vendorRefund->id,
+    //         'client' => $clientName,
+    //     ]);
+    // }
 
     Log::info('Vendor refund notification masters', [
         'vendor_refund_id' => $vendorRefund->id,
@@ -5429,30 +5454,6 @@ private function sendVendorRefundNotifications(string $vendorRefundId): void
     ]);
 
     foreach ($notificationMasters as $nm) {
-        $nmEmail = $nm->email_id ?? null;
-
-        if (!empty($nmEmail) && filter_var($nmEmail, FILTER_VALIDATE_EMAIL)) {
-            try {
-                Mail::to($nmEmail)->send(new RefundMail(
-                    'emails.refund-vendor',
-                    'Vendor Refund Notification - ' . $clientName . ' - ' . $serviceName,
-                    $vendorEmailData,
-                    $proofFilePath
-                ));
-                Log::info('Vendor refund NM email sent', [
-                    'vendor_refund_id' => $vendorRefund->id,
-                    'nm_id' => $nm->id,
-                    'to' => $nmEmail,
-                ]);
-            } catch (\Throwable $e) {
-                Log::error('Vendor refund NM email failed', [
-                    'vendor_refund_id' => $vendorRefund->id,
-                    'nm_id' => $nm->id,
-                    'error' => $e->getMessage(),
-                ]);
-            }
-        }
-
         try {
             $nmPhone = WhatsAppPhoneNumber::e164(
                 $nm->mobile_number,

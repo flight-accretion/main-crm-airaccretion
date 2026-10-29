@@ -41,7 +41,7 @@ class VendorsDesignTest extends TestCase
     private function actor(string $role): void
     {
         $id=(string)Str::uuid(); DB::table('user_types')->insert(['id'=>$id,'user_type'=>$role]);
-        $this->actingAs(User::forceCreate(['id'=>(string)Str::uuid(),'name'=>'Vendor user','email'=>Str::uuid().'@example.test','user_type_id'=>$id]));
+        $this->actingAs(User::forceCreate(['id'=>(string)Str::uuid(),'name'=>'Vendor user','email'=>Str::uuid().'@example.test','user_type_id'=>$id,'status'=>1]));
     }
     private function vendor(array $values=[]): Vendor
     {
