@@ -609,6 +609,7 @@ class SendMessageController extends Controller
             'exampleArr'  => array_map('strval', $bodyValues),
             'token'       => $apiToken,
             'mediaUri'    => $fileUrl ?? '',
+            'enableLog'   => true,
         ];
 
         // Validate PDF URL is reachable before sending (18:28 test logic)
@@ -706,6 +707,24 @@ class SendMessageController extends Controller
 
         return $result;
     }
+
+
+public function sendWhatsCrmVendorPaymentMessage(
+    string $toNumber,
+    array $bodyValues,
+    ?string $fileUrl = null,
+    ?string $filename = null
+): array {
+    $extension = strtolower(pathinfo($filename ?? '', PATHINFO_EXTENSION));
+    $isImage = in_array($extension, ['jpg', 'jpeg', 'png', 'gif', 'webp']);
+
+    $template = $isImage
+        ? 'vendor_payment_img'
+        : 'vendor_payment';
+
+    return app(\App\Services\WhatsApp\WhatsAppTemplateService::class)
+        ->sendTemplate($toNumber, $template, $bodyValues, $fileUrl);
+}
 
     // ═════════════════════════════════════════════════════════════════════════
     // WhatsApp via WhatsCRM for vendor refund receipts.

@@ -46,6 +46,7 @@ class WhatsAppTemplateService
                 )),
                 'token' => $token,
                 'mediaUri' => $mediaUri ?: '',
+                'enableLog' => true,
             ]);
 
         if (!$response->successful()) {

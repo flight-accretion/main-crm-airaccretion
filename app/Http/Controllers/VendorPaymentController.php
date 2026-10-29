@@ -1628,7 +1628,7 @@ $balanceAmount =
                     if (!empty($vendorPhone)) {
                         $cleanVendorPhone = preg_replace('/[^0-9]/', '', $vendorPhone);
 
-                        $waResult = $smc->sendWhatsCrmMessage(
+                        $waResult = $smc->sendWhatsCrmVendorPaymentMessage(
                             $cleanVendorPhone,
                             $waBodyData,
                             $waFileUrl,

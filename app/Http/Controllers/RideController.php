@@ -5388,7 +5388,7 @@ private function sendVendorRefundNotifications(string $vendorRefundId): void
     //     ]);
     // }
 
-    $smc = new SendMessageController();
+    $vendorRefundWhatsApp = app(\App\Services\WhatsApp\VendorRefundWhatsAppService::class);
     $waBodyData = [
         $vendorName,
         $clientName,
@@ -5403,7 +5403,7 @@ private function sendVendorRefundNotifications(string $vendorRefundId): void
 
     if (!empty($vendorPhone)) {
         try {
-            $waResult = $smc->sendWhatsCrmVendorRefundMessage(
+            $waResult = $vendorRefundWhatsApp->send(
                 $vendorPhone,
                 $waBodyData,
                 $proofFileUrl,
@@ -5465,7 +5465,7 @@ private function sendVendorRefundNotifications(string $vendorRefundId): void
 
         if (!empty($nmPhone)) {
             try {
-                $nmWaResult = $smc->sendWhatsCrmVendorRefundMessage(
+                $nmWaResult = $vendorRefundWhatsApp->send(
                     $nmPhone,
                     $waBodyData,
                     $proofFileUrl,
