@@ -994,144 +994,28 @@ public function sendWhatsCrmVendorPaymentMessage(
     }
 
     // ═════════════════════════════════════════════════════════════════════════
-    // WhatsApp via WhatsCRM (FOR REFUNDS - Dynamic Template Selection)
+    // WhatsApp via Operations (FOR REFUNDS - Dynamic Template Selection)
     // refund_cust_notify_v2_img → Image (JPG/PNG header)
     // refund_cust_notify_v2     → PDF  (document header)
     // exampleArr: [customer_name, service_name, service_date, 
     //              refund_amount, refund_date] (5 variables)
     // ═════════════════════════════════════════════════════════════════════════
     public function sendWhatsCrmRefundMessage(
-        string  $toNumber,
-        array   $bodyValues,
-        ?string $fileUrl  = null,
+        string $toNumber,
+        array $bodyValues,
+        ?string $fileUrl = null,
         ?string $filename = null,
         ?string $templateName = 'refund_cust_notify_v2'
     ) {
-        // Refunds are operational payment notifications.  They must leave from
-        // the Operations WhatsApp/IVR account, not the separate voucher account.
-        $apiUrl   = config('services.whatscrm.api_url');
-        $apiToken = config('services.whatscrm.api_token');
+        $extension = strtolower(pathinfo($filename ?? '', PATHINFO_EXTENSION));
+        $isImage = in_array($extension, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'], true);
+        $template = $isImage
+            ? 'refund_cust_notify_v2_img'
+            : ($templateName ?: 'refund_cust_notify_v2');
 
-        // WhatsCRM expects + prefix e.g. +919405059038
-        $toNumber = WhatsAppPhoneNumber::e164($toNumber);
-
-        // Detect file type and select template accordingly
-        $ext      = strtolower(pathinfo($filename ?? '', PATHINFO_EXTENSION));
-        $isImage  = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']);
-        $isPdf    = ($ext === 'pdf');
-
-        // Direct template selection based on file type
-        // IMAGE: refund_cust_notify_v2_img
-        // PDF/TEXT: refund_cust_notify_v2
-        if ($isImage) {
-            $template = 'refund_cust_notify_v2_img';
-        } else {
-            $template = 'refund_cust_notify_v2';
-        }
-
-        // WhatsCRM Templet API payload
-        $payload = [
-            'sendTo'      => $toNumber,
-            'templetName' => $template,
-            'exampleArr'  => array_map('strval', $bodyValues),
-            'token'       => $apiToken,
-            'mediaUri'    => $fileUrl ?? '',
-        ];
-
-        // Validate PDF URL is reachable before sending
-        if ($isPdf && $fileUrl) {
-            $curlCheck = curl_init();
-            curl_setopt_array($curlCheck, [
-                CURLOPT_URL            => $fileUrl,
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_CUSTOMREQUEST  => 'HEAD',
-                CURLOPT_TIMEOUT        => 10,
-                CURLOPT_SSL_VERIFYHOST => 0,
-                CURLOPT_SSL_VERIFYPEER => 0,
-            ]);
-            curl_exec($curlCheck);
-            $httpCodeCheck = curl_getinfo($curlCheck, CURLINFO_HTTP_CODE);
-            curl_close($curlCheck);
-
-            if ($httpCodeCheck !== 200) {
-                Log::warning('WHATSCRM REFUNDS ► PDF URL UNREACHABLE', [
-                    'To'       => $toNumber,
-                    'URL'      => $fileUrl,
-                    'Headers'  => "HTTP/1.1 {$httpCodeCheck}",
-                    'Fallback' => 'Sending without PDF attachment',
-                ]);
-            }
-        }
-
-        Log::info('WHATSCRM REFUNDS ► SENDING', [
-            'Template'       => $template,
-            'FileType'       => $isImage ? 'IMAGE' : ($isPdf ? 'PDF' : 'TEXT'),
-            'To'             => $toNumber,
-            'File'           => $fileUrl ?? 'none',
-            'CustomerName'   => $bodyValues[0] ?? '',
-            'ServiceName'    => $bodyValues[1] ?? '',
-            'ServiceDate'    => $bodyValues[2] ?? '',
-            'RefundAmount'   => $bodyValues[3] ?? '',
-            'RefundDate'     => $bodyValues[4] ?? '',
-        ]);
-
-        $curl = curl_init();
-        curl_setopt_array($curl, [
-            CURLOPT_URL            => $apiUrl,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_ENCODING       => '',
-            CURLOPT_MAXREDIRS      => 10,
-            CURLOPT_TIMEOUT        => 30,
-            CURLOPT_HTTP_VERSION   => CURL_HTTP_VERSION_1_1,
-            CURLOPT_CUSTOMREQUEST  => 'POST',
-            CURLOPT_POSTFIELDS     => json_encode($payload),
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_SSL_VERIFYHOST => 0,
-            CURLOPT_SSL_VERIFYPEER => 0,
-            CURLOPT_HTTPHEADER     => [
-                'Content-Type: application/json',
-                "Authorization: Bearer {$apiToken}",
-            ],
-        ]);
-
-        $response = curl_exec($curl);
-        $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-        $err      = curl_error($curl);
-        curl_close($curl);
-
-        if ($err) {
-            Log::error('WHATSCRM REFUNDS ► cURL error', [
-                'to'       => $toNumber,
-                'template' => $template,
-                'error'    => $err,
-            ]);
-            return ['success' => false, 'error' => $err];
-        }
-
-        $result = json_decode($response, true);
-
-        // Status determination: PDFs may have partial delivery
-        if ($isPdf) {
-            $statusMsg = ($result['success'] ?? false) ? '⚠ ACCEPTED (PDF sent but may not be delivered)' : '✗ FAILED';
-            $details   = 'PDF Messages: WhatsCRM accepts but may not deliver. Monitor delivery.';
-        } else {
-            $statusMsg = ($result['success'] ?? false) ? '✓ SUCCESS' : '✗ FAILED';
-            $details   = $result['metaResponse']['messages'][0]['message_status'] ?? 'unknown';
-        }
-
-        Log::info('WHATSCRM REFUNDS ► RESULT', [
-            'Status'   => $statusMsg,
-            'Template' => $template,
-            'FileType' => $isImage ? 'IMAGE' : ($isPdf ? 'PDF' : 'TEXT'),
-            'To'       => $toNumber,
-            'HTTP'     => $httpCode,
-            'MsgID'    => $result['metaResponse']['messages'][0]['id'] ?? 'N/A',
-            'Details'  => $details,
-        ]);
-
-        return $result;
+        return app(\App\Services\WhatsApp\WhatsAppTemplateService::class)
+            ->sendTemplate($toNumber, $template, $bodyValues, $fileUrl);
     }
-
     // ═════════════════════════════════════════════════════════════════════════
     // WhatsApp via WhatsCRM — Registration Links (With Dynamic Button)
     // registration_link_final → Template with dynamic button for registration

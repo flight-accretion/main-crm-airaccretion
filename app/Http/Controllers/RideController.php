@@ -3704,9 +3704,9 @@ return [
             }
 
             // ── 6. Select template based on file type ────────────────────────────
-            // refund_cust_notify_v2_img for images
-            // refund_cust_notify_v2 for PDFs (default)
-            $customerWaTemplate = 'refund_cust_notify_v2';
+            $customerWaTemplate = $isImageFile
+                ? 'refund_cust_notify_v2_img'
+                : 'refund_cust_notify_v2';
 
             // ── 7. WhatsApp data — CUSTOMER (5 variables) ────────────────────────
             $customerWaData = $sanitize([
@@ -5361,32 +5361,6 @@ private function sendVendorRefundNotifications(string $vendorRefundId): void
             'email' => $vendorEmail,
         ]);
     }
-
-    // if (!empty($customerEmail) && filter_var($customerEmail, FILTER_VALIDATE_EMAIL)) {
-    //     try {
-    //         Mail::to($customerEmail)->send(new RefundMail(
-    //             'emails.refund-vendor',
-    //             'Vendor Refund Notification - ' . $clientName . ' - ' . $serviceName,
-    //             $vendorEmailData,
-    //             $proofFilePath
-    //         ));
-    //         Log::info('Vendor refund customer email sent', [
-    //             'vendor_refund_id' => $vendorRefund->id,
-    //             'to' => $customerEmail,
-    //         ]);
-    //     } catch (\Throwable $e) {
-    //         Log::error('Vendor refund customer email failed', [
-    //             'vendor_refund_id' => $vendorRefund->id,
-    //             'to' => $customerEmail,
-    //             'error' => $e->getMessage(),
-    //         ]);
-    //     }
-    // } else {
-    //     Log::warning('Vendor refund customer email missing/invalid', [
-    //         'vendor_refund_id' => $vendorRefund->id,
-    //         'client' => $clientName,
-    //     ]);
-    // }
 
     $vendorRefundWhatsApp = app(\App\Services\WhatsApp\VendorRefundWhatsAppService::class);
     $waBodyData = [
