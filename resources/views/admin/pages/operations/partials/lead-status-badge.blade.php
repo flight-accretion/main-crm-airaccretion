@@ -10,7 +10,7 @@
 @elseif ($status === 4)
     <span class="badge bg-warning/10 text-warning">Partial Payment Received</span>
 @elseif ($status === 5)
-    <span class="badge bg-info/10 text-info">Confirmed</span>
+    <span class="badge bg-info/10 text-info">Ride Completed</span>
 @elseif ($status === 6)
     <span class="badge bg-default/10 text-default">Pending</span>
 @elseif ($status === 7)

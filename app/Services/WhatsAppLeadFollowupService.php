@@ -47,13 +47,18 @@ class WhatsAppLeadFollowupService
             return null;
         }
 
+        $statusResolver = app(LeadStatusTransitionService::class);
+        $status = $statusResolver->latestActivityStatus($lead) === LeadFollowup::STATUS_CLOSE_FOLLOW_UP
+            ? LeadFollowup::STATUS_SALES_FOLLOW_UP
+            : LeadFollowup::STATUS_ACTIVE;
+
         $followup = LeadFollowup::create([
             'id' => (string) Str::uuid(),
             'lead_id' => $lead->id,
             'next_followup_date' => now(),
             'followup_note' => $note,
             'followed_by' => $lead->representative_user_id ?: null,
-            'status' => 1,
+            'status' => $status,
         ]);
 
         $message->lead_followup_id = $followup->id;

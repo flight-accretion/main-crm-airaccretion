@@ -222,7 +222,8 @@ class SendMessageController extends Controller
     public function sendWhatsCrmTemplateMessage(
         string $toNumber,
         string $templateName,
-        array  $bodyValues
+        array  $bodyValues,
+        ?string $mediaUri = null
     ) {
         $apiUrl   = config('services.whatscrm.api_url');
         $apiToken = config('services.whatscrm.api_token');
@@ -234,7 +235,9 @@ class SendMessageController extends Controller
             'templetName' => $templateName,
             'exampleArr'  => array_map('strval', $bodyValues),
             'token'       => $apiToken,
-            'mediaUri'    => '',
+            // 'mediaUri'    => '',
+            'mediaUri'  => $mediaUri ?? '',
+            'enableLog' => true,
         ];
 
         Log::info('WHATSCRM TEMPLATE ► SENDING', [
@@ -1007,14 +1010,30 @@ public function sendWhatsCrmVendorPaymentMessage(
         ?string $filename = null,
         ?string $templateName = 'refund_cust_notify_v2'
     ) {
+
         $extension = strtolower(pathinfo($filename ?? '', PATHINFO_EXTENSION));
         $isImage = in_array($extension, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'], true);
+
         $template = $isImage
             ? 'refund_cust_notify_v2_img'
             : ($templateName ?: 'refund_cust_notify_v2');
 
-        return app(\App\Services\WhatsApp\WhatsAppTemplateService::class)
-            ->sendTemplate($toNumber, $template, $bodyValues, $fileUrl);
+        return $this->sendWhatsCrmTemplateMessage(
+            $toNumber,
+            $template,
+            $bodyValues,
+            $fileUrl
+        );
+
+
+        // $extension = strtolower(pathinfo($filename ?? '', PATHINFO_EXTENSION));
+        // $isImage = in_array($extension, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'], true);
+        // $template = $isImage
+        //     ? 'refund_cust_notify_v2_img'
+        //     : ($templateName ?: 'refund_cust_notify_v2');
+
+        // return app(\App\Services\WhatsApp\WhatsAppTemplateService::class)
+        //     ->sendTemplate($toNumber, $template, $bodyValues, $fileUrl);
     }
     // ═════════════════════════════════════════════════════════════════════════
     // WhatsApp via WhatsCRM — Registration Links (With Dynamic Button)

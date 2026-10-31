@@ -11,6 +11,8 @@ use App\Models\Service;
 use App\Models\User;
 use App\Models\UserType;
 use App\Services\ActiveLeadService;
+use App\Services\LeadStatusTransitionService;
+use App\Models\PaymentAuditTrail;
 use Carbon\Carbon;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
@@ -19,6 +21,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class LeadVisibilityAndDuplicateTest extends TestCase
@@ -217,6 +220,160 @@ class LeadVisibilityAndDuplicateTest extends TestCase
             app(ActiveLeadService::class)
             ->findByPhone('+91-9437938764')
         );
+    }
+
+    public function test_sales_and_close_followup_keep_the_same_lead_for_new_inbound_activity(): void
+    {
+        $salesperson = $this->createUser(UserType::SALES_EXECUTIVE, 'Sales User');
+        $lead = $this->createLeadWithClient([
+            'name' => 'Open Follow-up Customer',
+            'contact_number' => '+91-9437938767',
+        ], ['representative_user_id' => $salesperson->id]);
+
+        LeadFollowup::create([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $lead->id,
+            'followup_note' => 'Payment approved',
+            'followed_by' => $salesperson->id,
+            'status' => LeadFollowup::STATUS_APPROVED,
+            'created_at' => now()->subMinute(),
+            'updated_at' => now()->subMinute(),
+        ]);
+        LeadFollowup::create([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $lead->id,
+            'followup_note' => 'Close for now',
+            'followed_by' => $salesperson->id,
+            'status' => LeadFollowup::STATUS_CLOSE_FOLLOW_UP,
+        ]);
+
+        $this->assertSame(
+            $lead->id,
+            app(ActiveLeadService::class)->findByPhone('9437938767')->id
+        );
+        $this->assertSame(
+            LeadFollowup::STATUS_APPROVED,
+            app(LeadStatusTransitionService::class)->displayedBusinessStatus($lead)
+        );
+    }
+
+    public function test_approved_payment_permanently_limits_sales_status_choices(): void
+    {
+        $salesperson = $this->createUser(UserType::SALES_EXECUTIVE, 'Sales User');
+        $lead = $this->createLeadWithClient([
+            'name' => 'Approved Payment Customer',
+            'contact_number' => '+91-9437938768',
+        ], ['representative_user_id' => $salesperson->id]);
+        $followup = LeadFollowup::create([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $lead->id,
+            'followup_note' => 'Partial payment received',
+            'followed_by' => $salesperson->id,
+            'status' => LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
+        ]);
+        PaymentAuditTrail::create([
+            'id' => (string) Str::uuid(),
+            'lead_followup_id' => $followup->id,
+            'paid_amount' => 1000,
+            'payment_status' => PaymentAuditTrail::STATUS_APPROVED,
+        ]);
+
+        $service = app(LeadStatusTransitionService::class);
+
+        $this->assertTrue($service->hasApprovedPayment($lead));
+        $this->assertSame([
+            LeadFollowup::STATUS_FULL_PAYMENT_RECEIVED,
+            LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
+            LeadFollowup::STATUS_SALES_FOLLOW_UP,
+            LeadFollowup::STATUS_CLOSE_FOLLOW_UP,
+        ], $service->allowedSalesStatuses($lead));
+
+        try {
+            $service->assertManualTransition(
+                $lead,
+                $salesperson,
+                LeadFollowup::STATUS_CANCELLED,
+                'Customer requested cancellation',
+                null
+            );
+            $this->fail('Sales cancellation must be blocked after payment approval.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('status', $exception->errors());
+        }
+    }
+
+    public function test_status_labels_include_ride_completed_and_followup_actions(): void
+    {
+        $labels = LeadFollowup::statusLabels();
+
+        $this->assertSame('Ride Completed', $labels[LeadFollowup::STATUS_RIDE_COMPLETED]);
+        $this->assertSame('Sales Follow-up', $labels[LeadFollowup::STATUS_SALES_FOLLOW_UP]);
+        $this->assertSame('Close Follow-up', $labels[LeadFollowup::STATUS_CLOSE_FOLLOW_UP]);
+    }
+
+    public function test_latest_payment_attempt_controls_rejected_dashboard_state(): void
+    {
+        $salesperson = $this->createUser(UserType::SALES_EXECUTIVE, 'Sales User');
+        $lead = $this->createLeadWithClient([
+            'name' => 'Latest Payment Attempt Customer',
+            'contact_number' => '+91-9437938769',
+        ], ['representative_user_id' => $salesperson->id]);
+        $followup = LeadFollowup::create([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $lead->id,
+            'followup_note' => 'Payment attempt',
+            'followed_by' => $salesperson->id,
+            'status' => LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
+        ]);
+        $rejectedAt = now()->subMinute();
+
+        PaymentAuditTrail::create([
+            'id' => (string) Str::uuid(),
+            'lead_followup_id' => $followup->id,
+            'paid_amount' => 1000,
+            'payment_status' => PaymentAuditTrail::STATUS_REJECTED,
+            'created_at' => $rejectedAt,
+            'updated_at' => $rejectedAt,
+        ]);
+
+        $service = app(LeadStatusTransitionService::class);
+        $this->assertTrue($service->latestPaymentAttemptIsRejected($lead));
+
+        $approvedAt = $rejectedAt->copy()->addSecond();
+        PaymentAuditTrail::create([
+            'id' => (string) Str::uuid(),
+            'lead_followup_id' => $followup->id,
+            'paid_amount' => 1000,
+            'payment_status' => PaymentAuditTrail::STATUS_APPROVED,
+            'created_at' => $approvedAt,
+            'updated_at' => $approvedAt,
+        ]);
+
+        $this->assertFalse($service->latestPaymentAttemptIsRejected($lead));
+    }
+
+    public function test_manual_followup_rules_require_schedule_or_closing_note(): void
+    {
+        $salesperson = $this->createUser(UserType::SALES_EXECUTIVE, 'Sales User');
+        $lead = $this->createLeadWithClient([
+            'name' => 'Manual Rule Customer',
+            'contact_number' => '+91-9437938770',
+        ], ['representative_user_id' => $salesperson->id]);
+        $service = app(LeadStatusTransitionService::class);
+
+        try {
+            $service->assertManualTransition($lead, $salesperson, LeadFollowup::STATUS_SALES_FOLLOW_UP, null, null);
+            $this->fail('Sales Follow-up must require a schedule for a manual action.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('next_followup_date', $exception->errors());
+        }
+
+        try {
+            $service->assertManualTransition($lead, $salesperson, LeadFollowup::STATUS_CLOSE_FOLLOW_UP, ' ', now());
+            $this->fail('Close Follow-up must require a closing remark.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('notes', $exception->errors());
+        }
     }
 
     public function test_paid_lead_opens_add_lead_form_with_same_client_preselected(): void

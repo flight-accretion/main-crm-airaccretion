@@ -1,7 +1,7 @@
 @php
     $sortedFollowups = $enquiry->leadFollowups->sortByDesc('created_at')->values();
     $latestFollowupForPreview = $sortedFollowups->first();
-    $followupStatuses = [0 => ['Initiated', 'is-muted'], 1 => ['Active', 'is-active'], 2 => ['Cancelled', 'is-danger'], 3 => ['Full Payment Received', 'is-success'], 4 => ['Partial Payment Received', 'is-warning'], 5 => ['Confirmed', 'is-primary'], 6 => ['Pending', 'is-warning'], 7 => ['Rescheduled', 'is-primary'], 8 => ['Approved', 'is-success'], 9 => ['Rejected', 'is-danger']];
+    $followupStatuses = [0 => ['Initiated', 'is-muted'], 1 => ['Active', 'is-active'], 2 => ['Cancelled', 'is-danger'], 3 => ['Full Payment Received', 'is-success'], 4 => ['Partial Payment Received', 'is-warning'], 5 => ['Ride Completed', 'is-primary'], 6 => ['Pending', 'is-warning'], 7 => ['Rescheduled', 'is-primary'], 8 => ['Approved', 'is-success'], 9 => ['Rejected', 'is-danger'], 10 => ['Sales Follow-up', 'is-active'], 11 => ['Close Follow-up', 'is-muted']];
 @endphp
 <div class="followup-history-preview" tabindex="0" role="button" aria-expanded="false" aria-label="Click to view complete follow-up history" title="Click to view complete follow-up history">
     @if ($latestFollowupForPreview)

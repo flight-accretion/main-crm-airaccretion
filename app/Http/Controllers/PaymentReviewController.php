@@ -349,11 +349,22 @@ class PaymentReviewController extends Controller
         }
 
         // Get detailed payment information for the modal
-        $followup = LeadFollowup::with([
+        $followup =
+        LeadFollowup::with([
             'enquiry.client.country',
             'enquiry.client.city',
-            'enquiry.rideSegments'
-        ])->findOrFail($id);
+            'enquiry.rideSegments',
+
+            /*
+            |--------------------------------------------------------------------------
+            | Assigned Sales Person
+            |--------------------------------------------------------------------------
+            */
+            'enquiry.representative',
+        ])
+        ->findOrFail(
+            $id
+        );
 
         // Get payment history for this lead from PaymentAuditTrail (to avoid duplicates)
         $paymentHistory = PaymentAuditTrail::with(['leadFollowup.followedBy'])
@@ -425,15 +436,56 @@ class PaymentReviewController extends Controller
             ->orderBy('created_at', 'desc')
             ->first();
 
-        return response()->json([
-            'followup' => $followup,
-            'client' => $followup->enquiry->client,
-            'rides' => $followup->enquiry->rideSegments, // Send all ride segments
-            'services' => $services,
-            'extraServices' => $extraServices,
-            'paymentHistory' => $paymentHistory,
-            'latestAudit' => $latestAudit
-        ]);
+      $representative =
+    $followup
+        ->enquiry
+        ?->representative;
+
+
+return response()->json([
+
+    'followup' =>
+        $followup,
+
+    'client' =>
+        $followup
+            ->enquiry
+            ?->client,
+
+    'representative' =>
+        $representative
+            ? [
+                'id' =>
+                    $representative->id,
+
+                'name' =>
+                    $representative->name,
+
+                'email' =>
+                    $representative->email
+                    ?? null,
+            ]
+            : null,
+
+    'rides' =>
+        $followup
+            ->enquiry
+            ?->rideSegments
+        ?? [],
+
+    'services' =>
+        $services,
+
+    'extraServices' =>
+        $extraServices,
+
+    'paymentHistory' =>
+        $paymentHistory,
+
+    'latestAudit' =>
+        $latestAudit,
+
+]);
     }
 
     public function approve(Request $request, $id)

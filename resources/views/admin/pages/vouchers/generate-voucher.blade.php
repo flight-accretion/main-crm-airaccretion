@@ -1,27 +1,19 @@
 @extends('admin.layouts.header')
 @section('content')
+    <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/vouchers/generate-voucher.css') }}?v=20261030">
+    <div class="crm-voucher voucher-workspace">
     <!-- Page Header -->
-    <div class="block justify-between page-header md:flex">
+    <div class="voucher-page-heading">
         <div>
-            <h3
-                class="!text-defaulttextcolor dark:!text-defaulttextcolor/70 dark:text-white dark:hover:text-white text-[1.125rem] font-semibold">
-                Generate Voucher - {{ $lead->client->name }}
-            </h3>
+            <nav class="voucher-breadcrumb" aria-label="Breadcrumb">
+                <a href="{{ route('admin.clients.index') }}"><i class="ri-arrow-left-line"></i> Leads</a>
+                <i class="ri-arrow-right-s-line" aria-hidden="true"></i>
+                <span>Generate Voucher</span>
+            </nav>
+            <h3>Generate Voucher · {{ $lead->client->name }}</h3>
+            <p>Review booking, vendor and passenger details before issuing the final voucher.</p>
         </div>
-        <ol class="flex items-center whitespace-nowrap min-w-0">
-            <li class="text-[0.813rem] ps-[0.5rem]">
-                <a class="flex items-center text-primary hover:text-primary dark:text-primary truncate"
-                    href="{{ route('admin.clients.index') }}">
-                    Leads
-                    <i
-                        class="ti ti-chevrons-right flex-shrink-0 text-[#8c9097] dark:text-white/50 px-[0.5rem] overflow-visible rtl:rotate-180"></i>
-                </a>
-            </li>
-            <li class="text-[0.813rem] text-defaulttextcolor font-semibold hover:text-primary dark:text-[#8c9097] dark:text-white/50"
-                aria-current="page">
-                Generate Voucher
-            </li>
-        </ol>
+        <span class="voucher-ready-badge"><i class="ri-checkbox-circle-line"></i> Ready for voucher</span>
     </div>
     <!-- Page Header Close -->
     @if (session('success'))
@@ -49,10 +41,14 @@
         @csrf
         <input type="hidden" name="lead_id" value="{{ $lead->id }}">
 
-        <div class="grid grid-cols-12 gap-6">
-            <div class="col-span-12">
+        <div class="voucher-layout">
+            <div class="voucher-main">
                 <!-- Client Information -->
-                <div class="md:flex block items-center my-[1.5rem] page-header-breadcrumb">
+                <div class="voucher-actionbar">
+                    <div class="voucher-actionbar-copy">
+                        <strong>Voucher actions</strong>
+                        <span>Generate only after all mandatory details are complete.</span>
+                    </div>
                     <!-- Primary Actions -->
                     <div class="btn-list md:mt-0 mt-2">
                         <button type="submit" name="action" value="generate"
@@ -1381,10 +1377,10 @@
                                                         @enderror
                                                     </td>
                                                     <!-- <td>
-                                                                                            <input type="text" name="passengers[{{ $i }}][contact_number]"
-                                                                                                value="{{ $passenger->contact_number }}"
-                                                                                                class="ti-form-input rounded-sm form-control-sm">
-                                                                                        </td> -->
+                                                        <input type="text" name="passengers[{{ $i }}][contact_number]"
+                                                            value="{{ $passenger->contact_number }}"
+                                                            class="ti-form-input rounded-sm form-control-sm">
+                                                    </td> -->
                                                     <td>
                                                         <input type="number"
                                                             name="passengers[{{ $i }}][weight]"
@@ -1665,8 +1661,47 @@
                                                         </div>
                                                     </div> -->
             </div>
+            <aside class="voucher-summary-rail">
+                @php
+                    $voucherServiceTotal = collect($selectedServices ?? [])->sum(fn ($service) => (float) ($service->amount ?? $service->service_amount ?? 0));
+                    $voucherVendorTotal = collect($selectedServices ?? [])->sum(fn ($service) => (float) ($service->vendor_amount ?? $service->amount ?? $service->service_amount ?? 0));
+                    $voucherExtraTotal = collect($selectedExtraServices ?? [])->sum(fn ($service) => (float) ($service->amount ?? $service->extra_service_amount ?? 0));
+                    $voucherPassengerTotal = isset($voucher)
+                        ? $voucher->passengers->count()
+                        : (isset($preVoucherPassengers) ? $preVoucherPassengers->count() : 0);
+                @endphp
+                <section class="voucher-summary-card">
+                    <div class="voucher-summary-head">
+                        <div>
+                            <h5>Voucher Summary</h5>
+                            <p>Quick financial check.</p>
+                        </div>
+                    </div>
+                    <div class="voucher-summary-list">
+                        <div><span>Service amount</span><strong>₹{{ number_format($voucherServiceTotal, 2) }}</strong></div>
+                        <div><span>Vendor payable</span><strong>₹{{ number_format($voucherVendorTotal, 2) }}</strong></div>
+                        <div><span>Customer extras</span><strong>₹{{ number_format($voucherExtraTotal, 2) }}</strong></div>
+                        <div><span>Passengers</span><strong>{{ $voucherPassengerTotal }}</strong></div>
+                        <div><span>Status</span><b class="voucher-ready-badge">Ready</b></div>
+                    </div>
+                </section>
+                <section class="voucher-summary-card voucher-checklist">
+                    <div class="voucher-summary-head">
+                        <div>
+                            <h5>Checklist</h5>
+                            <p>Completeness review.</p>
+                        </div>
+                    </div>
+                    <div class="voucher-checklist-list">
+                        <span><i class="ri-checkbox-circle-line"></i> Client details ready</span>
+                        <span><i class="ri-checkbox-circle-line"></i> Travel details available</span>
+                        <span><i class="ri-information-line"></i> Verify vendor and passenger details</span>
+                    </div>
+                </section>
+            </aside>
         </div>
     </form>
+</div>
 @endsection
 
 <style>

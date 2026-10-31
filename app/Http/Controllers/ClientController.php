@@ -36,6 +36,7 @@ use App\Services\LeadAllocationService;
 use App\Services\LeadAssignmentFollowupService;
 use App\Services\LeadAiCurrentFactsService;
 use App\Services\LeadSourceFollowupService;
+use App\Services\LeadStatusTransitionService;
 use App\Services\LeadListFilter;
 use App\Services\SalesAmountCalculator;
 use App\Support\PhoneNormalizer;
@@ -166,6 +167,13 @@ class ClientController extends Controller
 
     private function buildLeadExportRow($lead, int $index, $allProducts): array
     {
+        // Scheduled follow-up columns use the actual latest activity. The
+        // commercial status below deliberately ignores follow-up-only actions.
+        $latestFollowup = $lead->leadFollowups
+            ->sortByDesc('created_at')
+            ->sortByDesc('id')
+            ->first();
+
         $productIds = is_array($lead->product_ids)
             ? $lead->product_ids
             : (json_decode($lead->product_ids, true) ?? []);
@@ -178,9 +186,11 @@ class ClientController extends Controller
 
         $firstSegment = $lead->rideSegments->first();
         $lastSegment = $lead->rideSegments->last();
-        $latestFollowup = $lead->leadFollowups->sortByDesc('created_at')->first();
-
-        $statusText = $latestFollowup ? $latestFollowup->statusLabel() : 'N/A';
+        $statusResolver = app(LeadStatusTransitionService::class);
+        $businessStatus = $statusResolver->displayedBusinessStatus($lead);
+        $statusText = $businessStatus === null
+            ? 'N/A'
+            : (LeadFollowup::statusLabels()[$businessStatus] ?? 'N/A');
 
         $formatDate = function ($date, $format = 'Y-m-d') {
             if (!$date) return '';
@@ -884,6 +894,16 @@ if ($isSuperAdmin) {
             ->get()
             ->unique('lead_id')
             ->keyBy('lead_id');
+        // Sales/Close Follow-up are workflow actions.  The list status must keep
+        // showing the latest commercial/payment state for the lead.
+        $displayedStatusFollowups = LeadFollowup::whereIn('lead_id', $leadIds)
+            ->whereNotIn('status', LeadFollowup::FOLLOWUP_ONLY_STATUSES)
+            ->select('id', 'lead_id', 'status')
+            ->orderBy('created_at', 'desc')
+            ->orderBy('id', 'desc')
+            ->get()
+            ->unique('lead_id')
+            ->keyBy('lead_id');
 
             /*
 |--------------------------------------------------------------------------
@@ -925,6 +945,7 @@ if ($isSuperAdmin) {
             'canFilterUnassignedLeads',
             'leadsWithApprovedPayments',
             'latestFollowups',
+            'displayedStatusFollowups',
             'isSuperAdmin',
             'queuedLeadCount',
             'leadQueueCounts',
@@ -3031,14 +3052,37 @@ $leadFollowUp = LeadFollowUp::create([
                 ->implode(', ');
         }
 
+        $clientLeadIds = $client->leads()->pluck('id');
+        $latestBusinessStatuses = LeadFollowup::query()
+            ->whereIn('lead_id', $clientLeadIds)
+            ->whereNotIn('status', LeadFollowup::FOLLOWUP_ONLY_STATUSES)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->get(['lead_id', 'status'])
+            ->unique('lead_id')
+            ->keyBy('lead_id');
+
+        $activeLeadCount = $clientLeadIds
+            ->filter(function ($leadId) use ($latestBusinessStatuses) {
+                $status = $latestBusinessStatuses->get($leadId)?->status;
+
+                return $status === null
+                    || !in_array(
+                        (int) $status,
+                        LeadFollowup::INBOUND_TERMINAL_STATUSES,
+                        true
+                    );
+            })
+            ->count();
+
         return response()->json([
             'success' => true,
             'client' => $client,
             'countries' => $countries,
             'cities' => $cities,
             'lead_summary' => [
-                'total' => $client->leads()->count(),
-                'active' => $client->leads()->where('status', 1)->count(),
+                'total' => $clientLeadIds->count(),
+                'active' => $activeLeadCount,
                 'latest_product' => $latestProduct,
                 'last_activity' => optional($latestLead?->updated_at)->format('d M Y'),
             ],
@@ -3125,7 +3169,7 @@ $leadFollowUp = LeadFollowUp::create([
                         }
                     },
                 ],
-                'status' => 'required|in:keep,0,1,2,3,4,5',
+                'status' => ['required', Rule::in(['keep', 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])],
                 'next_followup_date' => 'nullable|date_format:Y-m-d H:i',
                 'services' => 'nullable|array',
                 'services.*' => 'exists:services,id',
@@ -3159,7 +3203,7 @@ $leadFollowUp = LeadFollowUp::create([
                         }
                     },
                 ],
-                'status' => 'required|in:keep,0,1,2,3,4,5,6,7',
+                'status' => ['required', Rule::in(['keep', 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])],
                 'next_followup_date' => ['nullable', 'date_format:Y-m-d\TH:i'],
                 'services' => 'required_if:status,3,4|array',
                 'services.*' => 'exists:services,id',
@@ -3261,6 +3305,16 @@ $leadFollowUp = LeadFollowUp::create([
             $statusToSave = $preserveStatus
                 ? ($previousStatus === null ? LeadFollowup::STATUS_INITIATED : (int) $previousStatus)
                 : (int) $request->status;
+
+            if (!$preserveStatus) {
+                app(LeadStatusTransitionService::class)->assertManualTransition(
+                    $lead,
+                    $request->user(),
+                    $statusToSave,
+                    $request->input('notes'),
+                    $request->input('next_followup_date')
+                );
+            }
 
             $imagePath = null;
             if ($request->hasFile('image')) {
@@ -3719,7 +3773,9 @@ $leadFollowUp = LeadFollowUp::create([
                     2 => 'Cancelled',
                     3 => 'Full Payment Received',
                     4 => 'Partial Payment Received',
-                    5 => 'Confirmed'
+                    5 => 'Ride Completed',
+                    10 => 'Sales Follow-up',
+                    11 => 'Close Follow-up',
                 ];
                 $statusMessage = $statusMessages[$statusToSave] ?? 'Updated';
 
@@ -3732,6 +3788,17 @@ $leadFollowUp = LeadFollowUp::create([
                 return redirect()->route('admin.leads.follow-up.create', $lead->id)
                     ->with('success', 'Follow-up added successfully!');
             }
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+
+            if ($isAjaxRequest) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $e->validator->errors()->first(),
+                ], 422);
+            }
+
+            return back()->withErrors($e->validator)->withInput();
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Followup creation failed: ' . $e->getMessage(), [
@@ -3786,6 +3853,19 @@ $leadFollowUp = LeadFollowUp::create([
         }
 
         $leadFollowupData = $this->buildLeadFollowupViewData($lead);
+        $statusTransitionService = app(LeadStatusTransitionService::class);
+        $currentRole = optional(auth()->user()?->userType)->user_type;
+        $isSalesUser = in_array($currentRole, UserType::SALES_ROLES, true);
+        $allowedStatusOptions = $isSalesUser
+            ? $statusTransitionService->allowedSalesStatuses($lead)
+            : [
+                LeadFollowup::STATUS_ACTIVE,
+                LeadFollowup::STATUS_CANCELLED,
+                LeadFollowup::STATUS_FULL_PAYMENT_RECEIVED,
+                LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
+                LeadFollowup::STATUS_SALES_FOLLOW_UP,
+                LeadFollowup::STATUS_CLOSE_FOLLOW_UP,
+            ];
 
         $clientInfo = $leadFollowupData['clientInfo'];
         $followups = $leadFollowupData['followups'];
@@ -3870,6 +3950,9 @@ $leadFollowUp = LeadFollowUp::create([
             'workspaceTrips' => $workspaceTrips,
             'workspaceProductIds' => $this->normalizeIdList($lead->product_ids),
             'workspaceServiceIds' => $this->normalizeIdList($lead->service_ids),
+            'allowedStatusOptions' => $allowedStatusOptions,
+            'hasApprovedPayment' => $statusTransitionService->hasApprovedPayment($lead),
+            'isSalesUser' => $isSalesUser,
         ]);
     }
 
@@ -5414,7 +5497,7 @@ $this->abortUnlessRepresentativeInScope($staff ? $staff->id : null);
                     elseif ($status == 2) $statusText = 'Cancelled';
                     elseif ($status == 3) $statusText = 'Full payment received';
                     elseif ($status == 4) $statusText = 'Partial payment received';
-                    elseif ($status == 5) $statusText = 'Completed';
+                    elseif ($status == 5) $statusText = 'Ride Completed';
                     elseif ($status == 6) $statusText = 'pending';
                     elseif ($status == 7) $statusText = 'Rescheduled';
                     elseif ($status == 8) $statusText = 'Approved';

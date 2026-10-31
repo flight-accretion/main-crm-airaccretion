@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Models\VendorRefund;
 use App\Services\ActivityAuditService;
+use App\Support\NotificationRecipientGuard;
 use App\Support\WhatsAppPhoneNumber;
 
 class VendorPaymentController extends Controller
@@ -1467,7 +1468,7 @@ if ($oldVendorPaymentStatus !== 'paid' && $status === 'paid') {
 
             // Schedule notifications after the response is sent.
             // TODO P5: Move vendor payment notifications to queued job.
-            app()->terminating(function () use ($leadVendorPayment, $request, $receiptPath) {
+            app(\Illuminate\Foundation\Application::class)->terminating(function () use ($leadVendorPayment, $request, $receiptPath) {
                 try {
                     set_time_limit(300);
                     $leadVendorPayment->load(['vendor', 'lead.client', 'paymentDetails.service']);
@@ -1583,25 +1584,23 @@ $balanceAmount =
                     $clientName  = $client->name  ?? 'Customer';
                     $vendorPhone = $vendor->whatsapp_number ?? $vendor->alternate_number ?? $vendor->contact_number ?? $vendor->phone ?? null;
                     $vendorEmail = $vendor->email ?? null;
-                    // $clientPhone = $client->alternate_number ?? $client->contact_number ?? null;
-                    // $clientEmail = $client->email ?? null;
-
-                    // try {
-                    //     $clientPhone = $clientPhone
-                    //         ? WhatsAppPhoneNumber::e164(
-                    //             $clientPhone,
-                    //             $client->whatsapp_country_code
-                    //                 ?? $client->contact_country_code
-                    //                 ?? null
-                    //         )
-                    //         : null;
-                    // } catch (\InvalidArgumentException $exception) {
-                    //     Log::warning('storePayment: customer WhatsApp number is invalid', [
-                    //         'client' => $clientName,
-                    //     ]);
-                    //     $clientPhone = null;
-                    // }
-
+                    $clientPhoneNumbers = array_values(array_filter([
+                        $client->contact_number ?? null,
+                        $client->alternate_number ?? null,
+                    ]));
+                    $vendorPaymentEmailConflict = NotificationRecipientGuard::overlaps(
+                        [$vendorEmail],
+                        [],
+                        [$client->email ?? null],
+                        []
+                    );
+                    $vendorPaymentWhatsAppConflict = NotificationRecipientGuard::overlaps(
+                        [],
+                        [$vendorPhone],
+                        [],
+                        $clientPhoneNumbers
+                    );
+                   
                     // Receipt file paths
                     $waFileUrl        = $receiptPath
                         ? rtrim(config('app.url'), '/') . '/storage/' . $receiptPath
@@ -1625,7 +1624,11 @@ $balanceAmount =
                         $request->payment_method ?? 'N/A',
                     ];
 
-                    if (!empty($vendorPhone)) {
+                    if ($vendorPaymentWhatsAppConflict) {
+                        Log::warning('storePayment: vendor WhatsApp blocked because number matches customer contact', [
+                            'lead_vendor_payment_id' => $leadVendorPayment->id,
+                        ]);
+                    } elseif (!empty($vendorPhone)) {
                         $cleanVendorPhone = preg_replace('/[^0-9]/', '', $vendorPhone);
 
                         $waResult = $smc->sendWhatsCrmVendorPaymentMessage(
@@ -1677,7 +1680,11 @@ $balanceAmount =
                         ->all();
                     Log::info('storePayment: notification masters', ['count' => $notificationMasters->count()]);
 
-                    if (!empty($vendorEmail) && filter_var($vendorEmail, FILTER_VALIDATE_EMAIL)) {
+                    if ($vendorPaymentEmailConflict) {
+                        Log::warning('storePayment: vendor email blocked because it matches customer contact', [
+                            'lead_vendor_payment_id' => $leadVendorPayment->id,
+                        ]);
+                    } elseif (!empty($vendorEmail) && filter_var($vendorEmail, FILTER_VALIDATE_EMAIL)) {
                         try {
                             $mail = \Illuminate\Support\Facades\Mail::to($vendorEmail);
                             if (!empty($notificationMasterCcEmails)) {

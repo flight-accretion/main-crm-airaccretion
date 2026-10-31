@@ -146,7 +146,7 @@ class OperationsCallDashboardService
         return match ((int) $status) {
             LeadFollowup::STATUS_FULL_PAYMENT_RECEIVED => 'Full Payment Received',
             LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED => 'Partial Payment Received',
-            LeadFollowup::STATUS_CONFIRMED => 'Confirmed',
+            LeadFollowup::STATUS_CONFIRMED => 'Ride Completed',
             LeadFollowup::STATUS_RESCHEDULED => 'Rescheduled',
             default => 'Status ' . (string) $status,
         };

@@ -20,6 +20,8 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
 use App\Services\ActivityAuditService;
+use App\Models\InvoiceRegenerationLog;
+use App\Models\UserType;
 
 class InvoiceController extends Controller
 {
@@ -261,7 +263,10 @@ class InvoiceController extends Controller
                 if (!$latestPayment) continue;
 
 
-                $totalAmount = (float) $latestPayment->total_amount;
+                $voucherInvoiceData = $this->getVoucherCustomerInvoiceData($voucher);
+                $totalAmount = !empty($voucherInvoiceData['items'])
+                    ? (float) $voucherInvoiceData['total_amount']
+                    : (float) $latestPayment->total_amount;
                 $totalReceived = PaymentAuditTrail::whereHas('leadFollowup', function($q) use ($lead) {
                     $q->where('lead_id', $lead->id);
                 })->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)->sum('paid_amount');
@@ -273,7 +278,7 @@ class InvoiceController extends Controller
                     $paymentStatus = 'Partial Paid';
                 }
 
-                $serviceInfo = $this->getServiceInformation($lead);
+                $serviceInfo = $this->getServiceInformation($lead, $voucher);
                 $vendorInfo = $this->getVendorInformation($voucher);
                 $profitLoss = $totalReceived - $vendorInfo['totalVendorCost'];
                 $rideInfo = $this->getRideInformation($lead);
@@ -369,6 +374,12 @@ class InvoiceController extends Controller
 
             // Check if invoice already exists
             $existingInvoice = Invoice::where('voucher_id', $voucher->id)->first();
+            $regenerationHistory = $existingInvoice
+                ? InvoiceRegenerationLog::with('regeneratedBy')
+                    ->where('invoice_id', $existingInvoice->id)
+                    ->orderByDesc('regenerated_at')
+                    ->get()
+                : collect();
 
             // Return JSON for AJAX requests
             if (request()->ajax()) {
@@ -379,6 +390,7 @@ class InvoiceController extends Controller
                         'invoiceData' => $invoiceData,
                         'paymentHistory' => $paymentHistory,
                         'existingInvoice' => $existingInvoice,
+                        'regenerationHistory' => $regenerationHistory,
                         'lead' => $lead,
                         'client' => $client
                     ]
@@ -506,6 +518,228 @@ class InvoiceController extends Controller
                 'message' => 'Failed to generate invoice.'
             ]);
         }
+    }
+
+
+    public function regenerateInvoice(Request $request, $id)
+    {
+    try {
+        $currentUser = auth()->user();
+
+        if (!$currentUser) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthenticated.',
+            ], 401);
+        }
+
+        $role = optional(
+            $currentUser->userType
+        )->user_type;
+
+        $canRegenerate =
+            in_array(
+                $role,
+                UserType::ACCOUNTS_ROLES ?? [],
+                true
+            )
+            ||
+            in_array(
+                $role,
+                UserType::ADMIN_ROLES ?? [],
+                true
+            )
+            || $role === UserType::OWNER;
+
+        if (!$canRegenerate) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You are not authorized to regenerate invoices.',
+            ], 403);
+        }
+
+        /*
+         * Route may pass:
+         * - invoice UUID
+         * - voucher UUID
+         * depending on current UI implementation.
+         *
+         * Support both safely.
+         */
+        $invoice = Invoice::where('id', $id)
+            ->orWhere('voucher_id', $id)
+            ->orWhere('invoice_id', $id)
+            ->first();
+
+        if (!$invoice) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invoice not found.',
+            ], 404);
+        }
+
+        $voucher = Voucher::with([
+            'lead.client',
+            'vendorPayments.paymentDetails.service',
+            'vendorPayments.paymentDetails.extraService',
+        ])->find($invoice->voucher_id);
+
+        if (!$voucher) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Voucher not found for invoice.',
+            ], 404);
+        }
+
+        $invoiceData =
+            $this->getVoucherCustomerInvoiceData(
+                $voucher
+            );
+
+        if (empty($invoiceData['items'])) {
+            return response()->json([
+                'success' => false,
+                'message' =>
+                    'Cannot regenerate invoice because no voucher service details were found.',
+            ], 422);
+        }
+
+        $regeneratedAt = now();
+        $statusBefore = $invoice->status;
+        $invoiceNumberBefore = $invoice->invoice_id;
+
+        DB::transaction(function () use (
+            $invoice,
+            $voucher,
+            $currentUser,
+            $invoiceData,
+            $regeneratedAt,
+            $statusBefore,
+            $invoiceNumberBefore
+        ) {
+            // Regeneration deliberately refreshes the rendered source only. The
+            // invoice identity, status and finalized date must remain untouched.
+            $invoice->touch();
+
+            $userName = $currentUser->name
+                ?? $currentUser->email
+                ?? 'User';
+
+            $note = 'Invoice regenerated by '
+                . $userName
+                . ' on '
+                . $regeneratedAt->format('d M Y h:i A')
+                . '. Invoice data refreshed from current voucher.';
+
+            InvoiceRegenerationLog::create([
+                'id' => (string) Str::uuid(),
+                'invoice_id' => $invoice->id,
+                'regenerated_by' => $currentUser->id,
+                'regenerated_at' => $regeneratedAt,
+                'note' => $note,
+            ]);
+
+            app(ActivityAuditService::class)->record(
+                'invoice',
+                'regenerated',
+                $invoice,
+                [
+                    'invoice_number' => $invoiceNumberBefore,
+                    'status' => $statusBefore,
+                ],
+                [
+                    'invoice_number' => $invoice->invoice_id,
+                    'status' => $invoice->status,
+                    'customer_amount' => $invoiceData['total_amount'],
+                    'regenerated_at' => $regeneratedAt->toDateTimeString(),
+                ],
+                [
+                    'lead_id' => $voucher->lead?->id,
+                    'client_id' => $voucher->lead?->client_id,
+                    'voucher_id' => $voucher->id,
+                ]
+            );
+        });
+
+        Log::info(
+            'Invoice regenerated',
+            [
+                'invoice_id' =>
+                    $invoice->invoice_id,
+
+                'invoice_uuid' =>
+                    $invoice->id,
+
+                'voucher_id' =>
+                    $voucher->id,
+
+                'regenerated_by' =>
+                    $currentUser->id,
+
+                'customer_total' =>
+                    $invoiceData['total_amount'],
+
+                'status_preserved' =>
+                    $invoice->status,
+            ]
+        );
+
+        return response()->json([
+            'success' => true,
+
+            'message' =>
+                'Invoice regenerated successfully.',
+
+            'invoice_id' =>
+                $invoice->invoice_id,
+
+            'invoice_uuid' =>
+                $invoice->id,
+
+            'total_amount' =>
+                $invoiceData['total_amount'],
+
+            'status' =>
+                $invoice->status,
+
+            'regenerated_at' =>
+                $regeneratedAt->toDateTimeString(),
+
+            'preview_url' =>
+                route(
+                    'admin.account.invoices.preview',
+                    $voucher->id
+                ),
+
+            'pdf_url' =>
+                route(
+                    'admin.account.invoices.pdf',
+                    $voucher->id
+                ),
+        ]);
+
+    } catch (\Throwable $e) {
+
+        Log::error(
+            'Invoice regeneration failed',
+            [
+                'invoice_reference' =>
+                    $id,
+
+                'message' =>
+                    $e->getMessage(),
+
+                'trace' =>
+                    $e->getTraceAsString(),
+            ]
+        );
+
+        return response()->json([
+            'success' => false,
+            'message' =>
+                'Unable to regenerate invoice.',
+        ], 500);
+    }
     }
 
     /**
@@ -678,7 +912,7 @@ class InvoiceController extends Controller
     /**
      * Get service information for a lead.
      */
-    private function getServiceInformation($lead)
+    private function getServiceInformation($lead, ?Voucher $voucher = null)
     {
         $serviceIds = $lead->service_ids_array;
         $services = [];
@@ -691,7 +925,9 @@ class InvoiceController extends Controller
 
 
         // Get payment details for services and extra services from LeadPaymentDetail (client-side)
-        $voucherIds = $lead->vouchers()->pluck('id')->toArray();
+        $voucherIds = $voucher
+            ? [$voucher->id]
+            : $lead->vouchers()->pluck('id')->toArray();
         if (!empty($voucherIds)) {
             $paymentDetails = LeadPaymentDetail::whereHas('leadPayment', function($q) use ($voucherIds) {
                 $q->whereIn('voucher_id', $voucherIds);
@@ -728,6 +964,7 @@ class InvoiceController extends Controller
                     'selling_price' => 0.0,
                     'cost_price' => 0.0,
                     'vendor_amount' => 0.0,
+                    'has_voucher_customer_amount' => false,
                 ];
             }
             $detailedItems[$key]['selling_price'] += (float) $detail->amount;
@@ -743,6 +980,9 @@ class InvoiceController extends Controller
             // Also collect services/extra services from LeadVendorPayment details (vendor-side)
         try {
             $leadVendorPayments = \App\Models\LeadVendorPayment::where('lead_id', $lead->id)
+                ->when($voucher, function ($query) use ($voucher) {
+                    $query->where('voucher_id', $voucher->id);
+                })
                 ->with(['paymentDetails.service', 'paymentDetails.extraService'])
                 ->get();
 
@@ -766,9 +1006,13 @@ class InvoiceController extends Controller
                             'selling_price' => 0.0,
                             'cost_price' => 0.0,
                             'vendor_amount' => 0.0,
+                            'has_voucher_customer_amount' => false,
                         ];
                     }
                     $detailedItems[$key]['cost_price'] += (float) $costPrice;
+                    if ($detail->service_amount !== null) {
+                        $detailedItems[$key]['has_voucher_customer_amount'] = true;
+                    }
                     $detailedItems[$key]['vendor_amount'] = (isset($detailedItems[$key]['vendor_amount']) ? $detailedItems[$key]['vendor_amount'] : 0) + (float) $vendorAmount;
                 }
             }            // At this point we have selling_price aggregated from LeadPaymentDetail and cost_price aggregated from vendor details
@@ -826,6 +1070,7 @@ class InvoiceController extends Controller
                         'selling_price' => 0.0,
                         'cost_price' => 0.0,
                         'vendor_amount' => 0.0,
+                        'has_voucher_customer_amount' => false,
                     ];
                 }
                 // Apply followup cost immediately so it appears even if no vendor/payment rows
@@ -857,8 +1102,8 @@ class InvoiceController extends Controller
                     }
                 }
                 // extra service ids from latest followup or lead followup arrays
-                if (!empty($lastFollowupWithAmount)) {
-                    $lfExtraIds = is_string($lastFollowupWithAmount->extra_service_ids) ? json_decode($lastFollowupWithAmount->extra_service_ids, true) : ($lastFollowupWithAmount->extra_service_ids ?? []);
+                if (!empty($lastFollowupWithServiceDetails)) {
+                    $lfExtraIds = is_string($lastFollowupWithServiceDetails->extra_service_ids) ? json_decode($lastFollowupWithServiceDetails->extra_service_ids, true) : ($lastFollowupWithServiceDetails->extra_service_ids ?? []);
                     if (is_array($lfExtraIds)) {
                         foreach ($lfExtraIds as $eId) {
                             if ($eId && !in_array($eId, $extraIdsToLoad)) $extraIdsToLoad[] = $eId;
@@ -911,7 +1156,10 @@ class InvoiceController extends Controller
 
                 // cost price from followup if available, else keep existing (vendor-based) or zero
                 $followKey = ($type === 'extra' ? 'extra' : 'service') . '|' . ($keyId ?? 'unknown');
-                if (isset($followupCosts[$followKey])) {
+                if (
+                    !$it['has_voucher_customer_amount']
+                    && isset($followupCosts[$followKey])
+                ) {
                     $it['cost_price'] = $followupCosts[$followKey];
                 }
 
@@ -971,6 +1219,13 @@ class InvoiceController extends Controller
         // Deduplicate while preserving order
         $serviceNames = array_values(array_unique(array_filter($serviceNames)));
         $extraServiceNames = array_values(array_unique(array_filter($extraServiceNames)));
+
+        // The marker only controls this aggregation step and must not become
+        // part of the invoice data returned to views or documents.
+        foreach ($detailedItems as &$detailedItem) {
+            unset($detailedItem['has_voucher_customer_amount']);
+        }
+        unset($detailedItem);
 
         // Normalize detailed items to sequential array
         $detailedItemsList = array_values($detailedItems);
@@ -1167,14 +1422,17 @@ class InvoiceController extends Controller
             ->orderBy('created_at', 'desc')
             ->first();
 
-        $totalAmount = $latestPayment ? (float) $latestPayment->total_amount : 0;
+        $voucherInvoiceData = $this->getVoucherCustomerInvoiceData($voucher);
+        $totalAmount = !empty($voucherInvoiceData['items'])
+            ? (float) $voucherInvoiceData['total_amount']
+            : (float) ($latestPayment->total_amount ?? 0);
         // Sum all approved payments for this lead (across followups)
         $totalReceived = PaymentAuditTrail::whereHas('leadFollowup', function($q) use ($lead) {
             $q->where('lead_id', $lead->id);
         })->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)->sum('paid_amount');
 
         // build service and vendor data once so we can reuse values and keep paths consistent
-        $service = $this->getServiceInformation($lead);
+        $service = $this->getServiceInformation($lead, $voucher);
         $vendor = $this->getVendorInformation($voucher);
 
         // ensure compatibility: copy aggregated vendor total into service.total_service_amount
@@ -1195,6 +1453,7 @@ class InvoiceController extends Controller
                 'balance' => $totalAmount - $totalReceived,
                 'latest_payment' => $latestPayment
             ],
+            'voucher_customer_items' => $voucherInvoiceData['items'],
             'profit_loss' => $totalReceived - ($vendor['totalVendorCost'] ?? 0)
         ];
     }
@@ -1249,7 +1508,12 @@ class InvoiceController extends Controller
             ));
 
             Log::info("PDF generated successfully for voucher: " . $voucher->id);
-            return $pdf->setPaper('a4', 'portrait')->stream('invoice-' . $voucher->id . '.pdf');
+            $response = $pdf->setPaper('a4', 'portrait')->stream('invoice-' . $voucher->id . '.pdf');
+            $response->headers->set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+            $response->headers->set('Pragma', 'no-cache');
+            $response->headers->set('Expires', '0');
+
+            return $response;
             
         } catch (\Exception $e) {
             Log::error('Error in InvoiceController@generatePDF: ' . $e->getMessage() . ' | Trace: ' . $e->getTraceAsString());
@@ -1281,7 +1545,12 @@ class InvoiceController extends Controller
             ));
 
             Log::info("PDF download generated successfully for voucher: " . $voucher->id);
-            return $pdf->setPaper('a4', 'portrait')->download('invoice-' . $voucher->id . '.pdf');
+            $response = $pdf->setPaper('a4', 'portrait')->download('invoice-' . $voucher->id . '.pdf');
+            $response->headers->set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+            $response->headers->set('Pragma', 'no-cache');
+            $response->headers->set('Expires', '0');
+
+            return $response;
             
         } catch (\Exception $e) {
             Log::error('Error in InvoiceController@downloadPDF: ' . $e->getMessage() . ' | Trace: ' . $e->getTraceAsString());
@@ -1304,16 +1573,177 @@ class InvoiceController extends Controller
             // Use HTTP-accessible asset URL for logo when rendering HTML preview in browser
             $logo = asset('assets/admin/images/logo.png');
             Log::info("HTML preview generated successfully for voucher: " . $voucher->id);
-            return view('admin.account.invoices.invoices-preview', compact(
+            $response = response()->view('admin.account.invoices.invoices-preview', compact(
                 'voucher', 
                 'invoiceData', 
                 'existingInvoice',
                 'logo'
             ));
+            $response->headers->set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+            $response->headers->set('Pragma', 'no-cache');
+            $response->headers->set('Expires', '0');
+
+            return $response;
             
         } catch (\Exception $e) {
             Log::error('Error in InvoiceController@previewHTML: ' . $e->getMessage() . ' | Trace: ' . $e->getTraceAsString());
             return response()->json(['error' => 'Error generating preview: ' . $e->getMessage()], 500);
         }
     }
+
+
+    /**
+ * One source of truth for the customer invoice value.
+ *
+ * Priority:
+ * 1. Latest saved service/payment breakdown (`service_details`)
+ *    including service, extra services and discounts.
+ * 2. Legacy fallback: latest payment follow-up total_amount.
+ */
+private function getCanonicalInvoiceTotal(Lead $lead): float
+{
+    $pricingFollowup = $lead->leadFollowups()
+        ->whereNotNull('service_details')
+        ->orderByDesc('created_at')
+        ->first();
+
+    if ($pricingFollowup && !empty($pricingFollowup->service_details)) {
+        $details = is_string($pricingFollowup->service_details)
+            ? json_decode($pricingFollowup->service_details, true)
+            : $pricingFollowup->service_details;
+
+        if (is_array($details)) {
+            $total = 0.0;
+            $hasAmount = false;
+
+            foreach ($details as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+
+                // Use final amount first so discounts and extras are included.
+                if (array_key_exists('final_amount', $item) && is_numeric($item['final_amount'])) {
+                    $amount = (float) $item['final_amount'];
+                    $hasAmount = true;
+                } elseif (
+                    array_key_exists('original_amount', $item)
+                    && is_numeric($item['original_amount'])
+                ) {
+                    $amount = (float) $item['original_amount']
+                        - (float) ($item['discount_amount'] ?? 0);
+
+                    $hasAmount = true;
+                } elseif (array_key_exists('amount', $item) && is_numeric($item['amount'])) {
+                    $amount = (float) $item['amount'];
+                    $hasAmount = true;
+                } else {
+                    continue;
+                }
+
+                $total += $amount;
+            }
+
+            // A valid ₹0 total remains ₹0. Do not silently replace it.
+            if ($hasAmount) {
+                return round($total, 2);
+            }
+        }
+    }
+
+    // Backward-compatible fallback for older bookings with no service_details.
+    $latestPayment = $lead->leadFollowups()
+        ->whereNotNull('received_amount')
+        ->where('received_amount', '>', 0)
+        ->orderByDesc('created_at')
+        ->first();
+
+    return (float) ($latestPayment->total_amount ?? 0);
+}
+
+/**
+ * Build authoritative customer-facing invoice items from Voucher data.
+ *
+ * Priority:
+ * 1. LeadVendorPaymentDetail.service_amount from this Voucher
+ * 2. Caller may use existing follow-up/master fallback only if this returns empty
+ *
+ * IMPORTANT:
+ * vendor_service_amount must NEVER be used for customer invoice totals.
+ */
+private function getVoucherCustomerInvoiceData(Voucher $voucher): array
+{
+    $voucher->loadMissing([
+        'vendorPayments.paymentDetails.service',
+        'vendorPayments.paymentDetails.extraService',
+    ]);
+
+    $items = [];
+    $total = 0.0;
+
+    foreach ($voucher->vendorPayments as $vendorPayment) {
+        foreach ($vendorPayment->paymentDetails as $detail) {
+
+            $amount = (float) ($detail->service_amount ?? 0);
+
+            /*
+             * Extra Service
+             */
+            if ((bool) $detail->is_extra_service) {
+                $extraService = $detail->extraService;
+
+                /*
+                 * Vendor-only extras are vendor costs,
+                 * not customer invoice items.
+                 */
+                if (
+                    $extraService
+                    && defined(ExtraService::class . '::SCOPE_VENDOR')
+                    && $extraService->usage_scope === ExtraService::SCOPE_VENDOR
+                ) {
+                    continue;
+                }
+
+                $name = $extraService->extra_service
+                    ?? $detail->service_name
+                    ?? 'Extra Service';
+
+                $items[] = [
+                    'service_id' => $detail->service_id,
+                    'type' => 'extra_service',
+                    'name' => $name,
+                    'amount' => $amount,
+                ];
+
+                $total += $amount;
+
+                continue;
+            }
+
+            /*
+             * Regular Service
+             */
+            $service = $detail->service;
+
+            $name = $service->service
+                ?? $service->service_name
+                ?? $detail->service_name
+                ?? 'Service';
+
+            $items[] = [
+                'service_id' => $detail->service_id,
+                'type' => 'service',
+                'name' => $name,
+                'amount' => $amount,
+            ];
+
+            $total += $amount;
+        }
+    }
+
+    return [
+        'items' => $items,
+        'total_amount' => round($total, 2),
+    ];
+}
+
 }

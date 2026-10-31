@@ -1238,6 +1238,9 @@ Route::post(
         Route::post('/invoices/{id}/generate', [InvoiceController::class, 'generateInvoice'])
             ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')
             ->name('admin.account.invoices.generate');
+        Route::post('/invoices/{id}/regenerate', [InvoiceController::class, 'regenerateInvoice'])
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OWNER')
+            ->name('admin.account.invoices.regenerate');
         Route::put('/invoices/{id}/gst-info', [InvoiceController::class, 'updateGstInfo'])
             ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')
             ->name('admin.account.invoices.update-gst-info');
@@ -1523,9 +1526,9 @@ Route::post(
 
 
     Route::prefix('admin/users')
-    ->middleware('role:ADMIN_ROLES,OWNER')
+    ->middleware('role:ADMIN_ROLES,OWNER,HR')
     ->group(function () {
-        Route::get('/', [UserController::class, 'index'])->middleware('role:ADMIN_ROLES,OWNER')->name('admin.users.index');
+        Route::get('/', [UserController::class, 'index'])->middleware('role:ADMIN_ROLES,OWNER,HR')->name('admin.users.index');
         Route::get('/create', [UserController::class, 'create'])->name('admin.users.create');
         Route::post('/', [UserController::class, 'store'])->name('admin.users.store');
         Route::get('/get-user-for-edit', [UserController::class, 'getUserforEdit'])->name('admin.users.getUserforEdit');
@@ -1636,49 +1639,38 @@ Route::post(
             ->name('admin.service-addresses.edit-details');
     });
 
-    Route::prefix('admin/vouchers')->group(function () {
+    Route::prefix('admin/vouchers')->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')->group(function () {
         Route::get('/', [VoucherController::class, 'index'])
-            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,OWNER')
             ->name('admin.vouchers.index');
 
         Route::get('/{voucher_id}/pdf', [VoucherController::class, 'generateVoucherPdf'])
-            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,OWNER')
             ->name('admin.vouchers.pdf');
 
         Route::get('/generate/{lead_id}', [VoucherController::class, 'showVoucherForm'])
-            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,SALES_ROLES')
             ->name('admin.vouchers.generate');
 
         Route::get('/form/{lead_id}', [VoucherController::class, 'showVoucherForm'])
-            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,SALES_ROLES')
             ->name('admin.vouchers.form');
 
         Route::post('/store', [VoucherController::class, 'storeVoucher'])
-            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
             ->name('admin.vouchers.store');
 
         Route::post('/get-service-addresses', [VoucherController::class, 'getServiceAddresses'])
-            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
             ->name('admin.vouchers.getServiceAddresses');
 
         Route::post('/{voucher_id}/send', [VoucherController::class, 'sendVoucherPdf'])
-            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
             ->name('admin.vouchers.send');
 
         Route::post('/{voucher_id}/send-whatsapp', [VoucherController::class, 'sendVoucherWhatsApp'])
-            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
             ->name('admin.vouchers.send-whatsapp');
 
         Route::post('/{voucher_id}/resend-registration-link', [VoucherController::class, 'resendRegistrationLink'])
-            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
             ->name('admin.vouchers.resend-registration-link');
 
         Route::post('/{voucher_id}/send-registration-whatsapp', [VoucherController::class, 'sendRegistrationLinkWhatsApp'])
-            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
             ->name('admin.vouchers.send-registration-whatsapp');
 
         Route::delete('/{voucher_id}/attachment', [VoucherController::class, 'deleteAttachment'])
-            ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
             ->name('admin.vouchers.delete-attachment');
     });
 

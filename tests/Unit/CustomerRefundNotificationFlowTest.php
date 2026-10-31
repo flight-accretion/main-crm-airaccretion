@@ -3,7 +3,6 @@
 namespace Tests\Unit;
 
 use App\Http\Controllers\SendMessageController;
-use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class CustomerRefundNotificationFlowTest extends TestCase
@@ -31,61 +30,82 @@ class CustomerRefundNotificationFlowTest extends TestCase
         );
     }
 
-    public function test_customer_refund_whatsapp_uses_the_operations_account(): void
+    public function test_customer_refund_pdf_uses_the_main_whatscrm_sender(): void
     {
-        config()->set('services.operations_ride_alert.api_url', 'https://operations.example.test/send_templet');
-        config()->set('services.operations_ride_alert.api_key', 'operations-api-key');
-        config()->set('services.operations_ride_alert.token', 'operations-ivr-token');
+        $bodyValues = ['Customer', 'Service', '29th October, 2026', '1000.00', '29th October, 2026'];
+        $mediaUrl = 'https://crm.example.test/storage/refunds/proof.pdf';
+        $sender = new class extends SendMessageController {
+            public array $templateCall = [];
 
-        Http::fake([
-            'https://operations.example.test/send_templet' => Http::response([
-                'success' => true,
-                'message_id' => 'refund-message-1',
-            ]),
-        ]);
+            public function sendWhatsCrmTemplateMessage(
+                string $toNumber,
+                string $templateName,
+                array $bodyValues,
+                ?string $mediaUri = null
+            ) {
+                $this->templateCall = func_get_args();
 
-        $result = (new SendMessageController())->sendWhatsCrmRefundMessage(
+                return ['success' => true, 'provider_message_id' => 'refund-message-1'];
+            }
+        };
+
+        $result = $sender->sendWhatsCrmRefundMessage(
             '+91 9876543210',
-            ['Customer', 'Service', '29th October, 2026', '1000.00', '29th October, 2026'],
-            'https://crm.example.test/storage/refunds/proof.pdf',
+            $bodyValues,
+            $mediaUrl,
             'proof.pdf'
         );
 
         $this->assertTrue($result['success']);
         $this->assertSame('refund-message-1', $result['provider_message_id']);
+        $this->assertSame([
+            '+91 9876543210',
+            'refund_cust_notify_v2',
+            $bodyValues,
+            $mediaUrl,
+        ], $sender->templateCall);
 
-        Http::assertSent(function ($request) {
-            return $request->method() === 'POST'
-                && $request->url() === 'https://operations.example.test/send_templet'
-                && $request->hasHeader('Authorization', 'Bearer operations-api-key')
-                && $request->data() === [
-                    'sendTo' => '+919876543210',
-                    'templetName' => 'refund_cust_notify_v2',
-                    'exampleArr' => ['Customer', 'Service', '29th October, 2026', '1000.00', '29th October, 2026'],
-                    'token' => 'operations-ivr-token',
-                    'mediaUri' => 'https://crm.example.test/storage/refunds/proof.pdf',
-                    'enableLog' => true,
-                ];
-        });
+        $controller = file_get_contents(app_path('Http/Controllers/SendMessageController.php'));
+        $senderStart = strpos($controller, 'public function sendWhatsCrmTemplateMessage(');
+        $senderEnd = strpos($controller, 'public function sendSmsMessage(', $senderStart);
+        $genericSender = substr($controller, $senderStart, $senderEnd - $senderStart);
+
+        $this->assertStringContainsString("config('services.whatscrm.api_url')", $genericSender);
+        $this->assertStringContainsString("config('services.whatscrm.api_token')", $genericSender);
     }
 
-    public function test_customer_refund_image_uses_the_image_template_with_operations_account(): void
+    public function test_customer_refund_image_uses_the_image_template_and_forwards_media(): void
     {
-        config()->set('services.operations_ride_alert.api_url', 'https://operations.example.test/send_templet');
-        config()->set('services.operations_ride_alert.api_key', 'operations-api-key');
-        config()->set('services.operations_ride_alert.token', 'operations-ivr-token');
+        $bodyValues = ['Customer', 'Service', 'Date', '1000.00', 'Refund date'];
+        $mediaUrl = 'https://crm.example.test/storage/refunds/proof.jpg';
+        $sender = new class extends SendMessageController {
+            public array $templateCall = [];
 
-        Http::fake([
-            'https://operations.example.test/send_templet' => Http::response(['success' => true]),
-        ]);
+            public function sendWhatsCrmTemplateMessage(
+                string $toNumber,
+                string $templateName,
+                array $bodyValues,
+                ?string $mediaUri = null
+            ) {
+                $this->templateCall = func_get_args();
 
-        (new SendMessageController())->sendWhatsCrmRefundMessage(
+                return ['success' => true];
+            }
+        };
+
+        $result = $sender->sendWhatsCrmRefundMessage(
             '9876543210',
-            ['Customer', 'Service', 'Date', '1000.00', 'Refund date'],
-            'https://crm.example.test/storage/refunds/proof.jpg',
+            $bodyValues,
+            $mediaUrl,
             'proof.jpg'
         );
 
-        Http::assertSent(fn ($request) => $request->data()['templetName'] === 'refund_cust_notify_v2_img');
+        $this->assertTrue($result['success']);
+        $this->assertSame([
+            '9876543210',
+            'refund_cust_notify_v2_img',
+            $bodyValues,
+            $mediaUrl,
+        ], $sender->templateCall);
     }
 }

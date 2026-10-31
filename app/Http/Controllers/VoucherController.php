@@ -1167,7 +1167,7 @@ class VoucherController extends Controller
                         $detail = collect($leadServiceDetails)->first(function ($d) use ($service) {
                             return ($d['type'] ?? null) === 'service' && ($d['id'] ?? null) == $service->id;
                         });
-                        if ($detail) {
+                        if ($detail && !isset($voucherServiceData['service_' . $service->id])) {
                             $orig = floatval($detail['original_amount'] ?? $service->service_amount ?? 0);
                             $disc = floatval($detail['discount_amount'] ?? 0);
                             $service->amount = max(0, $orig - $disc);
@@ -1179,7 +1179,7 @@ class VoucherController extends Controller
                         $detail = collect($leadServiceDetails)->first(function ($d) use ($extraService) {
                             return ($d['type'] ?? null) === 'extra_service' && ($d['id'] ?? null) == $extraService->id;
                         });
-                        if ($detail) {
+                        if ($detail && !isset($voucherServiceData['extra_' . $extraService->id])) {
                             $orig = floatval($detail['original_amount'] ?? $extraService->extra_service_amount ?? 0);
                             $disc = floatval($detail['discount_amount'] ?? 0);
                             $extraService->amount = max(0, $orig - $disc);
@@ -3121,7 +3121,7 @@ if (!empty($oldVendorRefundsMap)) {
         }
 
         if (is_array($ids)) {
-            return $ids;
+            return array_map('strval', $ids);
         }
 
         // Remove escaped quotes if present
@@ -3134,7 +3134,7 @@ if (!empty($oldVendorRefundsMap)) {
 
         $decoded = json_decode($cleaned, true);
 
-        return is_array($decoded) ? $decoded : [];
+        return is_array($decoded) ? array_map('strval', $decoded) : [];
     }
 
     protected function saveVoucherPdfWithOptionalExtra($voucher, $pdf, $storePath)
@@ -3235,371 +3235,776 @@ if (!empty($oldVendorRefundsMap)) {
         return response()->json(['message' => $message]);
     }
 
-    /**
-     * Update or create a follow-up entry when new services or extra services are added to voucher
-     * Strategy: Update latest followup if it's Active/Initiated and not locked by audit; otherwise create new
-     */
-    private function createFollowUpForAddedServices(Request $request, $lead, $existingVoucher = null)
-    {
-        try {
-            // Get the latest follow-up to compare services
-            $latestFollowup = $lead->leadFollowups()
-                ->orderBy('created_at', 'desc')
+/**
+ * Synchronize voucher service/extra-service changes back to LeadFollowup.
+ *
+ * IMPORTANT BUSINESS RULES:
+ * - Voucher customer amount is authoritative for this booking.
+ * - Vendor amount stays separate and is stored in LeadVendorPaymentDetail.
+ * - Service/ExtraService master prices are NEVER changed here.
+ * - Lead/follow-up status is NEVER changed by voucher save.
+ * - Amount-only changes must also update the follow-up.
+ */
+private function createFollowUpForAddedServices(
+    Request $request,
+    $lead,
+    $existingVoucher = null
+) {
+    try {
+        $latestFollowup = $lead->leadFollowups()
+            ->orderBy('created_at', 'desc')
+            ->first();
+
+        /*
+        |--------------------------------------------------------------------------
+        | 1. Build current Voucher service IDs + customer-facing amounts
+        |--------------------------------------------------------------------------
+        */
+
+        $currentServiceIds = [];
+        $currentExtraServiceIds = [];
+
+        $currentServiceAmounts = [];
+        $currentExtraServiceAmounts = [];
+
+        if ($request->has('services') && is_array($request->services)) {
+            foreach ($request->services as $serviceData) {
+                if (empty($serviceData['service_id'])) {
+                    continue;
+                }
+
+                $serviceId = (string) $serviceData['service_id'];
+
+                $currentServiceIds[] = $serviceId;
+
+                $currentServiceAmounts[$serviceId] =
+                    isset($serviceData['amount'])
+                        ? (float) $serviceData['amount']
+                        : 0.0;
+            }
+        }
+
+        if (
+            $request->has('extra_services')
+            && is_array($request->extra_services)
+        ) {
+            foreach ($request->extra_services as $extraServiceData) {
+                if (empty($extraServiceData['extra_service_id'])) {
+                    continue;
+                }
+
+                $extraServiceId =
+                    (string) $extraServiceData['extra_service_id'];
+
+                $currentExtraServiceIds[] = $extraServiceId;
+
+                $currentExtraServiceAmounts[$extraServiceId] =
+                    isset($extraServiceData['amount'])
+                        ? (float) $extraServiceData['amount']
+                        : 0.0;
+            }
+        }
+
+        $currentServiceIds = array_values(
+            array_unique($currentServiceIds)
+        );
+
+        $currentExtraServiceIds = array_values(
+            array_unique($currentExtraServiceIds)
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | 2. Read existing service IDs from latest follow-up
+        |--------------------------------------------------------------------------
+        */
+
+        $followupServiceIds = [];
+        $followupExtraServiceIds = [];
+
+        if ($latestFollowup) {
+            $followupServiceIds = $this->cleanServiceIds(
+                $latestFollowup->service_ids ?? []
+            );
+
+            $followupExtraServiceIds = $this->cleanServiceIds(
+                $latestFollowup->extra_service_ids ?? []
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | 3. Detect service additions/removals
+        |--------------------------------------------------------------------------
+        */
+
+        $newServiceIds = array_diff(
+            $currentServiceIds,
+            $followupServiceIds
+        );
+
+        $newExtraServiceIds = array_diff(
+            $currentExtraServiceIds,
+            $followupExtraServiceIds
+        );
+
+        $removedServiceIds = array_diff(
+            $followupServiceIds,
+            $currentServiceIds
+        );
+
+        $removedExtraServiceIds = array_diff(
+            $followupExtraServiceIds,
+            $currentExtraServiceIds
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | 4. Read latest follow-up pricing details
+        |--------------------------------------------------------------------------
+        */
+
+        $existingServiceDetails = [];
+
+        if ($latestFollowup && $latestFollowup->service_details) {
+            $decoded = is_string($latestFollowup->service_details)
+                ? json_decode(
+                    $latestFollowup->service_details,
+                    true
+                )
+                : $latestFollowup->service_details;
+
+            if (is_array($decoded)) {
+                foreach ($decoded as $detail) {
+                    $key =
+                        ($detail['type'] ?? '')
+                        . '_'
+                        . ($detail['id'] ?? '');
+
+                    $existingServiceDetails[$key] = $detail;
+                }
+            }
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | 5. Detect amount-only changes
+        |--------------------------------------------------------------------------
+        |
+        | Example:
+        |
+        | Yacht remains selected
+        | ₹30,000 -> ₹28,000
+        |
+        | Old code would miss this because service ID did not change.
+        |
+        */
+
+        $hasAmountChanges = false;
+
+        foreach ($currentServiceAmounts as $serviceId => $submittedAmount) {
+            $key = 'service_' . $serviceId;
+
+            if (!isset($existingServiceDetails[$key])) {
+                // A legacy follow-up may list the service but not its pricing
+                // detail. Treat it as requiring synchronization so the voucher
+                // can repair the incomplete historical row.
+                if (in_array($serviceId, $followupServiceIds, true)) {
+                    $hasAmountChanges = true;
+                    break;
+                }
+
+                // New service is handled by the ID-difference check below.
+                continue;
+            }
+
+            $detail = $existingServiceDetails[$key];
+
+            $originalAmount = (float) (
+                $detail['original_amount'] ?? 0
+            );
+
+            $discountAmount = (float) (
+                $detail['discount_amount'] ?? 0
+            );
+
+            $existingCustomerAmount = max(
+                0,
+                $originalAmount - $discountAmount
+            );
+
+            if (
+                abs(
+                    $existingCustomerAmount
+                    - (float) $submittedAmount
+                ) > 0.009
+            ) {
+                $hasAmountChanges = true;
+                break;
+            }
+        }
+
+        if (!$hasAmountChanges) {
+            foreach (
+                $currentExtraServiceAmounts
+                as $extraServiceId => $submittedAmount
+            ) {
+                $key = 'extra_service_' . $extraServiceId;
+
+                if (!isset($existingServiceDetails[$key])) {
+                    if (in_array($extraServiceId, $followupExtraServiceIds, true)) {
+                        $hasAmountChanges = true;
+                        break;
+                    }
+
+                    continue;
+                }
+
+                $detail = $existingServiceDetails[$key];
+
+                $originalAmount = (float) (
+                    $detail['original_amount'] ?? 0
+                );
+
+                $discountAmount = (float) (
+                    $detail['discount_amount'] ?? 0
+                );
+
+                $existingCustomerAmount = max(
+                    0,
+                    $originalAmount - $discountAmount
+                );
+
+                if (
+                    abs(
+                        $existingCustomerAmount
+                        - (float) $submittedAmount
+                    ) > 0.009
+                ) {
+                    $hasAmountChanges = true;
+                    break;
+                }
+            }
+        }
+
+        $hasChanges =
+            !empty($newServiceIds)
+            || !empty($newExtraServiceIds)
+            || !empty($removedServiceIds)
+            || !empty($removedExtraServiceIds)
+            || $hasAmountChanges;
+
+        if (!$hasChanges) {
+            Log::info(
+                'No voucher service/amount changes to sync to follow-up',
+                [
+                    'lead_id' => $lead->id,
+                    'services' => $currentServiceIds,
+                    'extra_services' => $currentExtraServiceIds,
+                ]
+            );
+
+            return;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | 6. Build audit note
+        |--------------------------------------------------------------------------
+        */
+
+        $action = $existingVoucher
+            ? 'updated'
+            : 'created';
+
+        $notesAddition =
+            "Services/Extra Services changed in voucher "
+            . "(voucher {$action}):\n";
+
+        if (!empty($newServiceIds)) {
+            $names = Service::whereIn(
+                'id',
+                $newServiceIds
+            )
+                ->get()
+                ->map(function ($service) {
+                    return $service->service
+                        ?? $service->service_name
+                        ?? null;
+                })
+                ->filter()
+                ->values()
+                ->toArray();
+
+            if (!empty($names)) {
+                $notesAddition .=
+                    "• New Services: "
+                    . implode(', ', $names)
+                    . "\n";
+            }
+        }
+
+        if (!empty($newExtraServiceIds)) {
+            $names = ExtraService::whereIn(
+                'id',
+                $newExtraServiceIds
+            )
+                ->pluck('extra_service')
+                ->filter()
+                ->values()
+                ->toArray();
+
+            if (!empty($names)) {
+                $notesAddition .=
+                    "• New Extra Services: "
+                    . implode(', ', $names)
+                    . "\n";
+            }
+        }
+
+        if (!empty($removedServiceIds)) {
+            $names = Service::whereIn(
+                'id',
+                $removedServiceIds
+            )
+                ->get()
+                ->map(function ($service) {
+                    return $service->service
+                        ?? $service->service_name
+                        ?? null;
+                })
+                ->filter()
+                ->values()
+                ->toArray();
+
+            if (!empty($names)) {
+                $notesAddition .=
+                    "• Removed Services: "
+                    . implode(', ', $names)
+                    . "\n";
+            }
+        }
+
+        if (!empty($removedExtraServiceIds)) {
+            $names = ExtraService::whereIn(
+                'id',
+                $removedExtraServiceIds
+            )
+                ->pluck('extra_service')
+                ->filter()
+                ->values()
+                ->toArray();
+
+            if (!empty($names)) {
+                $notesAddition .=
+                    "• Removed Extra Services: "
+                    . implode(', ', $names)
+                    . "\n";
+            }
+        }
+
+        if ($hasAmountChanges) {
+            $notesAddition .=
+                "• Customer service amount(s) updated\n";
+        }
+
+        $notesAddition .=
+            "(Changed during voucher {$action} on "
+            . now()->format('Y-m-d H:i')
+            . ")";
+
+        /*
+        |--------------------------------------------------------------------------
+        | 7. Build authoritative service_details from Voucher amounts
+        |--------------------------------------------------------------------------
+        |
+        | Example:
+        |
+        | Master price = 35,000
+        | Sales price  = 30,000
+        | Ops changes  = 28,000
+        |
+        | original_amount = 35,000
+        | discount_amount = 7,000
+        | displayed/final = 28,000
+        |
+        | This keeps existing service_details compatibility.
+        |
+        */
+
+        $serviceAmountTotal = 0;
+        $serviceDetailsArray = [];
+
+        if (!empty($currentServiceIds)) {
+            $services = Service::whereIn(
+                'id',
+                $currentServiceIds
+            )->get();
+
+            foreach ($services as $service) {
+                $serviceId = (string) $service->id;
+                $key = 'service_' . $serviceId;
+
+                $submittedAmount = array_key_exists(
+                    $serviceId,
+                    $currentServiceAmounts
+                )
+                    ? (float) $currentServiceAmounts[$serviceId]
+                    : (float) ($service->service_amount ?? 0);
+
+                $masterAmount =
+                    (float) ($service->service_amount ?? 0);
+
+                $previousOriginalAmount = isset($existingServiceDetails[$key])
+                    ? (float) ($existingServiceDetails[$key]['original_amount'] ?? 0)
+                    : 0.0;
+
+                $originalAmount = max(
+                    $masterAmount,
+                    $previousOriginalAmount,
+                    $submittedAmount
+                );
+
+                $discountAmount = max(
+                    0,
+                    $originalAmount - $submittedAmount
+                );
+
+                $serviceDetailsArray[] = [
+                    'id' => $service->id,
+                    'type' => 'service',
+                    'name' =>
+                        $service->service
+                        ?? $service->service_name
+                        ?? 'Service',
+                    'original_amount' => $originalAmount,
+                    'discount_amount' => $discountAmount,
+                ];
+
+                $serviceAmountTotal += $originalAmount;
+            }
+        }
+
+        if (!empty($currentExtraServiceIds)) {
+            $extraServices = ExtraService::whereIn(
+                'id',
+                $currentExtraServiceIds
+            )->get();
+
+            foreach ($extraServices as $extraService) {
+                $extraServiceId =
+                    (string) $extraService->id;
+
+                $key =
+                    'extra_service_'
+                    . $extraServiceId;
+
+                $submittedAmount = array_key_exists(
+                    $extraServiceId,
+                    $currentExtraServiceAmounts
+                )
+                    ? (float) (
+                        $currentExtraServiceAmounts[
+                            $extraServiceId
+                        ]
+                    )
+                    : (float) (
+                        $extraService->extra_service_amount
+                        ?? 0
+                    );
+
+                $masterAmount = (float) (
+                    $extraService->extra_service_amount
+                    ?? 0
+                );
+
+                $previousOriginalAmount = isset($existingServiceDetails[$key])
+                    ? (float) ($existingServiceDetails[$key]['original_amount'] ?? 0)
+                    : 0.0;
+
+                $originalAmount = max(
+                    $masterAmount,
+                    $previousOriginalAmount,
+                    $submittedAmount
+                );
+
+                $discountAmount = max(
+                    0,
+                    $originalAmount - $submittedAmount
+                );
+
+                $serviceDetailsArray[] = [
+                    'id' => $extraService->id,
+                    'type' => 'extra_service',
+                    'name' =>
+                        $extraService->extra_service
+                        ?? 'Extra Service',
+                    'original_amount' => $originalAmount,
+                    'discount_amount' => $discountAmount,
+                ];
+
+                $serviceAmountTotal += $originalAmount;
+            }
+        }
+
+        $totalDiscount = array_sum(
+            array_column(
+                $serviceDetailsArray,
+                'discount_amount'
+            )
+        );
+
+        $totalAmount = max(
+            0,
+            $serviceAmountTotal - $totalDiscount
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | 8. Decide whether to update current follow-up or create audit follow-up
+        |--------------------------------------------------------------------------
+        |
+        | KEEP existing behavior:
+        | Active/Initiated + recent + not payment locked => update.
+        |
+        | Otherwise create another follow-up preserving EXACT status.
+        |
+        */
+
+        $shouldUpdateLatest = false;
+
+        if ($latestFollowup) {
+            $updateableStatuses = [0, 1];
+
+            $isUpdateableStatus = in_array(
+                (int) $latestFollowup->status,
+                $updateableStatuses,
+                true
+            );
+
+            $hasAuditLock = false;
+
+            try {
+                $hasAuditLock =
+                    \App\Models\PaymentAuditTrail::where(
+                        'lead_followup_id',
+                        $latestFollowup->id
+                    )
+                        ->whereIn(
+                            'payment_status',
+                            [1, 2]
+                        )
+                        ->exists();
+            } catch (\Exception $e) {
+                Log::warning(
+                    'Could not check audit lock status: '
+                    . $e->getMessage()
+                );
+            }
+
+            $isRecent =
+                $latestFollowup->created_at
+                    ->gt(
+                        now()->subHours(48)
+                    );
+
+            $shouldUpdateLatest =
+                $isUpdateableStatus
+                && !$hasAuditLock
+                && $isRecent;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | 9. UPDATE existing follow-up WITHOUT touching status
+        |--------------------------------------------------------------------------
+        */
+
+        if ($shouldUpdateLatest) {
+            $currentNotes = trim(
+                (string) $latestFollowup->followup_note
+            );
+
+            $updatedNotes = $currentNotes !== ''
+                ? $currentNotes
+                    . "\n\n---\n"
+                    . $notesAddition
+                : $notesAddition;
+
+            $latestFollowup->update([
+                'followup_note' => $updatedNotes,
+
+                'service_ids' =>
+                    !empty($currentServiceIds)
+                        ? json_encode(
+                            $currentServiceIds
+                        )
+                        : null,
+
+                'extra_service_ids' =>
+                    !empty($currentExtraServiceIds)
+                        ? json_encode(
+                            $currentExtraServiceIds
+                        )
+                        : null,
+
+                'service_amount' =>
+                    $serviceAmountTotal,
+
+                'discount_amount' =>
+                    $totalDiscount,
+
+                'total_amount' =>
+                    $totalAmount,
+
+                'service_details' =>
+                    json_encode(
+                        $serviceDetailsArray
+                    ),
+
+                'updated_at' => now(),
+
+                // IMPORTANT:
+                // DO NOT put 'status' here.
+            ]);
+
+            Log::info(
+                'Voucher amounts synced to existing follow-up without changing status',
+                [
+                    'lead_id' => $lead->id,
+                    'followup_id' => $latestFollowup->id,
+                    'status' => $latestFollowup->status,
+                    'service_amount' =>
+                        $serviceAmountTotal,
+                    'discount_amount' =>
+                        $totalDiscount,
+                    'total_amount' =>
+                        $totalAmount,
+                ]
+            );
+
+            return;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | 10. CREATE follow-up while preserving EXACT latest status
+        |--------------------------------------------------------------------------
+        */
+
+        $latestFollowupForLead =
+            \App\Models\LeadFollowup::where(
+                'lead_id',
+                $lead->id
+            )
+                ->orderBy(
+                    'created_at',
+                    'desc'
+                )
                 ->first();
 
-            // Get current services and extra services from the request
-            $currentServiceIds = [];
-            $currentExtraServiceIds = [];
+        /*
+         * NEVER fallback from status 10/11 etc. to Active.
+         *
+         * Whatever the latest status is, preserve it.
+         */
+        $preservedStatus =
+            $latestFollowupForLead
+                && $latestFollowupForLead->status !== null
+                    ? (int) $latestFollowupForLead->status
+                    : 1;
 
-            if ($request->has('services')) {
-                foreach ($request->services as $serviceData) {
-                    if (!empty($serviceData['service_id'])) {
-                        $currentServiceIds[] = $serviceData['service_id'];
-                    }
-                }
-            }
+        $followupData = [
+            'id' => (string) Str::uuid(),
 
-            if ($request->has('extra_services')) {
-                foreach ($request->extra_services as $extraServiceData) {
-                    if (!empty($extraServiceData['extra_service_id'])) {
-                        $currentExtraServiceIds[] = $extraServiceData['extra_service_id'];
-                    }
-                }
-            }
+            'lead_id' => $lead->id,
 
-            // Get services from latest follow-up
-            $followupServiceIds = [];
-            $followupExtraServiceIds = [];
+            'followup_note' =>
+                $notesAddition,
 
-            if ($latestFollowup) {
-                $followupServiceIds = $this->cleanServiceIds($latestFollowup->service_ids ?? []);
-                $followupExtraServiceIds = $this->cleanServiceIds($latestFollowup->extra_service_ids ?? []);
-            }
+            /*
+             * CRITICAL:
+             * Voucher change cannot alter lead status.
+             */
+            'status' =>
+                $preservedStatus,
 
-            // Find newly added services and extra services
-            $newServiceIds = array_diff($currentServiceIds, $followupServiceIds);
-            $newExtraServiceIds = array_diff($currentExtraServiceIds, $followupExtraServiceIds);
+            'followed_by' =>
+                auth()->id(),
 
-            // Find removed services (were in followup but removed from voucher)
-            $removedServiceIds = array_diff($followupServiceIds, $currentServiceIds);
-            $removedExtraServiceIds = array_diff($followupExtraServiceIds, $currentExtraServiceIds);
+            'next_followup_date' =>
+                $latestFollowupForLead
+                    ? $latestFollowupForLead->next_followup_date
+                    : null,
 
-            // Proceed if there are new OR removed services/extra services
-            $hasChanges = !empty($newServiceIds) || !empty($newExtraServiceIds) || !empty($removedServiceIds) || !empty($removedExtraServiceIds);
-            if ($hasChanges) {
-                $action = $existingVoucher ? 'updated' : 'created';
-                $notesAddition = "Services/Extra Services changed in voucher (voucher {$action}):\n";
+            'service_ids' =>
+                !empty($currentServiceIds)
+                    ? json_encode(
+                        $currentServiceIds
+                    )
+                    : null,
 
-                // Add new services to notes
-                if (!empty($newServiceIds)) {
-                    $services = Service::whereIn('id', $newServiceIds)
-                        ->get()
-                        ->map(function ($s) {
-                            return $s->service ?? ($s->service_name ?? null);
-                        })
-                        ->filter()
-                        ->values()
-                        ->toArray();
-                    if (!empty($services)) {
-                        $notesAddition .= "• New Services: " . implode(', ', $services) . "\n";
-                    }
-                }
+            'extra_service_ids' =>
+                !empty($currentExtraServiceIds)
+                    ? json_encode(
+                        $currentExtraServiceIds
+                    )
+                    : null,
 
-                // Add new extra services to notes
-                if (!empty($newExtraServiceIds)) {
-                    $extraServices = ExtraService::whereIn('id', $newExtraServiceIds)->pluck('extra_service')->toArray();
-                    if (!empty($extraServices)) {
-                        $notesAddition .= "• New Extra Services: " . implode(', ', $extraServices) . "\n";
-                    }
-                }
+            'service_amount' =>
+                $serviceAmountTotal,
 
-                // Add removed services to notes
-                if (!empty($removedServiceIds)) {
-                    $removedServices = Service::whereIn('id', $removedServiceIds)
-                        ->get()
-                        ->map(function ($s) {
-                            return $s->service ?? ($s->service_name ?? null);
-                        })
-                        ->filter()
-                        ->values()
-                        ->toArray();
-                    if (!empty($removedServices)) {
-                        $notesAddition .= "• Removed Services: " . implode(', ', $removedServices) . "\n";
-                    }
-                }
+            'discount_amount' =>
+                $totalDiscount,
 
-                // Add removed extra services to notes
-                if (!empty($removedExtraServiceIds)) {
-                    $removedExtraServices = ExtraService::whereIn('id', $removedExtraServiceIds)->pluck('extra_service')->toArray();
-                    if (!empty($removedExtraServices)) {
-                        $notesAddition .= "• Removed Extra Services: " . implode(', ', $removedExtraServices) . "\n";
-                    }
-                }
+            'total_amount' =>
+                $totalAmount,
 
-                $notesAddition .= "(Changed during voucher {$action} on " . now()->format('Y-m-d H:i') . ")";
+            'service_details' =>
+                json_encode(
+                    $serviceDetailsArray
+                ),
+        ];
 
-                // Determine if we should UPDATE latest followup or CREATE new one
-                $shouldUpdateLatest = false;
+        $newFollowup =
+            \App\Models\LeadFollowup::create(
+                $followupData
+            );
 
-                if ($latestFollowup) {
-                    // Check if latest followup is in an "updateable" state
-                    $updateableStatuses = [0, 1]; // 0=Initiated, 1=Active
-                    $isUpdateableStatus = in_array($latestFollowup->status, $updateableStatuses);
+        Log::info(
+            'Voucher amounts synced by creating follow-up while preserving status',
+            [
+                'lead_id' => $lead->id,
+                'followup_id' =>
+                    $newFollowup->id,
+                'preserved_status' =>
+                    $preservedStatus,
+                'service_amount' =>
+                    $serviceAmountTotal,
+                'discount_amount' =>
+                    $totalDiscount,
+                'total_amount' =>
+                    $totalAmount,
+            ]
+        );
+    } catch (\Throwable $e) {
+        Log::error(
+            'Voucher service/follow-up synchronization failed',
+            [
+                'lead_id' =>
+                    $lead->id ?? null,
 
-                    // Check if followup is locked by payment audit (has approved/rejected payments)
-                    $hasAuditLock = false;
-                    try {
-                        $hasAuditLock = \App\Models\PaymentAuditTrail::where('lead_followup_id', $latestFollowup->id)
-                            ->whereIn('payment_status', PaymentAuditTrail::FINAL_REVIEW_STATUSES)
-                            ->exists();
-                    } catch (\Exception $e) {
-                        Log::warning('Could not check audit lock status: ' . $e->getMessage());
-                    }
+                'message' =>
+                    $e->getMessage(),
 
-                    // Optional: Check if followup is recent (within last 48 hours)
-                    $isRecent = $latestFollowup->created_at->gt(now()->subHours(48));
+                'stack_trace' =>
+                    $e->getTraceAsString(),
+            ]
+        );
 
-                    // Update if: updateable status + no audit lock + recent
-                    $shouldUpdateLatest = $isUpdateableStatus && !$hasAuditLock && $isRecent;
-                }
-
-                if ($shouldUpdateLatest) {
-                    // **UPDATE STRATEGY**: Append to existing followup and recalculate amounts
-                    $updatedNotes = trim($latestFollowup->followup_note) . "\n\n---\n" . $notesAddition;
-
-                    // Use current service IDs from voucher form (replaces old followup IDs to reflect removals)
-                    $mergedServiceIds = array_values(array_unique($currentServiceIds));
-                    $mergedExtraServiceIds = array_values(array_unique($currentExtraServiceIds));
-
-                    // **RECALCULATE AMOUNTS** - Fetch all service and extra service prices
-                    $serviceAmountTotal = 0;
-                    $serviceDetailsArray = [];
-
-                    // Get existing service_details to preserve discounts
-                    $existingServiceDetails = [];
-                    if ($latestFollowup->service_details) {
-                        $decoded = is_string($latestFollowup->service_details)
-                            ? json_decode($latestFollowup->service_details, true)
-                            : $latestFollowup->service_details;
-                        if (is_array($decoded)) {
-                            foreach ($decoded as $detail) {
-                                $key = ($detail['type'] ?? '') . '_' . ($detail['id'] ?? '');
-                                $existingServiceDetails[$key] = $detail;
-                            }
-                        }
-                    }
-
-                    // Process all merged services
-                    if (!empty($mergedServiceIds)) {
-                        $services = Service::whereIn('id', $mergedServiceIds)->get();
-                        foreach ($services as $service) {
-                            $serviceKey = 'service_' . $service->id;
-                            $originalAmount = (float) ($service->service_amount ?? 0);
-
-                            // Preserve existing discount if service was already there, otherwise 0
-                            $discountAmount = isset($existingServiceDetails[$serviceKey])
-                                ? (float) ($existingServiceDetails[$serviceKey]['discount_amount'] ?? 0)
-                                : 0;
-
-                            $serviceDetailsArray[] = [
-                                'id' => $service->id,
-                                'type' => 'service',
-                                'name' => $service->service ?? $service->service_name ?? 'Service',
-                                'original_amount' => $originalAmount,
-                                'discount_amount' => $discountAmount
-                            ];
-
-                            $serviceAmountTotal += $originalAmount;
-                        }
-                    }
-
-                    // Process all merged extra services
-                    if (!empty($mergedExtraServiceIds)) {
-                        $extraServices = ExtraService::whereIn('id', $mergedExtraServiceIds)->get();
-                        foreach ($extraServices as $extraService) {
-                            $extraKey = 'extra_service_' . $extraService->id;
-                            $originalAmount = (float) ($extraService->extra_service_amount ?? 0);
-
-                            // Preserve existing discount if extra service was already there, otherwise 0
-                            $discountAmount = isset($existingServiceDetails[$extraKey])
-                                ? (float) ($existingServiceDetails[$extraKey]['discount_amount'] ?? 0)
-                                : 0;
-
-                            $serviceDetailsArray[] = [
-                                'id' => $extraService->id,
-                                'type' => 'extra_service',
-                                'name' => $extraService->extra_service ?? 'Extra Service',
-                                'original_amount' => $originalAmount,
-                                'discount_amount' => $discountAmount
-                            ];
-
-                            $serviceAmountTotal += $originalAmount;
-                        }
-                    }
-
-                    // Calculate total discount and final total
-                    $totalDiscount = array_sum(array_column($serviceDetailsArray, 'discount_amount'));
-                    $totalAmount = $serviceAmountTotal - $totalDiscount;
-
-                    // Update followup with recalculated amounts
-                    $latestFollowup->update([
-                        'followup_note' => $updatedNotes,
-                        'service_ids' => !empty($mergedServiceIds) ? json_encode($mergedServiceIds) : null,
-                        'extra_service_ids' => !empty($mergedExtraServiceIds) ? json_encode($mergedExtraServiceIds) : null,
-                        'service_amount' => $serviceAmountTotal,
-                        'discount_amount' => $totalDiscount,
-                        'total_amount' => $totalAmount,
-                        'service_details' => json_encode($serviceDetailsArray),
-                        'updated_at' => now(),
-                    ]);
-
-                    $this->debugLog('Updated latest follow-up with service changes and recalculated amounts', [
-                        'lead_id' => $lead->id,
-                        'followup_id' => $latestFollowup->id,
-                        'new_services' => $newServiceIds,
-                        'new_extra_services' => $newExtraServiceIds,
-                        'removed_services' => $removedServiceIds,
-                        'removed_extra_services' => $removedExtraServiceIds,
-                        'final_services' => $mergedServiceIds,
-                        'final_extra_services' => $mergedExtraServiceIds,
-                        'service_amount' => $serviceAmountTotal,
-                        'discount_amount' => $totalDiscount,
-                        'total_amount' => $totalAmount,
-                        'voucher_action' => $action
-                    ]);
-                } else {
-                    // **CREATE STRATEGY**: Create new followup entry with recalculated amounts
-                    $latestFollowupForLead = \App\Models\LeadFollowup::where('lead_id', $lead->id)
-                        ->orderBy('created_at', 'desc')
-                        ->first();
-
-                    // **RECALCULATE AMOUNTS** for new followup
-                    $serviceAmountTotal = 0;
-                    $serviceDetailsArray = [];
-
-                    // Get existing service_details to preserve discounts for services that were in previous followup
-                    $existingServiceDetails = [];
-                    if ($latestFollowupForLead && $latestFollowupForLead->service_details) {
-                        $decoded = is_string($latestFollowupForLead->service_details)
-                            ? json_decode($latestFollowupForLead->service_details, true)
-                            : $latestFollowupForLead->service_details;
-                        if (is_array($decoded)) {
-                            foreach ($decoded as $detail) {
-                                $key = ($detail['type'] ?? '') . '_' . ($detail['id'] ?? '');
-                                $existingServiceDetails[$key] = $detail;
-                            }
-                        }
-                    }
-
-                    // Process all current services
-                    if (!empty($currentServiceIds)) {
-                        $services = Service::whereIn('id', $currentServiceIds)->get();
-                        foreach ($services as $service) {
-                            $serviceKey = 'service_' . $service->id;
-                            $originalAmount = (float) ($service->service_amount ?? 0);
-
-                            // Preserve existing discount if service was in previous followup, otherwise 0
-                            $discountAmount = isset($existingServiceDetails[$serviceKey])
-                                ? (float) ($existingServiceDetails[$serviceKey]['discount_amount'] ?? 0)
-                                : 0;
-
-                            $serviceDetailsArray[] = [
-                                'id' => $service->id,
-                                'type' => 'service',
-                                'name' => $service->service ?? $service->service_name ?? 'Service',
-                                'original_amount' => $originalAmount,
-                                'discount_amount' => $discountAmount
-                            ];
-
-                            $serviceAmountTotal += $originalAmount;
-                        }
-                    }
-
-                    // Process all current extra services
-                    if (!empty($currentExtraServiceIds)) {
-                        $extraServices = ExtraService::whereIn('id', $currentExtraServiceIds)->get();
-                        foreach ($extraServices as $extraService) {
-                            $extraKey = 'extra_service_' . $extraService->id;
-                            $originalAmount = (float) ($extraService->extra_service_amount ?? 0);
-
-                            // Preserve existing discount if extra service was in previous followup, otherwise 0
-                            $discountAmount = isset($existingServiceDetails[$extraKey])
-                                ? (float) ($existingServiceDetails[$extraKey]['discount_amount'] ?? 0)
-                                : 0;
-
-                            $serviceDetailsArray[] = [
-                                'id' => $extraService->id,
-                                'type' => 'extra_service',
-                                'name' => $extraService->extra_service ?? 'Extra Service',
-                                'original_amount' => $originalAmount,
-                                'discount_amount' => $discountAmount
-                            ];
-
-                            $serviceAmountTotal += $originalAmount;
-                        }
-                    }
-
-                    // Calculate total discount and final total
-                    $totalDiscount = array_sum(array_column($serviceDetailsArray, 'discount_amount'));
-                    $totalAmount = $serviceAmountTotal - $totalDiscount;
-
-                    // Preserve the latest business status when creating a voucher-change followup.
-                    // This prevents paid/approved/completed leads from being reset back to Active.
-                    $preservedStatus = 1; // fallback: Active
-                    if ($latestFollowupForLead && isset($latestFollowupForLead->status)) {
-                        $candidateStatus = (int) $latestFollowupForLead->status;
-                        if ($candidateStatus >= 0 && $candidateStatus <= 9) {
-                            $preservedStatus = $candidateStatus;
-                        }
-                    }
-
-                    $followupData = [
-                        'id' => Str::uuid(),
-                        'lead_id' => $lead->id,
-                        'followup_note' => $notesAddition,
-                        'status' => $preservedStatus,
-                        'followed_by' => auth()->id(),
-                        'next_followup_date' => now()->addDays(7)->format('Y-m-d H:i:s'),
-                        'service_ids' => !empty($currentServiceIds) ? json_encode($currentServiceIds) : null,
-                        'extra_service_ids' => !empty($currentExtraServiceIds) ? json_encode($currentExtraServiceIds) : null,
-                        // Calculated amounts based on actual service prices
-                        'service_amount' => $serviceAmountTotal,
-                        'discount_amount' => $totalDiscount,
-                        'total_amount' => $totalAmount,
-                        'service_details' => json_encode($serviceDetailsArray),
-                    ];
-
-                    $newFollowup = \App\Models\LeadFollowup::create($followupData);
-
-                    $this->debugLog('Created new follow-up with recalculated amounts', [
-                        'lead_id' => $lead->id,
-                        'followup_id' => $newFollowup->id,
-                        'new_services' => $newServiceIds,
-                        'new_extra_services' => $newExtraServiceIds,
-                        'service_amount' => $serviceAmountTotal,
-                        'discount_amount' => $totalDiscount,
-                        'total_amount' => $totalAmount,
-                        'voucher_action' => $action,
-                        'reason' => 'Latest followup not updateable (status=' . ($latestFollowup->status ?? 'none') . ')'
-                    ]);
-                }
-            } else {
-                $this->debugLog('No new services to add to follow-up', [
-                    'lead_id' => $lead->id,
-                    'current_services' => $currentServiceIds,
-                    'followup_services' => $followupServiceIds,
-                    'current_extra_services' => $currentExtraServiceIds,
-                    'followup_extra_services' => $followupExtraServiceIds
-                ]);
-            }
-        } catch (\Exception $e) {
-            Log::error('Error updating/creating follow-up for added services: ' . $e->getMessage(), [
-                'lead_id' => $lead->id ?? null,
-                'stack_trace' => $e->getTraceAsString()
-            ]);
-            // Don't fail the whole voucher process for follow-up error
-        }
+        throw $e;
     }
+}
 
     private function serviceExtraServicesMap($services): array
     {

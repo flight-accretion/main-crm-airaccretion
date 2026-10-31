@@ -1,5 +1,13 @@
 @extends('admin.layouts.header')
 @section('content')
+    <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/staff/manage-staff.css') }}?v=20261030">
+    @php
+        $staffTotal = $users->count();
+        $staffActive = $users->where('status', 1)->count();
+        $staffSales = $users->filter(fn ($staff) => Str::contains(strtolower(optional($staff->userType)->user_type ?? ''), 'sales'))->count();
+        $staffManagers = $users->filter(fn ($staff) => Str::contains(strtolower(optional($staff->userType)->user_type ?? ''), 'manager'))->count();
+    @endphp
+    <div class="crm-manage-staff">
     <!-- Page Header -->
     <div class="block justify-between page-header md:flex">
     </div>
@@ -18,12 +26,29 @@
     {{-- Include reusable success/error modals so we can show validation errors in a modal and reopen edit modal --}}
     @include('admin.partials.modals.success-error-modals')
 
+    <header class="ms-header">
+        <div class="ms-header__title">
+            <h1>Manage Staff</h1>
+            <p>View and manage CRM users, roles, access, and account status from one place.</p>
+        </div>
+        <button type="button" class="ms-btn ms-btn--primary" data-staff-add-trigger>
+            <i class="ri-add-line"></i> Add Staff
+        </button>
+    </header>
+
+    <section class="ms-stats" aria-label="Staff summary">
+        <article class="ms-stat"><span class="ms-stat__label">Total Staff</span><strong class="ms-stat__value">{{ $staffTotal }}</strong><span class="ms-stat__sub">All CRM users</span></article>
+        <article class="ms-stat ms-stat--active"><span class="ms-stat__label">Active</span><strong class="ms-stat__value">{{ $staffActive }}</strong><span class="ms-stat__sub">Currently enabled</span></article>
+        <article class="ms-stat ms-stat--sales"><span class="ms-stat__label">Sales Team</span><strong class="ms-stat__value">{{ $staffSales }}</strong><span class="ms-stat__sub">Sales roles</span></article>
+        <article class="ms-stat ms-stat--manager"><span class="ms-stat__label">Managers</span><strong class="ms-stat__value">{{ $staffManagers }}</strong><span class="ms-stat__sub">Across all departments</span></article>
+    </section>
+
     <div class="grid grid-cols-12">
         <div class="xl:col-span-12 col-span-12">
-            <div class="box">
+            <div class="box ms-card ms-add-card">
                 <div class="hs-accordion-group">
                     <div id="add-staff-accordion" class="hs-accordion " aria-labelledby="add-staff-accordion">
-                        <div class="box-header" style="display: block; padding-top: 10px; padding-bottom: 10px;">
+                        <div class="box-header ms-add-staff-header" style="display: block; padding-top: 10px; padding-bottom: 10px;">
                             <div class="flex items-center">
                                 <div class="me-4 gap-0">
                                     <span class="avatar avatar-sm !rounded-full bg-theme m-0">
@@ -228,53 +253,57 @@
     <!-- Staff Table -->
     <div class="grid grid-cols-12 gap-6">
         <div class="xl:col-span-12 col-span-12">
-            <div class="box custom-box">
-                <div class="box-header justify-between flex">
+            <div class="box custom-box ms-card ms-directory-card">
+                <div class="box-header justify-between flex ms-directory-head">
                     <div class="box-title">
-                        All Staff Members
+                        <strong>Staff Directory</strong>
+                        <span>Search, paginate, view, edit, and manage access using the existing controls.</span>
                     </div>
                 </div>
                 <div class="box-body">
                     <div class="table-responsive">
-                        <table class="table display responsive nowrap table-datatable" width="100%">
-                            <thead class="bg-primary text-white">
+                        <table class="table display responsive nowrap table-datatable ms-table" width="100%">
+                            <thead>
                                 <tr class="border-b border-defaultborder">
-                                    <th data-priority="1">S.No</th>
-                                    <th data-priority="2">Name</th>
-                                    <th data-priority="3">Email</th>
-                                    <th data-priority="4">User Type</th>
-                                    <th data-priority="5">Phone</th>
-                                    <th data-priority="6">Address</th>
-                                    <th data-priority="7">Status</th>
-                                    <th data-priority="8">Actions</th>
+                                    <th data-priority="1">#</th>
+                                    <th data-priority="2">Staff</th>
+                                    <th data-priority="3">Contact</th>
+                                    <th data-priority="4">Role / Department</th>
+                                    <th data-priority="5">Location</th>
+                                    <th data-priority="6">Status</th>
+                                    <th data-priority="7" class="text-right">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @foreach ($users as $key => $user)
                                     <tr class="border-b border-defaultborder">
                                         <td class="text-center">{{ $key + 1 }}</td>
-                                        <td>{{ $user->name }}</td>
-                                        <td>{{ $user->email }}</td>
-                                        <td>{{ $user->userType->user_type ?? 'N/A' }}</td>
-                                        <td class="text-center">{{ $user->contact_number ?? 'N/A' }}</td>
-                                        <td>{{ Str::limit($user->address ?? 'N/A', 50) }}</td>
-                                        <td class="text-center">
+                                        <td>
+                                            <div class="ms-staff">
+                                                <span class="ms-avatar">{{ Str::upper(Str::substr($user->name ?? 'N', 0, 1)) }}</span>
+                                                <div><strong>{{ $user->name }}</strong><span>Staff member</span></div>
+                                            </div>
+                                        </td>
+                                        <td><div class="ms-contact"><strong>{{ $user->email }}</strong><span>{{ $user->contact_number ?? 'N/A' }}</span></div></td>
+                                        <td><div class="ms-role"><strong>{{ $user->userType->user_type ?? 'N/A' }}</strong><span class="ms-badge ms-badge--department">{{ Str::before($user->userType->user_type ?? 'N/A', ' ') }}</span></div></td>
+                                        <td><span class="ms-location" title="{{ $user->address ?? 'N/A' }}">{{ Str::limit($user->address ?? 'N/A', 34) }}</span></td>
+                                        <td class="text-center staff-status-cell">
                                             @if ($user->status == 1)
-                                                <span class="badge bg-success/10 text-success">Active</span>
+                                                <span class="ms-badge ms-badge--active">Active</span>
                                             @else
-                                                <span class="badge bg-danger/10 text-danger">Inactive</span>
+                                                <span class="ms-badge ms-badge--inactive">Inactive</span>
                                             @endif
                                         </td>
                                         <td>
-                                            <div class="hstack flex gap-3 text-[.9375rem]">
+                                            <div class="ms-actions">
                                                 <a aria-label="anchor" href="javascript:void(0);"
-                                                    class="ti-btn ti-btn-icon ti-btn-sm ti-btn-primary-full view-staff-btn"
+                                                    class="ms-icon-btn view-staff-btn"
                                                     data-id="{{ $user->id }}"
                                                     data-bs-toggle="tooltip" data-bs-placement="top" title="View">
                                                     <i class="ri-eye-line"></i>
                                                 </a>
                                                 <a aria-label="anchor" href="javascript:void(0);"
-                                                    class="ti-btn ti-btn-icon ti-btn-sm ti-btn-info-full edit-staff-btn"
+                                                    class="ms-icon-btn ms-icon-btn--edit edit-staff-btn"
                                                     data-id="{{ $user->id }}"
                                                     data-bs-toggle="tooltip" data-bs-placement="top" title="Edit">
                                                     <i class="ri-edit-line"></i>
@@ -287,7 +316,7 @@
                                                                             <i class="ri-delete-bin-line"></i>
                                                                         </a> -->
                                                 <a aria-label="anchor" href="javascript:void(0);"
-                                                    class=" toggle-staff-status ti-btn ti-btn-icon ti-btn-sm ti-btn-success-full"
+                                                    class="toggle-staff-status ms-icon-btn ms-icon-btn--access"
                                                     data-id="{{ $user->id }}" data-status="{{ $user->status }}"
                                                     data-name="{{ $user->name }}" data-bs-toggle="tooltip"
                                                     data-bs-placement="top"
@@ -304,6 +333,7 @@
                 </div>
             </div>
         </div>
+    </div>
     </div>
 
     <!-- Delete Confirmation Modal -->
@@ -634,6 +664,10 @@
 @push('scripts')
     <script>
         $(document).ready(function() {
+            $(document).on('click', '[data-staff-add-trigger]', function() {
+                $('#add-staff-accordion > .ms-add-staff-header .hs-accordion-toggle').trigger('click');
+            });
+
             // Toggle staff status button click
             $(document).on('click', '.toggle-staff-status', function(e) {
                 e.preventDefault();
@@ -671,11 +705,11 @@
                             button.attr('title', newStatus ? 'Deactivate' : 'Activate')
                                 .data('status', newStatus);
 
-                            const statusCell = button.closest('tr').find('td:nth-child(7)');
+                            const statusCell = button.closest('tr').find('.staff-status-cell');
                             statusCell.html(
                                 newStatus ?
-                                '<span class="badge bg-success/10 text-success">Active</span>' :
-                                '<span class="badge bg-danger/10 text-danger">Inactive</span>'
+                                '<span class="ms-badge ms-badge--active">Active</span>' :
+                                '<span class="ms-badge ms-badge--inactive">Inactive</span>'
                             );
                         } else {
                             showToast('error', response.message);

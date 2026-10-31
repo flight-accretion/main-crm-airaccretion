@@ -28,7 +28,15 @@
     <div class="ld-warning" role="status">@if(!$latestLead->representative_user_id)This lead is unassigned. @endif @if(!$detailNext)No follow-up scheduled.@endif</div>
 @endif
 <header class="ld-hero">
-    <div class="ld-identity"><span class="ld-avatar">{{ strtoupper(substr($client->name ?: 'L', 0, 2)) }}</span><div><h1>{{ $client->name }}</h1><span class="ld-tag">{{ $latestFollowup ? $latestFollowup->statusLabel() : ($client->status == 1 ? 'Active' : 'Inactive') }}</span>@if($detailSource)<span class="ld-tag">{{ $detailSource }}</span>@endif
+    @php
+        $detailBusinessStatus = $latestLead
+            ? app(\App\Services\LeadStatusTransitionService::class)->displayedBusinessStatus($latestLead)
+            : null;
+        $detailStatusLabel = $detailBusinessStatus === null
+            ? ($client->status == 1 ? 'Active' : 'Inactive')
+            : (\App\Models\LeadFollowup::statusLabels()[$detailBusinessStatus] ?? 'N/A');
+    @endphp
+    <div class="ld-identity"><span class="ld-avatar">{{ strtoupper(substr($client->name ?: 'L', 0, 2)) }}</span><div><h1>{{ $client->name }}</h1><span class="ld-tag">{{ $detailStatusLabel }}</span>@if($detailSource)<span class="ld-tag">{{ $detailSource }}</span>@endif
         <p>@if($detailPhone)<a href="tel:{{ $detailPhone }}">{{ $detailPhone }}</a> &middot; @endif Created {{ optional($latestLead?->created_at)->format('d M Y') ?: '--' }} &middot; Owner: {{ $latestLead?->representative?->name ?: 'Unassigned' }}</p></div></div>
     @if($latestLead && $detailCanAct)<div class="ld-actions">
         <a class="ld-button" href="{{ route('admin.leads.follow-up.create', $latestLead) }}"><i class="ti ti-pencil" aria-hidden="true"></i> Manage lead</a>

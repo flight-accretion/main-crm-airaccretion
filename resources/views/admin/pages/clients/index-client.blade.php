@@ -1,6 +1,6 @@
 @extends('admin.layouts.header')
 @section('content')
-<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/leads/view-clients.css') }}?v=1">
+<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/leads/view-clients.css') }}?v=3">
     <!-- Compact Client Directory Header -->
     <div class="crm-client-directory-heading">
         <div>
@@ -417,7 +417,7 @@
 </section>
 
 <div class="crm-client-drawer-backdrop" data-client-view-backdrop hidden></div>
-<aside class="crm-client-view-drawer" data-client-view-drawer aria-hidden="true" aria-labelledby="client-view-drawer-title">
+<aside class="crm-client-view-drawer" data-client-view-drawer aria-hidden="true" aria-labelledby="client-view-drawer-title" hidden>
     <header class="crm-client-drawer-header">
         <div>
             <h2 id="client-view-drawer-title">Client Details</h2>
@@ -707,11 +707,13 @@
             const closeView = () => {
                 viewDrawer?.classList.remove('is-open');
                 viewDrawer?.setAttribute('aria-hidden', 'true');
+                if (viewDrawer) viewDrawer.hidden = true;
                 if (viewBackdrop) viewBackdrop.hidden = true;
                 document.body.classList.remove('overflow-hidden');
             };
             const openView = async (clientId) => {
                 if (!viewDrawer || !viewBackdrop || !clientId) return;
+                viewDrawer.hidden = false;
                 viewDrawer.classList.add('is-open');
                 viewDrawer.setAttribute('aria-hidden', 'false');
                 viewBackdrop.hidden = false;
@@ -720,9 +722,16 @@
 
                 try {
                     const url = "{{ route('admin.client.data', ':client') }}".replace(':client', encodeURIComponent(clientId));
-                    const response = await fetch(url, { headers: { Accept: 'application/json' } });
-                    if (!response.ok) throw new Error('Unable to load client details');
+                    const response = await fetch(url, {
+                        headers: {
+                            Accept: 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        credentials: 'same-origin'
+                    });
+                    if (!response.ok) throw new Error(`Unable to load client details (HTTP ${response.status})`);
                     const payload = await response.json();
+                    if (!payload.success || !payload.client) throw new Error(payload.message || 'Unable to load client details');
                     const client = payload.client || {};
                     const summary = payload.lead_summary || {};
                     setText('[data-client-view-name]', client.name, 'Unnamed Client');
@@ -739,14 +748,20 @@
                     setText('[data-client-view-product]', summary.latest_product);
                     setText('[data-client-view-activity]', summary.last_activity);
                 } catch (error) {
+                    console.error('Client detail drawer request failed:', error);
                     setText('[data-client-view-name]', 'Could not load details');
-                    setText('[data-client-view-status]', 'Please try again');
+                    setText('[data-client-view-status]', 'Please try again or contact support');
                 }
             };
             document.querySelectorAll('.crm-client-view-trigger').forEach((button) => {
                 button.addEventListener('click', () => openView(button.dataset.clientId));
             });
-            document.querySelector('[data-close-client-view]')?.addEventListener('click', closeView);
+            document.addEventListener('click', (event) => {
+                const closeButton = event.target.closest('[data-close-client-view]');
+                if (!closeButton) return;
+                event.preventDefault();
+                closeView();
+            });
             viewBackdrop?.addEventListener('click', closeView);
             document.addEventListener('keydown', (event) => {
                 if (event.key !== 'Escape') return;

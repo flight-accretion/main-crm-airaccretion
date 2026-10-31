@@ -3,10 +3,13 @@
 namespace App\Services;
 
 use App\Models\Lead;
+use App\Services\LeadStatusTransitionService;
 
 class ActiveLeadService
 {
-    private const NEW_LEAD_ALLOWED_FOLLOWUP_STATUSES = [2, 5];
+    public function __construct(private LeadStatusTransitionService $statusResolver)
+    {
+    }
 
     /**
      * Normalize any phone representation to digits only.
@@ -39,7 +42,7 @@ class ActiveLeadService
      * Find the latest duplicate-blocking lead for this phone.
      *
      * CRM rule:
-     * Latest follow-up status 2 (Cancelled) or 5 (Confirm/Complete) means
+     * Latest follow-up status 2 (Cancelled) or 5 (Ride Completed) means
      * a fresh lead can be created. Any other latest status is still treated
      * as the same lead journey, so new activity should become a follow-up.
      *
@@ -87,6 +90,7 @@ class ActiveLeadService
 
             $latestFollowup = $lead->leadFollowups()
                 ->orderByDesc('created_at')
+                ->orderByDesc('id')
                 ->first();
 
             /*
@@ -95,11 +99,7 @@ class ActiveLeadService
              */
             if (
                 $latestFollowup &&
-                !in_array(
-                    (int) $latestFollowup->status,
-                    self::NEW_LEAD_ALLOWED_FOLLOWUP_STATUSES,
-                    true
-                )
+                !$this->statusResolver->isTerminalForInbound($lead)
             ) {
                 return $lead;
             }

@@ -512,7 +512,7 @@
                                             <td>
                                                 <input type="number"
                                                     class="ti-form-input w-full rounded-sm form-control-sm"
-                                                    name="passengers[{{ $index }}][age]" placeholder="">
+                                                    name="passengers[{{ $index }}][age]" placeholder="" >
                                             </td>
                                             <td>
                                                 <select class="ti-form-select rounded-sm form-control-sm"

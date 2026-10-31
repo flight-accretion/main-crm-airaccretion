@@ -113,7 +113,7 @@
                     <tbody>
                         @forelse($payments as $index => $payment)
                             @php
-                                $followupStatusLabels = [2 => 'Cancelled', 3 => 'Full Paid', 4 => 'Partial Paid', 5 => 'Confirmed/Complete', 6 => 'Pending', 7 => 'Rescheduled', 8 => 'Approved', 9 => 'Rejected'];
+                                $followupStatusLabels = [2 => 'Cancelled', 3 => 'Full Paid', 4 => 'Partial Paid', 5 => 'Ride Completed', 6 => 'Pending', 7 => 'Rescheduled', 8 => 'Approved', 9 => 'Rejected', 10 => 'Sales Follow-up', 11 => 'Close Follow-up'];
                                 $statusLabel = $followupStatusLabels[$payment->status] ?? 'Unknown';
                                 $statusTone = [3 => 'green', 4 => 'amber', 2 => 'red', 8 => 'blue', 9 => 'neutral'][$payment->status] ?? 'neutral';
                                 $received = (float) ($payment->received_amount ?? 0);
@@ -189,6 +189,21 @@
                         <span class="pr-pill amber" id="pr-review-status" hidden></span>
                         <a href="#" id="pr-open-lead" target="_blank" rel="noopener" hidden>Open lead <span aria-hidden="true">&rarr;</span></a>
                         <span class="pr-review-muted" id="pr-received-at"></span>
+                       <span
+                            class="pr-review-title pr-pill amber"
+                            id="pr-sales-person"
+                        >
+                            <i
+                                class="ri-user-line"
+                                aria-hidden="true"
+                            ></i>
+
+                            Sales Person:
+
+                            <strong id="pr-sales-person-name">
+                                Loading...
+                            </strong>
+                        </span>
                     </div>
                 </div>
                 <button type="button" class="pr-review-close" data-hs-overlay="#view-payment-review" aria-label="Close">
@@ -601,25 +616,41 @@
                     beforeSend: function() {
                         // Show loading state
                         $('#client-name-header').text('Loading...');
+                        $('#pr-sales-person-name')
+                        .text(
+                            'Loading...'
+                        );
                         $('#pr-review-status, #pr-verdict-note, #pr-open-lead').prop('hidden', true);
                         $('#pr-received-at').text('');
                     },
                     success: function(response) {
                         const {
-                            followup,
-                            client,
-                            rides,
-                            services,
-                            extraServices,
-                            paymentHistory,
-                            latestAudit
-                        } = response;
+                        followup,
+                        client,
+                        representative,
+                        rides,
+                        services,
+                        extraServices,
+                        paymentHistory,
+                        latestAudit
+                    } = response;
 
                         // Set form ID
                         $('#payment-followup-id').val(followup.id);
 
                         // Update header
                         $('#client-name-header').text(client.name || 'Unknown Client');
+                        /*
+                        |--------------------------------------------------------------------------
+                        | Assigned Sales Person
+                        |--------------------------------------------------------------------------
+                        */
+
+                        $('#pr-sales-person-name')
+                            .text(
+                                representative?.name
+                                || 'Unassigned'
+                            );
 
                         // Update client information
                         $('#client-name').text(client.name || '-');

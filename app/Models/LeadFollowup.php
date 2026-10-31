@@ -17,16 +17,31 @@ class LeadFollowup extends Model
     public const STATUS_CANCELLED = 2;
     public const STATUS_FULL_PAYMENT_RECEIVED = 3;
     public const STATUS_PARTIAL_PAYMENT_RECEIVED = 4;
-    public const STATUS_CONFIRMED = 5;
+    public const STATUS_RIDE_COMPLETED = 5;
+    /** @deprecated Use STATUS_RIDE_COMPLETED. Kept for existing Ride/Invoice code. */
+    public const STATUS_CONFIRMED = self::STATUS_RIDE_COMPLETED;
     public const STATUS_PENDING = 6;
     public const STATUS_RESCHEDULED = 7;
     public const STATUS_APPROVED = 8;
     public const STATUS_REJECTED = 9;
+    public const STATUS_SALES_FOLLOW_UP = 10;
+    public const STATUS_CLOSE_FOLLOW_UP = 11;
+
+    public const FOLLOWUP_ONLY_STATUSES = [
+        self::STATUS_SALES_FOLLOW_UP,
+        self::STATUS_CLOSE_FOLLOW_UP,
+    ];
+
+    public const INBOUND_TERMINAL_STATUSES = [
+        self::STATUS_CANCELLED,
+        self::STATUS_RIDE_COMPLETED,
+    ];
 
     public const SALES_AMOUNT_STATUSES = [
         self::STATUS_CANCELLED,
         self::STATUS_FULL_PAYMENT_RECEIVED,
         self::STATUS_PARTIAL_PAYMENT_RECEIVED,
+        self::STATUS_SALES_FOLLOW_UP,
         self::STATUS_CONFIRMED,
         self::STATUS_RESCHEDULED,
         self::STATUS_APPROVED,
@@ -41,6 +56,7 @@ class LeadFollowup extends Model
         self::STATUS_CANCELLED,
         self::STATUS_CONFIRMED,
         self::STATUS_REJECTED,
+        self::STATUS_CLOSE_FOLLOW_UP,
     ];
 
     public const MANUAL_REPEAT_LEAD_SOURCE_STATUSES = [
@@ -122,7 +138,7 @@ class LeadFollowup extends Model
 // 2=canceled
 // 3=Full payment received
 // 4=Partial payment received
-// 5=confirm/complete
+// 5=ride completed
 // 6=pending
 // 7=reschedule
 // 8=approve
@@ -141,11 +157,13 @@ class LeadFollowup extends Model
             self::STATUS_CANCELLED => 'Cancelled',
             self::STATUS_FULL_PAYMENT_RECEIVED => 'Full Payment Received',
             self::STATUS_PARTIAL_PAYMENT_RECEIVED => 'Partial Payment Received',
-            self::STATUS_CONFIRMED => 'Confirmed',
+            self::STATUS_RIDE_COMPLETED => 'Ride Completed',
             self::STATUS_PENDING => 'Pending',
             self::STATUS_RESCHEDULED => 'Rescheduled',
             self::STATUS_APPROVED => 'Approved',
             self::STATUS_REJECTED => 'Rejected',
+            self::STATUS_SALES_FOLLOW_UP => 'Sales Follow-up',
+            self::STATUS_CLOSE_FOLLOW_UP => 'Close Follow-up',
         ];
     }
 
@@ -208,7 +226,7 @@ class LeadFollowup extends Model
 | Do not allow closed/hidden lead statuses to retain a follow-up date
 |--------------------------------------------------------------------------
 |
-| Cancelled, Confirmed and Rejected leads must never return to
+| Cancelled, Ride Completed and Rejected leads must never return to
 | Today's Follow-up because of a stale next_followup_date.
 |
 */

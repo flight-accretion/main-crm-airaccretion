@@ -303,15 +303,8 @@ class UserController extends Controller
     }
      public function create()
     {
-        // Get Super Admin ID first
-        $superAdmin = UserType::where('user_type', UserType::SUPER_ADMIN)->first();
-
-        // Get children of Super Admin as the first level options (excluding Admin & Owner — only Super Admin provisions those)
-        $userTypes = UserType::where('parent_id', $superAdmin->id)
-                ->whereNotIn('user_type', [UserType::ADMIN, UserType::OWNER])
-                ->where('status', 1)
-                ->orderBy('user_type', 'asc')
-                ->get();
+        $userTypes = app(UserManagementAuthorizationService::class)
+            ->assignableUserTypes(auth()->user());
 
         return view('admin.pages.staff.add-staff', compact('userTypes'));
     }
@@ -442,15 +435,8 @@ class UserController extends Controller
         ->orderBy('created_at', 'desc')
         ->get();
 
-        // Get Super Admin ID first
-        $superAdmin = UserType::where('user_type', UserType::SUPER_ADMIN)->first();
-
-        // Get children of Super Admin as the first level options (excluding Admin & Owner — only Super Admin provisions those)
-        $userTypes = UserType::where('parent_id', $superAdmin->id)
-                ->whereNotIn('user_type', [UserType::ADMIN, UserType::OWNER])
-                ->where('status', 1)
-                ->orderBy('user_type', 'asc')
-                ->get();
+        $userTypes = app(UserManagementAuthorizationService::class)
+            ->assignableUserTypes(auth()->user());
 
         return view('admin.pages.staff.index-staff', [
             'users' => $users,

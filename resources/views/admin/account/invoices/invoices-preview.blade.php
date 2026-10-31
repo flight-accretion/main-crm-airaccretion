@@ -348,7 +348,7 @@
         <!-- Service Details -->
         <div class="box">
             <h3>Service Details :</h3>
-            <p style="text-align:right; font-size:14px; color:#333; margin-bottom:8px;">Total Service Cost: <strong>Rs.{{ number_format($invoiceData['vendor']['total_service_amount'] ?? $invoiceData['vendor']['totalVendorCost'] ?? 0, 0) }}</strong></p>
+            <p style="text-align:right; font-size:14px; color:#333; margin-bottom:8px;">Total Customer Amount: <strong>Rs.{{ number_format($invoiceData['payment']['total_amount'] ?? 0, 0) }}</strong></p>
             <table class="service-table">
                 <thead>
                     <tr>

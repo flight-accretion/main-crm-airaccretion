@@ -576,7 +576,7 @@ public function cancelImageCollection(
                 2 => 'Cancelled',
                 3 => 'Full Payment Received',
                 4 => 'Partial Payment Received',
-                5 => 'Confirmed',
+                5 => 'Ride Completed',
                 6 => 'Pending',
                 7 => 'Reschedule',
                 8 => 'Approved',

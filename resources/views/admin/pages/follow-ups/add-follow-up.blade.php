@@ -161,7 +161,18 @@
                     <div class="lw-section-body">
                         <div class="lw-lead-actions">
                             <a class="lw-btn" href="{{ route('admin.leads.transfers.index') }}">Transfer Lead</a>
-                            <button type="button" class="lw-btn lw-btn--danger" data-workspace-cancel-lead>Cancel Lead</button>
+                            @if(
+                                !($isSalesUser ?? false)
+                                || !($hasApprovedPayment ?? false)
+                            )
+                                <button
+                                    type="button"
+                                    class="lw-btn lw-btn--danger"
+                                    data-workspace-cancel-lead
+                                >
+                                    Cancel Lead
+                                </button>
+                            @endif
                         </div>
                         <p class="lw-action-help">Only actions permitted for your role are available.</p>
                     </div>

@@ -118,14 +118,15 @@ class LeadStatusPreservationTest extends KpiFeatureTestCase
         return $cases;
     }
 
-    public function test_explicit_status_change_still_works(): void
+    public function test_sales_cannot_cancel_after_approved_payment(): void
     {
         [, $lead] = $this->fixture(UserType::SALES_EXECUTIVE);
         $request = $this->request(['notes' => 'Customer requested cancellation', 'status' => 2], true);
         $response = app(ClientController::class)->storeLeadFollowUp($request, $lead);
-        $this->assertSame(200, $response->getStatusCode());
-        $this->assertSame(2, (int) $response->getData()->data->status);
-        $this->assertSame(1, DB::table('kpi_activity_events')->where('event_type', 'status_changed')->count());
+        $this->assertSame(422, $response->getStatusCode());
+        $this->assertSame(1, $lead->leadFollowups()->count());
+        $this->assertSame(0, DB::table('kpi_activity_events')->where('event_type', 'status_changed')->count());
+        $this->assertSame(1, DB::table('payment_audit_trail')->count());
     }
 
     public function test_explicit_payment_still_requires_payment_details(): void
@@ -213,12 +214,12 @@ class LeadStatusPreservationTest extends KpiFeatureTestCase
         [, $lead] = $this->fixture(UserType::SALES_EXECUTIVE);
         $this->request([]);
         $html = view('admin.pages.follow-ups.partials.status-select', ['followups' => $lead->leadFollowups()->get()])->render();
-        $this->assertStringContainsString('value="keep" selected', $html);
-        $this->assertStringContainsString('Keep current status - Full Payment Received', $html);
+        $this->assertMatchesRegularExpression('/<option\s+value="keep"\s+selected\s*>/', $html);
+        $this->assertStringContainsString('Select action', $html);
         if ($path = getenv('CRM_STATUS_SELECT_PREVIEW')) file_put_contents($path, $html);
         session()->flashInput(['status' => '4']);
         $html = view('admin.pages.follow-ups.partials.status-select', ['followups' => $lead->leadFollowups()->get()])->render();
-        $this->assertStringContainsString('value="4" selected', $html);
+        $this->assertMatchesRegularExpression('/<option\s+value="4"\s+selected\s*>/', $html);
         $this->assertStringNotContainsString('value="keep" selected', $html);
     }
 

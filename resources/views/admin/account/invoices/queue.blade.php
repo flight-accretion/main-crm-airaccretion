@@ -44,6 +44,7 @@
             <tbody>@forelse($invoicesData as $index => $invoice)
                 @php($finalized = $invoice['invoice_status'] === 2)
                 @php($voucher = $vouchers->firstWhere('id', $invoice['id']))
+                @php($canRegenerateInvoice = auth()->check() && (in_array(optional(auth()->user()->userType)->user_type, array_merge(\App\Models\UserType::ADMIN_ROLES, \App\Models\UserType::ACCOUNTS_ROLES, \App\Models\UserType::OWNER_ROLES), true)))
                 <tr class="ai-invoice-row" data-invoice-id="{{ $invoice['id'] }}" tabindex="0" aria-label="View invoice details for {{ $invoice['client']['name'] }}">
                     <td data-label="#">{{ ($vouchers->firstItem() ?: 1) + $index }}</td>
                     <td data-label="Client / billing"><div><strong>{{ $invoice['client']['name'] }}</strong><a class="ai-phone" href="tel:{{ $invoice['client']['phone'] }}">{{ $invoice['client']['phone'] }}</a><small>{{ $invoice['invoice_company_name'] !== 'N/A' ? $invoice['invoice_company_name'] : 'Individual customer' }}</small>@if($invoice['invoice_gst_number'] !== 'N/A')<small>GSTIN {{ $invoice['invoice_gst_number'] }}</small>@endif<small class="ai-number">{{ $invoice['existing_invoice_id'] ?: 'Not generated' }}</small></div></td>
@@ -55,6 +56,7 @@
                     <td data-label="Actions"><div class="ai-actions">
                         @if(!$invoice['existing_invoice'])<button type="button" class="ai-button primary generate-invoice-btn" data-invoice-id="{{ $invoice['id'] }}" data-client-name="{{ $invoice['client']['name'] }}" data-company-name="{{ $invoice['client']['company_name'] }}" data-gst-number="{{ $invoice['client']['gst_number'] }}">Generate</button>
                         @elseif(!$finalized)<button type="button" class="ai-button primary finalize-invoice-btn" data-invoice-id="{{ $invoice['id'] }}" data-client-name="{{ $invoice['client']['name'] }}">Finalize</button>@endif
+                        @if($invoice['existing_invoice'] && $canRegenerateInvoice)<button type="button" class="ai-button regenerate-invoice-btn" data-invoice-id="{{ $invoice['id'] }}">Regenerate</button>@endif
                         @if(!$finalized)<button type="button" class="ai-button ai-gst-btn" data-invoice-id="{{ $invoice['id'] }}" title="Optional GST and billing details">GST details</button>@endif
                         @if($invoice['existing_invoice'])<a class="ai-button ai-icon" href="{{ route('admin.account.invoices.pdf', $invoice['id']) }}" target="_blank" rel="noopener" aria-label="Preview invoice PDF" title="Preview PDF"><i class="ri-file-pdf-2-line" aria-hidden="true"></i></a><a class="ai-button ai-icon" href="{{ route('admin.account.invoices.download', $invoice['id']) }}" aria-label="Download invoice" title="Download invoice"><i class="ri-download-2-line" aria-hidden="true"></i></a>@endif
                     </div></td>

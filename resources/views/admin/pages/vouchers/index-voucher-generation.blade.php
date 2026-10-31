@@ -18,7 +18,7 @@
         && (in_array($currentUserType, \App\Models\UserType::ADMIN_ROLES) || in_array($currentUserType, \App\Models\UserType::OPERATIONS_ROLES));
     $isSuperAdmin = in_array(optional(auth()->user()->userType)->user_type, [\App\Models\UserType::SUPER_ADMIN]);
 
-    $crmStatusLabels = [0 => 'Initiated', 1 => 'Active', 2 => 'Cancelled', 3 => 'Full Payment Received', 4 => 'Partial Payment Received', 5 => 'Confirmed', 6 => 'Pending', 7 => 'Rescheduled', 8 => 'Approved', 9 => 'Rejected'];
+    $crmStatusLabels = [0 => 'Initiated', 1 => 'Active', 2 => 'Cancelled', 3 => 'Full Payment Received', 4 => 'Partial Payment Received', 5 => 'Ride Completed', 6 => 'Pending', 7 => 'Rescheduled', 8 => 'Approved', 9 => 'Rejected', 10 => 'Sales Follow-up', 11 => 'Close Follow-up'];
     $within48hLimit = now()->addHours(48);
 
     // "in 1 day 4 hrs" / "2 days ago" - time left to the service date.

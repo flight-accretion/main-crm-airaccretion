@@ -257,18 +257,7 @@
                             <ul class="list-unstyled mb-0 upcoming-events-list">
                                 @foreach($historyRows as $followup)
                                     @php
-                                        $statusLabels = [
-                                            0 => 'Initiated',
-                                            1 => 'Active',
-                                            2 => 'Cancelled',
-                                            3 => 'Full payment received',
-                                            4 => 'Partial payment received',
-                                            5 => 'Completed',
-                                            6 => 'Pending',
-                                            7 => 'Rescheduled',
-                                            8 => 'Approved',
-                                            9 => 'Rejected',
-                                        ];
+                                        $statusLabels = \App\Models\LeadFollowup::statusLabels();
                                         $statusText = $statusLabels[(int) $followup->status] ?? 'N/A';
                                     @endphp
                                     <li>

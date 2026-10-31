@@ -36,6 +36,7 @@ use App\Models\VendorPayment;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Storage;
 use App\Services\BookingSalesContactResolver;
+use App\Support\NotificationRecipientGuard;
 
 
 class RideController extends Controller
@@ -979,7 +980,7 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                 'number_of_passengers' => $lead ? $lead->number_of_passengers : 0,
                 'occasion' => $lead ? $lead->occasion : '',
                 'status_id' => $statusId,
-                'status_name' => $statusId == 5 ? 'Completed' : (LeadFollowup::statusLabels()[(int) $statusId] ?? 'Pending'),
+                'status_name' => $statusId == 5 ? 'Ride Completed' : (LeadFollowup::statusLabels()[(int) $statusId] ?? 'Pending'),
             ];
         });
 
@@ -1004,7 +1005,7 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
             // 2 => 'Cancelled',
             // 3 => 'Full Payment',
             // 4 => 'Partial Payment',
-            5 => 'Completed',
+            5 => 'Ride Completed',
             // 6 => 'Pending',
             7 => 'Reschedule',
             // 8 => 'Payment Approved',
@@ -1203,7 +1204,7 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                 //2 => 'Cancelled',
                 // 3 => 'Full Payment',
                 // 4 => 'Partial Payment',
-                5 => 'Completed',
+                5 => 'Ride Completed',
                 //6 => 'Pending',
                 7 => 'Reschedule',
                 // 8 => 'Payment Approved',
@@ -1442,7 +1443,7 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
             $pendingAmount = $this->calculatePendingAmount($lead);
 
             // Compute status name from latest followup
-            $statusMap = [1 => 'Active', 5 => 'Completed', 7 => 'Reschedule'];
+            $statusMap = [1 => 'Active', 5 => 'Ride Completed', 7 => 'Reschedule'];
             $statusName = null;
             if ($latestFollowup && isset($latestFollowup->status) && isset($statusMap[$latestFollowup->status])) {
                 $statusName = $statusMap[$latestFollowup->status];
@@ -1894,7 +1895,7 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                 2 => 'Cancelled',
                 3 => 'Full Payment Received',
                 4 => 'Partial Payment Received',
-                5 => 'Completed',
+                5 => 'Ride Completed',
                 7 => 'Reschedule',
                 8 => 'Approved',
             ];
@@ -2162,7 +2163,9 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
             ]);
 
             $balanceAmount = $totalAmount - $totalReceived;
-            Log::info(['service_extra_services' => $serviceExtraServices]);
+            Log::info('Service extra services', [
+                'service_extra_services' => $serviceExtraServices,
+            ]);
             // Attempt to fetch an existing refund for the lead's followups (if any)
             $refundData = null;
             try {
@@ -2520,15 +2523,13 @@ return [
                         $existingInvoice = \App\Models\Invoice::where('voucher_id', $voucher->id)->first();
 
                         if ($existingInvoice) {
-                            // Auto-generate invoice in active state (not auto-finalizing)
-                            if ((int) $existingInvoice->status !== 2 && $existingInvoice->status != 1) {
-                                $existingInvoice->status = 1;
-                                $existingInvoice->save();
-                                Log::info('Auto-generated invoice on ride completion (active state)', [
-                                    'ride_id' => $rideId,
-                                    'invoice_id' => $existingInvoice->invoice_id,
-                                ]);
-                            }
+                            // Completing a ride must never reopen, renumber or
+                            // otherwise mutate an invoice that already exists.
+                            Log::info('Existing invoice retained on ride completion', [
+                                'ride_id' => $rideId,
+                                'invoice_id' => $existingInvoice->invoice_id,
+                                'invoice_status' => $existingInvoice->status,
+                            ]);
 
                             $invoiceData = [
                                 'invoice_id' => $existingInvoice->invoice_id,
@@ -3814,7 +3815,19 @@ return [
                 // CUSTOMER — Blade Email
                 // ════════════════════════════════════════════════════════════════
                 $customerEmail = $client->email ?? null;
-                if (!empty($customerEmail) && filter_var($customerEmail, FILTER_VALIDATE_EMAIL)) {
+                $customerEmailConflict = NotificationRecipientGuard::overlaps(
+                    [$customerEmail],
+                    [],
+                    $vendorEmails,
+                    []
+                );
+
+                if ($customerEmailConflict) {
+                    Log::warning('sendRefundEmail: customer email blocked because it matches a vendor contact', [
+                        'refund_id' => $refund->id,
+                    ]);
+                    $errors[] = 'Customer email matches a vendor contact; notification was blocked.';
+                } elseif (!empty($customerEmail) && filter_var($customerEmail, FILTER_VALIDATE_EMAIL)) {
                     try {
                         $mail = Mail::to($customerEmail);
                         if (!empty($notificationMasterCcEmails)) {
@@ -3843,7 +3856,18 @@ return [
                 // ════════════════════════════════════════════════════════════════
                 // CUSTOMER — WhatsApp (dynamic template: image or PDF)
                 // ════════════════════════════════════════════════════════════════
-                if ($skipWhatsApp) {
+                $customerWhatsAppConflict = NotificationRecipientGuard::overlaps(
+                    [],
+                    [$customerWhatsApp ?? null],
+                    [],
+                    $vendorPhones
+                );
+
+                if ($customerWhatsAppConflict) {
+                    Log::warning('sendRefundEmail: customer WhatsApp blocked because number matches a vendor contact', [
+                        'refund_id' => $refund->id,
+                    ]);
+                } elseif ($skipWhatsApp) {
                     Log::warning('sendRefundEmail: skipping customer WhatsApp — no proof file');
                 } elseif (empty($customerWhatsApp)) {
                     Log::warning('sendRefundEmail: customer WhatsApp number missing');
@@ -5278,6 +5302,24 @@ private function sendVendorRefundNotifications(string $vendorRefundId): void
         $customerPhone = null;
     }
 
+    $customerPhones = array_values(array_filter([
+        $client->contact_number ?? null,
+        $client->alternate_number ?? null,
+        $customerPhone,
+    ]));
+    $vendorRefundEmailConflict = NotificationRecipientGuard::overlaps(
+        [$vendorEmail],
+        [],
+        [$customerEmail],
+        []
+    );
+    $vendorRefundWhatsAppConflict = NotificationRecipientGuard::overlaps(
+        [],
+        [$vendorPhone],
+        [],
+        $customerPhones
+    );
+
     $proofFilePath = null;
     $proofFileUrl = null;
     $proofFilename = null;
@@ -5330,7 +5372,11 @@ private function sendVendorRefundNotifications(string $vendorRefundId): void
         ->values()
         ->all();
 
-    if (!empty($vendorEmail) && filter_var($vendorEmail, FILTER_VALIDATE_EMAIL)) {
+    if ($vendorRefundEmailConflict) {
+        Log::warning('Vendor refund email blocked because it matches a customer contact', [
+            'vendor_refund_id' => $vendorRefund->id,
+        ]);
+    } elseif (!empty($vendorEmail) && filter_var($vendorEmail, FILTER_VALIDATE_EMAIL)) {
         try {
             $mail = Mail::to($vendorEmail);
             if (!empty($notificationMasterCcEmails)) {
@@ -5375,7 +5421,11 @@ private function sendVendorRefundNotifications(string $vendorRefundId): void
         $vendorRefund->refund_type ?? 'N/A',
     ];
 
-    if (!empty($vendorPhone)) {
+    if ($vendorRefundWhatsAppConflict) {
+        Log::warning('Vendor refund WhatsApp blocked because number matches a customer contact', [
+            'vendor_refund_id' => $vendorRefund->id,
+        ]);
+    } elseif (!empty($vendorPhone)) {
         try {
             $waResult = $vendorRefundWhatsApp->send(
                 $vendorPhone,
