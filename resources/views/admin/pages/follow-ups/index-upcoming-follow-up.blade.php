@@ -6,7 +6,7 @@
 @endphp
 <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/kpi/management-work.css') }}?v=1">
 <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/lead-queues.css') }}?v=1">
-@if($canComposeMsg91Campaign)<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/whatsapp/campaign-composer.css') }}?v=1">@endif
+@if($canComposeMsg91Campaign)<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/whatsapp/campaign-composer.css') }}?v=2">@endif
 <div class="crm-kpi-tool crm-lead-queue" data-kpi-tool data-lead-queue>
     <header class="lq-heading"><div><h3>Today's Follow-up</h3><p>{{ $fromDate->format('d M Y') }}</p></div>
     <div class="flex items-center gap-2">
@@ -191,5 +191,5 @@
 
 <script src="{{ asset('assets/admin/js/crm/kpi-tools.js') }}?v=1"></script>
 <script src="{{ asset('assets/admin/js/crm/lead-queues.js') }}?v=1"></script>
-@if($canComposeMsg91Campaign)<script src="{{ asset('assets/admin/js/crm/whatsapp/campaign-composer.js') }}?v=1"></script>@endif
+@if($canComposeMsg91Campaign)<script src="{{ asset('assets/admin/js/crm/whatsapp/campaign-composer.js') }}?v=2"></script>@endif
 @endpush

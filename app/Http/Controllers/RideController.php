@@ -37,6 +37,7 @@ use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Storage;
 use App\Services\BookingSalesContactResolver;
 use App\Support\NotificationRecipientGuard;
+use App\Services\Rides\RideRefundStatusService;
 
 
 class RideController extends Controller
@@ -1692,6 +1693,10 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                 ->filter()
                 ->values();
 
+                $refundDisplayByLead = app(
+                    RideRefundStatusService::class
+                )->forLeadIds($pageLeadIds);
+
             $rides = collect();
             if ($pageLeadIds->isNotEmpty()) {
                 $rides = (clone $ridesQuery)
@@ -1819,6 +1824,7 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                 $ridesData[] = [
                     'id' => $mainRide->id,
                     'lead_id' => $leadId,
+                    'refund_display' => $refundDisplayByLead[(string) $leadId] ?? [],
                     'invoice_id' => $invoiceId,
                     'vendor_name' => $vendorName,
                     'assigned_rep' => $assignedRep,

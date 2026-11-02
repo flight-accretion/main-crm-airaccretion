@@ -24,6 +24,12 @@ class Kernel extends ConsoleKernel
         ->everyFiveMinutes()
         ->withoutOverlapping();
 
+    if (config('services.msg91_campaigns.template_auto_sync_enabled', true)) {
+        $schedule->command('msg91:sync-templates')
+            ->everyFiveMinutes()
+            ->withoutOverlapping();
+    }
+
     // Run ride reminders every 5 minutes to catch upcoming rides 5h and 1h ahead.
     $schedule->command(
         'reminders:send-ride-reminders --limit='

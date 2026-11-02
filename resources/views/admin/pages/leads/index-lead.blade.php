@@ -161,7 +161,7 @@
     $canComposeMsg91Campaign = app(\App\Services\WhatsApp\Msg91\Msg91CampaignAccess::class)->canCompose(auth()->user());
 @endphp
 @if($canComposeMsg91Campaign)
-    <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/whatsapp/campaign-composer.css') }}?v=1">
+    <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/whatsapp/campaign-composer.css') }}?v=2">
 @endif
 <div class="crm-leads-list">
     <header class="leads-heading"><div><h1>Leads</h1></div><div class="leads-heading-actions">
@@ -239,7 +239,7 @@
             'storeUrl' => route('admin.msg91.campaigns.store'),
             'recordsUrl' => route('admin.msg91.campaigns.index'),
         ])
-        <script src="{{ asset('assets/admin/js/crm/whatsapp/campaign-composer.js') }}?v=1" defer></script>
+        <script src="{{ asset('assets/admin/js/crm/whatsapp/campaign-composer.js') }}?v=2" defer></script>
     @endif
     <nav id="leads-mobile-more" class="leads-mobile-more" aria-label="More navigation" hidden></nav>
     <nav class="leads-mobile-nav" aria-label="Mobile navigation">

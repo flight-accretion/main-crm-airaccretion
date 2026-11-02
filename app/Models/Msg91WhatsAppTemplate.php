@@ -11,7 +11,7 @@ class Msg91WhatsAppTemplate extends Model
 
     protected $table = 'msg91_whatsapp_templates';
     protected $guarded = [];
-    protected $casts = ['crm_enabled' => 'boolean', 'components' => 'array', 'variable_schema' => 'array', 'last_synced_at' => 'datetime'];
+    protected $casts = ['crm_enabled' => 'boolean', 'crm_visibility_overridden' => 'boolean', 'components' => 'array', 'variable_schema' => 'array', 'last_synced_at' => 'datetime'];
 
     public function owner() { return $this->belongsTo(User::class, 'owner_user_id'); }
     public function bindings() { return $this->hasMany(Msg91WhatsAppSenderTemplateBinding::class, 'template_id'); }

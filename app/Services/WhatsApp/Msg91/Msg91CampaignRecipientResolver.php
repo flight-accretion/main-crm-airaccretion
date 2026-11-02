@@ -52,6 +52,7 @@ class Msg91CampaignRecipientResolver
         $productNames = $this->products->forLeads(collect([$lead]))[$lead->id] ?? '';
         return [
             'customer_name' => (string) optional($lead->client)->name,
+            'customer_email' => (string) optional($lead->client)->email,
             'product_name' => (string) $productNames,
             'service_date' => optional($ride?->from_date)->format('d M Y') ?? '',
             'next_followup_date' => optional($lead->latestFollowup?->next_followup_date)->format('d M Y, H:i') ?? '',

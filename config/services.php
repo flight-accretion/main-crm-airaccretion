@@ -104,6 +104,7 @@ return [
         'enabled' => env('MSG91_CAMPAIGNS_ENABLED', false),
         'dry_run' => env('MSG91_CAMPAIGNS_DRY_RUN', true),
         'template_sync_enabled' => env('MSG91_CAMPAIGNS_TEMPLATE_SYNC_ENABLED', false),
+        'template_auto_sync_enabled' => env('MSG91_CAMPAIGNS_TEMPLATE_AUTO_SYNC_ENABLED', true),
         'template_create_enabled' => env('MSG91_CAMPAIGNS_TEMPLATE_CREATE_ENABLED', false),
         'auth_key' => env('MSG91_CAMPAIGNS_AUTH_KEY'),
         'control_url' => env('MSG91_CAMPAIGNS_CONTROL_URL', 'https://control.msg91.com'),

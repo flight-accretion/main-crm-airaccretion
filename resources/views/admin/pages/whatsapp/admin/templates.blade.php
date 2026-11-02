@@ -1,97 +1,2149 @@
 @extends('admin.layouts.header')
+
 @section('content')
-<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/whatsapp/admin.css') }}?v=2">
-<main class="msg91-page">
+
+<link
+    rel="stylesheet"
+    href="{{ asset('assets/admin/css/crm/whatsapp/admin.css') }}?v=6"
+>
+
+
+@php
+
+    $formTemplate =
+        $editingTemplate
+        ??
+        null;
+
+
+    /*
+     * Helps us reopen the correct modal after validation failure.
+     * Controller changes are NOT required.
+     * Laravel automatically carries old input after validation redirect.
+     */
+    $oldFormContext =
+        old(
+            'form_context'
+        );
+
+@endphp
+
+
+<main class="msg91-page msg91-template-registry">
+
+
+    {{-- =====================================================
+         PAGE HEADER
+         ===================================================== --}}
+
     <header class="msg91-page__heading">
-        <div>
-            <p class="msg91-eyebrow">MSG91 WhatsApp</p>
-            <h1>Template registry</h1>
-            <p>Register MSG91-approved templates against a verified sender. A template is usable only when it is approved, enabled, and freshly synced.</p>
+
+        <div class="msg91-page__heading-copy">
+
+            <p class="msg91-eyebrow">
+                MSG91 WhatsApp
+            </p>
+
+            <h1>
+                Template Registry
+            </h1>
+
+            <p>
+                Create templates in MSG91. Once MSG91 approves one, it becomes ready to use in CRM automatically.
+            </p>
+
         </div>
-        @if($canManageAll)<a class="msg91-button msg91-button--secondary" href="{{ route('admin.msg91.admin.index') }}">Sender access</a>@else<a class="msg91-button msg91-button--secondary" href="{{ route('admin.msg91.campaigns.index') }}">Campaign records</a>@endif
+
+
+        <div class="msg91-page__actions">
+
+            @if($canManageAll)
+
+                <a
+                    class="msg91-button msg91-button--secondary"
+                    href="{{ route('admin.msg91.admin.index') }}"
+                >
+
+                    <i class="ri-user-settings-line"></i>
+
+                    <span>
+                        Sender Access
+                    </span>
+
+                </a>
+
+            @else
+
+                <a
+                    class="msg91-button msg91-button--secondary"
+                    href="{{ route('admin.msg91.campaigns.index') }}"
+                >
+
+                    <i class="ri-history-line"></i>
+
+                    <span>
+                        Campaign Records
+                    </span>
+
+                </a>
+
+            @endif
+
+        </div>
+
     </header>
 
-    @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
-    @if($errors->any())<div class="alert alert-danger"><ul class="mb-0">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
 
-    <section class="msg91-card p-4 mb-3">
-        <h2 class="h5 mb-1">Sync approved templates</h2>
-        <p class="text-muted mb-3">Enable template sync only after MSG91 credentials are configured. It reads template metadata; it does not send any WhatsApp message.</p>
-        <div class="d-flex flex-wrap gap-2">
-            @forelse($senders as $sender)
-                <form method="post" action="{{ route('admin.msg91.templates.sync', $sender) }}">@csrf
-                    <button class="msg91-button msg91-button--secondary" type="submit">Sync {{ $sender->integrated_number }} · {{ $sender->user?->name }}</button>
-                </form>
-            @empty
-                <p class="mb-0 text-muted">No verified, active sender is available. Configure one in Sender access first.</p>
-            @endforelse
+
+    {{-- =====================================================
+         FLASH MESSAGES
+         ===================================================== --}}
+
+    @if(session('success'))
+
+        <div class="alert alert-success mb-3">
+
+            {{ session('success') }}
+
         </div>
-    </section>
 
-    <section class="msg91-card p-4 mb-3">
-        <h2 class="h5">Create a template in MSG91</h2>
-        <p class="text-muted">The template is submitted for MSG91 approval. It remains unavailable for campaigns until approval and a later sync confirm its status.</p>
-        <form method="post" action="{{ route('admin.msg91.templates.create') }}" class="msg91-admin-form">
-            @csrf
-            <div class="row">
-                <label class="col-md-4">Template name<input required name="name" placeholder="e.g. accretion_demo_followup" pattern="[a-z0-9_]+"></label>
-                <label class="col-md-2">Language<input required name="language" value="en"></label>
-                <label class="col-md-3">Category<select name="category"><option value="UTILITY">Utility</option><option value="MARKETING">Marketing</option><option value="AUTHENTICATION">Authentication</option></select></label>
-                <label class="col-md-3">Verified sender<select required name="sender_id"><option value="">Select sender</option>@foreach($senders as $sender)<option value="{{ $sender->id }}">{{ $sender->integrated_number }} · {{ $sender->user?->name }}</option>@endforeach</select></label>
-            </div>
-            <label>Body <textarea required name="body" rows="3" placeholder="Hello @{{1}}, this is a message from Accretion Aviation."></textarea></label>
-            <label>Footer <input name="footer" maxlength="60" placeholder="Optional"></label>
-            <p class="mb-1 mt-2"><strong>Body variable mapping</strong> <span class="text-muted">(map every @{{1}}, @{{2}} variable used in the body)</span></p>
-            <div class="row">@foreach(range(1, 5) as $index)<label class="col-md">Body {{ $index }}<select name="body_{{ $index }}"><option value="">Not used</option>@foreach(['customer_name'=>'Customer name','product_name'=>'Product name','service_date'=>'Service date','next_followup_date'=>'Next follow-up date','salesperson_name'=>'Salesperson name'] as $value=>$label)<option value="{{ $value }}">{{ $label }}</option>@endforeach</select></label>@endforeach</div>
-            <button class="msg91-button mt-3" type="submit">Submit template to MSG91</button>
-        </form>
-    </section>
+    @endif
 
-    @php($formTemplate = $editingTemplate ?? null)
-    <section class="msg91-card p-4 mb-3">
-        <h2 class="h5">{{ $formTemplate ? 'Edit template mapping' : 'Register an approved template' }}</h2>
-        <p class="text-muted">Use this only for a template that is already approved in MSG91. Sales users can manage their own templates; Admin roles can manage central templates.</p>
-        <form method="post" action="{{ route('admin.msg91.templates.save') }}" class="msg91-admin-form">
-            @csrf
-            @if($formTemplate)<input type="hidden" name="template_id" value="{{ $formTemplate->id }}">@endif
-            <div class="row">
-                <label class="col-md-4">Template name<input required name="name" value="{{ old('name', $formTemplate?->name) }}" placeholder="e.g. booking_update"></label>
-                <label class="col-md-2">Language<input required name="language" value="{{ old('language', $formTemplate?->language ?? 'en') }}" placeholder="en"></label>
-                <label class="col-md-3">Category<input name="category" value="{{ old('category', $formTemplate?->category) }}" placeholder="UTILITY"></label>
-                <label class="col-md-3">MSG91 template ID<input name="provider_template_id" value="{{ old('provider_template_id', $formTemplate?->provider_template_id) }}"></label>
-            </div>
-            <div class="row">
-                <label class="col-md-4">Verified sender<select required name="sender_id"><option value="">Select sender</option>@foreach($senders as $sender)<option value="{{ $sender->id }}" @selected(old('sender_id', $formTemplate?->bindings->first()?->sender_id)===$sender->id)>{{ $sender->integrated_number }} · {{ $sender->user?->name }}</option>@endforeach</select></label>
-                <label class="col-md-3">MSG91 status<select name="provider_status">@foreach(['approved','pending','rejected','disabled','unknown'] as $status)<option value="{{ $status }}" @selected(old('provider_status', $formTemplate?->status ?? 'approved')===$status)>{{ ucfirst($status) }}</option>@endforeach</select></label>
-                <label class="col-md-3 d-flex align-items-center gap-2 pt-4"><input type="checkbox" name="crm_enabled" value="1" @checked(old('crm_enabled', $formTemplate?->crm_enabled))> Make available in CRM campaigns</label>
-            </div>
-            <p class="mb-1 mt-2"><strong>Body variable mapping</strong> <span class="text-muted">(only map variables actually present in the MSG91 template)</span></p>
-            <div class="row">
-                @foreach(range(1, 5) as $index)<label class="col-md">Body {{ $index }}<select name="body_{{ $index }}"><option value="">Not used</option>@foreach(['customer_name'=>'Customer name','product_name'=>'Product name','service_date'=>'Service date','next_followup_date'=>'Next follow-up date','salesperson_name'=>'Salesperson name'] as $value=>$label)<option value="{{ $value }}" @selected(old('body_'.$index, data_get($formTemplate?->variable_schema, 'body_'.$index.'.source'))===$value)>{{ $label }}</option>@endforeach</select></label>@endforeach
-            </div>
-            <button class="msg91-button mt-3" type="submit">Save template mapping</button>
-        </form>
-    </section>
 
-    <section class="msg91-card msg91-table-wrap">
-        <table>
-            <thead><tr><th>Template</th><th>Language</th><th>CRM</th><th>Sender mappings</th><th>Last updated</th><th></th></tr></thead>
-            <tbody>
-                @forelse($templates as $template)
-                    <tr>
-                        <td><strong>{{ $template->name }}</strong><small>{{ $template->category ?? 'No category' }} · {{ $template->status }}</small></td>
-                        <td>{{ $template->language }}</td>
-                        <td>{{ $template->crm_enabled ? 'Enabled' : 'Disabled' }}</td>
-                        <td>@forelse($template->bindings as $binding)<div>{{ $binding->sender?->integrated_number }} · {{ $binding->provider_status }}<small>{{ optional($binding->last_synced_at)->format('d M Y H:i') }}</small></div>@empty<span class="text-muted">Not mapped</span>@endforelse</td>
-                        <td>{{ optional($template->updated_at)->format('d M Y H:i') }}</td>
-                        <td>@if($canManageAll || (string) $template->owner_user_id === (string) auth()->id())<a class="msg91-button msg91-button--small" href="{{ route('admin.msg91.templates.index', ['edit' => $template->id]) }}">Edit</a>@endif</td>
-                    </tr>
+    @if($errors->any())
+
+        <div class="alert alert-danger mb-3">
+
+            <ul class="mb-0">
+
+                @foreach($errors->all() as $error)
+
+                    <li>
+                        {{ $error }}
+                    </li>
+
+                @endforeach
+
+            </ul>
+
+        </div>
+
+    @endif
+
+
+
+    {{-- =====================================================
+         SYNC APPROVED TEMPLATES
+         ===================================================== --}}
+
+    <section class="msg91-card msg91-template-section">
+
+        <header class="msg91-card__header">
+
+            <div>
+
+                <h2>
+                            Refresh MSG91 Templates
+                </h2>
+
+                <p>
+                            Refresh approval status from MSG91 now. CRM also refreshes automatically every five minutes.
+                </p>
+
+            </div>
+
+
+            <span class="msg91-section-icon">
+
+                <i class="ri-refresh-line"></i>
+
+            </span>
+
+        </header>
+
+
+        <div class="msg91-template-section__body">
+
+            <div class="msg91-info-note">
+
+                <i class="ri-information-line"></i>
+
+                <p>
+                    Sync only reads template metadata from MSG91. It does not send any WhatsApp message.
+                </p>
+
+            </div>
+
+
+            <div class="msg91-sync-list">
+
+                @forelse($senders as $sender)
+
+                    <div class="msg91-sync-row">
+
+                        <div class="msg91-sync-row__sender">
+
+                            <span class="msg91-sync-row__icon">
+
+                                <i class="ri-whatsapp-line"></i>
+
+                            </span>
+
+
+                            <div>
+
+                                <strong>
+
+                                    {{ $sender->integrated_number }}
+
+                                </strong>
+
+
+                                <span>
+
+                                    {{ $sender->user?->name ?? 'Unknown user' }}
+
+                                </span>
+
+                            </div>
+
+                        </div>
+
+
+                        <form
+                            method="POST"
+                            action="{{ route('admin.msg91.templates.sync', $sender) }}"
+                        >
+
+                            @csrf
+
+
+                            <button
+                                class="msg91-button msg91-button--secondary"
+                                type="submit"
+                            >
+
+                                <i class="ri-refresh-line"></i>
+
+                                Refresh Now
+
+                            </button>
+
+                        </form>
+
+                    </div>
+
+
                 @empty
-                    <tr><td colspan="6" class="text-center text-muted">No templates registered yet.</td></tr>
+
+                    <div class="msg91-empty-state">
+
+                        <span>
+
+                            <i class="ri-whatsapp-line"></i>
+
+                        </span>
+
+
+                        <strong>
+                            No active sender available
+                        </strong>
+
+
+                        <p>
+                            Configure an active integrated WhatsApp sender in Sender Access first.
+                        </p>
+
+                    </div>
+
                 @endforelse
-            </tbody>
-        </table>
+
+            </div>
+
+        </div>
+
     </section>
-    {{ $templates->links() }}
+
+
+
+    {{-- =====================================================
+         TEMPLATE ACTIONS
+         ===================================================== --}}
+
+    <section class="msg91-template-actions">
+
+
+        {{-- CREATE TEMPLATE --}}
+        <article class="msg91-card msg91-template-action-card">
+
+            <div class="msg91-template-action-card__content">
+
+                <div class="msg91-template-action-card__info">
+
+                    <span class="msg91-template-action-card__icon">
+
+                        <i class="ri-add-circle-line"></i>
+
+                    </span>
+
+
+                    <div>
+
+                        <h2>
+                            Create Template in MSG91
+                        </h2>
+
+                        <p>
+                            Submit a new WhatsApp template to MSG91 for approval.
+                        </p>
+
+                    </div>
+
+                </div>
+
+
+                <button
+                    type="button"
+                    class="msg91-button"
+                    data-msg91-open-modal="msg91-create-template-modal"
+                >
+
+                    <i class="ri-add-line"></i>
+
+                    Create Template
+
+                </button>
+
+            </div>
+
+        </article>
+
+
+
+        @if(false) {{-- Old manual registration flow is intentionally unavailable. --}}
+        {{-- REGISTER TEMPLATE --}}
+        <article class="msg91-card msg91-template-action-card">
+
+            <div class="msg91-template-action-card__content">
+
+                <div class="msg91-template-action-card__info">
+
+                    <span class="msg91-template-action-card__icon">
+
+                        <i class="ri-link"></i>
+
+                    </span>
+
+
+                    <div>
+
+                        <h2>
+                            Register Approved Template
+                        </h2>
+
+                        <p>
+                            Map an approved MSG91 template into CRM campaigns.
+                        </p>
+
+                    </div>
+
+                </div>
+
+
+                <button
+                    type="button"
+                    class="msg91-button msg91-button--secondary"
+                    data-msg91-open-modal="msg91-register-template-modal"
+                >
+
+                    <i class="ri-link"></i>
+
+                    Register Template
+
+                </button>
+
+            </div>
+
+        </article>
+        @endif
+
+    </section>
+
+
+
+    {{-- =====================================================
+         REGISTERED TEMPLATE DIRECTORY
+         ===================================================== --}}
+
+    <section class="msg91-card msg91-template-list-card">
+
+        <header class="msg91-card__header">
+
+            <div>
+
+                <h2>
+                    Registered Templates
+                </h2>
+
+                <p>
+                    Review MSG91 approval, CRM availability and sender mappings.
+                </p>
+
+            </div>
+
+
+            <span class="msg91-record-count">
+
+                {{ number_format($templates->total()) }}
+
+                {{
+                    Str::plural(
+                        'template',
+                        $templates->total()
+                    )
+                }}
+
+            </span>
+
+        </header>
+
+
+
+        {{-- =================================================
+             DESKTOP TABLE
+             ================================================= --}}
+
+        <div class="msg91-template-table-wrap">
+
+            <table class="msg91-template-table">
+
+                <thead>
+
+                    <tr>
+
+                        <th>
+                            Template
+                        </th>
+
+                        <th>
+                            Language
+                        </th>
+
+                        <th>
+                            Visible in CRM
+                        </th>
+
+                        <th>
+                            Sender Mapping
+                        </th>
+
+                        <th>
+                            Last Updated
+                        </th>
+
+                        <th>
+                            Action
+                        </th>
+
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                    @forelse($templates as $template)
+
+                        <tr>
+
+
+                            {{-- TEMPLATE --}}
+                            <td>
+
+                                <div class="msg91-template-name">
+
+                                    <strong>
+
+                                        {{ $template->name }}
+
+                                    </strong>
+
+
+                                    <div>
+
+                                        <span class="msg91-category-badge">
+
+                                            {{ $template->category ?? 'No category' }}
+
+                                        </span>
+
+
+                                        <span
+                                            class="
+                                                msg91-provider-status
+                                                msg91-provider-status--{{ strtolower($template->status ?? 'unknown') }}
+                                            "
+                                        >
+
+                                            {{ ucfirst($template->status ?? 'unknown') }}
+
+                                        </span>
+
+                                    </div>
+
+                                </div>
+
+                            </td>
+
+
+
+                            {{-- LANGUAGE --}}
+                            <td>
+
+                                <span class="msg91-language-badge">
+
+                                    {{ strtoupper($template->language) }}
+
+                                </span>
+
+                            </td>
+
+
+
+                            {{-- CRM --}}
+                            <td>
+
+                                <span
+                                    class="
+                                        msg91-crm-status
+                                        {{
+                                            $template->crm_enabled
+                                                ? 'msg91-crm-status--enabled'
+                                                : 'msg91-crm-status--disabled'
+                                        }}
+                                    "
+                                >
+
+                                    <span></span>
+
+
+                                    {{
+                                        $template->crm_enabled
+                                            ? 'Enabled'
+                                            : 'Disabled'
+                                    }}
+
+                                </span>
+
+                            </td>
+
+
+
+                            {{-- SENDERS --}}
+                            <td>
+
+                                @forelse(
+                                    $template->bindings
+                                    as
+                                    $binding
+                                )
+
+                                    <div class="msg91-binding">
+
+                                        <div>
+
+                                            <i class="ri-whatsapp-line"></i>
+
+
+                                            <strong>
+
+                                                {{
+                                                    $binding
+                                                        ->sender
+                                                        ?->integrated_number
+                                                    ??
+                                                    'Not mapped'
+                                                }}
+
+                                            </strong>
+
+                                        </div>
+
+
+                                        <span>
+
+                                            {{ ucfirst($binding->provider_status ?? 'unknown') }}
+
+
+                                            @if($binding->last_synced_at)
+
+                                                ·
+
+                                                {{
+                                                    optional(
+                                                        $binding->last_synced_at
+                                                    )
+                                                    ->format(
+                                                        'd M Y H:i'
+                                                    )
+                                                }}
+
+                                            @endif
+
+                                        </span>
+
+                                    </div>
+
+
+                                @empty
+
+
+                                    <span class="msg91-not-mapped">
+
+                                        Not mapped
+
+                                    </span>
+
+
+                                @endforelse
+
+                            </td>
+
+
+
+                            {{-- DATE --}}
+                            <td>
+
+                                <span class="msg91-template-date">
+
+                                    {{
+                                        optional(
+                                            $template->updated_at
+                                        )
+                                        ->format(
+                                            'd M Y'
+                                        )
+                                    }}
+
+                                </span>
+
+
+                                <small>
+
+                                    {{
+                                        optional(
+                                            $template->updated_at
+                                        )
+                                        ->format(
+                                            'H:i'
+                                        )
+                                    }}
+
+                                </small>
+
+                            </td>
+
+
+
+                            {{-- ACTION --}}
+                            <td>
+
+                                @if($canManageVisibility)
+                                    <form method="POST" action="{{ route('admin.msg91.templates.save') }}">
+                                        @csrf
+                                        <input type="hidden" name="template_id" value="{{ $template->id }}">
+                                        <input type="hidden" name="crm_enabled" value="{{ $template->crm_enabled ? '0' : '1' }}">
+                                        <button type="submit" class="msg91-edit-button">
+                                            <i class="ri-eye{{ $template->crm_enabled ? '-off' : '' }}-line"></i>
+                                            {{ $template->crm_enabled ? 'Hide' : 'Show' }}
+                                        </button>
+                                    </form>
+                                @else
+                                    <span class="msg91-no-action">—</span>
+                                @endif
+
+                            </td>
+
+                        </tr>
+
+
+                    @empty
+
+
+                        <tr>
+
+                            <td
+                                colspan="6"
+                                class="msg91-empty"
+                            >
+
+                                <div class="msg91-empty__icon">
+
+                                    <i class="ri-file-list-3-line"></i>
+
+                                </div>
+
+
+                                <strong>
+                                    No templates registered
+                                </strong>
+
+
+                                <span>
+                                    Create or register your first MSG91 template.
+                                </span>
+
+                            </td>
+
+                        </tr>
+
+
+                    @endforelse
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+
+
+        {{-- =================================================
+             MOBILE CARDS
+             ================================================= --}}
+
+        <div class="msg91-template-mobile">
+
+            @forelse($templates as $template)
+
+                <article class="msg91-template-mobile-card">
+
+
+                    <div class="msg91-template-mobile-card__head">
+
+                        <div>
+
+                            <strong>
+
+                                {{ $template->name }}
+
+                            </strong>
+
+
+                            <span>
+
+                                {{ $template->category ?? 'No category' }}
+
+                            </span>
+
+                        </div>
+
+
+                        <span
+                            class="
+                                msg91-provider-status
+                                msg91-provider-status--{{ strtolower($template->status ?? 'unknown') }}
+                            "
+                        >
+
+                            {{ ucfirst($template->status ?? 'unknown') }}
+
+                        </span>
+
+                    </div>
+
+
+
+                    <div class="msg91-template-mobile-card__meta">
+
+
+                        <div>
+
+                            <small>
+                                Language
+                            </small>
+
+                            <strong>
+
+                                {{ strtoupper($template->language) }}
+
+                            </strong>
+
+                        </div>
+
+
+
+                        <div>
+
+                            <small>
+                                CRM
+                            </small>
+
+                            <strong>
+
+                                {{
+                                    $template->crm_enabled
+                                        ? 'Enabled'
+                                        : 'Disabled'
+                                }}
+
+                            </strong>
+
+                        </div>
+
+
+
+                        <div>
+
+                            <small>
+                                Updated
+                            </small>
+
+                            <strong>
+
+                                {{
+                                    optional(
+                                        $template->updated_at
+                                    )
+                                    ->format(
+                                        'd M Y'
+                                    )
+                                }}
+
+                            </strong>
+
+                        </div>
+
+                    </div>
+
+
+
+                    <div class="msg91-template-mobile-card__bindings">
+
+                        <small>
+                            Sender Mapping
+                        </small>
+
+
+                        @forelse(
+                            $template->bindings
+                            as
+                            $binding
+                        )
+
+                            <div>
+
+                                <strong>
+
+                                    {{
+                                        $binding
+                                            ->sender
+                                            ?->integrated_number
+                                        ??
+                                        'Not mapped'
+                                    }}
+
+                                </strong>
+
+
+                                <span>
+
+                                    {{ ucfirst($binding->provider_status ?? 'unknown') }}
+
+                                </span>
+
+                            </div>
+
+
+                        @empty
+
+
+                            <span class="msg91-not-mapped">
+
+                                Not mapped
+
+                            </span>
+
+
+                        @endforelse
+
+                    </div>
+
+
+
+                    @if($canManageVisibility)
+                        <form method="POST" action="{{ route('admin.msg91.templates.save') }}">
+                            @csrf
+                            <input type="hidden" name="template_id" value="{{ $template->id }}">
+                            <input type="hidden" name="crm_enabled" value="{{ $template->crm_enabled ? '0' : '1' }}">
+                            <button type="submit" class="msg91-edit-button msg91-edit-button--mobile">
+                                {{ $template->crm_enabled ? 'Hide from CRM' : 'Show in CRM' }}
+                            </button>
+                        </form>
+                    @endif
+
+                </article>
+
+
+            @empty
+
+
+                <div class="msg91-empty">
+
+                    No templates registered.
+
+                </div>
+
+
+            @endforelse
+
+        </div>
+
+    </section>
+
+
+
+    {{-- =====================================================
+         PAGINATION
+         ===================================================== --}}
+
+    @if($templates->hasPages())
+
+        <div class="msg91-pagination">
+
+            {{ $templates->links() }}
+
+        </div>
+
+    @endif
+
 </main>
+
+
+
+{{-- =========================================================
+     CREATE TEMPLATE MODAL
+     ========================================================= --}}
+
+<div
+    class="msg91-modal"
+    id="msg91-create-template-modal"
+    aria-hidden="true"
+>
+
+    <div
+        class="msg91-modal__backdrop"
+        data-msg91-close-modal
+    ></div>
+
+
+    <div
+        class="msg91-modal__dialog msg91-modal__dialog--large"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="msg91-create-template-title"
+    >
+
+        <header class="msg91-modal__header">
+
+            <div>
+
+                <p class="msg91-modal__eyebrow">
+                    MSG91 WhatsApp
+                </p>
+
+                <h2 id="msg91-create-template-title">
+                    Create Template
+                </h2>
+
+                <p>
+                    Submit a new WhatsApp template to MSG91 for approval.
+                </p>
+
+            </div>
+
+
+            <button
+                type="button"
+                class="msg91-modal__close"
+                data-msg91-close-modal
+                aria-label="Close"
+            >
+
+                <i class="ri-close-line"></i>
+
+            </button>
+
+        </header>
+
+
+        <form
+            method="POST"
+            action="{{ route('admin.msg91.templates.create') }}"
+            class="msg91-template-form"
+        >
+
+            @csrf
+
+
+            <input
+                type="hidden"
+                name="form_context"
+                value="create_template"
+            >
+
+
+            <div class="msg91-modal__scroll">
+
+
+                <div class="msg91-modal-info">
+
+                    <i class="ri-information-line"></i>
+
+                    <span>
+                        After MSG91 approves the template, CRM will automatically make it ready for campaigns. No mapping is required.
+                    </span>
+
+                </div>
+
+
+
+                <div class="msg91-form-grid msg91-form-grid--2">
+
+
+                    {{-- NAME --}}
+                    <div class="msg91-field">
+
+                        <label>
+                            Template Name
+                        </label>
+
+
+                        <input
+                            required
+                            name="name"
+                            value="{{
+                                $oldFormContext === 'create_template'
+                                    ? old('name')
+                                    : ''
+                            }}"
+                            placeholder="e.g. accretion_demo_followup"
+                            pattern="[a-z0-9_]+"
+                        >
+
+
+                        <small>
+                            Lowercase letters, numbers and underscores only.
+                        </small>
+
+                    </div>
+
+
+
+                    {{-- LANGUAGE --}}
+                    <div class="msg91-field">
+
+                        <label>
+                            Language
+                        </label>
+
+
+                        <select required name="language">
+                            <option value="en" {{ $oldFormContext === 'create_template' && old('language', 'en') === 'en' ? 'selected' : '' }}>English</option>
+                            <option value="hi" {{ $oldFormContext === 'create_template' && old('language') === 'hi' ? 'selected' : '' }}>Hindi</option>
+                        </select>
+
+                    </div>
+
+
+
+                    {{-- CATEGORY --}}
+                    <div class="msg91-field">
+
+                        <label>
+                            Category
+                        </label>
+
+
+                        <select name="category">
+
+                            <option
+                                value="UTILITY"
+                                {{ $oldFormContext === 'create_template' && old('category', 'UTILITY') === 'UTILITY' ? 'selected' : '' }}
+                            >
+                                Utility
+                            </option>
+
+
+                            <option
+                                value="MARKETING"
+                                {{ $oldFormContext === 'create_template' && old('category') === 'MARKETING' ? 'selected' : '' }}
+                            >
+                                Marketing
+                            </option>
+
+
+                            <option
+                                value="AUTHENTICATION"
+                                {{ $oldFormContext === 'create_template' && old('category') === 'AUTHENTICATION' ? 'selected' : '' }}
+                            >
+                                Authentication
+                            </option>
+
+                        </select>
+
+                    </div>
+
+
+
+                    {{-- SENDER --}}
+                    <div class="msg91-field">
+
+                        <label>
+                            {{ $canManageAll ? 'Eligible Team Members' : 'Your Verified Sender' }}
+                        </label>
+
+
+                        @if($canManageAll)
+                            <div class="msg91-member-selector" data-msg91-member-selector>
+                                <label class="msg91-member-selector__all">
+                                    <input type="checkbox" data-msg91-select-all-senders>
+                                    <span>Select all eligible members</span>
+                                </label>
+                                <div class="msg91-member-selector__list">
+                                    @foreach($senders as $sender)
+                                        <label class="msg91-member-selector__option">
+                                            <input
+                                                type="checkbox"
+                                                name="sender_ids[]"
+                                                value="{{ $sender->id }}"
+                                                data-msg91-sender-checkbox
+                                                {{ in_array((string) $sender->id, array_map('strval', (array) old('sender_ids', [])), true) ? 'checked' : '' }}
+                                            >
+                                            <span>
+                                                <strong>{{ $sender->user?->name }}</strong>
+                                                <small>{{ $sender->integrated_number }}</small>
+                                            </span>
+                                        </label>
+                                    @endforeach
+                                </div>
+                            </div>
+                            <small>Select one or more members. The template is submitted to MSG91 for each selected member's verified sender.</small>
+                        @else
+                            <select required name="sender_ids[]">
+                                <option value="">Select sender</option>
+                                @foreach($senders as $sender)
+                                    <option
+                                        value="{{ $sender->id }}"
+                                        {{ in_array((string) $sender->id, array_map('strval', (array) old('sender_ids', [])), true) ? 'selected' : '' }}
+                                    >
+                                        {{ $sender->integrated_number }} · {{ $sender->user?->name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        @endif
+
+                    </div>
+
+                </div>
+
+
+
+                {{-- BODY --}}
+                <div class="msg91-field msg91-field--full">
+
+                    <label>
+                        Template Body
+                    </label>
+
+
+                    <textarea
+                        required
+                        name="body"
+                        rows="4"
+                        placeholder="Hello @{{1}}, this is a message from Accretion Aviation."
+                    >{{ $oldFormContext === 'create_template' ? old('body') : '' }}</textarea>
+
+
+                    <small>
+                        MSG91 variables use the format @{{1}}, @{{2}}, @{{3}}...
+                    </small>
+
+                </div>
+
+
+
+                {{-- FOOTER --}}
+                <div class="msg91-field msg91-field--full">
+
+                    <label>
+                        Footer
+                    </label>
+
+
+                    <input
+                        name="footer"
+                        maxlength="60"
+                        value="{{
+                            $oldFormContext === 'create_template'
+                                ? old('footer')
+                                : ''
+                        }}"
+                        placeholder="Optional"
+                    >
+
+                </div>
+
+
+
+                {{-- VARIABLE MAPPING --}}
+                <div class="msg91-variable-block">
+
+                    <div class="msg91-variable-block__heading">
+
+                        <div>
+
+                            <strong>
+                                Body Variable Mapping
+                            </strong>
+
+                            <span>
+                                Select what each variable in this template should show when it is sent.
+                            </span>
+
+                        </div>
+
+
+                        <span class="msg91-variable-help">
+                            @{{1}} – @{{6}}
+                        </span>
+
+                    </div>
+
+
+                    <div class="msg91-variable-grid">
+
+                        @foreach(range(1, 6) as $index)
+
+                            <div class="msg91-field">
+
+                                <label>
+                                    Body {{ $index }}
+                                </label>
+
+
+                                <select name="body_{{ $index }}">
+
+                                    <option value="">
+                                        Not used
+                                    </option>
+
+
+                                    @foreach(
+                                        [
+                                            'customer_name' =>
+                                                'Customer name',
+
+                                            'customer_email' =>
+                                                'Customer email',
+
+                                            'product_name' =>
+                                                'Product name',
+
+                                            'service_date' =>
+                                                'Service date',
+
+                                            'next_followup_date' =>
+                                                'Next follow-up date',
+
+                                            'salesperson_name' =>
+                                                'Salesperson name',
+                                        ]
+                                        as
+                                        $value
+                                        =>
+                                        $label
+                                    )
+
+                                        <option
+                                            value="{{ $value }}"
+                                            {{ old('body_'.$index, $index === 1 ? 'customer_name' : '') === $value ? 'selected' : '' }}
+                                        >
+
+                                            {{ $label }}
+
+                                        </option>
+
+                                    @endforeach
+
+                                </select>
+
+                            </div>
+
+                        @endforeach
+
+                    </div>
+
+                </div>
+            </div>
+
+
+
+            <footer class="msg91-modal__footer">
+
+                <button
+                    type="button"
+                    class="msg91-button msg91-button--secondary"
+                    data-msg91-close-modal
+                >
+                    Cancel
+                </button>
+
+
+                <button
+                    type="submit"
+                    class="msg91-button"
+                >
+
+                    <i class="ri-send-plane-line"></i>
+
+                    Submit to MSG91
+
+                </button>
+
+            </footer>
+
+        </form>
+
+    </div>
+
+</div>
+
+
+
+@if(false) {{-- The former manual registration and mapping screen is intentionally unavailable. --}}
+{{-- =========================================================
+     REGISTER / EDIT TEMPLATE MODAL
+     ========================================================= --}}
+
+<div
+    class="msg91-modal"
+    id="msg91-register-template-modal"
+    aria-hidden="true"
+>
+
+    <div
+        class="msg91-modal__backdrop"
+        data-msg91-close-modal
+    ></div>
+
+
+    <div
+        class="msg91-modal__dialog msg91-modal__dialog--large"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="msg91-register-template-title"
+    >
+
+        <header class="msg91-modal__header">
+
+            <div>
+
+                <p class="msg91-modal__eyebrow">
+                    MSG91 WhatsApp
+                </p>
+
+
+                <h2 id="msg91-register-template-title">
+
+                    {{
+                        $formTemplate
+                            ? 'Edit Template Mapping'
+                            : 'Register Approved Template'
+                    }}
+
+                </h2>
+
+
+                <p>
+
+                    {{
+                        $formTemplate
+                            ? 'Update the CRM mapping for this MSG91 template.'
+                            : 'Map an already approved MSG91 template into CRM.'
+                    }}
+
+                </p>
+
+            </div>
+
+
+            <button
+                type="button"
+                class="msg91-modal__close"
+                data-msg91-close-modal
+                aria-label="Close"
+            >
+
+                <i class="ri-close-line"></i>
+
+            </button>
+
+        </header>
+
+
+        <form
+            method="POST"
+            action="{{ route('admin.msg91.templates.save') }}"
+            class="msg91-template-form"
+        >
+
+            @csrf
+
+
+            <input
+                type="hidden"
+                name="form_context"
+                value="register_template"
+            >
+
+
+            @if($formTemplate)
+
+                <input
+                    type="hidden"
+                    name="template_id"
+                    value="{{ $formTemplate->id }}"
+                >
+
+            @endif
+
+
+            <div class="msg91-modal__scroll">
+
+
+                <div class="msg91-modal-info">
+
+                    <i class="ri-information-line"></i>
+
+                    <span>
+                        Use this only for a template that already exists in MSG91.
+                    </span>
+
+                </div>
+
+
+
+                <div class="msg91-form-grid msg91-form-grid--2">
+
+
+                    {{-- TEMPLATE NAME --}}
+                    <div class="msg91-field">
+
+                        <label>
+                            Template Name
+                        </label>
+
+
+                        <input
+                            required
+                            name="name"
+                            value="{{
+                                old(
+                                    'name',
+                                    $formTemplate?->name
+                                )
+                            }}"
+                            placeholder="e.g. booking_update"
+                        >
+
+                    </div>
+
+
+
+                    {{-- LANGUAGE --}}
+                    <div class="msg91-field">
+
+                        <label>
+                            Language
+                        </label>
+
+
+                        <input
+                            required
+                            name="language"
+                            value="{{
+                                old(
+                                    'language',
+                                    $formTemplate?->language
+                                    ??
+                                    'en'
+                                )
+                            }}"
+                            placeholder="en"
+                        >
+
+                    </div>
+
+
+
+                    {{-- CATEGORY --}}
+                    <div class="msg91-field">
+
+                        <label>
+                            Category
+                        </label>
+
+
+                        <input
+                            name="category"
+                            value="{{
+                                old(
+                                    'category',
+                                    $formTemplate?->category
+                                )
+                            }}"
+                            placeholder="UTILITY"
+                        >
+
+                    </div>
+
+
+
+                    {{-- TEMPLATE ID --}}
+                    <div class="msg91-field">
+
+                        <label>
+                            MSG91 Template ID
+                        </label>
+
+
+                        <input
+                            name="provider_template_id"
+                            value="{{
+                                old(
+                                    'provider_template_id',
+                                    $formTemplate?->provider_template_id
+                                )
+                            }}"
+                            placeholder="MSG91 template ID"
+                        >
+
+                    </div>
+
+
+
+                    {{-- SENDER --}}
+                    <div class="msg91-field">
+
+                        <label>
+                            Verified Sender
+                        </label>
+
+
+                        <select
+                            required
+                            name="sender_id"
+                        >
+
+                            <option value="">
+                                Select sender
+                            </option>
+
+
+                            @foreach($senders as $sender)
+
+                                <option
+                                    value="{{ $sender->id }}"
+                                    {{
+                                        (string) old(
+                                            'sender_id',
+                                            $formTemplate?->bindings->first()?->sender_id
+                                        ) === (string) $sender->id
+                                            ? 'selected'
+                                            : ''
+                                    }}
+                                >
+
+                                    {{ $sender->integrated_number }}
+
+                                    ·
+
+                                    {{ $sender->user?->name }}
+
+                                </option>
+
+                            @endforeach
+
+                        </select>
+
+                    </div>
+
+
+
+                    {{-- STATUS --}}
+                    <div class="msg91-field">
+
+                        <label>
+                            MSG91 Status
+                        </label>
+
+
+                        <select name="provider_status">
+
+                            @foreach(
+                                [
+                                    'approved',
+                                    'pending',
+                                    'rejected',
+                                    'disabled',
+                                    'unknown',
+                                ]
+                                as
+                                $status
+                            )
+
+                                <option
+                                    value="{{ $status }}"
+                                    {{
+                                        old(
+                                            'provider_status',
+                                            $formTemplate?->status ?? 'approved'
+                                        ) === $status
+                                            ? 'selected'
+                                            : ''
+                                    }}
+                                >
+
+                                    {{ ucfirst($status) }}
+
+                                </option>
+
+                            @endforeach
+
+                        </select>
+
+                    </div>
+
+                </div>
+
+
+
+                {{-- CRM ENABLE --}}
+                <div class="msg91-toggle-field">
+
+                    <label>
+                        CRM Availability
+                    </label>
+
+
+                    <label class="msg91-switch-row">
+
+                        <input
+                            type="checkbox"
+                            name="crm_enabled"
+                            value="1"
+                            {{
+                                old(
+                                    'crm_enabled',
+                                    $formTemplate?->crm_enabled
+                                )
+                                    ? 'checked'
+                                    : ''
+                            }}
+                        >
+
+
+                        <span class="msg91-switch">
+
+                            <span></span>
+
+                        </span>
+
+
+                        <span>
+                            Make this template available in CRM campaigns
+                        </span>
+
+                    </label>
+
+                </div>
+
+
+
+                {{-- VARIABLE MAPPING --}}
+                <div class="msg91-variable-block">
+
+                    <div class="msg91-variable-block__heading">
+
+                        <div>
+
+                            <strong>
+                                Body Variable Mapping
+                            </strong>
+
+                            <span>
+                                Map only variables actually present in the MSG91 template.
+                            </span>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="msg91-variable-grid">
+
+                        @foreach(range(1, 5) as $index)
+
+                            <div class="msg91-field">
+
+                                <label>
+                                    Body {{ $index }}
+                                </label>
+
+
+                                <select name="body_{{ $index }}">
+
+                                    <option value="">
+                                        Not used
+                                    </option>
+
+
+                                    @foreach(
+                                        [
+                                            'customer_name' =>
+                                                'Customer name',
+
+                                            'product_name' =>
+                                                'Product name',
+
+                                            'service_date' =>
+                                                'Service date',
+
+                                            'next_followup_date' =>
+                                                'Next follow-up date',
+
+                                            'salesperson_name' =>
+                                                'Salesperson name',
+                                        ]
+                                        as
+                                        $value
+                                        =>
+                                        $label
+                                    )
+
+                                        <option
+                                            value="{{ $value }}"
+                                            {{
+                                                old(
+                                                    'body_'.$index,
+                                                    data_get(
+                                                        $formTemplate?->variable_schema,
+                                                        'body_'.$index.'.source'
+                                                    )
+                                                ) === $value
+                                                    ? 'selected'
+                                                    : ''
+                                            }}
+                                        >
+
+                                            {{ $label }}
+
+                                        </option>
+
+                                    @endforeach
+
+                                </select>
+
+                            </div>
+
+                        @endforeach
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+
+            <footer class="msg91-modal__footer">
+
+                <button
+                    type="button"
+                    class="msg91-button msg91-button--secondary"
+                    data-msg91-close-modal
+                >
+                    Cancel
+                </button>
+
+
+                <button
+                    type="submit"
+                    class="msg91-button"
+                >
+
+                    <i class="ri-save-line"></i>
+
+
+                    {{
+                        $formTemplate
+                            ? 'Update Mapping'
+                            : 'Save Mapping'
+                    }}
+
+                </button>
+
+            </footer>
+
+        </form>
+
+    </div>
+
+</div>
+@endif
+
+
+
+{{-- =========================================================
+     MODAL JAVASCRIPT
+     ========================================================= --}}
+
+<script>
+
+document.addEventListener(
+    'DOMContentLoaded',
+    function () {
+
+        /*
+        |--------------------------------------------------------------------------
+        | OPEN MODAL
+        |--------------------------------------------------------------------------
+        */
+
+        function openModal(
+            modalId
+        ) {
+
+            const modal =
+                document.getElementById(
+                    modalId
+                );
+
+
+            if (!modal) {
+                return;
+            }
+
+
+            modal.classList.add(
+                'is-open'
+            );
+
+
+            modal.setAttribute(
+                'aria-hidden',
+                'false'
+            );
+
+
+            document.body.classList.add(
+                'msg91-modal-open'
+            );
+
+
+            const firstInput =
+                modal.querySelector(
+                    'input:not([type="hidden"]), select, textarea'
+                );
+
+
+            if (firstInput) {
+
+                setTimeout(
+                    function () {
+
+                        firstInput.focus();
+
+                    },
+                    80
+                );
+
+            }
+
+        }
+
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | CLOSE MODAL
+        |--------------------------------------------------------------------------
+        */
+
+      function closeModal(modal) {
+
+    if (!modal) {
+        return;
+    }
+
+    modal.classList.remove('is-open');
+
+    modal.setAttribute(
+        'aria-hidden',
+        'true'
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | REMOVE EDIT PARAMETER FROM URL
+    |--------------------------------------------------------------------------
+    |
+    | When Edit Template is opened, the URL becomes:
+    |
+    | /admin/msg91-whatsapp/templates?edit=UUID
+    |
+    | Closing the Edit modal should return the browser URL to:
+    |
+    | /admin/msg91-whatsapp/templates
+    |
+    | without reloading the page.
+    |
+    */
+
+    if (
+        modal.id ===
+        'msg91-register-template-modal'
+    ) {
+
+        const currentUrl =
+            new URL(
+                window.location.href
+            );
+
+
+        if (
+            currentUrl.searchParams.has(
+                'edit'
+            )
+        ) {
+
+            currentUrl.searchParams.delete(
+                'edit'
+            );
+
+
+            window.history.replaceState(
+                {},
+                '',
+                currentUrl.pathname
+                +
+                (
+                    currentUrl.search
+                    ?
+                    currentUrl.search
+                    :
+                    ''
+                )
+                +
+                currentUrl.hash
+            );
+
+        }
+
+    }
+
+
+    if (
+        !document.querySelector(
+            '.msg91-modal.is-open'
+        )
+    ) {
+
+        document.body.classList.remove(
+            'msg91-modal-open'
+        );
+
+    }
+
+}
+
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | CLICK
+        |--------------------------------------------------------------------------
+        */
+
+        document.addEventListener(
+            'click',
+            function (
+                event
+            ) {
+
+                const openButton =
+                    event.target.closest(
+                        '[data-msg91-open-modal]'
+                    );
+
+
+                if (openButton) {
+
+                    event.preventDefault();
+
+
+                    openModal(
+                        openButton.dataset.msg91OpenModal
+                    );
+
+
+                    return;
+
+                }
+
+
+                const closeButton =
+                    event.target.closest(
+                        '[data-msg91-close-modal]'
+                    );
+
+
+                if (closeButton) {
+
+                    event.preventDefault();
+
+
+                    closeModal(
+                        closeButton.closest(
+                            '.msg91-modal'
+                        )
+                    );
+
+                }
+
+            }
+        );
+
+        document.querySelectorAll('[data-msg91-member-selector]').forEach(function (selector) {
+            const selectAll = selector.querySelector('[data-msg91-select-all-senders]');
+            const members = Array.from(selector.querySelectorAll('[data-msg91-sender-checkbox]'));
+
+            function refreshSelectAll() {
+                selectAll.checked = members.length > 0 && members.every(function (member) {
+                    return member.checked;
+                });
+                selectAll.indeterminate = members.some(function (member) {
+                    return member.checked;
+                }) && !selectAll.checked;
+            }
+
+            selectAll.addEventListener('change', function () {
+                members.forEach(function (member) {
+                    member.checked = selectAll.checked;
+                });
+                refreshSelectAll();
+            });
+
+            members.forEach(function (member) {
+                member.addEventListener('change', refreshSelectAll);
+            });
+
+            refreshSelectAll();
+        });
+
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | ESC
+        |--------------------------------------------------------------------------
+        */
+
+        document.addEventListener(
+            'keydown',
+            function (
+                event
+            ) {
+
+                if (
+                    event.key
+                    !==
+                    'Escape'
+                ) {
+                    return;
+                }
+
+
+                const openModalElement =
+                    document.querySelector(
+                        '.msg91-modal.is-open'
+                    );
+
+
+                if (
+                    openModalElement
+                ) {
+
+                    closeModal(
+                        openModalElement
+                    );
+
+                }
+
+            }
+        );
+
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | AUTO OPEN EDIT
+        |--------------------------------------------------------------------------
+        */
+
+        @if($formTemplate)
+
+            openModal(
+                'msg91-register-template-modal'
+            );
+
+        @endif
+
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | AUTO OPEN AFTER VALIDATION FAILURE
+        |--------------------------------------------------------------------------
+        */
+
+        @if(
+            $errors->any()
+            &&
+            $oldFormContext === 'create_template'
+        )
+
+            openModal(
+                'msg91-create-template-modal'
+            );
+
+        @elseif(
+            $errors->any()
+            &&
+            $oldFormContext === 'register_template'
+        )
+
+            openModal(
+                'msg91-register-template-modal'
+            );
+
+        @endif
+
+    }
+);
+
+</script>
+
 @endsection

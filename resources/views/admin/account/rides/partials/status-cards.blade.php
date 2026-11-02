@@ -34,6 +34,53 @@
                 <strong>&#8377;{{ number_format($ride['received_amount'], 2) }} / &#8377;{{ number_format($ride['total_amount'], 2) }}</strong>
                 <small>Balance &#8377;{{ number_format($ride['balance_amount'], 2) }}</small>
                 <span class="rs-status">{{ $ride['status_label'] ?? $ride['status_text'] }}</span>
+
+                @if((int) ($ride['status'] ?? -1) === 2)
+                    <div class="rs-refund-summary">
+                        @foreach([
+                            'customer' => 'Customer Refund',
+                            'vendor' => 'Vendor Refund'
+                        ] as $type => $title)
+
+                            @php
+                                $refund = $ride['refund_display'][$type] ?? [
+                                    'label' => 'Assessment Pending',
+                                    'tone' => 'warning',
+                                    'due' => 0,
+                                ];
+
+                                $allowedTones = [
+                                    'neutral',
+                                    'warning',
+                                    'info',
+                                    'success'
+                                ];
+
+                                $tone = in_array(
+                                    $refund['tone'] ?? 'neutral',
+                                    $allowedTones,
+                                    true
+                                ) ? $refund['tone'] : 'neutral';
+                            @endphp
+
+                            <div class="rs-refund-line">
+                                <span class="rs-refund-title">
+                                    {{ $title }}
+                                </span>
+
+                                <span class="rs-refund-badge rs-refund-badge--{{ $tone }}">
+                                    {{ $refund['label'] }}
+                                </span>
+
+                                @if(($refund['due'] ?? 0) > 0)
+                                    <small>
+                                        Due ₹{{ number_format($refund['due'], 2) }}
+                                    </small>
+                                @endif
+                            </div>
+                        @endforeach
+                    </div>
+                @endif
             </div>
             <div class="rs-actions">
                 <a class="ti-btn ti-btn-icon ti-btn-sm ti-btn-primary-full" href="{{ route('admin.leads.view', $ride['lead_id']) }}" target="_blank" rel="noopener" title="View lead" aria-label="View lead {{ $ride['client_name'] }}"><i class="ri-eye-line" aria-hidden="true"></i></a>
