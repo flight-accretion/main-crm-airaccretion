@@ -98,6 +98,23 @@ return [
         'email_from_address'  => env('MSG91_EMAIL_FROM_ADDRESS', 'confirm@accretionaviation.com'),
         'email_from_name'     => env('MSG91_EMAIL_FROM_NAME', 'Accretion Aviation'),
     ],
+    // Dedicated, disabled-by-default campaign module. Existing MSG91 email,
+    // WhatsCRM, booking and Operations integrations remain independent.
+    'msg91_campaigns' => [
+        'enabled' => env('MSG91_CAMPAIGNS_ENABLED', false),
+        'dry_run' => env('MSG91_CAMPAIGNS_DRY_RUN', true),
+        'template_sync_enabled' => env('MSG91_CAMPAIGNS_TEMPLATE_SYNC_ENABLED', false),
+        'template_create_enabled' => env('MSG91_CAMPAIGNS_TEMPLATE_CREATE_ENABLED', false),
+        'auth_key' => env('MSG91_CAMPAIGNS_AUTH_KEY'),
+        'control_url' => env('MSG91_CAMPAIGNS_CONTROL_URL', 'https://control.msg91.com'),
+        'webhook_secret' => env('MSG91_CAMPAIGNS_WEBHOOK_SECRET'),
+        'template_stale_minutes' => (int) env('MSG91_CAMPAIGNS_TEMPLATE_STALE_MINUTES', 20),
+        'sender_per_minute' => (int) env('MSG91_CAMPAIGNS_SENDER_PER_MINUTE', 15),
+        'account_per_minute' => (int) env('MSG91_CAMPAIGNS_ACCOUNT_PER_MINUTE', 50),
+        'max_attempts' => (int) env('MSG91_CAMPAIGNS_MAX_ATTEMPTS', 3),
+        'connect_timeout' => (int) env('MSG91_CAMPAIGNS_CONNECT_TIMEOUT', 10),
+        'timeout' => (int) env('MSG91_CAMPAIGNS_TIMEOUT', 30),
+    ],
     'whatscrm' => [
         'api_url'                   => env('WHATSCRM_API_URL'),
         'api_token'                 => env('WHATSCRM_API_TOKEN'),

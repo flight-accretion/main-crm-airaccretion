@@ -1,11 +1,18 @@
 @extends('admin.layouts.header')
 @section('content')
-@php $tableProductNames = app(\App\Services\LeadTableProducts::class)->forRelatedLeads($arrFollowUps, 'enquiry'); @endphp
+@php
+    $tableProductNames = app(\App\Services\LeadTableProducts::class)->forRelatedLeads($arrFollowUps, 'enquiry');
+    $canComposeMsg91Campaign = app(\App\Services\WhatsApp\Msg91\Msg91CampaignAccess::class)->canCompose(auth()->user());
+@endphp
 <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/kpi/management-work.css') }}?v=1">
 <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/lead-queues.css') }}?v=1">
+@if($canComposeMsg91Campaign)<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/whatsapp/campaign-composer.css') }}?v=1">@endif
 <div class="crm-kpi-tool crm-lead-queue" data-kpi-tool data-lead-queue>
     <header class="lq-heading"><div><h3>Today's Follow-up</h3><p>{{ $fromDate->format('d M Y') }}</p></div>
-    <button type="button" class="ti-btn" data-export-followups><i class="ri-download-line"></i> Export</button></header>
+    <div class="flex items-center gap-2">
+        @if($canComposeMsg91Campaign)<div class="msg91-selection-toolbar" data-msg91-selection-toolbar><strong><span data-msg91-selection-count>0</span> selected</strong><button type="button" class="ti-btn ti-btn-primary" data-msg91-open><i class="ri-whatsapp-line"></i> Bulk WhatsApp</button><button type="button" class="ti-btn" data-msg91-clear>Clear</button></div>@endif
+        <button type="button" class="ti-btn" data-export-followups><i class="ri-download-line"></i> Export</button>
+    </div></header>
     @if(session('success'))<p role="status">{{ session('success') }}</p>@endif
     @if(session('error'))<p role="alert">{{ session('error') }}</p>@endif
     @if($errors->any())<div role="alert">@foreach($errors->all() as $error)<p>{{ $error }}</p>@endforeach</div>@endif
@@ -29,8 +36,9 @@
     </nav>
     <section class="lq-list"><header class="lq-heading"><h2>Follow-ups</h2><small>{{ number_format($queueSummary['total']) }} leads</small></header>
     @include('admin.pages.leads.partials.queue-table-controls')
-    <table data-queue-table id="followUpTable"><thead><tr>
-        @foreach(['#','Lead score','Lead','Phone','Representative','Next follow-up','Product','Created','Service date','Action'] as $heading)<th scope="col">@if($heading !== 'Action')<button type="button" data-queue-sort="{{ $loop->index }}">{{ $heading }} <i class="ri-arrow-up-down-line" aria-hidden="true"></i></button>@else{{ $heading }}@endif</th>@endforeach
+    <table data-queue-table id="followUpTable" @if($canComposeMsg91Campaign) data-msg91-selection-column @endif><thead><tr>
+        @if($canComposeMsg91Campaign)<th scope="col"><input type="checkbox" data-msg91-select-page aria-label="Select visible follow-ups for WhatsApp"></th>@endif
+        @foreach(['#','Lead score','Lead','Phone','Representative','Next follow-up','Product','Created','Service date','Action'] as $heading)<th scope="col">@if($heading !== 'Action')<button type="button" data-queue-sort="{{ $loop->index + ($canComposeMsg91Campaign ? 1 : 0) }}">{{ $heading }} <i class="ri-arrow-up-down-line" aria-hidden="true"></i></button>@else{{ $heading }}@endif</th>@endforeach
     </tr></thead><tbody>
     @foreach($arrFollowUps as $row)
         @php
@@ -41,6 +49,7 @@
             $serviceDate=$lead?->rideSegments->first()?->from_date;
         @endphp
         <tr data-queue-row data-id="{{ $lead?->id }}" data-bucket="{{ $bucket }}" class="{{ $bucket === 'overdue' ? 'lq-overdue-row' : '' }}">
+            @if($canComposeMsg91Campaign)<td data-label="Select"><input type="checkbox" data-msg91-lead-checkbox value="{{ $lead?->id }}" aria-label="Select {{ $lead?->client?->name ?? 'lead' }} for WhatsApp"></td>@endif
             <td data-label="#">{{ $loop->iteration }}</td>
             <td data-label="Lead score" data-order="{{ $score?->score ?? -1 }}">
             @if($score && $score->status === 'completed' && $temperature)<span class="lq-pill lq-score-{{ $temperature }}">{{ strtoupper($temperature) }} {{ $score->score }}</span>
@@ -113,6 +122,13 @@
     </section>
     @include('admin.pages.kpi.partials.tool-mobile-nav')
 </div>
+@if($canComposeMsg91Campaign)
+    @include('admin.pages.whatsapp.campaigns.composer', [
+        'previewUrl' => route('admin.msg91.campaigns.preview'),
+        'storeUrl' => route('admin.msg91.campaigns.store'),
+        'recordsUrl' => route('admin.msg91.campaigns.index'),
+    ])
+@endif
 @endsection
 @push('scripts')
 
@@ -175,4 +191,5 @@
 
 <script src="{{ asset('assets/admin/js/crm/kpi-tools.js') }}?v=1"></script>
 <script src="{{ asset('assets/admin/js/crm/lead-queues.js') }}?v=1"></script>
+@if($canComposeMsg91Campaign)<script src="{{ asset('assets/admin/js/crm/whatsapp/campaign-composer.js') }}?v=1"></script>@endif
 @endpush

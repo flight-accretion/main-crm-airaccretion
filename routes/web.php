@@ -735,6 +735,22 @@ Route::prefix(
         ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')
         ->name('admin.vendor-extra-services.store');
 
+    /* MSG91 campaign routes are intentionally separate from the CRM inbox and
+       existing WhatsCRM/booking routes. Controllers perform sender and scope checks. */
+    Route::prefix('admin/msg91-whatsapp')->name('admin.msg91.')->group(function () {
+        Route::get('/campaigns', [\App\Http\Controllers\Msg91CampaignController::class, 'index'])->name('campaigns.index');
+        Route::get('/campaigns/{campaign}', [\App\Http\Controllers\Msg91CampaignController::class, 'show'])->whereUuid('campaign')->name('campaigns.show');
+        Route::post('/campaigns/preview', [\App\Http\Controllers\Msg91CampaignController::class, 'preview'])->middleware('throttle:30,1')->name('campaigns.preview');
+        Route::post('/campaigns', [\App\Http\Controllers\Msg91CampaignController::class, 'store'])->middleware('throttle:10,1')->name('campaigns.store');
+        Route::post('/campaigns/{campaign}/cancel', [\App\Http\Controllers\Msg91CampaignController::class, 'cancel'])->whereUuid('campaign')->name('campaigns.cancel');
+        Route::get('/admin/subscriptions', [\App\Http\Controllers\Msg91WhatsAppAdminController::class, 'index'])->name('admin.index');
+        Route::put('/admin/subscriptions', [\App\Http\Controllers\Msg91WhatsAppAdminController::class, 'save'])->name('admin.save');
+        Route::get('/templates', [\App\Http\Controllers\Msg91WhatsAppTemplateController::class, 'index'])->name('templates.index');
+        Route::post('/templates', [\App\Http\Controllers\Msg91WhatsAppTemplateController::class, 'save'])->name('templates.save');
+        Route::post('/templates/create', [\App\Http\Controllers\Msg91WhatsAppTemplateController::class, 'create'])->name('templates.create');
+        Route::post('/templates/senders/{sender}/sync', [\App\Http\Controllers\Msg91WhatsAppTemplateController::class, 'sync'])->whereUuid('sender')->name('templates.sync');
+    });
+
 
     Route::delete('/admin/vendor-extra-services/{id}', [VendorExtraServiceController::class, 'destroy'])
         ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES')

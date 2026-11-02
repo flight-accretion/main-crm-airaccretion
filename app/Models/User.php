@@ -67,6 +67,16 @@ class User extends Authenticatable
         return $this->belongsTo(UserType::class, 'user_type_id');
     }
 
+    public function msg91CampaignSubscription()
+    {
+        return $this->hasOne(\App\Models\Msg91WhatsAppSubscription::class, 'user_id');
+    }
+
+    public function msg91CampaignSender()
+    {
+        return $this->hasOne(\App\Models\Msg91WhatsAppSender::class, 'user_id');
+    }
+
     /**
      * Get users with same or child user types based on hierarchy
      */

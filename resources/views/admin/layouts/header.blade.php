@@ -762,6 +762,7 @@
                         <li class="slide {{ Route::is('admin.clients.index') ? 'active' : '' }}"><a href="{{ route('admin.clients.index') }}" class="side-menu__item"><i class="ri-user-search-line side-menu__icon"></i><span class="side-menu__label">Leads</span></a></li>
                         <li class="slide {{ Route::is('admin.leads.dnp') ? 'active' : '' }}"><a href="{{ route('admin.leads.dnp') }}" class="side-menu__item"><i class="ri-phone-missed-line side-menu__icon"></i><span class="side-menu__label">DNP Leads</span></a></li>
                         <li class="slide {{ Route::is('admin.upcoming-follow-up.*') ? 'active' : '' }}"><a href="{{ route('admin.upcoming-follow-up.index') }}" class="side-menu__item"><i class="ri-calendar-event-line side-menu__icon"></i><span class="side-menu__label">Upcoming Follow-ups</span></a></li>
+                        <li class="slide {{ Route::is('admin.msg91.campaigns.*') ? 'active' : '' }}"><a href="{{ route('admin.msg91.campaigns.index') }}" class="side-menu__item"><i class="ri-whatsapp-line side-menu__icon"></i><span class="side-menu__label">WhatsApp Campaigns</span></a></li>
 
                         <li class="slide__category"><span class="category-name">Operations</span></li>
                         <li class="slide {{ Route::is('admin.rides.upcoming') ? 'active' : '' }}"><a href="{{ route('admin.rides.upcoming') }}" class="side-menu__item"><i class="ri-plane-line side-menu__icon"></i><span class="side-menu__label">Upcoming Rides</span></a></li>
@@ -817,6 +818,8 @@
                             <li class="slide {{ Route::is('admin.leads.transfers.*') ? 'active' : '' }}"><a href="{{ route('admin.leads.transfers.index') }}" class="side-menu__item"><i class="bx bx-transfer side-menu__icon"></i><span class="side-menu__label">Requested Leads</span></a></li>
                             <li class="slide {{ Route::is('admin.client.*') ? 'active' : '' }}"><a href="{{ route('admin.client.index') }}" class="side-menu__item"><i class="bx bx-user side-menu__icon"></i><span class="side-menu__label">View Clients</span></a></li>
                             <li class="slide {{ Route::is('admin.whatsapp.index') ? 'active' : '' }}"><a href="{{ route('admin.whatsapp.index') }}" class="side-menu__item"><i class="bx bxl-whatsapp side-menu__icon"></i><span class="side-menu__label">WhatsApp Inbox</span></a></li>
+                            <li class="slide {{ Route::is('admin.msg91.campaigns.*') ? 'active' : '' }}"><a href="{{ route('admin.msg91.campaigns.index') }}" class="side-menu__item"><i class="ri-whatsapp-line side-menu__icon"></i><span class="side-menu__label">WhatsApp Campaigns</span></a></li>
+                            <li class="slide {{ Route::is('admin.msg91.templates.*') ? 'active' : '' }}"><a href="{{ route('admin.msg91.templates.index') }}" class="side-menu__item"><i class="ri-file-list-3-line side-menu__icon"></i><span class="side-menu__label">WhatsApp Templates</span></a></li>
 
                             <li class="slide__category"><span class="category-name">KPI</span></li>
                             <li class="slide {{ Route::is('admin.kpi.index') ? 'active' : '' }}"><a href="{{ route('admin.kpi.index') }}" class="side-menu__item"><i class="bx bx-bar-chart-alt-2 side-menu__icon"></i><span class="side-menu__label">KPI Dashboard</span></a></li>
@@ -998,6 +1001,21 @@
                                 <a href="{{ route('admin.whatsapp.index') }}" class="side-menu__item">
                                     <i class="bx bxl-whatsapp side-menu__icon"></i>
                                     <span class="side-menu__label">WhatsApp Inbox</span>
+                                </a>
+                            </li>
+                        @endif
+
+                        @if ($userType === UserType::SUPER_ADMIN || $canAccess($userType, $adminRoles))
+                            <li class="slide {{ Route::is('admin.msg91.campaigns.*') ? 'active' : '' }}">
+                                <a href="{{ route('admin.msg91.campaigns.index') }}" class="side-menu__item">
+                                    <i class="ri-whatsapp-line side-menu__icon"></i>
+                                    <span class="side-menu__label">WhatsApp Campaigns</span>
+                                </a>
+                            </li>
+                            <li class="slide {{ Route::is('admin.msg91.templates.*') ? 'active' : '' }}">
+                                <a href="{{ route('admin.msg91.templates.index') }}" class="side-menu__item">
+                                    <i class="ri-file-list-3-line side-menu__icon"></i>
+                                    <span class="side-menu__label">WhatsApp Templates</span>
                                 </a>
                             </li>
                         @endif

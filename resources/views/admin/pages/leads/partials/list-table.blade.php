@@ -4,6 +4,7 @@
 @endphp
 <table class="leads-table" aria-label="Leads">
     <thead><tr>
+        @if($canComposeMsg91Campaign ?? false)<th class="leads-selection"><input type="checkbox" data-msg91-select-page aria-label="Select all visible leads for WhatsApp"></th>@endif
         @if($isSuperAdmin)<th class="leads-selection"><input type="checkbox" id="select-all-transfer-leads" aria-label="Select all leads on this page"></th>@endif
         <th scope="col" class="leads-col-name">Name</th><th scope="col" class="leads-col-phone">Phone</th><th scope="col" class="leads-col-product">Product</th><th scope="col" class="leads-col-service-date">Service date</th><th scope="col" class="leads-col-followup">Follow-up</th><th scope="col" class="leads-col-assigned">Assigned</th><th scope="col" class="leads-col-ai">AI score</th><th scope="col" class="leads-col-status">Status</th><th scope="col" class="leads-col-action">Action</th>
     </tr></thead>
@@ -20,6 +21,7 @@
             $phone = \App\Support\LeadPhonePresentation::forNumber(optional($enquiry->client)->contact_number);
         @endphp
         <tr class="lead-followup-hover-row {{ $isOverdue ? 'leads-overdue-row' : '' }}">
+            @if($canComposeMsg91Campaign ?? false)<td class="leads-selection"><input type="checkbox" data-msg91-lead-checkbox value="{{ $enquiry->id }}" aria-label="Select {{ optional($enquiry->client)->name ?? 'lead' }} for WhatsApp"></td>@endif
             @if($isSuperAdmin)<td class="leads-selection"><input type="checkbox" class="lead-transfer-checkbox" value="{{ $enquiry->id }}" data-client-name="{{ optional($enquiry->client)->name ?? 'N/A' }}" data-current-representative="{{ optional($enquiry->representative)->name ?? 'N/A' }}" aria-label="Select {{ optional($enquiry->client)->name ?? 'lead' }}"></td>@endif
             <td data-label="Name" class="leads-client" data-sort-value="{{ optional($enquiry->client)->name ?? '' }}"><strong>{{ optional($enquiry->client)->name ?? 'N/A' }}</strong><details class="leads-record-dates"><summary>Details</summary><span>Created: {{ optional($enquiry->created_at)->format('d-m-Y H:i') }}</span><span>Updated: {{ optional($enquiry->updated_at)->format('d-m-Y H:i') }}</span></details></td>
             <td data-label="Phone" class="leads-phone" data-sort-value="{{ $phone['copy'] ?? $phone['display'] }}">
@@ -36,7 +38,7 @@
             <td data-label="Action" class="leads-actions">@include('admin.pages.leads.partials.list-actions')</td>
         </tr>
     @empty
-        <tr><td colspan="{{ $isSuperAdmin ? 10 : 9 }}" class="leads-empty">No matching leads</td></tr>
+        <tr><td colspan="{{ 9 + ($isSuperAdmin ? 1 : 0) + (($canComposeMsg91Campaign ?? false) ? 1 : 0) }}" class="leads-empty">No matching leads</td></tr>
     @endforelse
     </tbody>
 </table>

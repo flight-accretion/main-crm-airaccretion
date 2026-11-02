@@ -15,6 +15,8 @@ use App\Http\Middleware\VerifySkyrackToken;
 use App\Http\Controllers\Api\GoogleChatPubSubController;
 use App\Http\Controllers\Api\SkyrackLeadCancellationController;
 
+require __DIR__ . '/msg91-webhooks.php';
+
 
 /*
 |--------------------------------------------------------------------------

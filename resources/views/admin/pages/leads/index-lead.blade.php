@@ -158,7 +158,11 @@
     $canDownloadLeads = in_array($listRole, [\App\Models\UserType::SUPER_ADMIN, \App\Models\UserType::HR], true);
     $canRequestLeads = $listRole === \App\Models\UserType::SUPER_ADMIN || in_array($listRole, \App\Models\UserType::SALES_ROLES, true);
     $dashboardRoute = $listRole === \App\Models\UserType::HR ? 'admin.hr.dashboard' : (in_array($listRole, \App\Models\UserType::OPERATIONS_ROLES, true) ? 'admin.operations.index' : 'admin.sales-dashboard');
+    $canComposeMsg91Campaign = app(\App\Services\WhatsApp\Msg91\Msg91CampaignAccess::class)->canCompose(auth()->user());
 @endphp
+@if($canComposeMsg91Campaign)
+    <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/whatsapp/campaign-composer.css') }}?v=1">
+@endif
 <div class="crm-leads-list">
     <header class="leads-heading"><div><h1>Leads</h1></div><div class="leads-heading-actions">
         @if($canDownloadLeads)<button type="button" class="leads-button" data-lead-dialog-open="leads-download"><i class="ri-download-2-line" aria-hidden="true"></i>Download</button>@endif
@@ -181,6 +185,13 @@
     @if(!$isSuperAdmin && request('lead_queue', 'all') !== 'all')<a class="leads-reset" href="{{ route('admin.clients.index', request()->except(['page', 'lead_queue'])) }}">Reset queue filter</a>@endif
     <section class="leads-results" aria-label="Lead results">
         <div class="leads-results-heading"><h2>Leads</h2>
+            @if($canComposeMsg91Campaign)
+                <div class="msg91-selection-toolbar" data-msg91-selection-toolbar>
+                    <strong><span data-msg91-selection-count>0</span> selected</strong>
+                    <button type="button" class="leads-button leads-primary" data-msg91-open><i class="ri-whatsapp-line" aria-hidden="true"></i> Bulk WhatsApp</button>
+                    <button type="button" class="leads-button" data-msg91-clear>Clear</button>
+                </div>
+            @endif
             @if($isSuperAdmin)
 <div
     id="bulk-lead-transfer-controls"
@@ -222,6 +233,14 @@
         @include('admin.pages.leads.partials.list-table')
         <footer class="leads-pagination"><span>{{ $leads->firstItem() ?? 0 }}-{{ $leads->lastItem() ?? 0 }} of {{ $leads->total() }} leads</span>{{ $leads->appends(request()->except('page'))->links() }}</footer>
     </section>
+    @if($canComposeMsg91Campaign)
+        @include('admin.pages.whatsapp.campaigns.composer', [
+            'previewUrl' => route('admin.msg91.campaigns.preview'),
+            'storeUrl' => route('admin.msg91.campaigns.store'),
+            'recordsUrl' => route('admin.msg91.campaigns.index'),
+        ])
+        <script src="{{ asset('assets/admin/js/crm/whatsapp/campaign-composer.js') }}?v=1" defer></script>
+    @endif
     <nav id="leads-mobile-more" class="leads-mobile-more" aria-label="More navigation" hidden></nav>
     <nav class="leads-mobile-nav" aria-label="Mobile navigation">
         <a href="{{ route($dashboardRoute) }}"><i class="ri-home-4-line" aria-hidden="true"></i><span>Dashboard</span></a>
