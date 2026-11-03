@@ -29,6 +29,7 @@ class Msg91WhatsAppAdminController extends Controller
                 'userType',
                 'msg91CampaignSender',
             ])
+            ->where('status', 1)
             ->whereHas(
                 'userType',
                 fn ($q) =>
@@ -67,6 +68,15 @@ class Msg91WhatsAppAdminController extends Controller
 
         $data =
             $request->validated();
+
+        abort_unless(
+            User::query()
+                ->where('status', 1)
+                ->whereKey($data['user_id'])
+                ->exists(),
+            422,
+            'Sender access can only be managed for an active CRM user.'
+        );
 
 
         /*

@@ -4,7 +4,7 @@
 
 <link
     rel="stylesheet"
-    href="{{ asset('assets/admin/css/crm/whatsapp/admin.css') }}?v=3"
+    href="{{ asset('assets/admin/css/crm/whatsapp/admin.css') }}?v=9"
 >
 
 
@@ -27,7 +27,7 @@
             </h1>
 
             <p>
-                Manage WhatsApp sender access and integrated numbers for CRM users.
+                Manage WhatsApp sender access and integrated numbers for active CRM users.
             </p>
 
         </div>
@@ -455,7 +455,7 @@
 
 
                                 <span>
-                                    No CRM users are available for WhatsApp sender access.
+                                    No active CRM users are available for WhatsApp sender access.
                                 </span>
 
                             </td>

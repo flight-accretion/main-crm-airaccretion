@@ -1,1 +1,4 @@
-@import url("campaigns.css");
+/* Keep the imported bundle versioned as well as the parent file.  The parent
+   query string is not inherited by @import, so without this suffix a CDN can
+   keep serving an old campaigns.css file after a deployment. */
+@import url("campaigns.css?v=9");

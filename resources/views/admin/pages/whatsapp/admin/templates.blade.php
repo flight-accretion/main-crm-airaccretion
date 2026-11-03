@@ -4,7 +4,7 @@
 
 <link
     rel="stylesheet"
-    href="{{ asset('assets/admin/css/crm/whatsapp/admin.css') }}?v=6"
+    href="{{ asset('assets/admin/css/crm/whatsapp/admin.css') }}?v=9"
 >
 
 
