@@ -1283,7 +1283,7 @@
 
                                         <option
                                             value="{{ $value }}"
-                                            {{ old('body_'.$index, $index === 1 ? 'customer_name' : '') === $value ? 'selected' : '' }}
+                                           {{ old('body_'.$index, '') === $value ? 'selected' : '' }}
                                         >
 
                                             {{ $label }}

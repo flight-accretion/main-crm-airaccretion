@@ -32,7 +32,9 @@ class Msg91WhatsAppTemplateController extends Controller
         $senders = Msg91WhatsAppSender::query()
             ->with('user:id,name,email')
             ->where('status', 'active')
-            ->whereNotNull('verified_at')
+            ->where('verified_at', '>=', now()->subMinutes(
+            (int) config('services.msg91_campaigns.sender_verification_ttl_minutes', 15)
+            ))
             ->when(!$canManageAll, fn ($query) => $query->where('user_id', $request->user()->id))
             ->orderBy('integrated_number')
             ->get();

@@ -5,6 +5,8 @@
     justify-content: space-between;
     gap: 1rem;
     margin-bottom: 1rem;
+    margin-top: 1rem;
+
 }
 .crm-client-directory-heading h1 {
     margin: 0 0 0.25rem;
@@ -409,6 +411,7 @@ a.crm-client-contact:hover {
     border-top: 1px solid #dfe5ec;
     color: #7e8da3;
     font-size: 0.7rem;
+    margin-left: 17px;
 }
 .crm-client-pagination-links {
     min-width: 0;
@@ -538,4 +541,8 @@ a.crm-client-contact:hover {
     .crm-client-add-panel,
     .crm-client-view-drawer { width: 100vw; }
     .crm-client-view-grid { grid-template-columns: 1fr; }
+}
+
+.crm-client-directory{
+    margin-bottom: 20px;
 }

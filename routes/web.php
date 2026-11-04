@@ -762,6 +762,10 @@ Route::get(
         Route::post('/templates', [\App\Http\Controllers\Msg91WhatsAppTemplateController::class, 'save'])->name('templates.save');
         Route::post('/templates/create', [\App\Http\Controllers\Msg91WhatsAppTemplateController::class, 'create'])->name('templates.create');
         Route::post('/templates/senders/{sender}/sync', [\App\Http\Controllers\Msg91WhatsAppTemplateController::class, 'sync'])->whereUuid('sender')->name('templates.sync');
+        Route::post('/admin/subscriptions/refresh-senders',
+        [\App\Http\Controllers\Msg91WhatsAppAdminController::class, 'refreshSenders'])
+        ->middleware('throttle:3,1')
+        ->name('admin.refresh-senders');
     });
 
 

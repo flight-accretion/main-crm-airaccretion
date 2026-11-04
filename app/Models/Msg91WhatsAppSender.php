@@ -13,7 +13,21 @@ class Msg91WhatsAppSender extends Model
     protected $guarded = [];
     protected $casts = ['verified_at' => 'datetime', 'verification_meta' => 'array'];
 
-    public function user() { return $this->belongsTo(User::class); }
-    public function bindings() { return $this->hasMany(Msg91WhatsAppSenderTemplateBinding::class, 'sender_id'); }
-    public function isVerifiedActive(): bool { return $this->status === 'active' && $this->verified_at !== null; }
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+    public function bindings()
+    {
+        return $this->hasMany(Msg91WhatsAppSenderTemplateBinding::class, 'sender_id');
+    }
+    public function isVerifiedActive(): bool
+    {
+        return $this->status === 'active'
+            && filled($this->integrated_number)
+            && $this->verified_at !== null
+            && $this->verified_at->gte(
+                now()->subMinutes((int) config('services.msg91_campaigns.sender_verification_ttl_minutes', 15))
+            );
+  }
 }

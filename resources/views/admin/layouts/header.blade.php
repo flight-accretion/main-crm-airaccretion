@@ -17,7 +17,7 @@
     <link rel="stylesheet" href="/assets/admin/css/style.css?v=1.4">
     <link rel="stylesheet" href="/assets/admin/css/responsive.css?v=1.1">
     <link rel="stylesheet" href="/assets/admin/css/custom.css?v=2.4">
-    <link rel="stylesheet" href="/assets/admin/css/crm/navigation.css?v=10">
+    <link rel="stylesheet" href="/assets/admin/css/crm/navigation.css?v=13">
     <link rel="stylesheet" href="/assets/admin/css/crm/responsive/mobile-tables.css?v=1">
 
     <!-- Simplebar Css -->
@@ -666,7 +666,7 @@
         </header>
         <!-- End::Header -->
         <!-- Start::app-sidebar -->
-        <aside class="app-sidebar" id="sidebar">
+        <aside class="app-sidebar crm-sidebar" id="sidebar">
 
             <!-- Start::main-sidebar-header -->
             <div class="main-sidebar-header">
@@ -732,13 +732,85 @@
                 };
                 // Accounts gets one purpose-built tree. Other roles retain the existing shared navigation below.
                 $isAccountsSidebar = $canAccess($userType, $accountRoles) && !$canAccess($userType, $adminRoles);
-                $isSalesSidebar = $canAccess($userType, $salesRoles) && !$canAccess($userType, $adminRoles);
-                $salesCanReceiveMoreLeads = $isSalesSidebar
-                    && \Illuminate\Support\Facades\Schema::hasTable('salesperson_availability')
-                    && (bool) \App\Models\SalespersonAvailability::where('user_id', auth()->id())
-                        ->where('is_available', true)
-                        ->where('is_opted_in', true)
-                        ->exists();
+
+                $isSalesSidebar =
+        $canAccess(
+            $userType,
+            $salesRoles
+        )
+        &&
+        !$canAccess(
+            $userType,
+            $adminRoles
+        );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Sales lead availability
+    |--------------------------------------------------------------------------
+    */
+
+    $sidebarLeadAvailability = null;
+
+    $sidebarLeadSettings = null;
+
+    $sidebarOfficeOpen = false;
+
+    $salesCanReceiveMoreLeads = false;
+
+
+    if (
+        $isSalesSidebar
+        &&
+        \Illuminate\Support\Facades\Schema::hasTable(
+            'salesperson_availability'
+        )
+    ) {
+
+        $sidebarLeadAvailability =
+            \App\Models\SalespersonAvailability::query()
+                ->where(
+                    'user_id',
+                    auth()->id()
+                )
+                ->first();
+
+
+        $sidebarLeadSettings =
+            \App\Models\LeadAllocationSetting::getActiveSettings();
+
+
+        $sidebarOfficeOpen =
+            app(
+                \App\Services\LeadAllocationService::class
+            )->isOfficeOpenForDebug(
+                $sidebarLeadSettings,
+                now()
+            );
+
+
+        $sidebarConfirmedToday =
+            $sidebarLeadAvailability
+            &&
+            $sidebarLeadAvailability->last_response_at
+            &&
+            $sidebarLeadAvailability
+                ->last_response_at
+                ->isToday();
+
+
+        $salesCanReceiveMoreLeads =
+            (bool) (
+                $sidebarOfficeOpen
+                &&
+                $sidebarConfirmedToday
+                &&
+                $sidebarLeadAvailability->is_available
+                &&
+                $sidebarLeadAvailability->is_opted_in
+            );
+                }
             @endphp
                     <ul class="main-menu" data-navigation-role="{{ $userType }}" data-navigation-user="{{ auth()->id() }}">
                         {{-- ================= OWNER MENU (read-only oversight) ================= --}}
@@ -825,14 +897,42 @@
                             <li class="slide {{ Route::is('admin.kpi.index') ? 'active' : '' }}"><a href="{{ route('admin.kpi.index') }}" class="side-menu__item"><i class="bx bx-bar-chart-alt-2 side-menu__icon"></i><span class="side-menu__label">KPI Dashboard</span></a></li>
 
                             <li class="slide sales-lead-availability">
-                                <form method="POST" action="{{ $salesCanReceiveMoreLeads ? route('admin.sales-dashboard.popup.decline') : route('admin.sales-dashboard.popup.accept') }}">
+                                <form
+                                    method="POST"
+                                    action="{{ $salesCanReceiveMoreLeads
+                                        ? route('admin.sales-dashboard.popup.decline')
+                                        : route('admin.sales-dashboard.popup.accept') }}"
+                                    class="{{ !$sidebarOfficeOpen ? 'is-disabled' : '' }}"
+                                >
                                     @csrf
-                                    <label class="side-menu__item sales-lead-availability__label">
-                                        <span><i class="bx bx-trending-up side-menu__icon"></i><span class="side-menu__label">Assign more leads</span></span>
-                                        <input type="checkbox" role="switch" aria-label="Assign more leads" {{ $salesCanReceiveMoreLeads ? 'checked' : '' }} onchange="this.form.submit()">
+
+                                    <label
+                                        class="side-menu__item sales-lead-availability__label"
+                                        title="{{ !$sidebarOfficeOpen
+                                            ? 'Lead assignment is available only during office hours.'
+                                            : ($salesCanReceiveMoreLeads
+                                                ? 'Receiving new automatically assigned leads.'
+                                                : 'Turn on to receive new automatically assigned leads.') }}"
+                                    >
+                                        <span>
+                                            <i class="bx bx-trending-up side-menu__icon"></i>
+                                            <span class="side-menu__label">Assign more leads</span>
+                                        </span>
+
+                                        <input
+                                            type="checkbox"
+                                            role="switch"
+                                            aria-label="Assign more leads"
+                                            {{ $salesCanReceiveMoreLeads ? 'checked' : '' }}
+                                            {{ !$sidebarOfficeOpen ? 'disabled' : '' }}
+                                            onchange="if (!this.disabled) { this.form.submit(); }"
+                                        >
                                     </label>
                                 </form>
                             </li>
+
+                           
+
                         @elseif($isAccountsSidebar)
                             <li class="slide {{ Route::is('admin.account.dashboard') ? 'active' : '' }}">
                                 <a href="{{ route('admin.account.dashboard') }}" class="side-menu__item"><i class="ri-dashboard-line side-menu__icon" aria-hidden="true"></i><span class="side-menu__label">Accounts Dashboard</span></a>
@@ -1927,6 +2027,7 @@
                             </li>
                         @endif
                         @endif
+                        
                     </ul>
                     <div class="slide-right" id="slide-right">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="#7b8191" width="24" height="24"

@@ -785,14 +785,18 @@
                 return;
             }
 
+
+            // IMPORTANT:
+            // Create FormData before render() disables the refund amount input.
+            const form = new FormData(event.currentTarget);
+
+            form.set('amount', el('cr2-amount').value);
+            form.set('request_id', activeRequestId);
+
             paymentSaving = true;
             render();
 
             try {
-                const form = new FormData(event.currentTarget);
-
-                form.set('request_id', activeRequestId);
-
                 const body = await call(
                     url('pay'),
                     {
@@ -830,6 +834,7 @@
                 paymentSaving = false;
                 render();
             }
+
         }
     );
 

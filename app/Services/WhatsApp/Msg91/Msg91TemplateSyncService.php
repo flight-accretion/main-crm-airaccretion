@@ -61,17 +61,40 @@ class Msg91TemplateSyncService
                     ]);
                 }
 
-                $autoVisible = !$template->exists || !(bool) $template->crm_visibility_overridden;
-                $template->fill([
-                    'category' => data_get($row, 'category'),
-                    'provider_template_id' => $providerId,
-                    'status' => $status,
-                    'components' => data_get($variant, 'code', data_get($row, 'components')),
-                    'variable_schema' => $this->schemaForVariant($variant),
-                    'crm_enabled' => $autoVisible ? $status === 'approved' : $template->crm_enabled,
-                    'last_synced_at' => now(),
-                ]);
-                $template->save();
+                
+            $autoVisible = !$template->exists
+                || !(bool) $template->crm_visibility_overridden;
+
+            // Preserve the existing CRM variable mapping.
+            // MSG91 provides placeholder positions but not our CRM field choices.
+            $existingSchema = $template->variable_schema;
+
+            $variableSchema = (
+                $template->exists
+                && is_array($existingSchema)
+                && !empty($existingSchema)
+            )
+                ? $existingSchema
+                : $this->schemaForVariant($variant);
+
+            $template->fill([
+                'category' => data_get($row, 'category'),
+                'provider_template_id' => $providerId,
+                'status' => $status,
+                'components' => data_get(
+                    $variant,
+                    'code',
+                    data_get($row, 'components')
+                ),
+                'variable_schema' => $variableSchema,
+                'crm_enabled' => $autoVisible
+                    ? $status === 'approved'
+                    : $template->crm_enabled,
+                'last_synced_at' => now(),
+            ]);
+
+            $template->save();
+
 
                 Msg91WhatsAppSenderTemplateBinding::query()->updateOrCreate(
                     ['sender_id' => $sender->id, 'template_id' => $template->id],

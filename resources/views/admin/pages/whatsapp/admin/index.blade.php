@@ -31,9 +31,15 @@
             </p>
 
         </div>
-
-
         <div class="msg91-page__actions">
+
+            <form method="POST" action="{{ route('admin.msg91.admin.refresh-senders') }}">
+                @csrf
+                <button type="submit" class="msg91-button msg91-button--secondary">
+                    <i class="ri-refresh-line" aria-hidden="true"></i>
+                    Refresh MSG91 Sender Status
+                </button>
+            </form>
 
             <a
                 class="msg91-button msg91-button--secondary"
@@ -189,16 +195,12 @@
                             'active';
 
 
-                        $subscriptionActive =
-                            (
-                                $member
-                                    ->msg91CampaignSubscription
-                                    ?->status
-                                ??
-                                'inactive'
-                            )
-                            ===
-                            'active';
+                        $providerStatus = strtolower(trim((string) data_get(
+                            $member->msg91CampaignSender?->verification_meta,
+                            'provider_status',
+                            'not_checked'
+                        )));
+                        $providerConnected = $providerStatus === 'connected';
 
 
                             $accessStatus =
@@ -346,10 +348,9 @@
                         <span
                             class="
                                 msg91-access-status
-                                {{
-                                    $subscriptionActive
-                                        ? 'msg91-access-status--active'
-                                        : 'msg91-access-status--inactive'
+                               {{ in_array($providerStatus, ['activated', 'connected'], true)
+                                    ? 'msg91-access-status--active'
+                                    : 'msg91-access-status--inactive'
                                 }}
                             "
                         >
@@ -357,9 +358,7 @@
                             <span class="msg91-access-status__dot"></span>
 
                             {{
-                                $subscriptionActive
-                                    ? 'Active'
-                                    : 'Inactive'
+                                $providerConnected ? 'Connected' : ucfirst(str_replace('_', ' ', $providerStatus))
                             }}
 
                         </span>
@@ -494,16 +493,12 @@
         'active';
 
 
-    $subscriptionActive =
-        (
-            $member
-                ->msg91CampaignSubscription
-                ?->status
-            ??
-            'inactive'
-        )
-        ===
-        'active';
+    $providerStatus = strtolower(trim((string) data_get(
+        $member->msg91CampaignSender?->verification_meta,
+        'provider_status',
+        'not_checked'
+    )));
+    $providerConnected = $providerStatus === 'connected';
 
 
     $accessStatus =
@@ -584,19 +579,16 @@
         <span
             class="
                 msg91-access-status
-                {{
-                    $subscriptionActive
-                        ? 'msg91-access-status--active'
-                        : 'msg91-access-status--inactive'
-                }}
+            {{ in_array($providerStatus, ['activated', 'connected'], true)
+                ? 'msg91-access-status--active'
+                : 'msg91-access-status--inactive'
+            }}
             "
         >
             <span class="msg91-access-status__dot"></span>
 
             {{
-                $subscriptionActive
-                    ? 'Active'
-                    : 'Inactive'
+                $providerConnected ? 'Connected' : ucfirst(str_replace('_', ' ', $providerStatus))
             }}
         </span>
 
@@ -1227,24 +1219,6 @@ modal.classList.add(
                     closeModal();
 
                 }
-
-            }
-        );
-
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | SYNC STATUS
-        |--------------------------------------------------------------------------
-        */
-
-        status.addEventListener(
-            'change',
-            function () {
-
-                senderStatus.value =
-                    status.value;
 
             }
         );

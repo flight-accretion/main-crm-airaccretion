@@ -490,54 +490,216 @@
     }
 }
 /* Sales availability stays reachable without interrupting work with a modal. */
-.sales-lead-availability {
-    position: sticky;
-    bottom: 0;
-    margin-top: 16px;
-    padding: 10px 8px;
-    background: var(--body-bg, #fff);
-    border-top: 1px solid #e5eaf0;
-    z-index: 2;
+/* =========================================================
+   SALES SIDEBAR - ASSIGN MORE LEADS
+   ========================================================= */
+
+/*
+ * Leave space at the bottom of the scrollable menu so that
+ * the last navigation item is not hidden behind the toggle.
+ */
+.crm-sidebar #sidebar-scroll {
+    padding-bottom: 74px;
 }
-.sales-lead-availability__label {
+
+
+/*
+ * Always keep Assign More Leads visible at the bottom
+ * of the sidebar.
+ */
+.crm-sidebar .sales-lead-availability {
+    position: fixed !important;
+
+    left: 0;
+    bottom: 0;
+
+    width: 15rem;
+
+    z-index: 100;
+
+    margin: 0 !important;
+    padding: 9px 10px;
+
+    background: #ffffff;
+
+    border-top: 1px solid #e4e9ef;
+
+    box-shadow:
+        0 -4px 12px rgba(15, 43, 70, 0.05);
+}
+
+
+.crm-sidebar .sales-lead-availability form {
+    margin: 0;
+}
+
+
+.crm-sidebar .sales-lead-availability__label {
+    display: flex !important;
+
+    align-items: center !important;
     justify-content: space-between !important;
+
+    gap: 8px;
+
+    width: 100%;
+
+    min-height: 42px;
+
+    padding: 8px 10px !important;
+
+    border: 1px solid #dfe5ec !important;
+
+    border-radius: 7px !important;
+
+    background: #ffffff !important;
+
     cursor: pointer;
 }
-.sales-lead-availability__label > span {
+
+
+.crm-sidebar .sales-lead-availability__label > span {
     display: flex;
+
     align-items: center;
-    gap: 0.45rem;
+
+    gap: 7px;
+
+    min-width: 0;
 }
-.sales-lead-availability input,
-.sd-availability input {
+
+
+/* Sidebar toggle */
+.crm-sidebar
+.sales-lead-availability__label
+input[type="checkbox"] {
     appearance: none;
+    -webkit-appearance: none;
+
+    position: relative;
+
+    flex: 0 0 38px;
+
     width: 38px;
     height: 22px;
+
+    margin: 0;
+
+    border: 0;
+
     border-radius: 999px;
+
     background: #aab7c5;
-    position: relative;
+
     cursor: pointer;
-    flex: 0 0 auto;
-    transition: background 0.2s;
+
+    transition: background-color 0.2s ease;
 }
-.sales-lead-availability input::after,
-.sd-availability input::after {
+
+
+.crm-sidebar
+.sales-lead-availability__label
+input[type="checkbox"]::after {
     content: "";
+
     position: absolute;
+
     width: 16px;
     height: 16px;
-    border-radius: 50%;
-    background: #fff;
+
     left: 3px;
     top: 3px;
+
+    border-radius: 50%;
+
+    background: #ffffff;
+
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+
+    transition: transform 0.2s ease;
+}
+
+
+.crm-sidebar
+.sales-lead-availability__label
+input[type="checkbox"]:checked {
+    background: #168a4e;
+}
+
+
+.crm-sidebar
+.sales-lead-availability__label
+input[type="checkbox"]:checked::after {
+    transform: translateX(16px);
+}
+
+
+.crm-sidebar
+.sales-lead-availability
+form.is-disabled {
+    opacity: 0.6;
+}
+
+
+.crm-sidebar
+.sales-lead-availability__label
+input[type="checkbox"]:disabled {
+    cursor: not-allowed;
+}
+
+
+/* =========================================================
+   SALES DASHBOARD - ASSIGN MORE LEADS
+   Keep dashboard switch styling separate.
+   ========================================================= */
+
+.sd-availability input {
+    appearance: none;
+    -webkit-appearance: none;
+
+    width: 38px;
+    height: 22px;
+
+    border-radius: 999px;
+
+    background: #aab7c5;
+
+    position: relative;
+
+    cursor: pointer;
+
+    flex: 0 0 auto;
+
+    transition: background 0.2s;
+}
+
+
+.sd-availability input::after {
+    content: "";
+
+    position: absolute;
+
+    width: 16px;
+    height: 16px;
+
+    border-radius: 50%;
+
+    background: #ffffff;
+
+    left: 3px;
+    top: 3px;
+
     transition: transform 0.2s;
+
     box-shadow: 0 1px 2px #0003;
 }
-.sales-lead-availability input:checked,
+
+
 .sd-availability input:checked {
     background: #168a4e;
 }
-.sales-lead-availability input:checked::after,
+
+
 .sd-availability input:checked::after {
     transform: translateX(16px);
 }

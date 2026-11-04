@@ -7,6 +7,8 @@ use App\Models\Msg91WhatsAppSender;
 use App\Models\User;
 use App\Services\WhatsApp\Msg91\Msg91CampaignAccess;
 use Illuminate\Http\Request;
+use App\Services\WhatsApp\Msg91\Msg91SenderVerificationService;
+use Illuminate\Support\Facades\Log;
 
 class Msg91WhatsAppAdminController extends Controller
 {
@@ -97,29 +99,24 @@ class Msg91WhatsAppAdminController extends Controller
                         $data['user_id'],
                 ]
             );
-
+        $newNumber = !empty($data['integrated_number'])
+            ? (preg_replace('/\D+/', '', $data['integrated_number']) ?? '')
+            : null;
+        if ($sender->exists && $sender->integrated_number !== $newNumber) {
+            $sender->verified_at = null;
+            $sender->verified_by = null;
+            $sender->verification_meta = [
+                'source' => 'crm-number-changed',
+                'provider_status' => 'pending_verification',
+            ];
+        }
 
         $sender->fill(
             [
                 /*
                  * Store digits only.
                  */
-                'integrated_number' =>
-                    !empty(
-                        $data[
-                            'integrated_number'
-                        ]
-                    )
-                        ? preg_replace(
-                            '/\D+/',
-                            '',
-                            $data[
-                                'integrated_number'
-                            ]
-                        )
-                        : null,
-
-
+             'integrated_number' => $newNumber,
                 /*
                  * CRM sender access only.
                  */
@@ -156,4 +153,23 @@ class Msg91WhatsAppAdminController extends Controller
                 'WhatsApp sender access updated successfully.'
             );
     }
+
+    public function refreshSenders(Request $request, Msg91SenderVerificationService $verification)
+{
+    abort_unless($this->access->canManage($request->user()), 403);
+
+    try {
+        $result = $verification->syncAll();
+        return back()->with('success',
+            "MSG91 checked {$result['checked']} numbers; {$result['verified']} connected."
+        );
+    } catch (\Throwable $e) {
+        Log::warning('MSG91 sender verification refresh failed', [
+            'exception_type' => get_class($e),
+        ]);
+        return back()->with('error',
+            'MSG91 sender status could not be confirmed. See Laravel logs and API configuration.'
+        );
+    }
+}
 }

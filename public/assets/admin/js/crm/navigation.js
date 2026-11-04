@@ -74,6 +74,10 @@
     const leads = branch('Leads', 'leads', 'ri-user-3-line', [leadList, dnp, ...remainingLeads]);
     // Convert the remaining authorized menu groups to the same native tree controls.
     function normalize(item) {
+        // Keep the Sales lead-availability form; it is not a navigation link.
+        if (item.classList.contains('sales-lead-availability')) {
+            return item;
+        }
         if (item.classList.contains('crm-nav-section')) return item;
         if (item.classList.contains('slide__category') || item.classList.contains('side-menu__label1')) return null;
         const native = direct(item, 'DETAILS');

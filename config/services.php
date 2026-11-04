@@ -119,6 +119,13 @@ return [
         'max_attempts' => (int) env('MSG91_CAMPAIGNS_MAX_ATTEMPTS', 3),
         'connect_timeout' => (int) env('MSG91_CAMPAIGNS_CONNECT_TIMEOUT', 10),
         'timeout' => (int) env('MSG91_CAMPAIGNS_TIMEOUT', 30),
+        // Read-only provider number listing; use the exact URL from MSG91 docs.
+        'numbers_url' => env('MSG91_CAMPAIGNS_NUMBERS_URL', ''),
+        'numbers_list_path' => env('MSG91_CAMPAIGNS_NUMBERS_LIST_PATH', 'data'),
+        'numbers_number_field' => env('MSG91_CAMPAIGNS_NUMBERS_NUMBER_FIELD', 'integrated_number'),
+        'numbers_status_field' => env('MSG91_CAMPAIGNS_NUMBERS_STATUS_FIELD', 'status'),
+        'connected_states' => ['activated', 'connected'], // extend ONLY after verifying actual MSG91 response semantics
+        'sender_verification_ttl_minutes' => 15,
     ],
     'whatscrm' => [
         'api_url'                   => env('WHATSCRM_API_URL'),
