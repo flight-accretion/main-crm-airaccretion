@@ -33,7 +33,7 @@ class Msg91Client
                 ->withHeaders(['authkey' => $authKey])
                 ->withOptions(['connect_timeout' => (int) config('services.msg91_campaigns.connect_timeout', 10)])
                 ->timeout((int) config('services.msg91_campaigns.timeout', 30))
-                ->post(rtrim((string) config('services.msg91_campaigns.control_url'), '/') . '/api/v5/whatsapp/client-panel-template/', $payload);
+                ->post(rtrim((string) config('services.msg91_campaigns.template_create_url'), '/') . '/api/v5/whatsapp/client-panel-template/', $payload);
         } catch (ConnectionException $exception) {
             throw new RuntimeException('MSG91 template creation did not receive a response.', 0, $exception);
         }

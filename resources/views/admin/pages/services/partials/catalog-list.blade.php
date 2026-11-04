@@ -1,5 +1,5 @@
 <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/shared/kimi-tokens.css') }}">
-<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/services/services.css') }}?v=2">
+<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/services/services.css') }}?v=3">
 @php $productNames = $catalogProducts->pluck('product', 'id'); @endphp
 <div class="crm-kimi sc-page" data-service-catalog data-csrf="{{ csrf_token() }}">
     <header class="sc-heading">

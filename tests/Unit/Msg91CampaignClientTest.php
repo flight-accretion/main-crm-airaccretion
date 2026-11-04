@@ -15,6 +15,7 @@ class Msg91CampaignClientTest extends TestCase
         config()->set('services.msg91_campaigns.dry_run', false);
         config()->set('services.msg91_campaigns.auth_key', 'test-auth-key');
         config()->set('services.msg91_campaigns.control_url', 'https://msg91.example.test');
+        config()->set('services.msg91_campaigns.template_create_url', 'https://api.msg91.example.test');
     }
 
     public function test_bulk_template_request_uses_the_server_side_sender_and_documented_payload_shape(): void
@@ -47,7 +48,7 @@ class Msg91CampaignClientTest extends TestCase
     {
         config()->set('services.msg91_campaigns.template_create_enabled', true);
         Http::fake([
-            'https://msg91.example.test/api/v5/whatsapp/client-panel-template/' => Http::response([
+            '*' => Http::response([
                 'status' => 'success',
                 'data' => ['template_id' => 'provider-template-1'],
             ]),
@@ -64,9 +65,10 @@ class Msg91CampaignClientTest extends TestCase
 
         $this->assertSame('provider-template-1', $result['template_id']);
         Http::assertSent(function ($request) {
-            return $request->hasHeader('authkey', 'test-auth-key')
-                && data_get($request->data(), 'template_name') === 'accretion_demo_test'
-                && data_get($request->data(), 'integrated_number') === '919876543210';
+            return $request->url() === 'https://api.msg91.example.test/api/v5/whatsapp/client-panel-template/'
+                && $request->hasHeader('authkey', 'test-auth-key')
+                && str_contains($request->body(), '"template_name":"accretion_demo_test"')
+                && str_contains($request->body(), '"integrated_number":"919876543210"');
         });
     }
 }

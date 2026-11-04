@@ -108,6 +108,10 @@ return [
         'template_create_enabled' => env('MSG91_CAMPAIGNS_TEMPLATE_CREATE_ENABLED', false),
         'auth_key' => env('MSG91_CAMPAIGNS_AUTH_KEY'),
         'control_url' => env('MSG91_CAMPAIGNS_CONTROL_URL', 'https://control.msg91.com'),
+        'template_create_url' => env(
+            'MSG91_CAMPAIGNS_TEMPLATE_CREATE_URL',
+            'https://api.msg91.com'
+        ),
         'webhook_secret' => env('MSG91_CAMPAIGNS_WEBHOOK_SECRET'),
         'template_stale_minutes' => (int) env('MSG91_CAMPAIGNS_TEMPLATE_STALE_MINUTES', 20),
         'sender_per_minute' => (int) env('MSG91_CAMPAIGNS_SENDER_PER_MINUTE', 15),

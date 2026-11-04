@@ -15,7 +15,7 @@ class SidebarPendingCounts
         $finance = array_merge(UserType::ADMIN_ROLES, UserType::ACCOUNTS_ROLES, UserType::OWNER_ROLES);
         $allowed = match ($queue) {
             'customer_refund' => array_merge($finance, UserType::OPERATIONS_ROLES),
-            'vendor_refund' => array_merge(UserType::ADMIN_ROLES, UserType::OPERATIONS_ROLES, UserType::OWNER_ROLES),
+            'vendor_refund' => array_merge(UserType::ADMIN_ROLES, UserType::OPERATIONS_ROLES, UserType::ACCOUNTS_ROLES, UserType::OWNER_ROLES),
             'account_vendor_refund', 'invoice' => $finance,
             'payment_approval' => array_merge($finance, [UserType::SENIOR_OPERATIONS_MANAGER, UserType::OPERATIONS_MANAGER]),
             default => [],

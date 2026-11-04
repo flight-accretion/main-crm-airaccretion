@@ -11,6 +11,8 @@ use App\Services\WhatsApp\Msg91\Msg91TemplateSyncService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Throwable;
+use App\Services\WhatsApp\Msg91\Msg91ProviderException;
+use Illuminate\Support\Facades\Log;
 
 class Msg91WhatsAppTemplateController extends Controller
 {
@@ -83,7 +85,7 @@ class Msg91WhatsAppTemplateController extends Controller
         return back()->with('success', "Updated {$count} template(s) from MSG91 for {$sender->integrated_number}.");
     }
 
-    public function create(Request $request): RedirectResponse
+    public function create(Request $request)
     {
         abort_unless($this->access->canManageTemplates($request->user()), 403);
 
@@ -101,6 +103,14 @@ class Msg91WhatsAppTemplateController extends Controller
             'body_4' => ['nullable', 'in:customer_name,customer_email,product_name,service_date,next_followup_date,salesperson_name'],
             'body_5' => ['nullable', 'in:customer_name,customer_email,product_name,service_date,next_followup_date,salesperson_name'],
             'body_6' => ['nullable', 'in:customer_name,customer_email,product_name,service_date,next_followup_date,salesperson_name'],
+        ], [
+            'name.required' => 'Enter a template name.',
+            'name.regex' => 'Template name may contain only lowercase letters, numbers, and underscores. Do not use spaces, hyphens, or uppercase letters.',
+            'name.max' => 'Template name cannot be longer than 191 characters.',
+            'sender_ids.required' => 'Choose a verified sender before submitting the template.',
+            'sender_ids.min' => 'Choose at least one verified sender before submitting the template.',
+            'sender_ids.*.exists' => 'Choose a verified sender from the available list.',
+            'body.required' => 'Enter the template message.',
         ]);
 
         $senders = Msg91WhatsAppSender::query()
@@ -139,15 +149,18 @@ class Msg91WhatsAppTemplateController extends Controller
             ];
         }
 
-        $components = [[
+        $bodyComponent = [
             'type' => 'BODY',
             'text' => $data['body'],
-            'example' => [
+        ];
+        if ($expected !== []) {
+            $bodyComponent['example'] = [
                 'body_text' => [
                     array_map(fn (int $index) => $this->sync->sampleValue($schema["body_{$index}"]['field']), $expected),
                 ],
-            ],
-        ]];
+            ];
+        }
+        $components = [$bodyComponent];
         if (!empty($data['footer'])) {
             $components[] = ['type' => 'FOOTER', 'text' => $data['footer']];
         }
@@ -201,13 +214,45 @@ class Msg91WhatsAppTemplateController extends Controller
                     $template->provider_template_id = $provider['template_id'];
                     $template->save();
                 }
+            } catch (Msg91ProviderException $exception) {
+                $reason = $this->providerRejectionReason($exception->payload);
+
+                Log::warning('MSG91 template rejected', [
+                    'sender_id' => $sender->id,
+                    'template_name' => $data['name'],
+                    'http_status' => $exception->httpStatus,
+                    'reason' => $reason,
+                ]);
+
+                $failed[] = ($sender->user?->name ?: 'Selected sender')
+                    . ': MSG91 HTTP '
+                    . $exception->httpStatus
+                    . ' — '
+                    . $reason;
             } catch (Throwable $exception) {
-                $failed[] = ($sender->user?->name ?: $sender->integrated_number) . ': ' . $exception->getMessage();
+                Log::error('MSG91 template creation failed', [
+                    'sender_id' => $sender->id,
+                    'exception_type' => get_class($exception),
+                ]);
+
+                $failed[] = 'Unable to create template due to a server error.';
             }
         }
 
         if ($submitted === []) {
-            return back()->withInput()->withErrors(['msg91_template' => implode(' ', $failed)]);
+            $message = implode(' ', $failed) ?: 'MSG91 could not accept this template. Check the template details and try again.';
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => 'Template was not submitted to MSG91.',
+                    'errors' => ['msg91_template' => [$message]],
+                ], 422);
+            }
+
+            return back()
+                ->withInput()
+                ->with('msg91_open_create_template', true)
+                ->withErrors(['msg91_template' => $message]);
         }
 
         $message = 'Template submitted to MSG91 for ' . implode(', ', $submitted) . '. It will become available for each member automatically after MSG91 approval is synced.';
@@ -215,7 +260,46 @@ class Msg91WhatsAppTemplateController extends Controller
             $message .= ' Not submitted for: ' . implode(' | ', $failed);
         }
 
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => $message,
+                'warning' => $failed !== [] ? 'Some selected members were not submitted. Review the message above.' : null,
+            ], 201);
+        }
+
         return redirect()->route('admin.msg91.templates.index')->with('success', $message);
+    }
+
+    private function providerRejectionReason(array $payload): string
+    {
+        $candidates = [
+            data_get($payload, 'errors.0.message'),
+            data_get($payload, 'errors.0'),
+            data_get($payload, 'errors.message'),
+            data_get($payload, 'error.message'),
+            data_get($payload, 'error_description'),
+            data_get($payload, 'data.message'),
+            data_get($payload, 'message'),
+        ];
+
+        foreach ($candidates as $candidate) {
+            if (is_array($candidate)) {
+                $candidate = data_get($candidate, 'message')
+                    ?? data_get($candidate, 'description');
+            }
+
+            if (is_scalar($candidate) && trim((string) $candidate) !== '') {
+                $reason = strip_tags((string) $candidate);
+                $reason = preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $reason) ?? '';
+                $reason = trim(preg_replace('/\s+/', ' ', $reason) ?? '');
+
+                if ($reason !== '') {
+                    return mb_substr($reason, 0, 300);
+                }
+            }
+        }
+
+        return 'MSG91 rejected the template. Check the template fields and sender configuration.';
     }
 
     private function visibleTemplates(Request $request, bool $canManageAll)

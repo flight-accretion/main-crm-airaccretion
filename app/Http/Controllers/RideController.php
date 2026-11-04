@@ -2236,6 +2236,22 @@ $totalRefunded =
         ->vendorRefunds
         ->sum('refund_amount');
 
+        $savedAssessment = $payment->vendorRefunds
+    ->filter(fn ($refund) => round((float) $refund->refund_amount, 2) == 0)
+    ->sortByDesc('created_at')
+    ->first();
+
+$hasActualRefund = $payment->vendorRefunds
+    ->contains(
+        fn ($refund) => round((float) $refund->refund_amount, 2) > 0
+    );
+
+$assessmentFinalized = $savedAssessment
+    && (
+        (int) $savedAssessment->status === VendorRefund::STATUS_COMPLETED
+        || $savedAssessment->completed_at !== null
+        || (bool) $savedAssessment->no_refund_required
+    );
 
 return [
 
@@ -2250,6 +2266,19 @@ return [
             $payment->vendor
         )->name
         ?? 'Vendor',
+
+        'assessment_exists' => $savedAssessment !== null
+    && $payment->cancellation_amount !== null,
+
+'assessment_reason' => $savedAssessment?->refund_reason ?? '',
+
+        'assessment_finalized' => $assessmentFinalized,
+
+        'can_edit_cancellation' => $savedAssessment !== null
+            && !$hasActualRefund
+            && !$assessmentFinalized,
+
+'has_actual_refund' => $hasActualRefund,
 
     /*
     |--------------------------------------------------------------------------
@@ -4087,6 +4116,16 @@ return [
                 return response()->json(['success' => false, 'message' => 'Ride must be cancelled to create refund'], 400);
             }
 
+            // Do not allow the retired single-step endpoint to overwrite a refund
+            // already being managed by the two-step settlement workflow.
+            if (\Illuminate\Support\Facades\Schema::hasTable('customer_refund_settlements')
+                && \App\Models\CustomerRefundSettlement::where('lead_id', $followup->lead_id)->exists()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This refund is managed by the two-step customer refund workflow and cannot be changed here.',
+                ], 409);
+            }
+
             // Handle file upload
             $refundProofPath = null;
             if ($request->hasFile('refund_proof')) {
@@ -4286,6 +4325,17 @@ public function saveVendorRefundFromRideStatus(
                     ]);
                 }
 
+                $latestFollowupStatus = LeadFollowup::query()
+                    ->where('lead_id', $lead->id)
+                    ->latest('created_at')
+                    ->value('status');
+
+                if ((int) $latestFollowupStatus !== LeadFollowup::STATUS_CANCELLED) {
+                    throw ValidationException::withMessages([
+                        'ride' => 'Ride must be cancelled before recording a vendor cancellation or refund.',
+                    ]);
+                }
+
 
                 /*
                 |--------------------------------------------------------------------------
@@ -4346,7 +4396,17 @@ public function saveVendorRefundFromRideStatus(
                     ->where('refund_amount', '>', 0)
                     ->exists()) {
                     throw ValidationException::withMessages([
-                        'stage' => 'Cancellation cannot be changed after a vendor refund receipt is recorded.',
+                        'stage' => 'Cancellation cannot be edited because a vendor refund payment has already been recorded.',
+                    ]);
+                }
+
+                if ($stage === 'cancellation' && $savedCancellation && (
+                    (int) $savedCancellation->status === VendorRefund::STATUS_COMPLETED
+                    || $savedCancellation->completed_at !== null
+                    || (bool) $savedCancellation->no_refund_required
+                )) {
+                    throw ValidationException::withMessages([
+                        'stage' => 'Cancellation cannot be edited because this vendor refund assessment is finalized.',
                     ]);
                 }
 
@@ -4700,7 +4760,9 @@ public function saveVendorRefundFromRideStatus(
 
                         $oldVendorRefundValues = [
                             'vendor_id' => $existingVendorSettlement->vendor_id,
-                            'amount' => $existingVendorSettlement->refund_amount,
+                            'cancellation_amount' => $existingVendorSettlement->cancellation_amount,
+                            'refund_amount' => $existingVendorSettlement->refund_amount,
+                            'refund_reason' => $existingVendorSettlement->refund_reason,
                             'status' => $existingVendorSettlement->status,
                         ];
 
@@ -4732,8 +4794,6 @@ public function saveVendorRefundFromRideStatus(
                             'refund_reason' =>
                                 $request->refund_reason,
 
-                            'created_by' =>
-                                auth()->id(),
                         ];
 
 
@@ -4857,7 +4917,9 @@ public function saveVendorRefundFromRideStatus(
                             $oldVendorRefundValues,
                             [
                                 'vendor_id' => $existingVendorSettlement->vendor_id,
-                                'amount' => $existingVendorSettlement->refund_amount,
+                                'cancellation_amount' => $existingVendorSettlement->cancellation_amount,
+                                'refund_amount' => $existingVendorSettlement->refund_amount,
+                                'refund_reason' => $existingVendorSettlement->refund_reason,
                                 'status' => $existingVendorSettlement->status,
                             ],
                             [
@@ -4878,7 +4940,9 @@ public function saveVendorRefundFromRideStatus(
                                 true,
 
                             'message' =>
-                                'Vendor settlement updated successfully.',
+                                $stage === 'cancellation'
+                                    ? 'Vendor cancellation updated successfully.'
+                                    : 'Vendor settlement updated successfully.',
 
                             'vendor_refund_id' =>
                                 $existingVendorSettlement->id,

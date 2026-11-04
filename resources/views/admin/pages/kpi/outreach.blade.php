@@ -2,7 +2,7 @@
 
 @section('content')
 
-<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/kpi/daily-outreach.css') }}?v=1">
+<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/kpi/daily-outreach.css') }}?v=4">
 
 @php
     $isAdminMonitor =
@@ -158,13 +158,7 @@
     @endif
 </div>
 
-@if(session('success'))
-    <div class="alert alert-success">{{ session('success') }}</div>
-@endif
 
-@if($errors->any())
-    <div class="alert alert-danger">{{ $errors->first() }}</div>
-@endif
 
 @if($standardLocked)
     <div class="alert alert-success">
@@ -173,7 +167,10 @@
 @endif
 
 <div class="do-notice">
-    Save the DNP or remark action on a queue row. Existing call-verification rules continue to decide when an action counts toward the KPI.
+    Select DNP or enter a remark, then click Save.
+    If both are provided, the action is recorded as DNP
+    and the remark is preserved as a note.
+    Existing call-verification and KPI rules still apply.
 </div>
 
 <section class="do-summary" aria-label="Daily outreach progress">
@@ -263,52 +260,426 @@
 </div>
 @endsection
 
+
 @push('scripts')
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            document.querySelectorAll('[data-copy-phone]').forEach(function (button) {
-                button.addEventListener('click', function () {
-                    var phone = button.getAttribute('data-copy-phone');
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    'use strict';
 
-                    if (!phone || !navigator.clipboard) {
-                        return;
-                    }
+    /*
+    |--------------------------------------------------------------------------
+    | Popup Helpers
+    |--------------------------------------------------------------------------
+    */
 
-                    navigator.clipboard.writeText(phone).then(function () {
-                        var original = button.textContent;
-                        button.textContent = 'Copied';
-                        window.setTimeout(function () {
-                            button.textContent = original;
-                        }, 1200);
-                    });
-                });
-            });
+    function popup(icon, title, message) {
+        return Swal.fire({
+            icon: icon,
+            title: title,
+            text: String(message || ''),
+            confirmButtonText: 'OK',
+            allowOutsideClick: false,
+            allowEscapeKey: true
+        });
+    }
 
-            if (!window.jQuery || !$.fn.DataTable) {
-                return;
+    function getErrorMessage(xhr) {
+        const body = xhr.responseJSON || {};
+        const status = xhr.status;
+
+        if (status === 419) {
+            return 'Your session has expired. Please refresh the page and sign in again.';
+        }
+
+        if (status === 401) {
+            return 'Please sign in again.';
+        }
+
+        if (status === 403) {
+            return 'You do not have permission to perform this action, or this assignment is no longer available.';
+        }
+
+        if (status === 422) {
+            if (body.errors) {
+                const first = Object.values(body.errors)
+                    .flat()
+                    .find(value => typeof value === 'string');
+
+                if (first) {
+                    return first;
+                }
             }
 
-            $('.kpi-outreach-datatable').each(function () {
-                if ($.fn.DataTable.isDataTable(this)) {
-                    return;
-                }
+            return typeof body.message === 'string'
+                ? body.message
+                : 'Please check the entered details.';
+        }
 
-                if ($(this).find('tbody td[colspan]').length) {
-                    return;
-                }
+        if (status >= 500) {
+            return 'A server error occurred. Please try again or contact the administrator.';
+        }
 
-                $(this).DataTable({
-                    pageLength: 10,
-                    lengthMenu: [10, 25, 50, 100],
-                    responsive: false,
-                    scrollX: true,
-                    autoWidth: false,
-                    ordering: true,
-                    columnDefs: [
-                        { orderable: false, targets: [4, 5, 6] }
-                    ]
-                });
+        if (status === 0) {
+            return 'Unable to connect to the server. Please check your connection.';
+        }
+
+        return 'Unable to save the outreach action.';
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Existing Flash Messages
+    |--------------------------------------------------------------------------
+    */
+
+    const flashSuccess = @json(session('success'));
+    const flashError = @json($errors->first());
+
+    if (flashError) {
+        popup('error', 'Action Failed', flashError);
+    } else if (flashSuccess) {
+        popup('success', 'Success', flashSuccess);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Copy Phone Number
+    |--------------------------------------------------------------------------
+    */
+
+   
+/*
+|--------------------------------------------------------------------------
+| Mobile Number - Desktop Copy / Mobile Dialer
+|--------------------------------------------------------------------------
+*/
+
+function isMobilePhone() {
+    if (
+        navigator.userAgentData &&
+        typeof navigator.userAgentData.mobile === 'boolean'
+    ) {
+        return navigator.userAgentData.mobile;
+    }
+
+    return /Android|iPhone|iPod/i.test(navigator.userAgent);
+}
+
+document.addEventListener('click', async function (event) {
+
+    const phoneLink = event.target.closest(
+        '.crm-daily-outreach [data-outreach-phone]'
+    );
+
+    if (!phoneLink) {
+        return;
+    }
+
+    const phone = (
+        phoneLink.getAttribute('data-outreach-phone') || ''
+    ).trim();
+
+    if (!phone) {
+        event.preventDefault();
+        return;
+    }
+
+    // Mobile: open the native phone dialer.
+    if (isMobilePhone()) {
+        return;
+    }
+
+    // Desktop: copy number instead of opening dialer.
+    event.preventDefault();
+
+    try {
+        if (!navigator.clipboard?.writeText) {
+            throw new Error('Clipboard unavailable');
+        }
+
+        await navigator.clipboard.writeText(phone);
+
+        if (window.Swal) {
+            Swal.fire({
+                icon: 'success',
+                title: 'Number Copied',
+                text: phone,
+                toast: true,
+                position: 'top-end',
+                timer: 1500,
+                showConfirmButton: false,
+                timerProgressBar: true
             });
+        }
+
+    } catch (error) {
+        if (window.Swal) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Copy Failed',
+                text: 'Unable to copy the phone number.',
+                confirmButtonText: 'OK'
+            });
+        }
+    }
+});
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Unified DNP / Remark Save
+    |--------------------------------------------------------------------------
+    */
+
+    document.addEventListener('submit', async function (event) {
+        const form = event.target.closest(
+            '.do-outreach-save-form'
+        );
+
+        if (!form) {
+            return;
+        }
+
+        event.preventDefault();
+
+        if (form.dataset.saving === '1') {
+            return;
+        }
+
+        const formId = form.id;
+
+        const dnp = form.querySelector(
+            'input[name="dnp"]'
+        );
+
+        const remark = document.querySelector(
+            'textarea[name="remark"][form="' + formId + '"]'
+        );
+
+        const button = document.querySelector(
+            'button[type="submit"][form="' + formId + '"]'
+        );
+
+        if (!dnp || !remark || !button) {
+            await popup(
+                'error',
+                'Form Error',
+                'Outreach form is incomplete. Please refresh the page.'
+            );
+            return;
+        }
+
+        if (button.disabled) {
+            return;
+        }
+
+        const isDnp = dnp.checked;
+        const remarkText = remark.value.trim();
+
+        /*
+         * No action selected.
+         */
+        if (!isDnp && !remarkText) {
+            await popup(
+                'warning',
+                'Action Required',
+                'Please select DNP or enter a remark.'
+            );
+            return;
+        }
+
+        /*
+         * Determine one completion type.
+         */
+        let actionDescription = '';
+
+        if (isDnp && remarkText) {
+            actionDescription =
+                'Mark this number as DNP and save the remark?';
+        } else if (isDnp) {
+            actionDescription =
+                'Mark this number as DNP?';
+        } else {
+            actionDescription =
+                'Save this remark and complete the outreach action?';
+        }
+
+        const confirmation = await Swal.fire({
+            icon: 'question',
+            title: 'Confirm Outreach Action',
+            text: actionDescription,
+            showCancelButton: true,
+            confirmButtonText: 'Confirm & Save',
+            cancelButtonText: 'Cancel',
+            reverseButtons: true,
+            focusCancel: true
         });
-    </script>
+
+        if (!confirmation.isConfirmed) {
+            return;
+        }
+
+        /*
+         * Prevent duplicate requests.
+         */
+        if (form.dataset.saving === '1') {
+            return;
+        }
+
+        form.dataset.saving = '1';
+
+        const originalButtonText = button.textContent;
+
+        button.disabled = true;
+        dnp.disabled = true;
+        remark.readOnly = true;
+        button.textContent = 'Saving...';
+
+        try {
+            const formData = new FormData(form);
+
+            /*
+             * External form-associated textarea is
+             * included by modern browsers, but set
+             * explicitly for predictable behavior.
+             */
+            formData.set('remark', remarkText);
+
+            if (isDnp) {
+                formData.set('dnp', '1');
+            } else {
+                formData.delete('dnp');
+            }
+
+            const response = await fetch(form.action, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: formData
+            });
+
+            const contentType = response.headers.get(
+                'content-type'
+            ) || '';
+
+            let result = {};
+
+            if (contentType.includes('application/json')) {
+                result = await response.json();
+            }
+
+            if (!response.ok || !result.success) {
+                throw {
+                    status: response.status,
+                    responseJSON: result
+                };
+            }
+
+            await popup(
+                'success',
+                'Saved Successfully',
+                result.message || 'Outreach action saved successfully.'
+            );
+
+            /*
+             * Reload to fetch the updated rolling
+             * queue, KPI progress and replacement row.
+             */
+            window.location.reload();
+
+        } catch (error) {
+            let message = getErrorMessage(error);
+
+            if (error instanceof TypeError) {
+                message = 'Unable to connect to the server. Please check your connection.';
+            }
+
+            await popup(
+                'error',
+                'Unable to Save',
+                message
+            );
+
+        } finally {
+            delete form.dataset.saving;
+
+            button.disabled = false;
+            dnp.disabled = false;
+            remark.readOnly = false;
+            button.textContent = originalButtonText;
+        }
+    });
+
+    /*
+    |--------------------------------------------------------------------------
+    | DataTables Initialization
+    |--------------------------------------------------------------------------
+    */
+
+    if (
+        !window.jQuery ||
+        !jQuery.fn ||
+        !jQuery.fn.DataTable
+    ) {
+        return;
+    }
+
+    jQuery('.kpi-outreach-datatable').each(function () {
+        const table = this;
+
+        if (jQuery.fn.DataTable.isDataTable(table)) {
+            return;
+        }
+
+        const headerCount = table.querySelectorAll(
+            'thead tr:first-child th'
+        ).length;
+
+        /*
+         * Verify table structure before initializing.
+         */
+        const rows = Array.from(
+            table.querySelectorAll('tbody tr')
+        );
+
+        const valid = rows.every(function (row) {
+            return row.children.length === headerCount &&
+                Array.from(row.children).every(function (cell) {
+                    return cell.tagName === 'TD' &&
+                        cell.colSpan === 1;
+                });
+        });
+
+        if (!valid || headerCount !== 6) {
+            console.error(
+                'Daily Outreach table structure is invalid. DataTables initialization skipped.'
+            );
+            return;
+        }
+
+        jQuery(table).DataTable({
+            pageLength: 10,
+            lengthMenu: [10, 25, 50, 100],
+            responsive: false,
+            scrollX: false,
+            autoWidth: false,
+            ordering: true,
+            columnDefs: [
+                {
+                    orderable: false,
+                    targets: [3, 4, 5]
+                }
+            ],
+            language: {
+                emptyTable: 'No outreach numbers available.',
+                zeroRecords: 'No matching outreach numbers found.'
+            }
+        });
+    });
+});
+</script>
 @endpush
+

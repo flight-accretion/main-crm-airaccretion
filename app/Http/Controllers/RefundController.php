@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\LeadRefund;
+use App\Models\CustomerRefundSettlement;
 use App\Models\LeadRide;
 use App\Models\LeadFollowup;
 use App\Models\PaymentAuditTrail;
@@ -52,13 +53,22 @@ class RefundController extends Controller
             // status=2 = marked as done — shown in COMPLETE tab
             // Save Changes alone does NOT make a lead appear here (it saves with status=0)
             // Only popup OK click (which calls sendRefundEmail → status=1) makes it appear
+            $hasTwoStepSettlements = Schema::hasTable('customer_refund_settlements');
             $query = LeadFollowup::with([
                 'enquiry.client',
                 'enquiry.representative',
                 'enquiry.rideSegments'
             ])
-                ->whereHas('refunds', function ($refundQ) {
-                    $refundQ->where('status', '>=', 1);
+                ->whereHas('refunds', function ($refundQ) use ($hasTwoStepSettlements) {
+                    $refundQ->where(function ($refundQ) use ($hasTwoStepSettlements) {
+                        $refundQ->where('status', '>=', 1);
+                        if ($hasTwoStepSettlements) {
+                            $refundQ->orWhereIn(
+                                'id',
+                                CustomerRefundSettlement::query()->select('lead_refund_id')
+                            );
+                        }
+                    });
                 })
                 ->orderBy('created_at', 'desc');
 
@@ -151,7 +161,17 @@ class RefundController extends Controller
             $seenLeadIds = [];
             $rides = $rides->filter(function ($ride) use (&$seenLeadIds) {
                 // Only include if refund is notified (status>=1: email/WA sent via popup OK)
-                $hasRefund = LeadRefund::where('lead_followup_id', $ride->id)->where('status', '>=', 1)->exists();
+                $hasRefund = LeadRefund::where('lead_followup_id', $ride->id)
+                    ->where(function ($refundQ) use ($hasTwoStepSettlements) {
+                        $refundQ->where('status', '>=', 1);
+                        if ($hasTwoStepSettlements) {
+                            $refundQ->orWhereIn(
+                                'id',
+                                CustomerRefundSettlement::query()->select('lead_refund_id')
+                            );
+                        }
+                    })
+                    ->exists();
                 if ($hasRefund) {
                     return true;
                 }

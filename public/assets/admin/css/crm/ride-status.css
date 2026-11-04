@@ -616,3 +616,78 @@
         white-space: normal;
     }
 }
+
+/* ======================================================
+   Cancelled Ride — 7 Step Timeline
+   ====================================================== */
+
+@media (min-width: 769px) {
+    .crm-ride-status .rs-timeline--with-refunds ol {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: 0;
+    }
+}
+
+.crm-ride-status .rs-timeline-refund {
+    min-width: 0;
+}
+
+.crm-ride-status .rs-step-refund {
+    border-color: #f59e0b;
+    background: #fffbeb;
+    color: #b45309;
+}
+
+.crm-ride-status .rs-timeline-refund-details {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+
+.crm-ride-status .rs-timeline-refund .rs-refund-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    max-width: 100%;
+    padding: 5px 9px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.4;
+    white-space: normal;
+    text-align: center;
+    overflow-wrap: anywhere;
+}
+
+.crm-ride-status .rs-refund-timeline-due {
+    font-size: 11px;
+    color: #64748b;
+    font-weight: 600;
+}
+
+@media (min-width: 769px) and (max-width: 1199px) {
+    .crm-ride-status .rs-timeline--with-refunds li {
+        padding-left: 4px;
+        padding-right: 4px;
+    }
+
+    .crm-ride-status .rs-timeline--with-refunds strong {
+        font-size: 11px;
+    }
+}
+
+@media (max-width: 768px) {
+    .crm-ride-status .rs-timeline--with-refunds ol {
+        display: block;
+    }
+
+    .crm-ride-status .rs-timeline-refund-details {
+        align-items: flex-start;
+    }
+
+    .crm-ride-status .rs-timeline-refund .rs-refund-badge {
+        text-align: left;
+    }
+}

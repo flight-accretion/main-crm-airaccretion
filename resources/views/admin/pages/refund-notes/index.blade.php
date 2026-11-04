@@ -171,7 +171,7 @@
                     data-download-url-template="{{ route('admin.refunds.download', ':refundId') }}"
                     data-invoice-download-url-template="{{ route('admin.refunds.invoice.download', ':refundId') }}"
                     data-invoice-preview-url-template="{{ route('admin.refunds.invoice.preview', ':refundId') }}">
-                    <div class="table-responsive">
+                    <div class="refund-table-wrap">
                         <table class="table display refund-list-table table-datatable" width="100%"
                             data-empty-msg="No cancelled rides found for refund processing.">
                             <thead class="bg-primary text-white">
@@ -189,13 +189,13 @@
                             <tbody>
                                 @forelse($refundsData as $index => $refund)
                                 <tr data-lead-url="{{ url('admin/leads/'.$refund['lead_id']) }}">
-                                    <td><a class="refund-client" href="{{ url('admin/leads/'.$refund['lead_id']) }}" target="_blank" rel="noopener">{{ $refund['client_name'] }}</a></td>
-                                    <td><div>{{ $refund['product_names'] ?: 'Not specified' }}<small>{{ !empty($refund['service_date']) ? \Carbon\Carbon::parse($refund['service_date'])->format('d M Y') : '--' }}</small></div></td>
-                                    <td class="text-center">₹{{ number_format($refund['original_amount'], 2) }}</td>
-                                    <td class="text-center">₹{{ number_format($refund['refund_amount'], 2) }}</td>
-                                    <td><span class="refund-pill {{ $refund['refund_status'] === 'completed' ? 'is-completed' : 'is-pending' }}">{{ $refund['refund_status'] === 'completed' ? 'Completed' : 'Pending' }}</span>@if($refund['approval_status'])<small class="refund-approval is-{{ $refund['approval_status'] }}" data-approval-label>{{ \App\Support\RefundApproval::label($refund['approval_status']) }}</small>@endif</td>
-                                    <td>@if($refund['refund_status'] !== 'completed' && $refund['pending_since'])<span class="refund-pill is-pending">{{ max(0, (int)\Carbon\Carbon::parse($refund['pending_since'])->diffInDays(now())) }} days</span>@else -- @endif</td>
-                                    <td>
+                                    <td data-label="Client"><a class="refund-client" href="{{ url('admin/leads/'.$refund['lead_id']) }}" target="_blank" rel="noopener">{{ $refund['client_name'] }}</a></td>
+                                    <td data-label="Product"><div>{{ $refund['product_names'] ?: 'Not specified' }}<small>{{ !empty($refund['service_date']) ? \Carbon\Carbon::parse($refund['service_date'])->format('d M Y') : '--' }}</small></div></td>
+                                    <td class="text-center" data-label="Original Amount">₹{{ number_format($refund['original_amount'], 2) }}</td>
+                                    <td class="text-center" data-label="Refund Amount">₹{{ number_format($refund['refund_amount'], 2) }}</td>
+                                    <td data-label="Status"><span class="refund-pill {{ $refund['refund_status'] === 'completed' ? 'is-completed' : 'is-pending' }}">{{ $refund['refund_status'] === 'completed' ? 'Completed' : 'Pending' }}</span>@if($refund['approval_status'])<small class="refund-approval is-{{ $refund['approval_status'] }}" data-approval-label>{{ \App\Support\RefundApproval::label($refund['approval_status']) }}</small>@endif</td>
+                                    <td data-label="Days Pending">@if($refund['refund_status'] !== 'completed' && $refund['pending_since'])<span class="refund-pill is-pending">{{ max(0, (int)\Carbon\Carbon::parse($refund['pending_since'])->diffInDays(now())) }} days</span>@else -- @endif</td>
+                                    <td data-label="Action">
                                         <div class="flex gap-2">
                                             <button type="button"
                                                 class="ti-btn ti-btn-icon ti-btn-sm ti-btn-primary-full view-refund-btn"
@@ -222,11 +222,11 @@
                                             </button>
                                             @if ($refund['refund_status'] != 'completed' && $refund['approval_status'] && $canDecideRefundApproval)
                                             <button type="button" class="ti-btn ti-btn-icon ti-btn-sm ti-btn-success refund-approval-btn" data-decision="approve"
-                                                data-url="{{ route('admin.refunds.approval', $refund['refund_id']) }}" title="Approve refund" @disabled($refund['approval_status'] === 'approved')>
+                                                data-url="{{ route('admin.refunds.approval', $refund['refund_id']) }}" title="Approve refund" {{ $refund['approval_status'] === 'approved' ? 'disabled' : '' }}>
                                                 <i class="ri-thumb-up-line"></i>
                                             </button>
                                             <button type="button" class="ti-btn ti-btn-icon ti-btn-sm ti-btn-danger refund-approval-btn" data-decision="reject"
-                                                data-url="{{ route('admin.refunds.approval', $refund['refund_id']) }}" title="Reject refund" @disabled($refund['approval_status'] === 'rejected')>
+                                                data-url="{{ route('admin.refunds.approval', $refund['refund_id']) }}" title="Reject refund" {{ $refund['approval_status'] === 'rejected' ? 'disabled' : '' }}>
                                                 <i class="ri-thumb-down-line"></i>
                                             </button>
                                             @endif
@@ -646,7 +646,8 @@
     @push('scripts')
     <script>
         function initSimpleTable() {
-            $('.table-datatable').wrap('<div class="table-responsive"></div>');
+            // This page uses its own fixed-width responsive layout. Do not add a
+            // second scrolling wrapper around the refund table.
 
             // Add search functionality
             $('#search-input').on('keyup', function() {

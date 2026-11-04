@@ -6,7 +6,10 @@ use App\Models\LeadFollowup;
 use App\Models\LeadRefund;
 use App\Models\LeadVendorPayment;
 use App\Models\PaymentAuditTrail;
+use App\Models\CustomerRefundSettlement;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Collection;
+use Carbon\CarbonInterface;
 
 class RideRefundStatusService
 {
@@ -57,6 +60,18 @@ class RideRefundStatusService
             ->get()
             ->groupBy('lead_id');
 
+        // The migration may not yet be installed on an environment during a
+        // staged release. In that case retain the existing LeadRefund view.
+        $customerSettlements = Schema::hasTable('customer_refund_settlements')
+            && Schema::hasTable('customer_refund_transactions')
+            ? CustomerRefundSettlement::with('transactions')
+                ->whereIn('lead_id', $ids)
+                ->get()
+                ->keyBy('lead_id')
+            : collect();
+
+        $customerWorkflow = app(CustomerRefundWorkflowService::class);
+
         $result = [];
 
         foreach ($ids as $leadId) {
@@ -68,10 +83,15 @@ class RideRefundStatusService
             );
 
             $result[$key] = [
-                'customer' => $this->customerStatus(
-                    $refunds->get($key, collect()),
-                    $approvedAmount
-                ),
+                'customer' => $customerSettlements->has($key)
+                    ? $this->settlementStatus(
+                        $customerWorkflow->snapshot($customerSettlements->get($key)),
+                        $customerSettlements->get($key)
+                    )
+                    : $this->customerStatus(
+                        $refunds->get($key, collect()),
+                        $approvedAmount
+                    ),
 
                 'vendor' => $this->vendorStatus(
                     $vendorPayments->get($key, collect())
@@ -82,15 +102,34 @@ class RideRefundStatusService
         return $result;
     }
 
+    private function settlementStatus(
+        array $snapshot,
+        CustomerRefundSettlement $settlement
+    ): array
+    {
+        $latestTransaction = $settlement->transactions
+            ->sortByDesc('created_at')
+            ->first();
+
+        return $this->display(
+            $snapshot['label'],
+            $snapshot['tone'],
+            (float) $snapshot['remaining'],
+            $latestTransaction?->created_at ?: $settlement->assessed_at
+        );
+    }
+
     private function display(
         string $label,
         string $tone = 'neutral',
-        float $due = 0
+        float $due = 0,
+        ?CarbonInterface $activityAt = null
     ): array {
         return [
             'label' => $label,
             'tone' => $tone,
             'due' => round(max(0, $due), 2),
+            'date' => $activityAt?->format('d M Y, H:i'),
         ];
     }
 
@@ -107,12 +146,13 @@ class RideRefundStatusService
         // Current customer workflow stores a single LeadRefund
         // per follow-up. Prefer the most recent record for display.
         $refund = $refunds->sortByDesc('created_at')->first();
+        $activityAt = $refund->updated_at ?: $refund->created_at;
 
         $amount = round((float) $refund->refund_amount, 2);
         $status = (int) $refund->status;
 
         if ($amount <= 0) {
-            return $this->display('No Refund Required');
+            return $this->display('No Refund Required', 'neutral', 0, $activityAt);
         }
 
         switch ($status) {
@@ -120,26 +160,30 @@ class RideRefundStatusService
                 return $this->display(
                     'Refund Pending',
                     'warning',
-                    $amount
+                    $amount,
+                    $activityAt
                 );
 
             case 1:
                 return $this->display(
                     'Refund Processing',
                     'info',
-                    $amount
+                    $amount,
+                    $activityAt
                 );
 
             case 2:
-                return $this->display('Refunded', 'success');
+                return $this->display('Refunded', 'success', 0, $activityAt);
 
             case 3:
-                return $this->display('Refund Cancelled');
+                return $this->display('Refund Cancelled', 'neutral', 0, $activityAt);
 
             default:
                 return $this->display(
                     'Assessment Pending',
-                    'warning'
+                    'warning',
+                    0,
+                    $activityAt
                 );
         }
     }
@@ -154,6 +198,7 @@ class RideRefundStatusService
         $totalRefunded = 0;
         $hasSettlement = false;
         $hasUncompletedRecord = false;
+        $latestActivityAt = null;
 
         foreach ($payments as $payment) {
             if ($payment->cancellation_amount === null) {
@@ -165,8 +210,17 @@ class RideRefundStatusService
             // Existing LeadVendorPayment financial accessors.
             $totalDue += (float) $payment->vendor_refund_due;
             $totalRefunded += (float) $payment->total_refunded;
+            $latestActivityAt = $this->latestDate(
+                $latestActivityAt,
+                $payment->updated_at
+            );
 
             foreach ($payment->vendorRefunds as $refund) {
+                $latestActivityAt = $this->latestDate(
+                    $latestActivityAt,
+                    $refund->completed_at ?: $refund->updated_at ?: $refund->created_at
+                );
+
                 if (
                     (int) $refund->status !==
                     \App\Models\VendorRefund::STATUS_COMPLETED
@@ -189,23 +243,36 @@ class RideRefundStatusService
                 ? $this->display(
                     'Partially Refunded',
                     'info',
-                    $totalDue
+                    $totalDue,
+                    $latestActivityAt
                 )
                 : $this->display(
                     'Refund Pending',
                     'warning',
-                    $totalDue
+                    $totalDue,
+                    $latestActivityAt
                 );
         }
 
         if ($hasUncompletedRecord) {
-            return $this->display('Refund Processing', 'info');
+            return $this->display('Refund Processing', 'info', 0, $latestActivityAt);
         }
 
         if ($totalRefunded > 0) {
-            return $this->display('Refunded', 'success');
+            return $this->display('Refunded', 'success', 0, $latestActivityAt);
         }
 
-        return $this->display('No Refund Required');
+        return $this->display('No Refund Required', 'neutral', 0, $latestActivityAt);
+    }
+
+    private function latestDate(
+        ?CarbonInterface $current,
+        ?CarbonInterface $candidate
+    ): ?CarbonInterface {
+        if (!$candidate) {
+            return $current;
+        }
+
+        return !$current || $candidate->gt($current) ? $candidate : $current;
     }
 }

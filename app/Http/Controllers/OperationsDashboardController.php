@@ -168,7 +168,9 @@ class OperationsDashboardController extends Controller
             ->withQueryString();
 
     return view(
-        'admin.pages.operations.queue',
+        $type === OperationCase::TYPE_CUSTOMER_CALL
+            ? 'admin.pages.operations.customer-call-queue'
+            : 'admin.pages.operations.queue',
         array_merge(
             [
                 'cases' =>
@@ -439,24 +441,77 @@ public function cancelImageCollection(
             $query->where('assigned_to', $filters['operations_user_id']);
         }
 
-        if (!empty($filters['search'])) {
-            $search = trim((string) $filters['search']);
+     if (!empty($filters['search'])) {
 
-            $query->where(function ($query) use ($search) {
-                $query
-                    ->where('lead_id', 'like', "%{$search}%")
-                    ->orWhere('note', 'like', "%{$search}%")
-                    ->orWhereHas('lead.client', function ($clientQuery) use ($search) {
-                        $clientQuery
-                            ->where('name', 'like', "%{$search}%")
-                            ->orWhere('contact_number', 'like', "%{$search}%")
-                            ->orWhere('email', 'like', "%{$search}%");
-                    })
-                    ->orWhereHas('lead.representative', function ($userQuery) use ($search) {
-                        $userQuery->where('name', 'like', "%{$search}%");
-                    });
-            });
-        }
+    $search = trim((string) $filters['search']);
+
+    if ($search !== '') {
+
+        $driver = $query->getModel()
+            ->getConnection()
+            ->getDriverName();
+
+        $operator = $driver === 'pgsql'
+            ? 'ILIKE'
+            : 'LIKE';
+
+        $query->where(function ($q) use ($search, $driver, $operator) {
+
+            if ($driver === 'pgsql') {
+
+                $q->whereRaw(
+                    'CAST(lead_id AS TEXT) ILIKE ?',
+                    ["%{$search}%"]
+                );
+
+            } else {
+
+                $q->where(
+                    'lead_id',
+                    'like',
+                    "%{$search}%"
+                );
+            }
+
+            $q->orWhere(
+                'note',
+                $operator,
+                "%{$search}%"
+            );
+
+            $q->orWhereHas(
+                'lead.client',
+                function ($clientQuery) use ($search, $operator) {
+
+                    $clientQuery
+                        ->where('name', $operator, "%{$search}%")
+                        ->orWhere(
+                            'contact_number',
+                            $operator,
+                            "%{$search}%"
+                        )
+                        ->orWhere(
+                            'email',
+                            $operator,
+                            "%{$search}%"
+                        );
+                }
+            );
+
+            $q->orWhereHas(
+                'lead.representative',
+                function ($userQuery) use ($search, $operator) {
+
+                    $userQuery->where(
+                        'name',
+                        $operator,
+                        "%{$search}%"
+                    );
+                }
+            );
+        });
+    }
+}
 
         $this->applyLeadFilters($query, $filters);
     }

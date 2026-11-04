@@ -232,6 +232,34 @@ class OperationsDashboardFilterTest extends TestCase
             ->assertDontSee('Complete Customer');
     }
 
+    public function test_customer_call_queue_uses_the_new_design_without_changing_filters_or_actions(): void
+    {
+        $viewer = $this->user('Customer Call Ops', UserType::OPERATIONS_EXECUTIVE);
+        $sales = $this->user('Customer Call Sales', UserType::SALES_EXECUTIVE);
+        $leadId = $this->lead('Customer Call Match', $sales);
+        $this->enrichLead($leadId, 'Call Queue Product', 1);
+        $caseId = $this->case($leadId, 'customer_call', 'pending', $viewer->id, '2026-09-22 11:00:00', null, 'Call customer');
+
+        $response = $this
+            ->actingAs($viewer)
+            ->get(route('admin.operations.queue', [
+                'type' => 'customer_call',
+                'search' => $leadId,
+                'per_page' => 10,
+            ]));
+
+        $response->assertOk();
+        $response->assertSee('ccq-page', false);
+        $response->assertSee('Customer Call Queue');
+        $response->assertSee('Customer Call Match');
+        $response->assertSee('name="search"', false);
+        $response->assertSee($leadId, false);
+        $response->assertSee('name="from_service_date"', false);
+        $response->assertSee('name="operations_user_id"', false);
+        $response->assertSee(route('admin.operations.case.complete', $caseId), false);
+        $response->assertSee(route('admin.operations.vendor-followups.create', $leadId), false);
+    }
+
     public function test_history_uses_leads_table_without_complete_action(): void
     {
         $viewer = $this->user('Ops History Table', UserType::OPERATIONS_EXECUTIVE);

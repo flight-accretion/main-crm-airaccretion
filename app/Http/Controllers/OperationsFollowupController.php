@@ -2,10 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\LeadAiScore;
-use App\Models\LeadAiScoringSetting;
 use App\Models\OperationCase;
-use App\Services\LeadAiCurrentFactsService;
 use App\Services\Operations\OperationsActivityService;
 use Illuminate\Http\Request;
 
@@ -13,56 +10,16 @@ class OperationsFollowupController extends Controller
 {
     public function create(OperationCase $case)
     {
-        $case->loadMissing('lead.client');
+        $case->loadMissing('lead.client', 'assignee');
         $lead = $case->lead;
 
         abort_unless($lead, 404);
 
-        $leadFollowupData = app(ClientController::class)
-            ->buildLeadFollowupViewData($lead);
-
-        $latestAiScore = LeadAiScore::query()
-            ->with('previousScore')
-            ->where('lead_id', $lead->id)
-            ->orderByDesc('created_at')
-            ->first();
-
-        return view('admin.pages.follow-ups.add-follow-up', array_merge(
-            [
-                'client' => $lead->client,
-                'lead' => $lead,
-                'latestAiScore' => $latestAiScore,
-                'leadAiScoringSetting' => LeadAiScoringSetting::active(),
-                'aiBookedClosed' => app(LeadAiCurrentFactsService::class)
-                    ->isBookedClosed($lead),
-                'operationsMode' => true,
-                'operationCase' => $case,
-            ],
-            [
-                'clientInfo' => $leadFollowupData['clientInfo'],
-                'followups' => $leadFollowupData['followups'],
-                'services' => $leadFollowupData['services'],
-                'allExtraServices' => $leadFollowupData['allExtraServices'],
-                'selectedServices' => $leadFollowupData['selectedServiceIds'],
-                'selectedExtraServices' => $leadFollowupData['selectedExtraServiceIds'],
-                'selectedServiceModels' => $leadFollowupData['selectedServiceModels'],
-                'selectedExtraServiceModels' => $leadFollowupData['selectedExtraServiceModels'],
-                'servicePrices' => $leadFollowupData['servicePrices'],
-                'serviceFeePercents' => $leadFollowupData['serviceFeePercents'],
-                'extraServicePrices' => $leadFollowupData['extraServicePrices'],
-                'serviceExtraServicesMap' => $leadFollowupData['serviceExtraServicesMap'],
-                'lastFollowupTotalAmount' => $leadFollowupData['lastFollowupTotalAmount'],
-                'lastFollowupServiceAmount' => $leadFollowupData['lastFollowupServiceAmount'],
-                'lastFollowupDiscountAmount' => $leadFollowupData['lastFollowupDiscountAmount'],
-                'lastFollowupServiceDetails' => $leadFollowupData['lastFollowupServiceDetails'],
-                'lastFollowupServiceIds' => $leadFollowupData['lastFollowupServiceIds'],
-                'lastFollowupExtraServiceIds' => $leadFollowupData['lastFollowupExtraServiceIds'],
-                'totalServiceAmount' => $leadFollowupData['totalServiceAmount'],
-                'totalExtraServiceAmount' => $leadFollowupData['totalExtraServiceAmount'],
-                'totalAmount' => $leadFollowupData['totalAmount'],
-                'isStoredAmount' => $leadFollowupData['isStoredAmount'],
-            ]
-        ));
+        return view('admin.pages.operations.followups.create', [
+            'operationCase' => $case,
+            'lead' => $lead,
+            'client' => $lead->client,
+        ]);
     }
 
     public function store(

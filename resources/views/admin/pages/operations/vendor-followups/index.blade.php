@@ -2,7 +2,7 @@
 @section('content')
 <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/vendor-followups.css') }}">
 <div class="vf-page">
-    <header class="vf-heading"><div><h1>Vendor Follow-ups</h1><p>Vendor confirmations and follow-up history</p></div><a class="vf-button" href="{{ route('admin.operations.vendor-followups.export', request()->query()) }}"><i class="ri-download-line" aria-hidden="true"></i> Export</a></header>
+    <header class="vf-heading vf-heading-card"><div><p class="vf-eyebrow">Operations Queue</p><h1>Vendor Follow-ups</h1><p>Track vendor confirmations, pending actions and ride dates.</p></div><a class="vf-button" href="{{ route('admin.operations.vendor-followups.export', request()->query()) }}"><i class="ri-download-line" aria-hidden="true"></i> Export</a></header>
     @if(session('success'))<p class="vf-notice" role="status">{{ session('success') }}</p>@endif
     @if($errors->any())<p class="vf-notice vf-red" role="alert">{{ $errors->first() }}</p>@endif
     <section class="vf-stats" aria-label="Vendor follow-up summary">
@@ -15,7 +15,7 @@
         <a href="{{ route('admin.operations.vendor-followups.index', array_merge(request()->except('page'), ['bucket' => $key])) }}" @if($filters['bucket'] === $key) aria-current="page" @endif>{{ $label }} <span>{{ $counts[$key] }}</span></a>
         @endforeach
     </nav>
-    <form method="GET" action="{{ route('admin.operations.vendor-followups.index') }}" class="vf-filters">
+    <form method="GET" action="{{ route('admin.operations.vendor-followups.index') }}" class="vf-filters vf-card">
         <input type="hidden" name="bucket" value="{{ $filters['bucket'] }}">
         @foreach(['vendor_id', 'assigned_to'] as $key)@if($filters[$key])<input type="hidden" name="{{ $key }}" value="{{ $filters[$key] }}">@endif @endforeach
         <label>Search<input type="search" name="search" value="{{ $filters['search'] }}" placeholder="Client, vendor, phone or lead ID"></label>

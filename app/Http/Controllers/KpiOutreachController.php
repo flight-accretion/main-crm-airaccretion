@@ -432,6 +432,74 @@ public function index(
     );
 }
 
+
+public function save(
+    Request $request,
+    KpiOutreachAssignment $assignment,
+    KpiOutreachService $service
+) {
+    $data = $request->validate([
+        'assignment_id' => [
+            'required',
+            'uuid',
+        ],
+        'dnp' => [
+            'nullable',
+            'in:1',
+        ],
+        'remark' => [
+            'nullable',
+            'string',
+            'max:1000',
+        ],
+    ]);
+
+    if ($data['assignment_id'] !== $assignment->id) {
+        throw \Illuminate\Validation\ValidationException::withMessages([
+            'assignment_id' => 'Invalid outreach assignment.',
+        ]);
+    }
+
+    $isDnp = ($data['dnp'] ?? null) === '1';
+
+    $remark = trim((string) ($data['remark'] ?? ''));
+
+    if (!$isDnp && $remark === '') {
+        throw \Illuminate\Validation\ValidationException::withMessages([
+            'outreach' => 'Please select DNP or enter a remark.',
+        ]);
+    }
+
+    if ($isDnp) {
+        $service->completeDnp(
+            $assignment,
+            $request->user(),
+            $remark !== '' ? $remark : null
+        );
+
+        $message = 'DNP saved successfully.'
+            . ($remark !== '' ? ' Remark also saved.' : '');
+    } else {
+        $service->completeRemark(
+            $assignment,
+            $request->user(),
+            $remark
+        );
+
+        $message = 'Remark saved successfully.';
+    }
+
+    if ($request->expectsJson()) {
+        return response()->json([
+            'success' => true,
+            'message' => $message,
+        ]);
+    }
+
+    return back()->with('success', $message);
+}
+
+
   public function dnp(
     Request $request,
     KpiOutreachAssignment $assignment,

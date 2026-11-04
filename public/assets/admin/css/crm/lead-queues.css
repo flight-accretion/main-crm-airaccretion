@@ -26,3 +26,13 @@
         text-underline-offset: 3px;
     }
 }
+
+
+/* =========================================================
+   TODAY'S FOLLOW-UP - WHITE PAGE BACKGROUND
+   ========================================================= */
+
+.crm-kpi-tool.crm-lead-queue {
+    --kt-canvas: #ffffff;
+    background: #ffffff;
+}

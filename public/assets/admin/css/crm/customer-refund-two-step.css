@@ -1,0 +1,145 @@
+/* Accretion CRM / customer refund two-step: scoped, no global overrides */
+.crm-ride-status #ride-refund-form {
+    display: none !important;
+}
+.crm-ride-status .cr2 {
+    color: #1e293b;
+    font-size: 13px;
+}
+.crm-ride-status .cr2-steps {
+    display: block;
+    margin: 0;
+}
+.crm-ride-status .cr2-band {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 0;
+    padding: 20px;
+    min-width: 0;
+    margin: 0;
+}
+.crm-ride-status .cr2-band + .cr2-band {
+    border-top: 0;
+}
+.crm-ride-status .cr2-heading {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+.crm-ride-status .cr2-heading strong {
+    color: #0f2945;
+    font-size: 18px;
+}
+.crm-ride-status .cr2-badge {
+    background: #f1f5f9;
+    border-radius: 999px;
+    padding: 4px 9px;
+    font-size: 11px;
+    color: #475569;
+}
+.crm-ride-status .cr2-description {
+    color: #334155;
+    font-size: 14px;
+    line-height: 1.5;
+    margin-bottom: 15px;
+}
+.crm-ride-status .cr2-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 13px;
+    margin: 14px 0 0;
+    padding: 18px;
+    background: #fff;
+    border: 1px solid #dbe3ed;
+    border-radius: 10px;
+}
+.crm-ride-status .cr2-grid label {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+    color: #334155;
+    font-size: 14px;
+    font-weight: 600;
+}
+.crm-ride-status .cr2-grid .cr2-wide {
+    grid-column: 1/-1;
+}
+.crm-ride-status .cr2-grid input,
+.crm-ride-status .cr2-grid select,
+.crm-ride-status .cr2-grid textarea {
+    width: 100%;
+    border: 1px solid #dbe3ed;
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-weight: 400;
+    background: #fff;
+    color: #0f172a;
+}
+.crm-ride-status .cr2-grid input[readonly] {
+    background: #f8fafc;
+    color: #475569;
+}
+.crm-ride-status .cr2-required {
+    color: #dc2626;
+}
+.crm-ride-status .cr2-alert {
+    padding: 10px 12px;
+    border-radius: 6px;
+    margin-top: 12px;
+    background: #eef6ff;
+    color: #1e40af;
+}
+.crm-ride-status .cr2-alert.is-error {
+    background: #fff1f2;
+    color: #be123c;
+}
+.crm-ride-status .cr2-history {
+    font-size: 12px;
+    margin: 15px 0;
+}
+.crm-ride-status .cr2-edit-actions,
+.crm-ride-status .cr2-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 18px;
+}
+.crm-ride-status .cr2-edit-actions .ti-btn-primary-full,
+.crm-ride-status .cr2-actions .ti-btn-primary-full {
+    width: auto;
+}
+.crm-ride-status .cr2-history table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.crm-ride-status .cr2-history th,
+.crm-ride-status .cr2-history td {
+    text-align: left;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 7px;
+}
+.crm-ride-status .cr2 input:focus-visible,
+.crm-ride-status .cr2 select:focus-visible,
+.crm-ride-status .cr2 textarea:focus-visible {
+    outline: 2px solid #234b78;
+    outline-offset: 1px;
+}
+@media (max-width: 520px) {
+    .crm-ride-status .cr2-grid {
+        grid-template-columns: 1fr;
+    }
+    .crm-ride-status .cr2-band {
+        padding: 14px;
+    }
+    .crm-ride-status .cr2-grid { padding: 14px; }
+    .crm-ride-status .cr2-edit-actions,
+    .crm-ride-status .cr2-actions { justify-content: stretch; }
+    .crm-ride-status .cr2-edit-actions .ti-btn,
+    .crm-ride-status .cr2-actions .ti-btn { width: 100%; }
+}
+

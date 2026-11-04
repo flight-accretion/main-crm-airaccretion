@@ -9,6 +9,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\TargetController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\RefundController;
+use App\Http\Controllers\CustomerRefundTwoStepController;
 use App\Http\Controllers\VendorController;
 use App\Http\Controllers\FollowupFileController;
 use function App\Helpers\getCitiesByState;
@@ -486,7 +487,7 @@ Route::prefix('admin/chat-notifications')
 |--------------------------------------------------------------------------
 |
 | GET page:
-| Admin/Super Admin + Sales + Accounts + Operations
+| Admin/Super Admin + Sales + Accounts
 |
 | Actions:
 | Preserve existing Sales/Admin action permissions.
@@ -501,20 +502,32 @@ Route::get(
     ]
 )
     ->middleware(
-        'role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES,HR,OWNER'
+        'role:ADMIN_ROLES,SALES_ROLES,ACCOUNTS_ROLES,HR,OWNER'
     )
     ->name(
         'admin.kpi.outreach.index'
     );
 
 
-Route::prefix(
-    'admin/kpi/outreach'
-)
-    ->middleware(
-        'role:SALES_ROLES,ADMIN_ROLES'
+    Route::prefix(
+        'admin/kpi/outreach'
     )
-    ->group(function () {
+        ->middleware(
+            'role:SALES_ROLES,ADMIN_ROLES'
+        )
+        ->group(function () {
+
+        
+    Route::post(
+        '/{assignment}/save',
+        [
+            KpiOutreachController::class,
+            'save'
+        ]
+    )
+        ->whereUuid('assignment')
+        ->name('admin.kpi.outreach.save');
+
 
         Route::post(
             '/{assignment}/dnp',
@@ -786,7 +799,7 @@ Route::prefix(
 
 
         Route::prefix('admin/operations/vendor-refunds')
-    ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,OWNER')
+    ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES,OWNER')
     ->name('admin.operations.vendor-refunds.')
     ->group(function () {
 
@@ -1732,6 +1745,21 @@ Route::post(
             ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES')
             ->name('admin.rides.ride-status.generate-invoice');
         Route::post('/ride-status/{rideId}/save-refund', [RideController::class, 'saveRefundFromRideStatus'])->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')->name('admin.rides.ride-status.save-refund');
+
+        // Two-step customer refund processing. The controller repeats authorization
+        // checks so direct requests cannot rely on UI visibility alone.
+        Route::get('/ride-status/{rideId}/customer-refund', [CustomerRefundTwoStepController::class, 'show'])
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')
+            ->name('admin.rides.customer-refund.two-step.show');
+        Route::post('/ride-status/{rideId}/customer-refund/assessment', [CustomerRefundTwoStepController::class, 'assessment'])
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')
+            ->name('admin.rides.customer-refund.two-step.assessment');
+        Route::post('/ride-status/{rideId}/customer-refund/payment', [CustomerRefundTwoStepController::class, 'payment'])
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES,OPERATIONS_ROLES,OWNER')
+            ->name('admin.rides.customer-refund.two-step.payment');
+        Route::post('/ride-status/{rideId}/customer-refund/payment/correct', [CustomerRefundTwoStepController::class, 'correctPayment'])
+            ->middleware('role:ADMIN_ROLES,ACCOUNTS_ROLES')
+            ->name('admin.rides.customer-refund.two-step.correct-payment');
     Route::post(
     '/ride-status/{rideId}/save-vendor-refund',
     [RideController::class, 'saveVendorRefundFromRideStatus']

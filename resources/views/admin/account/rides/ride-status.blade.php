@@ -15,6 +15,7 @@
     @else
         @unless($operationsRescheduleMode)
             <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/ride-status.css') }}?v={{ filemtime(public_path('assets/admin/css/crm/ride-status.css')) }}">
+            <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/customer-refund-two-step.css') }}?v={{ filemtime(public_path('assets/admin/css/crm/customer-refund-two-step.css')) }}">
             <div class="crm-ride-status">
                 <header class="rs-heading">
                     <div>
@@ -488,7 +489,11 @@
                                     </button>
                                 </div>
                                 <div class="box-body bg-gray-50">
-                                    <form id="ride-refund-form" enctype="multipart/form-data">
+                                    @include('admin.account.rides.partials.customer-refund-two-step')
+
+                                    {{-- Retained for the legacy endpoint and historical records. New refunds
+                                         are intentionally processed through the two-step panel above. --}}
+                                    <form id="ride-refund-form" enctype="multipart/form-data" style="display: none;">
                                         <input type="hidden" id="ride-followup-id" name="followup_id">
                                         @php
                                             $currentRole = optional(auth()->user()->userType)->user_type;
@@ -646,6 +651,7 @@
 
                                         <h6 class="font-semibold mb-3">Step 1 · Vendor Cancellation</h6>
                                         <p class="text-muted mb-3">Select vendor, enter cancellation amount and reason, then Save Cancellation. It will appear in the existing Vendor Refund Queue.</p>
+                                        <div id="ride-vendor-cancellation-summary" class="alert alert-info d-none mb-3" role="status"></div>
                                         <div class="vendor-refund-form-band mb-4">
 
                                             <label class="ti-form-label">
@@ -993,6 +999,14 @@
                                                 id="ride-vendor-save-cancellation" data-vendor-save="cancellation">
                                                 <i class="ri-save-line me-1"></i> Save Cancellation
                                             </button>
+                                            <button type="button" class="ti-btn ti-btn-outline-primary d-none"
+                                                id="ride-vendor-edit-cancellation">
+                                                <i class="ri-edit-line me-1"></i> Edit Cancellation
+                                            </button>
+                                            <button type="button" class="ti-btn ti-btn-outline-secondary d-none"
+                                                id="ride-vendor-cancel-cancellation-edit">
+                                                Cancel Edit
+                                            </button>
                                             <button type="submit" class="ti-btn ti-btn-primary"
                                                 id="ride-vendor-save-refund" data-vendor-save="refund" disabled
                                                 title="Save the cancellation first">
@@ -1321,6 +1335,7 @@
 @endsection
 
     @push('scripts')
+        <script src="{{ asset('assets/admin/js/crm/customer-refund-two-step.js') }}?v={{ filemtime(public_path('assets/admin/js/crm/customer-refund-two-step.js')) }}" defer></script>
             <script>
 
                 $(document).on(
@@ -1852,11 +1867,12 @@
                     });
                 });
 
-                function loadRideDetails(rideId) {
+                function loadRideDetails(rideId, onLoaded) {
                     const selectedRideId = String(rideId);
                     const requestSequence = ++rideDetailsSequence;
                     if (rideDetailsRequest) { rideDetailsRequest.abort(); rideDetailsRequest = null; }
                     currentRideId = selectedRideId;
+                    document.getElementById('customer-refund-two-step')?.setAttribute('data-ride-id', selectedRideId);
                     clearRideDetailsState();
                     // Show loading state
                     showLoadingState();
@@ -1876,6 +1892,7 @@
                             // Check if response has the expected format with success flag
                             if (response && response.success && response.data) {
                                 populateRideDetails(response.data);
+                                if (typeof onLoaded === 'function') onLoaded();
                                 loadedRideDetailsId = selectedRideId;
                                 lockRideDetails(false);
 
@@ -1925,6 +1942,7 @@
                                     vendor_refunds: response.vendor_refunds || []
                                 };
                                 populateRideDetails(transformedData);
+                                if (typeof onLoaded === 'function') onLoaded();
                                 loadedRideDetailsId = selectedRideId;
                                 lockRideDetails(false);
 
@@ -2858,6 +2876,8 @@
                             success: function (response) {
                                 // single trip update response
                                 if (response.success) {
+
+                                    const selectedVendorPaymentId = $('#ride-vendor-refund-payment-id').val();
                                     showSuccess('Travel dates updated successfully');
                                     hideEditDatesForm();
                                     loadRideDetails(currentRideId);
@@ -3124,6 +3144,54 @@
                     $('#ride-preview-proof-btn').data('preview-url', '').hide();
                 }
 
+                let vendorCancellationMode = 'create';
+
+                function applyVendorCancellationMode(mode) {
+                    const $selected = $('#ride-vendor-refund-payment-id option:selected');
+                    const assessmentExists = $selected.attr('data-assessment-exists') === '1';
+                    const canEdit = $selected.attr('data-can-edit-cancellation') === '1';
+                    const amount = $selected.attr('data-cancellation-amount') || '0.00';
+                    const reason = $selected.attr('data-assessment-reason') || '';
+                    const $amount = $('#ride-vendor-cancellation-amount');
+                    const $reason = $('#ride-vendor-refund-reason');
+
+                    vendorCancellationMode = assessmentExists ? mode : 'create';
+                    if (!assessmentExists) {
+                        $amount.prop('readonly', false);
+                        $reason.prop('readonly', false);
+                        $('#ride-vendor-save-cancellation').removeClass('d-none').html('<i class="ri-save-line me-1"></i> Save Cancellation');
+                        $('#ride-vendor-edit-cancellation, #ride-vendor-cancel-cancellation-edit, #ride-vendor-cancellation-summary').addClass('d-none');
+                        return;
+                    }
+
+                    $amount.val(parseFloat(amount).toFixed(2));
+                    $reason.val(reason);
+                    if (mode === 'edit' && canEdit) {
+                        $amount.prop('readonly', false);
+                        $reason.prop('readonly', false);
+                        $('#ride-vendor-save-cancellation').removeClass('d-none').html('<i class="ri-save-line me-1"></i> Save Changes');
+                        $('#ride-vendor-edit-cancellation').addClass('d-none');
+                        $('#ride-vendor-cancel-cancellation-edit').removeClass('d-none');
+                    } else {
+                        $amount.prop('readonly', true);
+                        $reason.prop('readonly', true);
+                        $('#ride-vendor-save-cancellation, #ride-vendor-cancel-cancellation-edit').addClass('d-none');
+                        $('#ride-vendor-edit-cancellation').toggleClass('d-none', !canEdit);
+                    }
+                    $('#ride-vendor-cancellation-summary')
+                        .html('<strong>Saved cancellation:</strong> ₹' + parseFloat(amount).toFixed(2) + '<br><strong>Reason:</strong> ' + $('<div>').text(reason).html())
+                        .removeClass('d-none');
+                }
+
+                $(document).on('click', '#ride-vendor-edit-cancellation', function () {
+                    applyVendorCancellationMode('edit');
+                });
+
+                $(document).on('click', '#ride-vendor-cancel-cancellation-edit', function () {
+                    applyVendorCancellationMode('view');
+                    calculateVendorRefund();
+                });
+
                 function showVendorRefundInformationSection() {
                     if (!ensureRideDetailsReady()) return;
                     if (!currentRideId) {
@@ -3193,6 +3261,18 @@
                                         vendor.cancellation_amount !== undefined
                                         ? vendor.cancellation_amount
                                         : ''
+                                )
+                                .attr(
+                                    'data-assessment-exists',
+                                    vendor.assessment_exists ? '1' : '0'
+                                )
+                                .attr(
+                                    'data-assessment-reason',
+                                    vendor.assessment_reason || ''
+                                )
+                                .attr(
+                                    'data-can-edit-cancellation',
+                                    vendor.can_edit_cancellation ? '1' : '0'
                                 );
 
 
@@ -3238,6 +3318,8 @@
 
                     $('#ride-vendor-refund-reason')
                         .val('');
+
+                    applyVendorCancellationMode('create');
 
 
                     updateVendorRefundFields();
@@ -3321,6 +3403,11 @@
 
                             $('#ride-vendor-cancellation-amount')
                                 .val('0.00');
+
+                            $('#ride-vendor-refund-reason')
+                                .val('');
+
+                            applyVendorCancellationMode('create');
 
                             $('#ride-vendor-refund-amount')
                                 .val('0.00');
@@ -3449,6 +3536,14 @@
                             cancellationRaw !== ''
                             && cancellationRaw !== undefined
                             && Number.isFinite(cancellationAmount);
+
+                        const assessmentExists = $selected.attr('data-assessment-exists') === '1';
+                        if (assessmentExists) {
+                            $('#ride-vendor-refund-reason').val($selected.attr('data-assessment-reason') || '');
+                            applyVendorCancellationMode('view');
+                        } else {
+                            applyVendorCancellationMode('create');
+                        }
 
                         $('#ride-vendor-save-refund')
                             .prop('disabled', !cancellationSaved)
@@ -4002,7 +4097,14 @@
                                             .attr('title', 'Record money received from the vendor');
                                     }
                                     if (currentRideId) {
-                                        loadRideDetails(currentRideId);
+                                        loadRideDetails(currentRideId, function () {
+                                            if (cancellationOnly && selectedVendorPaymentId) {
+                                                showVendorRefundInformationSection();
+                                                $('#ride-vendor-refund-payment-id')
+                                                    .val(selectedVendorPaymentId)
+                                                    .trigger('change');
+                                            }
+                                        });
                                     }
 
                                     return;

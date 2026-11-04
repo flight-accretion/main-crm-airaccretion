@@ -170,7 +170,7 @@
             </div>
         </div>
 
-        <div class="box-body overflow-x-auto">
+        <div class="box-body refund-table-wrap">
 
             <table
                 id="vendorRefundTable"
@@ -198,29 +198,29 @@
 
                     @forelse ($vendorRefunds as $index => $row)
                         <tr data-vendor-payment-id="{{ $row->id }}" data-lead-url="{{ url('admin/leads/'.$row->lead_id) }}">
-                            <td>{{ $row->vendor_name }}</td>
-                            <td>{{ $row->vendor_phone }}</td>
-                            <td><a class="refund-client" href="{{ url('admin/leads/'.$row->lead_id) }}" target="_blank" rel="noopener">{{ $row->customer_name }}</a></td>
-                            <td><div>{{ $row->product_name ?: 'Not specified' }}<small>{{ $row->service_date ? $row->service_date->format('d M Y') : '--' }}</small></div></td>
+                            <td data-label="Vendor">{{ $row->vendor_name }}</td>
+                            <td data-label="Vendor Phone">{{ $row->vendor_phone }}</td>
+                            <td data-label="Client"><a class="refund-client" href="{{ url('admin/leads/'.$row->lead_id) }}" target="_blank" rel="noopener">{{ $row->customer_name }}</a></td>
+                            <td data-label="Product"><div>{{ $row->product_name ?: 'Not specified' }}<small>{{ $row->service_date ? $row->service_date->format('d M Y') : '--' }}</small></div></td>
 
-                            <td>{{ $money($row->original_amount) }}</td>
+                            <td data-label="Original Vendor Amount">{{ $money($row->original_amount) }}</td>
 
-                            <td>
+                            <td data-label="Cancellation Amount">
                                 {{ $row->cancellation_amount !== null ? $money($row->cancellation_amount) : '-' }}
                             </td>
 
                             <!-- <td>{{ $money($row->refund_received) }}</td> -->
 
-                            <td>{{ $money($row->refund_due) }}</td>
-                            <td><span class="refund-pill is-pending">Pending</span>@if($row->approval_status)<small class="refund-approval is-{{ $row->approval_status }}" data-approval-label>{{ \App\Support\RefundApproval::label($row->approval_status) }}</small>@endif</td>
-                            <td>@if($row->pending_since)<span class="refund-pill is-pending">{{ max(0, (int)\Carbon\Carbon::parse($row->pending_since)->diffInDays(now())) }} days</span>@else -- @endif</td>
+                            <td data-label="Refund Due">{{ $money($row->refund_due) }}</td>
+                            <td data-label="Status"><span class="refund-pill is-pending">Pending</span>@if($row->approval_status)<small class="refund-approval is-{{ $row->approval_status }}" data-approval-label>{{ \App\Support\RefundApproval::label($row->approval_status) }}</small>@endif</td>
+                            <td data-label="Days Pending">@if($row->pending_since)<span class="refund-pill is-pending">{{ max(0, (int)\Carbon\Carbon::parse($row->pending_since)->diffInDays(now())) }} days</span>@else -- @endif</td>
 
                             <!-- <td>
                                 {{ $row->refund_date ? \Carbon\Carbon::parse($row->refund_date)->format('d M Y') : '-' }}
                             </td> -->
 
                             {{-- Actions --}}
-                            <td>
+                            <td data-label="Action">
 
                                 <div class="flex gap-2">
 
@@ -255,11 +255,11 @@
 
                                     @if ($row->approval_status && $canDecideRefundApproval)
                                         <button type="button" class="ti-btn ti-btn-icon ti-btn-sm ti-btn-success refund-approval-btn" data-decision="approve"
-                                            data-url="{{ route('admin.refunds.vendor-approval', $row->id) }}" title="Approve refund" @disabled($row->approval_status === 'approved')>
+                                            data-url="{{ route('admin.refunds.vendor-approval', $row->id) }}" title="Approve refund" {{ $row->approval_status === 'approved' ? 'disabled' : '' }}>
                                             <i class="ri-thumb-up-line"></i>
                                         </button>
                                         <button type="button" class="ti-btn ti-btn-icon ti-btn-sm ti-btn-danger refund-approval-btn" data-decision="reject"
-                                            data-url="{{ route('admin.refunds.vendor-approval', $row->id) }}" title="Reject refund" @disabled($row->approval_status === 'rejected')>
+                                            data-url="{{ route('admin.refunds.vendor-approval', $row->id) }}" title="Reject refund" {{ $row->approval_status === 'rejected' ? 'disabled' : '' }}>
                                             <i class="ri-thumb-down-line"></i>
                                         </button>
                                     @endif

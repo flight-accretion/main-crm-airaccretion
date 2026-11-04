@@ -1,0 +1,256 @@
+/* Detail-only enhancements. Kept separate so the Vendor Follow-up queue and create screen retain their existing presentation. */
+.vf-detail-page .vf-card-header {
+    align-items: flex-start;
+    gap: 14px;
+}
+
+.vf-detail-page .vf-section-tag {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 4px 10px;
+    border: 1px solid #dbe7fb;
+    border-radius: 999px;
+    background: #f4f8ff;
+    color: #315b96;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.vf-detail-page .vf-summary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0 22px;
+}
+
+.vf-detail-page .vf-summary-item {
+    min-height: 76px;
+    padding: 14px 0;
+    border-bottom: 1px solid #edf1f7;
+}
+
+.vf-detail-page .vf-summary-item strong {
+    display: block;
+    margin-top: 5px;
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+.vf-detail-page .vf-summary-item.vf-full {
+    grid-column: span 3;
+}
+
+.vf-detail-page .vf-action-tabs {
+    grid-template-columns: 1fr;
+    gap: 9px;
+    margin-bottom: 16px;
+}
+
+.vf-detail-page .vf-action-tab {
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 11px;
+    width: 100%;
+    min-height: 70px;
+    height: auto;
+    padding: 12px 13px;
+    text-align: left;
+    border: 1px solid #d8e1ee;
+    border-radius: 10px;
+    background: #fff;
+}
+
+.vf-detail-page .vf-action-tab:hover {
+    border-color: #7ca4df;
+    background: #f8fbff;
+}
+
+.vf-detail-page .vf-action-tab.is-active {
+    border-color: #1e5fbf;
+    background: #edf5ff;
+    box-shadow: 0 0 0 2px rgba(30, 95, 191, .10);
+}
+
+.vf-detail-page .vf-action-tab > span:last-child {
+    display: grid;
+    gap: 3px;
+}
+
+.vf-detail-page .vf-action-tab strong {
+    color: #102f54;
+    font-size: 14px;
+}
+
+.vf-detail-page .vf-action-tab small {
+    color: #6c819f;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.vf-detail-page .vf-action-number {
+    display: inline-flex;
+    flex: 0 0 26px;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: #dfeafb;
+    color: #1e5fbf;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.vf-detail-page .vf-action-tab.is-active .vf-action-number {
+    background: #1e5fbf;
+    color: #fff;
+}
+
+.vf-detail-page .vf-action-panel {
+    padding: 16px;
+    border: 1px solid #dbe5f1;
+    border-radius: 10px;
+    background: #fbfdff;
+}
+
+.vf-detail-page .vf-panel-heading,
+.vf-detail-page .vf-danger-heading {
+    display: grid;
+    gap: 4px;
+    margin-bottom: 14px;
+}
+
+.vf-detail-page .vf-panel-heading strong,
+.vf-detail-page .vf-danger-heading strong {
+    color: #17395f;
+    font-size: 15px;
+}
+
+.vf-detail-page .vf-panel-heading span,
+.vf-detail-page .vf-danger-heading span {
+    color: #6c819f;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.vf-detail-page .vf-action-panel form,
+.vf-detail-page .vf-danger-action form {
+    display: grid;
+    gap: 12px;
+}
+
+.vf-detail-page .vf-action-panel label,
+.vf-detail-page .vf-danger-action label {
+    display: grid;
+    gap: 6px;
+    color: #234161;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.vf-detail-page .vf-required {
+    color: #c74646;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.vf-detail-page .vf-action-panel input,
+.vf-detail-page .vf-action-panel textarea,
+.vf-detail-page .vf-danger-action textarea {
+    width: 100%;
+    padding: 10px 11px;
+    border: 1px solid #cedbeb;
+    border-radius: 8px;
+    background: #fff;
+    color: #193752;
+    font: inherit;
+}
+
+.vf-detail-page .vf-action-panel textarea,
+.vf-detail-page .vf-danger-action textarea {
+    resize: vertical;
+}
+
+.vf-detail-page .vf-inline-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.vf-detail-page .vf-action-submit,
+.vf-detail-page .vf-danger-button {
+    justify-self: start;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 40px;
+    padding: 9px 14px;
+    font-weight: 700;
+}
+
+.vf-detail-page .vf-danger-action {
+    margin-top: 16px;
+    padding: 16px;
+    border: 1px solid #f4d6d6;
+    border-radius: 10px;
+    background: #fff9f9;
+}
+
+.vf-detail-page .vf-danger-heading strong { color: #9d3030; }
+
+.vf-detail-page .vf-danger-button {
+    border: 1px solid #c94848;
+    border-radius: 8px;
+    background: #c94848;
+    color: #fff;
+    cursor: pointer;
+}
+
+.vf-detail-page .vf-danger-button:hover { background: #aa3535; }
+
+.vf-detail-page .vf-timeline-item {
+    padding: 2px 0 22px;
+}
+
+.vf-detail-page .vf-timeline-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    align-items: baseline;
+}
+
+.vf-detail-page .vf-timeline-action {
+    margin-top: 5px;
+    color: #1e5fbf;
+    font-weight: 700;
+}
+
+@media (max-width: 1180px) {
+    .vf-detail-page .vf-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .vf-detail-page .vf-summary-item.vf-full { grid-column: span 2; }
+}
+
+@media (max-width: 720px) {
+    .vf-detail-page .vf-card-header { flex-direction: column; }
+    .vf-detail-page .vf-summary-grid,
+    .vf-detail-page .vf-inline-fields { grid-template-columns: 1fr; }
+    .vf-detail-page .vf-summary-item.vf-full { grid-column: span 1; }
+    .vf-detail-page .vf-action-submit,
+    .vf-detail-page .vf-danger-button { width: 100%; justify-content: center; }
+}
+
+@media (prefers-color-scheme: dark) {
+    .dark .vf-detail-page .vf-section-tag { border-color: #345273; background: #193350; color: #bfd7fa; }
+    .dark .vf-detail-page .vf-summary-item { border-bottom-color: #2b3d52; }
+    .dark .vf-detail-page .vf-action-tab { border-color: #334a63; background: #17283b; }
+    .dark .vf-detail-page .vf-action-tab:hover,
+    .dark .vf-detail-page .vf-action-tab.is-active { background: #1d3550; }
+    .dark .vf-detail-page .vf-action-tab strong,
+    .dark .vf-detail-page .vf-panel-heading strong { color: #e1ecfa; }
+    .dark .vf-detail-page .vf-action-panel { border-color: #314a65; background: #142538; }
+    .dark .vf-detail-page .vf-action-panel input,
+    .dark .vf-detail-page .vf-action-panel textarea,
+    .dark .vf-detail-page .vf-danger-action textarea { border-color: #3a526d; background: #102235; color: #e1ecfa; }
+    .dark .vf-detail-page .vf-danger-action { border-color: #673f45; background: #321f27; }
+}

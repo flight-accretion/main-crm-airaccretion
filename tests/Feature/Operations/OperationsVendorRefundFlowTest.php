@@ -112,6 +112,32 @@ class OperationsVendorRefundFlowTest extends TestCase
         );
     }
 
+    public function test_accounts_can_access_the_operations_vendor_refund_queue(): void
+    {
+        $viewer = $this->user('Accounts Vendor Refund', UserType::ACCOUNTS_EXECUTIVE);
+
+        $this->vendorRefundFixture(
+            customerName: 'Accounts queue customer',
+            vendorName: 'Accounts queue vendor',
+            paidAmount: 70000,
+            cancellationAmount: 20000,
+            refundAmount: 10000,
+            refundDate: '2026-08-22',
+            refundType: 'Bank Transfer',
+            refundReason: 'Trip cancelled',
+            status: 1
+        );
+
+        $response = $this
+            ->actingAs($viewer)
+            ->get(route('admin.operations.vendor-refunds.index'));
+
+        $response->assertOk();
+        $response->assertSee('Vendor Refund List');
+        $response->assertSee('Accounts queue vendor');
+        $response->assertSee(route('admin.operations.vendor-refunds.index'), false);
+    }
+
     public function test_accounts_can_submit_vendor_refund_or_cancellation_from_ride_status(): void
     {
         $viewer = $this->user('Accounts Vendor Refund', UserType::ACCOUNTS_EXECUTIVE);

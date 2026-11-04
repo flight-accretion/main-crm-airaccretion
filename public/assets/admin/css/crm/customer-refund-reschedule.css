@@ -1,0 +1,151 @@
+/* Customer Refund inside Operations > Reschedule Queue only. */
+#ride-details-modal .crm-customer-refund {
+    color: #1e293b;
+    font-size: 13px;
+}
+
+#ride-details-modal .crm-customer-refund .cr2-steps {
+    display: block;
+    margin: 0;
+}
+
+#ride-details-modal .crm-customer-refund .cr2-band {
+    min-width: 0;
+    margin: 0;
+    padding: 20px;
+    border: 1px solid #e2e8f0;
+    border-radius: 0;
+    background: #f8fafc;
+}
+
+#ride-details-modal .crm-customer-refund .cr2-band + .cr2-band { border-top: 0; }
+
+#ride-details-modal .crm-customer-refund .cr2-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+#ride-details-modal .crm-customer-refund .cr2-heading strong {
+    color: #0f2945;
+    font-size: 18px;
+}
+
+#ride-details-modal .crm-customer-refund .cr2-badge {
+    padding: 4px 9px;
+    border-radius: 999px;
+    background: #f1f5f9;
+    color: #475569;
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+#ride-details-modal .crm-customer-refund .cr2-description {
+    margin: 0 0 15px;
+    color: #334155;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+#ride-details-modal .crm-customer-refund .cr2-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 13px;
+    margin: 14px 0 0;
+    padding: 18px;
+    border: 1px solid #dbe3ed;
+    border-radius: 10px;
+    background: #fff;
+}
+
+#ride-details-modal .crm-customer-refund .cr2-grid label {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+    color: #334155;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+#ride-details-modal .crm-customer-refund .cr2-grid .cr2-wide { grid-column: 1 / -1; }
+
+#ride-details-modal .crm-customer-refund .cr2-grid input,
+#ride-details-modal .crm-customer-refund .cr2-grid select,
+#ride-details-modal .crm-customer-refund .cr2-grid textarea {
+    width: 100%;
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid #dbe3ed;
+    border-radius: 7px;
+    background: #fff;
+    color: #0f172a;
+    font-size: 14px;
+    font-weight: 400;
+}
+
+#ride-details-modal .crm-customer-refund .cr2-grid input[readonly] {
+    background: #f8fafc;
+    color: #475569;
+}
+
+#ride-details-modal .crm-customer-refund .cr2-alert {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    background: #eef6ff;
+    color: #1e40af;
+}
+
+#ride-details-modal .crm-customer-refund .cr2-alert.is-error {
+    background: #fff1f2;
+    color: #be123c;
+}
+
+#ride-details-modal .crm-customer-refund .cr2-edit-actions,
+#ride-details-modal .crm-customer-refund .cr2-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 18px;
+}
+
+#ride-details-modal .crm-customer-refund .cr2-edit-actions .ti-btn-primary-full,
+#ride-details-modal .crm-customer-refund .cr2-actions .ti-btn-primary-full { width: auto; }
+
+#ride-details-modal .crm-customer-refund .cr2-history {
+    margin: 15px 0;
+    font-size: 12px;
+}
+
+#ride-details-modal .crm-customer-refund .cr2-history table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+#ride-details-modal .crm-customer-refund .cr2-history th,
+#ride-details-modal .crm-customer-refund .cr2-history td {
+    padding: 7px;
+    border-bottom: 1px solid #e2e8f0;
+    text-align: left;
+}
+
+#ride-details-modal .crm-customer-refund input:focus-visible,
+#ride-details-modal .crm-customer-refund select:focus-visible,
+#ride-details-modal .crm-customer-refund textarea:focus-visible {
+    outline: 2px solid #234b78;
+    outline-offset: 1px;
+}
+
+@media (max-width: 640px) {
+    #ride-details-modal .crm-customer-refund .cr2-grid { grid-template-columns: 1fr; padding: 14px; }
+    #ride-details-modal .crm-customer-refund .cr2-band { padding: 14px; }
+    #ride-details-modal .crm-customer-refund .cr2-heading { align-items: flex-start; flex-direction: column; }
+    #ride-details-modal .crm-customer-refund .cr2-edit-actions,
+    #ride-details-modal .crm-customer-refund .cr2-actions { justify-content: stretch; }
+    #ride-details-modal .crm-customer-refund .cr2-edit-actions .ti-btn,
+    #ride-details-modal .crm-customer-refund .cr2-actions .ti-btn { width: 100%; }
+}

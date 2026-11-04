@@ -40,6 +40,9 @@ class VendorRefund extends Model
         'approval_decided_by',
         'approval_decided_at',
         'approval_note',
+        'reversed_at',
+        'reversed_by',
+        'reversal_reason',
     ];
 
 
@@ -51,6 +54,7 @@ class VendorRefund extends Model
         'status' => 'integer',
         'completed_at' => 'datetime',
         'approval_decided_at' => 'datetime',
+        'reversed_at' => 'datetime',
     ];
 
 

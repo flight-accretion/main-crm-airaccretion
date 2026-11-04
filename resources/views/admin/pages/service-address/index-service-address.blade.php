@@ -1,7 +1,7 @@
 @extends('admin.layouts.header')
 @section('content')
     <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/shared/kimi-tokens.css') }}">
-    <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/service-addresses.css') }}?v=2">
+    <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/service-addresses.css') }}?v=3">
     <div class="crm-kimi sa-page" data-address-page data-base="{{ route('admin.service-addresses.index') }}"
         data-csrf="{{ csrf_token() }}"
         data-restore="{{ $errors->edit->any() ? 'edit' : ($errors->add->any() ? 'add' : '') }}">
@@ -24,6 +24,7 @@
             <div><strong>{{ $addressSummary['shared_numbers'] }}</strong><span>Shared phone numbers</span></div>
             <div><strong>{{ $addressSummary['missing_contact'] }}</strong><span>Missing contact person</span></div>
         </div>
+        
         <nav class="sa-chips" aria-label="Filter by city"><a class="sa-chip {{ !request('city_id') ? 'is-active' : '' }}"
                 href="{{ route('admin.service-addresses.index', request()->except('city_id', 'page')) }}">All ·
                 {{ $addressSummary['total'] }}</a>

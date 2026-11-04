@@ -152,24 +152,39 @@ class OperationsVendorRefundController extends Controller
             'status' => $refund->status,
         ];
 
-        DB::transaction(function () use ($request, $validated, $vendorPayment, $refund, $oldValues) {
+        $oldProofPath = $refund->refund_proof;
+        $newProofPath = null;
+
+        try {
+
+    DB::transaction(function () use (
+        $request,
+        $validated,
+        $vendorPayment,
+        $refund,
+        $oldValues,
+        &$newProofPath
+    ) {
             foreach (['refund_type', 'refund_date', 'refund_reason'] as $field) {
                 if (array_key_exists($field, $validated)) {
                     $refund->{$field} = $validated[$field];
                 }
             }
 
-            if ($request->hasFile('refund_proof')) {
-                $oldProof = $refund->refund_proof;
+          if ($request->hasFile('refund_proof')) {
 
-                $refund->refund_proof = $request
-                    ->file('refund_proof')
-                    ->store('vendor-refunds', 'public');
+            $newProofPath = $request
+                ->file('refund_proof')
+                ->store('vendor-refunds', 'public');
 
-                if ($oldProof && Storage::disk('public')->exists($oldProof)) {
-                    Storage::disk('public')->delete($oldProof);
-                }
+            if (!$newProofPath) {
+                throw new \RuntimeException(
+                    'Unable to store vendor refund proof.'
+                );
             }
+
+            $refund->refund_proof = $newProofPath;
+        }
 
             $refund->save();
 
@@ -203,6 +218,55 @@ class OperationsVendorRefundController extends Controller
                 OperationCase::STATUS_IN_PROGRESS
             );
         });
+
+        } catch (\Throwable $exception) {
+
+    // Database transaction failed.
+    // Delete the newly uploaded proof, not the original.
+
+    if (
+        $newProofPath
+        && Storage::disk('public')->exists($newProofPath)
+    ) {
+        try {
+            Storage::disk('public')->delete($newProofPath);
+        } catch (\Throwable $storageException) {
+            Log::warning('Unable to clean up failed vendor refund upload', [
+                'vendor_payment_id' => $vendorPayment->id,
+                'error' => $storageException->getMessage(),
+            ]);
+        }
+    }
+
+    Log::error('Vendor refund update failed', [
+        'vendor_payment_id' => $vendorPayment->id,
+        'error' => $exception->getMessage(),
+    ]);
+
+    return $this->fail(
+        $request,
+        'Unable to save vendor refund information.',
+        500
+    );
+}
+
+// The database transaction has committed successfully.
+// Only now is it safe to remove the previous proof.
+
+if (
+    $newProofPath
+    && $oldProofPath
+    && $oldProofPath !== $newProofPath
+) {
+    try {
+        Storage::disk('public')->delete($oldProofPath);
+    } catch (\Throwable $exception) {
+        Log::warning('Old vendor refund proof cleanup failed', [
+            'vendor_payment_id' => $vendorPayment->id,
+            'error' => $exception->getMessage(),
+        ]);
+    }
+}
 
         if ($request->expectsJson()) {
             return response()->json([

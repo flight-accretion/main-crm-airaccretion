@@ -202,7 +202,15 @@ class Kernel extends ConsoleKernel
         $schedule->command('google-chat:retry-pending --limit=25')
             ->everyFiveMinutes()
             ->withoutOverlapping();
-        $schedule->command('google-chat:reconcile')->hourly()->withoutOverlapping();
+      $schedule
+        ->command('google-chat:reconcile --limit=50')
+        ->everyMinute()
+        ->withoutOverlapping()
+        ->appendOutputTo(
+            storage_path(
+                'logs/google-chat-reconcile.log'
+            )
+        );
 
         $schedule->command('whatsapp:cleanup-ai-queue --limit=500')
             ->everyFifteenMinutes()

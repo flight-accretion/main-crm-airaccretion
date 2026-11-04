@@ -258,14 +258,28 @@ class KpiOutreachService
         });
     }
 
+  
     public function completeDnp(
         KpiOutreachAssignment $assignment,
-        User $user
+        User $user,
+        ?string $remark = null
     ): void {
         $this->assertActionAllowed($assignment, $user);
 
-        $this->complete($assignment, $user, 'dnp', null, null, null);
+        $remark = $remark !== null
+            ? trim($remark)
+            : null;
+
+        $this->complete(
+            $assignment,
+            $user,
+            'dnp',
+            $remark !== '' ? $remark : null,
+            null,
+            null
+        );
     }
+
 
     public function completeRemark(
         KpiOutreachAssignment $assignment,

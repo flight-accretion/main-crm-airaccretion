@@ -109,6 +109,29 @@ class VendorFollowupDesignTest extends KpiFeatureTestCase
         catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) { $this->assertSame(403, $e->getStatusCode()); }
     }
 
+    public function test_detail_keeps_each_vendor_action_as_a_clear_separate_form(): void
+    {
+        $case = $this->makeCase('2026-09-18', '2026-09-20');
+        $html = app(OperationsVendorFollowupController::class)->show($this->request(), $case)->render();
+
+        foreach ([
+            'vendor-followup-detail.css',
+            'Need to follow up later',
+            'Vendor confirmed the ride',
+            'Cannot continue this vendor follow-up?',
+            'name="followup_date"',
+            'name="confirmed_ride_date"',
+            'name="confirmed_ride_time"',
+            'name="vendor_response"',
+        ] as $fragment) {
+            $this->assertTrue(str_contains($html, $fragment));
+        }
+
+        $this->assertStringContainsString(route('admin.operations.vendor-followups.reschedule', $case), $html);
+        $this->assertStringContainsString(route('admin.operations.vendor-followups.complete', $case), $html);
+        $this->assertStringContainsString(route('admin.operations.vendor-followups.cancel', $case), $html);
+    }
+
     public function test_operations_user_can_save_a_vendor_followup_and_write_compatible_lead_history(): void
     {
         $newVendor = \App\Models\Vendor::create([

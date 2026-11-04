@@ -1,3 +1,1201 @@
-.crm-daily-outreach{--do-bg:#f4f6fa;--do-card:#fff;--do-line:#dfe5ec;--do-text:#172033;--do-muted:#718096;--do-navy:#0f2b46;--do-green:#15965d;--do-blue:#2f6fed;background:var(--do-bg);color:var(--do-text);padding:24px;min-width:0}.crm-daily-outreach *{box-sizing:border-box;letter-spacing:0}.crm-daily-outreach h1,.crm-daily-outreach h2{color:var(--do-text);margin:0}.crm-daily-outreach h1{font-size:23px;font-weight:650}.crm-daily-outreach h2{font-size:17px;font-weight:650}.crm-daily-outreach .do-muted{color:var(--do-muted);font-size:12px;line-height:1.45}.crm-daily-outreach .do-page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:14px}.crm-daily-outreach .do-page-head p{margin:4px 0 0}.crm-daily-outreach .do-button{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:8px 13px;border:1px solid var(--do-line);border-radius:7px;background:var(--do-card);color:var(--do-navy);font:inherit;font-weight:650;white-space:nowrap;cursor:pointer;text-decoration:none}.crm-daily-outreach .do-button--primary{background:var(--do-navy);border-color:var(--do-navy);color:#fff}.crm-daily-outreach .do-button--success{background:var(--do-green);border-color:var(--do-green);color:#fff}.crm-daily-outreach .do-button:disabled{cursor:not-allowed;opacity:.55}.crm-daily-outreach .do-notice{margin-bottom:14px;padding:11px 13px;border:1px solid #d6e4ff;border-radius:8px;background:#eef5ff;color:#315f9d;font-size:12px;line-height:1.45}.crm-daily-outreach .do-summary{display:grid;grid-template-columns:minmax(230px,1.4fr) repeat(3,minmax(130px,.7fr));gap:10px;margin-bottom:14px}.crm-daily-outreach .do-summary-card,.crm-daily-outreach .do-filter,.crm-daily-outreach .do-queue-card{border:1px solid var(--do-line);border-radius:8px;background:var(--do-card)}.crm-daily-outreach .do-summary-card{min-height:126px;padding:14px}.crm-daily-outreach .do-summary-card strong{display:block;margin:3px 0;color:var(--do-text);font-size:23px;font-weight:700}.crm-daily-outreach .do-summary-card small{color:var(--do-muted);font-size:12px}.crm-daily-outreach .do-progress{height:8px;margin:10px 0 7px;overflow:hidden;border-radius:999px;background:#e7ecf2}.crm-daily-outreach .do-progress>span{display:block;height:100%;border-radius:inherit;background:var(--do-navy)}.crm-daily-outreach .do-filter{display:grid;grid-template-columns:minmax(0,1fr) minmax(180px,230px) auto;gap:10px;align-items:end;padding:13px;margin-bottom:20px}.crm-daily-outreach .do-field label{display:block;margin-bottom:6px;color:#617188;font-size:12px;font-weight:650}.crm-daily-outreach .do-field input{width:100%;height:40px;padding:0 11px;border:1px solid var(--do-line);border-radius:7px;background:var(--do-card);color:var(--do-text);font:inherit}.crm-daily-outreach .do-filter-actions{display:flex;gap:8px;align-items:center}.crm-daily-outreach .do-queue-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:0 0 9px}.crm-daily-outreach .do-queue-head p{margin:3px 0 0}.crm-daily-outreach .do-queue-card{overflow:hidden}.crm-daily-outreach .do-table-wrap{padding:0;overflow:visible}.crm-daily-outreach .do-table{width:100%!important;margin:0!important;border-collapse:collapse;table-layout:fixed}.crm-daily-outreach .do-table th{padding:11px 14px;border-bottom:1px solid var(--do-line);background:#fbfcfd;color:#8090a6;font-size:11px;font-weight:700;text-align:left;text-transform:uppercase}.crm-daily-outreach .do-table td{padding:14px;border-bottom:1px solid var(--do-line);vertical-align:top;color:var(--do-text);overflow-wrap:anywhere}.crm-daily-outreach .do-table tbody tr:last-child td{border-bottom:0}.crm-daily-outreach .do-table th:nth-child(1){width:18%}.crm-daily-outreach .do-table th:nth-child(2){width:14%}.crm-daily-outreach .do-table th:nth-child(3){width:14%}.crm-daily-outreach .do-table th:nth-child(4){width:11%}.crm-daily-outreach .do-table th:nth-child(5){width:27%}.crm-daily-outreach .do-table th:nth-child(6){width:16%}.crm-daily-outreach .do-customer-name{display:block;font-weight:700}.crm-daily-outreach .do-phone{display:block;margin-top:3px;color:var(--do-navy);font-size:15px;font-weight:750}.crm-daily-outreach .do-copy{display:inline-flex;margin-top:7px;border:1px solid var(--do-line);border-radius:6px;background:#fff;color:var(--do-navy);padding:4px 7px;font-size:11px;font-weight:600;cursor:pointer}.crm-daily-outreach .do-table textarea{display:block;width:100%;min-height:68px;resize:vertical;padding:9px;border:1px solid var(--do-line);border-radius:7px;background:#fff;color:var(--do-text);font:inherit;line-height:1.4}.crm-daily-outreach .do-dnp-form,.crm-daily-outreach .do-remark-form,.crm-daily-outreach .do-action-box{display:grid;gap:8px}.crm-daily-outreach .do-dnp-check{display:inline-flex;align-items:center;gap:7px;margin:0;color:var(--do-text);font-size:13px;font-weight:600}.crm-daily-outreach .do-action-box .do-button{width:100%}.crm-daily-outreach .dataTables_wrapper{padding:0 14px 14px}.crm-daily-outreach .dataTables_wrapper .dataTables_length{float:left;padding-top:14px}.crm-daily-outreach .dataTables_wrapper .dataTables_filter{float:right;padding-top:14px}.crm-daily-outreach .dataTables_wrapper .dataTables_filter input{height:36px;border:1px solid var(--do-line);border-radius:6px;padding:6px 9px;background:#fff}.crm-daily-outreach .dataTables_wrapper .dataTables_info{padding-top:14px;color:var(--do-muted);font-size:12px}.crm-daily-outreach .dataTables_wrapper .dataTables_paginate{padding-top:10px}.crm-daily-outreach .dataTables_wrapper .dataTables_paginate .paginate_button{border:1px solid var(--do-line)!important;border-radius:5px!important;background:#fff!important;color:var(--do-navy)!important;margin-left:3px}.crm-daily-outreach .dataTables_wrapper .dataTables_paginate .paginate_button.current{background:var(--do-navy)!important;border-color:var(--do-navy)!important;color:#fff!important}.crm-daily-outreach .dataTables_wrapper:after{content:'';display:block;clear:both}.crm-daily-outreach :is(a,button,input,textarea):focus-visible{outline:2px solid var(--do-blue);outline-offset:2px}.dark .crm-daily-outreach,[data-theme-mode=dark] .crm-daily-outreach{--do-bg:#121417;--do-card:#1b1e24;--do-line:#2a2f38;--do-text:#e8eaee;--do-muted:#b9bfcc}.dark .crm-daily-outreach .do-table th,[data-theme-mode=dark] .crm-daily-outreach .do-table th{background:#20242b}.dark .crm-daily-outreach .do-table textarea,[data-theme-mode=dark] .crm-daily-outreach .do-table textarea,.dark .crm-daily-outreach .do-copy,[data-theme-mode=dark] .crm-daily-outreach .do-copy{background:#1b1e24;color:var(--do-text)}
-@media(max-width:1100px){.crm-daily-outreach .do-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.crm-daily-outreach .do-table th:nth-child(1){width:21%}.crm-daily-outreach .do-table th:nth-child(5){width:25%}}
-@media(max-width:767px){.crm-daily-outreach{padding:16px 12px calc(86px + env(safe-area-inset-bottom,0px))}.crm-daily-outreach h1{font-size:20px}.crm-daily-outreach .do-page-head{align-items:stretch}.crm-daily-outreach .do-page-head form,.crm-daily-outreach .do-page-head form .do-button{width:100%}.crm-daily-outreach .do-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.crm-daily-outreach .do-summary-card{min-height:112px;padding:12px}.crm-daily-outreach .do-summary-card strong{font-size:20px}.crm-daily-outreach .do-filter{grid-template-columns:1fr;padding:12px}.crm-daily-outreach .do-filter-actions{display:grid;grid-template-columns:1fr 1fr}.crm-daily-outreach .do-filter-actions .do-button{width:100%}.crm-daily-outreach .do-queue-head{align-items:flex-start;flex-direction:column}.crm-daily-outreach .dataTables_wrapper{padding:0 10px 12px}.crm-daily-outreach .dataTables_wrapper .dataTables_length,.crm-daily-outreach .dataTables_wrapper .dataTables_filter{float:none;text-align:left;padding-top:12px}.crm-daily-outreach .dataTables_wrapper .dataTables_filter input{width:100%;margin:5px 0 0}.crm-daily-outreach .dataTables_wrapper .dataTables_info{float:none}.crm-daily-outreach .dataTables_wrapper .dataTables_paginate{float:none;text-align:left;white-space:normal}.crm-daily-outreach .dataTables_scroll{overflow:visible!important}.crm-daily-outreach .dataTables_scrollHead{display:none}.crm-daily-outreach .dataTables_scrollBody{height:auto!important;overflow:visible!important}.crm-daily-outreach .do-table,.crm-daily-outreach .do-table tbody,.crm-daily-outreach .do-table tr,.crm-daily-outreach .do-table td{display:block;width:100%!important}.crm-daily-outreach .do-table thead{display:none}.crm-daily-outreach .do-table tr{margin:10px 0;padding:12px;border:1px solid var(--do-line);border-radius:8px;background:var(--do-card)}.crm-daily-outreach .do-table td{display:grid;grid-template-columns:minmax(78px,.7fr) minmax(0,1.3fr);gap:10px;padding:7px 0;border:0;text-align:right}.crm-daily-outreach .do-table td:before{content:attr(data-label);color:var(--do-muted);font-size:11px;font-weight:600;text-align:left}.crm-daily-outreach .do-table td[data-label=Remark],.crm-daily-outreach .do-table td[data-label=Action]{display:block;text-align:left}.crm-daily-outreach .do-table td[data-label=Remark]:before,.crm-daily-outreach .do-table td[data-label=Action]:before{display:block;margin-bottom:7px}.crm-daily-outreach .do-table td[colspan]{display:block;text-align:center}.crm-daily-outreach .do-table td[colspan]:before{display:none}.crm-daily-outreach .do-dnp-form,.crm-daily-outreach .do-remark-form,.crm-daily-outreach .do-action-box{width:100%}.crm-daily-outreach .do-action-box{grid-template-columns:1fr 1fr}.crm-daily-outreach .do-action-box .do-button--success{grid-column:1/-1}}
+.crm-daily-outreach {
+    --do-bg: #f4f6fa;
+    --do-card: #fff;
+    --do-line: #dfe5ec;
+    --do-text: #172033;
+    --do-muted: #718096;
+    --do-navy: #0f2b46;
+    --do-green: #15965d;
+    --do-blue: #2f6fed;
+    background: var(--do-bg);
+    color: var(--do-text);
+    padding: 24px;
+    min-width: 0;
+}
+.crm-daily-outreach * {
+    box-sizing: border-box;
+    letter-spacing: 0;
+}
+.crm-daily-outreach h1,
+.crm-daily-outreach h2 {
+    color: var(--do-text);
+    margin: 0;
+}
+.crm-daily-outreach h1 {
+    font-size: 23px;
+    font-weight: 650;
+}
+.crm-daily-outreach h2 {
+    font-size: 17px;
+    font-weight: 650;
+}
+.crm-daily-outreach .do-muted {
+    color: var(--do-muted);
+    font-size: 12px;
+    line-height: 1.45;
+}
+.crm-daily-outreach .do-page-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+.crm-daily-outreach .do-page-head p {
+    margin: 4px 0 0;
+}
+.crm-daily-outreach .do-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 8px 13px;
+    border: 1px solid var(--do-line);
+    border-radius: 7px;
+    background: var(--do-card);
+    color: var(--do-navy);
+    font: inherit;
+    font-weight: 650;
+    white-space: nowrap;
+    cursor: pointer;
+    text-decoration: none;
+}
+.crm-daily-outreach .do-button--primary {
+    background: var(--do-navy);
+    border-color: var(--do-navy);
+    color: #fff;
+}
+.crm-daily-outreach .do-button--success {
+    background: var(--do-green);
+    border-color: var(--do-green);
+    color: #fff;
+}
+.crm-daily-outreach .do-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+.crm-daily-outreach .do-notice {
+    margin-bottom: 14px;
+    padding: 11px 13px;
+    border: 1px solid #d6e4ff;
+    border-radius: 8px;
+    background: #eef5ff;
+    color: #315f9d;
+    font-size: 12px;
+    line-height: 1.45;
+}
+.crm-daily-outreach .do-summary {
+    display: grid;
+    grid-template-columns: minmax(230px, 1.4fr) repeat(3, minmax(130px, 0.7fr));
+    gap: 10px;
+    margin-bottom: 14px;
+}
+.crm-daily-outreach .do-summary-card,
+.crm-daily-outreach .do-filter,
+.crm-daily-outreach .do-queue-card {
+    border: 1px solid var(--do-line);
+    border-radius: 8px;
+    background: var(--do-card);
+}
+.crm-daily-outreach .do-summary-card {
+    min-height: 126px;
+    padding: 14px;
+}
+.crm-daily-outreach .do-summary-card strong {
+    display: block;
+    margin: 3px 0;
+    color: var(--do-text);
+    font-size: 23px;
+    font-weight: 700;
+}
+.crm-daily-outreach .do-summary-card small {
+    color: var(--do-muted);
+    font-size: 12px;
+}
+.crm-daily-outreach .do-progress {
+    height: 8px;
+    margin: 10px 0 7px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #e7ecf2;
+}
+.crm-daily-outreach .do-progress > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--do-navy);
+}
+.crm-daily-outreach .do-filter {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 230px) auto;
+    gap: 10px;
+    align-items: end;
+    padding: 13px;
+    margin-bottom: 20px;
+}
+.crm-daily-outreach .do-field label {
+    display: block;
+    margin-bottom: 6px;
+    color: #617188;
+    font-size: 12px;
+    font-weight: 650;
+}
+.crm-daily-outreach .do-field input {
+    width: 100%;
+    height: 40px;
+    padding: 0 11px;
+    border: 1px solid var(--do-line);
+    border-radius: 7px;
+    background: var(--do-card);
+    color: var(--do-text);
+    font: inherit;
+}
+.crm-daily-outreach .do-filter-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+.crm-daily-outreach .do-queue-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 0 0 9px;
+}
+.crm-daily-outreach .do-queue-head p {
+    margin: 3px 0 0;
+}
+.crm-daily-outreach .do-queue-card {
+    overflow: hidden;
+}
+.crm-daily-outreach .do-table-wrap {
+    padding: 0;
+    overflow: visible;
+}
+.crm-daily-outreach .do-table {
+    width: 100% !important;
+    margin: 0 !important;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+.crm-daily-outreach .do-table th {
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--do-line);
+    background: #fbfcfd;
+    color: #8090a6;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: left;
+    text-transform: uppercase;
+}
+.crm-daily-outreach .do-table td {
+    padding: 14px;
+    border-bottom: 1px solid var(--do-line);
+    vertical-align: top;
+    color: var(--do-text);
+    overflow-wrap: anywhere;
+}
+.crm-daily-outreach .do-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+.crm-daily-outreach .do-table th:nth-child(1) {
+    width: 18%;
+}
+.crm-daily-outreach .do-table th:nth-child(2) {
+    width: 14%;
+}
+.crm-daily-outreach .do-table th:nth-child(3) {
+    width: 14%;
+}
+.crm-daily-outreach .do-table th:nth-child(4) {
+    width: 11%;
+}
+.crm-daily-outreach .do-table th:nth-child(5) {
+    width: 27%;
+}
+.crm-daily-outreach .do-table th:nth-child(6) {
+    width: 16%;
+}
+.crm-daily-outreach .do-customer-name {
+    display: block;
+    font-weight: 700;
+}
+.crm-daily-outreach .do-phone {
+    display: block;
+    margin-top: 3px;
+    color: var(--do-navy);
+    font-size: 15px;
+    font-weight: 750;
+}
+.crm-daily-outreach .do-copy {
+    display: inline-flex;
+    margin-top: 7px;
+    border: 1px solid var(--do-line);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--do-navy);
+    padding: 4px 7px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.crm-daily-outreach .do-table textarea {
+    display: block;
+    width: 100%;
+    min-height: 68px;
+    resize: vertical;
+    padding: 9px;
+    border: 1px solid var(--do-line);
+    border-radius: 7px;
+    background: #fff;
+    color: var(--do-text);
+    font: inherit;
+    line-height: 1.4;
+}
+.crm-daily-outreach .do-dnp-form,
+.crm-daily-outreach .do-remark-form,
+.crm-daily-outreach .do-action-box {
+    display: grid;
+    gap: 8px;
+}
+.crm-daily-outreach .do-dnp-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin: 0;
+    color: var(--do-text);
+    font-size: 13px;
+    font-weight: 600;
+}
+.crm-daily-outreach .do-action-box .do-button {
+    width: 100%;
+}
+.crm-daily-outreach .dataTables_wrapper {
+    padding: 0 14px 14px;
+}
+.crm-daily-outreach .dataTables_wrapper .dataTables_length {
+    float: left;
+    padding-top: 14px;
+}
+.crm-daily-outreach .dataTables_wrapper .dataTables_filter {
+    float: right;
+    padding-top: 14px;
+}
+.crm-daily-outreach .dataTables_wrapper .dataTables_filter input {
+    height: 36px;
+    border: 1px solid var(--do-line);
+    border-radius: 6px;
+    padding: 6px 9px;
+    background: #fff;
+}
+.crm-daily-outreach .dataTables_wrapper .dataTables_info {
+    padding-top: 14px;
+    color: var(--do-muted);
+    font-size: 12px;
+}
+.crm-daily-outreach .dataTables_wrapper .dataTables_paginate {
+    padding-top: 10px;
+}
+.crm-daily-outreach .dataTables_wrapper .dataTables_paginate .paginate_button {
+    border: 1px solid var(--do-line) !important;
+    border-radius: 5px !important;
+    background: #fff !important;
+    color: var(--do-navy) !important;
+    margin-left: 3px;
+}
+.crm-daily-outreach
+    .dataTables_wrapper
+    .dataTables_paginate
+    .paginate_button.current {
+    background: var(--do-navy) !important;
+    border-color: var(--do-navy) !important;
+    color: #fff !important;
+}
+.crm-daily-outreach .dataTables_wrapper:after {
+    content: "";
+    display: block;
+    clear: both;
+}
+.crm-daily-outreach :is(a, button, input, textarea):focus-visible {
+    outline: 2px solid var(--do-blue);
+    outline-offset: 2px;
+}
+.dark .crm-daily-outreach,
+[data-theme-mode="dark"] .crm-daily-outreach {
+    --do-bg: #121417;
+    --do-card: #1b1e24;
+    --do-line: #2a2f38;
+    --do-text: #e8eaee;
+    --do-muted: #b9bfcc;
+}
+.dark .crm-daily-outreach .do-table th,
+[data-theme-mode="dark"] .crm-daily-outreach .do-table th {
+    background: #20242b;
+}
+.dark .crm-daily-outreach .do-table textarea,
+[data-theme-mode="dark"] .crm-daily-outreach .do-table textarea,
+.dark .crm-daily-outreach .do-copy,
+[data-theme-mode="dark"] .crm-daily-outreach .do-copy {
+    background: #1b1e24;
+    color: var(--do-text);
+}
+@media (max-width: 1100px) {
+    .crm-daily-outreach .do-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .crm-daily-outreach .do-table th:nth-child(1) {
+        width: 21%;
+    }
+    .crm-daily-outreach .do-table th:nth-child(5) {
+        width: 25%;
+    }
+}
+@media (max-width: 767px) {
+    .crm-daily-outreach {
+        padding: 16px 12px calc(86px + env(safe-area-inset-bottom, 0px));
+    }
+    .crm-daily-outreach h1 {
+        font-size: 20px;
+    }
+    .crm-daily-outreach .do-page-head {
+        align-items: stretch;
+    }
+    .crm-daily-outreach .do-page-head form,
+    .crm-daily-outreach .do-page-head form .do-button {
+        width: 100%;
+    }
+    .crm-daily-outreach .do-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+    .crm-daily-outreach .do-summary-card {
+        min-height: 112px;
+        padding: 12px;
+    }
+    .crm-daily-outreach .do-summary-card strong {
+        font-size: 20px;
+    }
+    .crm-daily-outreach .do-filter {
+        grid-template-columns: 1fr;
+        padding: 12px;
+    }
+    .crm-daily-outreach .do-filter-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+    }
+    .crm-daily-outreach .do-filter-actions .do-button {
+        width: 100%;
+    }
+    .crm-daily-outreach .do-queue-head {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+    .crm-daily-outreach .dataTables_wrapper {
+        padding: 0 10px 12px;
+    }
+    .crm-daily-outreach .dataTables_wrapper .dataTables_length,
+    .crm-daily-outreach .dataTables_wrapper .dataTables_filter {
+        float: none;
+        text-align: left;
+        padding-top: 12px;
+    }
+    .crm-daily-outreach .dataTables_wrapper .dataTables_filter input {
+        width: 100%;
+        margin: 5px 0 0;
+    }
+    .crm-daily-outreach .dataTables_wrapper .dataTables_info {
+        float: none;
+    }
+    .crm-daily-outreach .dataTables_wrapper .dataTables_paginate {
+        float: none;
+        text-align: left;
+        white-space: normal;
+    }
+    .crm-daily-outreach .dataTables_scroll {
+        overflow: visible !important;
+    }
+    .crm-daily-outreach .dataTables_scrollHead {
+        display: none;
+    }
+    .crm-daily-outreach .dataTables_scrollBody {
+        height: auto !important;
+        overflow: visible !important;
+    }
+    .crm-daily-outreach .do-table,
+    .crm-daily-outreach .do-table tbody,
+    .crm-daily-outreach .do-table tr,
+    .crm-daily-outreach .do-table td {
+        display: block;
+        width: 100% !important;
+    }
+    .crm-daily-outreach .do-table thead {
+        display: none;
+    }
+    .crm-daily-outreach .do-table tr {
+        margin: 10px 0;
+        padding: 12px;
+        border: 1px solid var(--do-line);
+        border-radius: 8px;
+        background: var(--do-card);
+    }
+    .crm-daily-outreach .do-table td {
+        display: grid;
+        grid-template-columns: minmax(78px, 0.7fr) minmax(0, 1.3fr);
+        gap: 10px;
+        padding: 7px 0;
+        border: 0;
+        text-align: right;
+    }
+    .crm-daily-outreach .do-table td:before {
+        content: attr(data-label);
+        color: var(--do-muted);
+        font-size: 11px;
+        font-weight: 600;
+        text-align: left;
+    }
+    .crm-daily-outreach .do-table td[data-label="Remark"],
+    .crm-daily-outreach .do-table td[data-label="Action"] {
+        display: block;
+        text-align: left;
+    }
+    .crm-daily-outreach .do-table td[data-label="Remark"]:before,
+    .crm-daily-outreach .do-table td[data-label="Action"]:before {
+        display: block;
+        margin-bottom: 7px;
+    }
+    .crm-daily-outreach .do-table td[colspan] {
+        display: block;
+        text-align: center;
+    }
+    .crm-daily-outreach .do-table td[colspan]:before {
+        display: none;
+    }
+    .crm-daily-outreach .do-dnp-form,
+    .crm-daily-outreach .do-remark-form,
+    .crm-daily-outreach .do-action-box {
+        width: 100%;
+    }
+    .crm-daily-outreach .do-action-box {
+        grid-template-columns: 1fr 1fr;
+    }
+    .crm-daily-outreach .do-action-box .do-button--success {
+        grid-column: 1/-1;
+    }
+}
+
+
+
+/* Daily Outreach - Kimi Action Column */
+
+.crm-daily-outreach .do-action-buttons {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    gap: 8px;
+    white-space: nowrap;
+}
+
+.crm-daily-outreach .do-action-buttons .do-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    flex: 0 0 auto;
+    width: auto;
+    min-height: 38px;
+    margin: 0;
+    white-space: nowrap;
+}
+
+.crm-daily-outreach .do-action-buttons .do-unified-save {
+    min-width: 76px;
+}
+
+.crm-daily-outreach .do-action-buttons .do-button--success {
+    min-width: 145px;
+}
+
+.crm-daily-outreach .do-table td[data-label="Action"] {
+    min-width: 240px;
+    vertical-align: middle;
+}
+
+@media (max-width: 767px) {
+    .crm-daily-outreach .do-action-buttons {
+        gap: 6px;
+    }
+
+    .crm-daily-outreach .do-action-buttons .do-button {
+        min-height: 36px;
+        font-size: 12px;
+        padding: 8px 10px;
+    }
+
+    .crm-daily-outreach .do-table td[data-label="Action"] {
+        min-width: 220px;
+    }
+}
+
+
+
+/* ============================================================
+   DAILY OUTREACH - FINAL TABLE WRAPPING FIX
+   ============================================================ */
+
+/* Allow horizontal scrolling if the table needs more room */
+.crm-daily-outreach .do-table-wrap {
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: visible;
+}
+
+/* Consistent column sizing */
+.crm-daily-outreach table.do-table {
+    width: 100% !important;
+    min-width: 1120px;
+    table-layout: fixed !important;
+    border-collapse: collapse;
+}
+
+/* All cells must respect their column boundaries */
+.crm-daily-outreach table.do-table th,
+.crm-daily-outreach table.do-table td {
+    box-sizing: border-box;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    word-break: normal;
+    vertical-align: middle;
+    min-width: 0;
+}
+
+/* Column widths - total 100% */
+.crm-daily-outreach table.do-table th:nth-child(1) {
+    width: 17%;
+}
+
+.crm-daily-outreach table.do-table th:nth-child(2) {
+    width: 12%;
+}
+
+.crm-daily-outreach table.do-table th:nth-child(3) {
+    width: 21%;
+}
+
+.crm-daily-outreach table.do-table th:nth-child(4) {
+    width: 7%;
+}
+
+.crm-daily-outreach table.do-table th:nth-child(5) {
+    width: 20%;
+}
+
+.crm-daily-outreach table.do-table th:nth-child(6) {
+    width: 23%;
+}
+
+/* Long product names wrap inside their cell */
+.crm-daily-outreach table.do-table td:nth-child(3) {
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    word-break: normal;
+    line-height: 1.55;
+}
+
+/* Customer and phone values */
+.crm-daily-outreach .do-customer-name,
+.crm-daily-outreach .do-phone {
+    max-width: 100%;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+}
+
+/* Remark input stays within its column */
+.crm-daily-outreach table.do-table textarea {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+/* Save and Create Fresh Lead on same line */
+.crm-daily-outreach .do-action-buttons {
+    display: flex !important;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+}
+
+.crm-daily-outreach .do-action-buttons .do-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: auto !important;
+    max-width: 100%;
+    white-space: nowrap !important;
+    margin: 0;
+}
+
+.crm-daily-outreach .do-action-buttons .do-unified-save {
+    min-width: 70px;
+}
+
+.crm-daily-outreach .do-action-buttons .do-button--success {
+    min-width: 140px;
+}
+
+/* DataTables should not clip cell text */
+.crm-daily-outreach .dataTables_wrapper {
+    max-width: 100%;
+    min-width: 0;
+}
+
+/* Mobile: preserve existing card-style layout */
+@media (max-width: 767px) {
+
+    .crm-daily-outreach .do-table-wrap {
+        overflow-x: visible;
+    }
+
+    .crm-daily-outreach table.do-table {
+        min-width: 0;
+        width: 100% !important;
+    }
+
+    .crm-daily-outreach table.do-table td {
+        min-width: 0;
+        overflow-wrap: anywhere !important;
+    }
+
+    .crm-daily-outreach table.do-table td[data-label="Last Product"] {
+        white-space: normal !important;
+        overflow-wrap: anywhere !important;
+    }
+
+    .crm-daily-outreach .do-action-buttons {
+        display: flex !important;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .crm-daily-outreach .do-action-buttons .do-button {
+        flex: 0 1 auto;
+        min-width: 0;
+    }
+}
+
+
+/* Daily Outreach - Final Column Widths */
+
+@media (min-width: 768px) {
+    .crm-daily-outreach table.do-table th:nth-child(1) {
+        width: 17% !important;
+    }
+
+    .crm-daily-outreach table.do-table th:nth-child(2) {
+        width: 12% !important;
+    }
+
+    /* Last Product - reduced from 21% to 12% */
+    .crm-daily-outreach table.do-table th:nth-child(3) {
+        width: 12% !important;
+    }
+
+    .crm-daily-outreach table.do-table th:nth-child(4) {
+        width: 8% !important;
+    }
+
+    .crm-daily-outreach table.do-table th:nth-child(5) {
+        width: 22% !important;
+    }
+
+    .crm-daily-outreach table.do-table th:nth-child(6) {
+        width: 29% !important;
+    }
+
+    /* Product name always wraps within its cell */
+    .crm-daily-outreach table.do-table th:nth-child(3),
+    .crm-daily-outreach table.do-table td:nth-child(3) {
+        white-space: normal !important;
+        overflow-wrap: anywhere !important;
+        word-break: normal;
+        line-height: 1.5;
+    }
+}
+
+
+
+/* ============================================================
+   ACCRETION AVIATION - DAILY OUTREACH
+   RESPONSIVE PAGE + MOBILE CARD FIX
+   ============================================================ */
+
+/* Shared page containment */
+.crm-daily-outreach,
+.crm-daily-outreach .do-page-head,
+.crm-daily-outreach .do-summary,
+.crm-daily-outreach .do-filter,
+.crm-daily-outreach .do-queue-card,
+.crm-daily-outreach .do-table-wrap {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+/* Prevent long text from forcing the full page wider */
+.crm-daily-outreach .do-queue-head,
+.crm-daily-outreach .do-summary-card,
+.crm-daily-outreach .do-field {
+    min-width: 0;
+}
+
+/* Desktop phone styling */
+.crm-daily-outreach .do-customer-info {
+    min-width: 0;
+}
+
+.crm-daily-outreach .do-phone-action {
+    display: inline-block;
+    max-width: 100%;
+    color: var(--do-navy);
+    font-weight: 750;
+    text-decoration: none;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+}
+
+.crm-daily-outreach .do-phone-action:hover {
+    color: #2563eb;
+    text-decoration: underline;
+}
+
+/* ============================================================
+   TABLET
+   ============================================================ */
+
+@media (min-width: 768px) and (max-width: 1100px) {
+    .crm-daily-outreach {
+        padding: 18px 14px;
+    }
+
+    .crm-daily-outreach .do-summary {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .crm-daily-outreach .do-filter {
+        grid-template-columns: minmax(0, 1fr) minmax(150px, 220px);
+    }
+
+    .crm-daily-outreach .do-filter-actions {
+        grid-column: 1 / -1;
+        justify-content: flex-end;
+    }
+
+    .crm-daily-outreach .do-table-wrap {
+        overflow-x: auto;
+    }
+
+    .crm-daily-outreach table.do-table {
+        min-width: 1050px;
+    }
+}
+
+/* ============================================================
+   MOBILE: UP TO 767px
+   ============================================================ */
+
+@media (max-width: 767px) {
+
+    /* Whole Daily Outreach page */
+    .crm-daily-outreach {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0 !important;
+        padding: 14px 10px
+            calc(130px + env(safe-area-inset-bottom, 0px))
+            !important;
+        margin: 0;
+        overflow-x: clip;
+    }
+
+    /* Page title */
+    .crm-daily-outreach .do-page-head {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+        margin-bottom: 14px;
+    }
+
+    .crm-daily-outreach .do-page-head h1 {
+        font-size: 19px;
+        line-height: 1.3;
+        overflow-wrap: anywhere;
+    }
+
+    .crm-daily-outreach .do-page-head p {
+        font-size: 12px;
+        line-height: 1.5;
+    }
+
+    .crm-daily-outreach .do-page-head form,
+    .crm-daily-outreach .do-page-head form .do-button {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    /* KPI summary cards */
+    .crm-daily-outreach .do-summary {
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 8px !important;
+        width: 100%;
+        margin-bottom: 14px;
+    }
+
+    .crm-daily-outreach .do-summary-card {
+        min-width: 0;
+        min-height: 105px;
+        padding: 12px 10px;
+    }
+
+    .crm-daily-outreach .do-summary-card strong {
+        font-size: 19px;
+        line-height: 1.3;
+        overflow-wrap: anywhere;
+    }
+
+    .crm-daily-outreach .do-summary-card small {
+        font-size: 11px;
+        line-height: 1.4;
+    }
+
+    /* Page filter */
+    .crm-daily-outreach .do-filter {
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) !important;
+        gap: 12px !important;
+        width: 100%;
+        padding: 12px;
+    }
+
+    .crm-daily-outreach .do-field,
+    .crm-daily-outreach .do-field input {
+        display: block;
+        width: 100% !important;
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .crm-daily-outreach .do-filter-actions {
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 8px;
+        width: 100%;
+    }
+
+    .crm-daily-outreach .do-filter-actions .do-button {
+        width: 100%;
+        min-width: 0;
+        margin: 0;
+    }
+
+    /* Queue title */
+    .crm-daily-outreach .do-queue-head {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 5px;
+        width: 100%;
+    }
+
+    .crm-daily-outreach .do-queue-head h2 {
+        font-size: 16px;
+    }
+
+    /* Main queue card */
+    .crm-daily-outreach .do-queue-card {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        padding: 0;
+        background: transparent;
+        border: none;
+        overflow: visible !important;
+    }
+
+    .crm-daily-outreach .do-table-wrap {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        overflow: visible !important;
+    }
+
+    /* DataTables layout */
+    .crm-daily-outreach .dataTables_wrapper {
+        width: 100% !important;
+        max-width: 100%;
+        min-width: 0;
+        padding: 0 !important;
+        overflow: visible;
+    }
+
+    .crm-daily-outreach .dataTables_length,
+    .crm-daily-outreach .dataTables_filter {
+        float: none !important;
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        padding: 8px 0;
+        text-align: left !important;
+    }
+
+    .crm-daily-outreach .dataTables_filter label {
+        display: block;
+        width: 100%;
+    }
+
+    .crm-daily-outreach .dataTables_filter input {
+        display: block;
+        width: 100% !important;
+        max-width: 100%;
+        min-width: 0;
+        margin: 6px 0 0 !important;
+    }
+
+    /* Disable desktop table geometry on mobile */
+    .crm-daily-outreach table.do-table {
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        margin: 0 !important;
+        table-layout: auto !important;
+        border-collapse: separate;
+    }
+
+    .crm-daily-outreach table.do-table thead {
+        display: none !important;
+    }
+
+    .crm-daily-outreach table.do-table tbody {
+        display: block !important;
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+
+    /* Every customer becomes a separate card */
+    .crm-daily-outreach table.do-table tbody tr {
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        margin: 0 0 12px !important;
+        padding: 13px !important;
+        border: 1px solid #dfe5ec !important;
+        border-radius: 10px;
+        background: var(--do-card) !important;
+        box-shadow: 0 2px 6px rgba(15, 43, 70, 0.04);
+        box-sizing: border-box;
+    }
+
+    /* Reset conflicting older mobile grid styles */
+    .crm-daily-outreach table.do-table tbody td {
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        padding: 10px 0 !important;
+        margin: 0 !important;
+        border: 0 !important;
+        border-bottom: 1px solid var(--do-line) !important;
+        text-align: left !important;
+        vertical-align: top;
+        white-space: normal !important;
+        overflow-wrap: anywhere;
+        word-break: normal;
+        box-sizing: border-box;
+    }
+
+    .crm-daily-outreach table.do-table tbody td:last-child {
+        border-bottom: none !important;
+        padding-bottom: 0 !important;
+    }
+
+    /* Column labels above values */
+    .crm-daily-outreach table.do-table tbody td::before {
+        content: attr(data-label);
+        display: block !important;
+        width: 100%;
+        margin: 0 0 7px !important;
+        color: var(--do-muted);
+        font-size: 11px;
+        line-height: 1.4;
+        font-weight: 700;
+        text-align: left !important;
+        text-transform: uppercase;
+    }
+
+    /* Customer and mobile in correct order */
+    .crm-daily-outreach table.do-table td[data-label="Customer / Mobile"] {
+        text-align: left !important;
+    }
+
+    .crm-daily-outreach .do-customer-name {
+        display: block !important;
+        width: 100%;
+        max-width: 100%;
+        margin: 0 0 5px;
+        font-size: 14px;
+        line-height: 1.4;
+        font-weight: 700;
+        text-align: left !important;
+        white-space: normal !important;
+        overflow-wrap: anywhere;
+    }
+
+    .crm-daily-outreach .do-phone,
+    .crm-daily-outreach .do-phone-action {
+        display: inline-block !important;
+        width: auto !important;
+        max-width: 100%;
+        margin: 0;
+        color: #2563eb !important;
+        font-size: 16px;
+        line-height: 1.4;
+        font-weight: 750;
+        text-align: left !important;
+        text-decoration: underline;
+        text-underline-offset: 3px;
+        white-space: nowrap !important;
+        overflow-wrap: normal !important;
+        word-break: normal !important;
+    }
+
+    /* Last product: allow wrapping */
+    .crm-daily-outreach table.do-table td[data-label="Last Product"] {
+        white-space: normal !important;
+        overflow-wrap: anywhere !important;
+        line-height: 1.5;
+    }
+
+    /* DNP checkbox */
+    .crm-daily-outreach .do-dnp-check {
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 8px;
+        width: auto;
+        max-width: 100%;
+        margin: 0;
+        text-align: left;
+    }
+
+    .crm-daily-outreach .do-dnp-check input[type="checkbox"] {
+        width: 17px;
+        height: 17px;
+        flex-shrink: 0;
+        margin: 0;
+    }
+
+    /* Full-width Remark */
+    .crm-daily-outreach .do-table textarea,
+    .crm-daily-outreach .do-remark-input {
+        display: block;
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        min-height: 85px;
+        padding: 10px;
+        margin: 0;
+        box-sizing: border-box;
+        resize: vertical;
+    }
+
+    /* Save + Create Fresh Lead side by side */
+    .crm-daily-outreach .do-action-box.do-action-buttons {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center;
+        justify-content: flex-start;
+        flex-wrap: wrap !important;
+        gap: 8px;
+        width: 100% !important;
+        min-width: 0;
+    }
+
+    .crm-daily-outreach .do-action-buttons .do-button {
+        display: inline-flex !important;
+        justify-content: center;
+        align-items: center;
+        flex: 0 1 auto !important;
+        width: auto !important;
+        min-width: 0 !important;
+        min-height: 38px;
+        padding: 8px 10px;
+        margin: 0 !important;
+        font-size: 12px;
+        line-height: 1.25;
+        white-space: nowrap !important;
+        grid-column: auto !important;
+    }
+
+    .crm-daily-outreach .do-action-buttons .do-unified-save {
+        flex-shrink: 0 !important;
+    }
+
+    .crm-daily-outreach .do-action-buttons .do-button--success {
+        grid-column: auto !important;
+    }
+
+    /* Pagination and footer */
+    .crm-daily-outreach .dataTables_info,
+    .crm-daily-outreach .dataTables_paginate {
+        display: block;
+        float: none !important;
+        width: 100%;
+        max-width: 100%;
+        padding: 10px 0;
+        text-align: center !important;
+        white-space: normal !important;
+    }
+
+    .crm-daily-outreach .dataTables_paginate .paginate_button {
+        margin: 3px !important;
+    }
+
+    /* Avoid overlap with fixed bottom navigation */
+    .crm-daily-outreach .do-queue-card:last-child {
+        margin-bottom: 18px;
+    }
+}
+
+/* Very narrow phones */
+@media (max-width: 359px) {
+    .crm-daily-outreach {
+        padding-left: 8px !important;
+        padding-right: 8px !important;
+    }
+
+    .crm-daily-outreach .do-summary-card {
+        padding: 9px;
+    }
+
+    .crm-daily-outreach .do-action-buttons .do-button {
+        font-size: 11px;
+        padding: 8px;
+    }
+}
+

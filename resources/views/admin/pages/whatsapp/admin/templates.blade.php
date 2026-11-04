@@ -981,6 +981,7 @@
             method="POST"
             action="{{ route('admin.msg91.templates.create') }}"
             class="msg91-template-form"
+            data-msg91-create-template-form
         >
 
             @csrf
@@ -994,7 +995,19 @@
 
 
             <div class="msg91-modal__scroll">
+                <div class="msg91-form-feedback" data-msg91-create-feedback role="status" aria-live="polite" hidden></div>
 
+                @if($errors->any() && old('form_context') === 'create_template')
+                    <div class="alert alert-danger mb-4" role="alert">
+                        <strong>Template creation failed</strong>
+
+                        <ul class="mb-0 mt-2">
+                            @foreach($errors->all() as $error)
+                                <li>{{ $error }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
 
                 <div class="msg91-modal-info">
 
@@ -1029,11 +1042,14 @@
                             }}"
                             placeholder="e.g. accretion_demo_followup"
                             pattern="[a-z0-9_]+"
+                            maxlength="191"
+                            title="Use lowercase letters, numbers and underscores only. Do not use spaces, hyphens or uppercase letters."
+                            aria-describedby="msg91-template-name-help"
                         >
 
 
-                        <small>
-                            Lowercase letters, numbers and underscores only.
+                        <small id="msg91-template-name-help">
+                            Use lowercase letters (a-z), numbers (0-9), and underscores (_). Do not use spaces, hyphens, or uppercase letters.
                         </small>
 
                     </div>
@@ -1135,7 +1151,7 @@
                                 @foreach($senders as $sender)
                                     <option
                                         value="{{ $sender->id }}"
-                                        {{ in_array((string) $sender->id, array_map('strval', (array) old('sender_ids', [])), true) ? 'selected' : '' }}
+                                        {{ in_array((string) $sender->id, array_map('strval', (array) old('sender_ids', $senders->take(1)->pluck('id')->all())), true) ? 'selected' : '' }}
                                     >
                                         {{ $sender->integrated_number }} · {{ $sender->user?->name }}
                                     </option>
@@ -1303,11 +1319,10 @@
                 <button
                     type="submit"
                     class="msg91-button"
+                    data-msg91-create-submit
                 >
-
-                    <i class="ri-send-plane-line"></i>
-
-                    Submit to MSG91
+                    <i class="ri-send-plane-line" data-msg91-create-submit-icon></i>
+                    <span data-msg91-create-submit-label>Submit to MSG91</span>
 
                 </button>
 
@@ -1420,7 +1435,6 @@
 
 
             <div class="msg91-modal__scroll">
-
 
                 <div class="msg91-modal-info">
 
@@ -2014,11 +2028,15 @@ document.addEventListener(
 
                     event.preventDefault();
 
+                    const modal = closeButton.closest('.msg91-modal');
+                    const createForm = modal ? modal.querySelector('[data-msg91-create-template-form]') : null;
+
+                    if (createForm && createForm.classList.contains('is-submitting')) {
+                        return;
+                    }
 
                     closeModal(
-                        closeButton.closest(
-                            '.msg91-modal'
-                        )
+                        modal
                     );
 
                 }
@@ -2053,6 +2071,100 @@ document.addEventListener(
             refreshSelectAll();
         });
 
+        const createTemplateForm = document.querySelector('[data-msg91-create-template-form]');
+
+        if (createTemplateForm) {
+            const templateName = createTemplateForm.querySelector('[name="name"]');
+            const feedback = createTemplateForm.querySelector('[data-msg91-create-feedback]');
+            const submitButton = createTemplateForm.querySelector('[data-msg91-create-submit]');
+            const submitLabel = createTemplateForm.querySelector('[data-msg91-create-submit-label]');
+            const submitIcon = createTemplateForm.querySelector('[data-msg91-create-submit-icon]');
+
+            function setTemplateNameValidity() {
+                const name = templateName.value.trim();
+
+                if (name === '') {
+                    templateName.setCustomValidity('Enter a template name.');
+                } else if (!/^[a-z0-9_]+$/.test(name)) {
+                    templateName.setCustomValidity('Use only lowercase letters (a-z), numbers (0-9), and underscores (_). Do not use spaces, hyphens, or uppercase letters.');
+                } else {
+                    templateName.setCustomValidity('');
+                }
+            }
+
+            function showCreateFeedback(message, type) {
+                feedback.textContent = message;
+                feedback.hidden = false;
+                feedback.classList.toggle('is-error', type === 'error');
+                feedback.classList.toggle('is-success', type === 'success');
+            }
+
+            function setCreateSubmitting(submitting) {
+                createTemplateForm.classList.toggle('is-submitting', submitting);
+                submitButton.disabled = submitting;
+                submitLabel.textContent = submitting ? 'Submitting…' : 'Submit to MSG91';
+                submitIcon.className = submitting ? 'ri-loader-4-line ri-spin' : 'ri-send-plane-line';
+                createTemplateForm.querySelectorAll('[data-msg91-close-modal]').forEach(function (button) {
+                    button.disabled = submitting;
+                });
+            }
+
+            templateName.addEventListener('input', setTemplateNameValidity);
+            templateName.addEventListener('invalid', setTemplateNameValidity);
+
+            createTemplateForm.addEventListener('submit', function (event) {
+                setTemplateNameValidity();
+
+                if (!createTemplateForm.checkValidity()) {
+                    return;
+                }
+
+                event.preventDefault();
+
+                if (createTemplateForm.classList.contains('is-submitting')) {
+                    return;
+                }
+
+                feedback.hidden = true;
+                setCreateSubmitting(true);
+
+                fetch(createTemplateForm.action, {
+                    method: 'POST',
+                    body: new FormData(createTemplateForm),
+                    credentials: 'same-origin',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                    .then(function (response) {
+                        return response.json().catch(function () {
+                            return {};
+                        }).then(function (payload) {
+                            return { ok: response.ok, payload: payload };
+                        });
+                    })
+                    .then(function (result) {
+                        if (!result.ok) {
+                            const errors = result.payload.errors || {};
+                            const details = Object.keys(errors).map(function (key) {
+                                return Array.isArray(errors[key]) ? errors[key].join(' ') : errors[key];
+                            }).filter(Boolean);
+                            throw new Error(details.join(' ') || result.payload.message || 'Template could not be submitted. Please review the details and try again.');
+                        }
+
+                        showCreateFeedback(result.payload.message || 'Template submitted to MSG91. The page will refresh shortly.', 'success');
+                        window.setTimeout(function () {
+                            window.location.reload();
+                        }, 1600);
+                    })
+                    .catch(function (error) {
+                        showCreateFeedback(error.message || 'Template could not be submitted. Please try again.', 'error');
+                        setCreateSubmitting(false);
+                    });
+            });
+        }
+
 
 
         /*
@@ -2085,6 +2197,11 @@ document.addEventListener(
                 if (
                     openModalElement
                 ) {
+
+                    const createForm = openModalElement.querySelector('[data-msg91-create-template-form]');
+                    if (createForm && createForm.classList.contains('is-submitting')) {
+                        return;
+                    }
 
                     closeModal(
                         openModalElement
@@ -2120,9 +2237,9 @@ document.addEventListener(
         */
 
         @if(
-            $errors->any()
-            &&
-            $oldFormContext === 'create_template'
+            session('msg91_open_create_template')
+            ||
+            ($errors->any() && $oldFormContext === 'create_template')
         )
 
             openModal(

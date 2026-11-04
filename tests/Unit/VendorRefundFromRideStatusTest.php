@@ -8,6 +8,7 @@ use App\Http\Controllers\LeadTrackingController;
 use App\Mail\RefundMail;
 use App\Models\Client;
 use App\Models\Lead;
+use App\Models\LeadFollowup;
 use App\Models\LeadRide;
 use App\Models\LeadVendorPayment;
 use App\Models\NotificationMaster;
@@ -478,6 +479,56 @@ class VendorRefundFromRideStatusTest extends TestCase
         }
     }
 
+    public function test_saved_cancellation_is_updated_in_place_before_any_vendor_refund_payment(): void
+    {
+        [$ride, $payment] = $this->createVendorPaymentScenario(['vendor_amount' => 70000, 'paid_amount' => 30000]);
+
+        $this->saveVendorRefund($ride->id, [
+            'stage' => 'cancellation', 'lead_vendor_payment_id' => $payment->id,
+            'cancellation_amount' => 10000, 'refund_amount' => 0, 'refund_reason' => 'Original cancellation assessment',
+        ]);
+        $assessment = VendorRefund::where('lead_vendor_payment_id', $payment->id)->firstOrFail();
+        $createdBy = $assessment->created_by;
+
+        $response = $this->saveVendorRefund($ride->id, [
+            'stage' => 'cancellation', 'lead_vendor_payment_id' => $payment->id,
+            'cancellation_amount' => 12000, 'refund_amount' => 0, 'refund_reason' => 'Updated cancellation assessment',
+        ]);
+
+        $this->assertTrue($response->getData(true)['success']);
+        $this->assertSame('Vendor cancellation updated successfully.', $response->getData(true)['message']);
+        $this->assertSame(1, VendorRefund::where('lead_vendor_payment_id', $payment->id)->count());
+        $assessment->refresh();
+        $this->assertSame(12000.0, (float) $assessment->cancellation_amount);
+        $this->assertSame('Updated cancellation assessment', $assessment->refund_reason);
+        $this->assertSame($createdBy, $assessment->created_by);
+    }
+
+    public function test_finalized_cancellation_cannot_be_edited(): void
+    {
+        [$ride, $payment] = $this->createVendorPaymentScenario(['vendor_amount' => 70000, 'paid_amount' => 30000]);
+        $assessment = VendorRefund::create([
+            'lead_id' => $payment->lead_id, 'lead_vendor_payment_id' => $payment->id,
+            'vendor_id' => $payment->vendor_id, 'ride_id' => $ride->id,
+            'cancellation_amount' => 10000, 'refund_amount' => 0,
+            'refund_reason' => 'Finalized cancellation', 'status' => VendorRefund::STATUS_COMPLETED,
+            'completed_at' => now(), 'created_by' => auth()->id(),
+        ]);
+
+        try {
+            $this->saveVendorRefund($ride->id, [
+                'stage' => 'cancellation', 'lead_vendor_payment_id' => $payment->id,
+                'cancellation_amount' => 5000, 'refund_amount' => 0, 'refund_reason' => 'Attempted update',
+            ]);
+            $this->fail('A finalized cancellation assessment must be immutable.');
+        } catch (\Illuminate\Validation\ValidationException $exception) {
+            $this->assertArrayHasKey('stage', $exception->errors());
+        }
+
+        $assessment->refresh();
+        $this->assertSame(10000.0, (float) $assessment->cancellation_amount);
+    }
+
     private function saveVendorRefund(string $rideId, array $data)
     {
         $file = $data['refund_proof'] ?? null;
@@ -548,6 +599,12 @@ class VendorRefundFromRideStatusTest extends TestCase
             'to_date' => '2026-09-15 11:00:00',
             'from_place' => 'Indore',
             'to_place' => 'Ujjain',
+        ]);
+
+        LeadFollowup::create([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $lead->id,
+            'status' => LeadFollowup::STATUS_CANCELLED,
         ]);
 
         $vendor = Vendor::create([
@@ -631,6 +688,14 @@ class VendorRefundFromRideStatusTest extends TestCase
             $table->timestamps();
         });
 
+        Schema::create('lead_followups', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('lead_id');
+            $table->integer('status')->default(0);
+            $table->dateTime('next_followup_date')->nullable();
+            $table->timestamps();
+        });
+
         Schema::create('vendors', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->string('name')->unique();
@@ -710,6 +775,9 @@ class VendorRefundFromRideStatusTest extends TestCase
             $table->text('refund_reason')->nullable();
             $table->string('refund_proof')->nullable();
             $table->boolean('no_refund_required')->default(false);
+            $table->unsignedTinyInteger('status')->default(1);
+            $table->timestamp('completed_at')->nullable();
+            $table->uuid('completed_by')->nullable();
             $table->uuid('created_by')->nullable();
             $table->timestamps();
         });

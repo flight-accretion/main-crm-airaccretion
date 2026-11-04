@@ -1,5 +1,6 @@
 <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/reschedules.css') }}">
 <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/reschedule-cancel.css') }}">
+<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/customer-refund-reschedule.css') }}?v={{ filemtime(public_path('assets/admin/css/crm/customer-refund-reschedule.css')) }}">
 @php
     $reasonLabels = ['client_personal' => 'Client - personal', 'client_business' => 'Client - business', 'weather' => 'Weather', 'maintenance' => 'Maintenance', 'vendor_unavailable' => 'Vendor unavailable', 'other' => 'Other'];
     $stateLabels = ['fixed' => 'Date confirmed', 'open' => 'Awaiting date', 'pending' => 'Pending reschedule', 'legacy_closed' => 'Closed - legacy record', 'cancelled' => 'Cancelled'];
