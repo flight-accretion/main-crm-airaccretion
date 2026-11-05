@@ -268,6 +268,11 @@ if (
     }
 }
 
+        // The queue can be the final save step for vendor refund details.
+        // Schedule the existing vendor-only sender after commit; failure to
+        // notify cannot roll back the saved financial record.
+        app(RideController::class)->queueVendorRefundNotifications((string) $refund->getKey());
+
         if ($request->expectsJson()) {
             return response()->json([
                 'success' => true,

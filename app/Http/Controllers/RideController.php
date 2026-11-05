@@ -3985,7 +3985,7 @@ return [
             // ── 10. Mark refund status=1 (notifications sent, pending in Refund Notes) ──
             // status=1 = processed/notified → shows in Refund Notes PENDING tab
             // status=2 = completed → set by markAsDone button in Refund Notes page
-            if (empty($errors)) {
+            if (empty($errors) && (int) $refund->status !== 2) {
                 try {
                     $refund->update(['status' => 1]);
                     Log::info('sendRefundEmail: refund status=1 set (notified, pending)', ['refund_id' => $refund->id]);
@@ -5280,7 +5280,7 @@ public function saveVendorRefundFromRideStatus(
     }
 }
 
-private function queueVendorRefundNotifications(string $vendorRefundId): void
+public function queueVendorRefundNotifications(string $vendorRefundId): void
 {
     // TODO P5: Move vendor refund notifications to queued job.
     app()->terminating(function () use ($vendorRefundId) {

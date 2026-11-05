@@ -2043,7 +2043,7 @@
 
         </aside>
         <!-- End::app-sidebar -->
-        <script src="{{ asset('assets/admin/js/crm/navigation.js') }}?v=6"></script>
+        <script src="{{ asset('assets/admin/js/crm/navigation.js') }}?v=7"></script>
         <script src="{{ asset('assets/admin/js/crm/mobile-tables.js') }}?v=1" defer></script>
 
 

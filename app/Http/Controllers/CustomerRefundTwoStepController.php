@@ -299,6 +299,12 @@ class CustomerRefundTwoStepController extends Controller
                     \Log::warning('Could not close completed customer refund case', ['ride_id' => $rideId]);
                 }
             }
+
+            // Notification delivery must never prevent a recorded refund payment.
+            // Reuse the established customer-only sender so notification-master
+            // recipients and customer/vendor contact isolation remain consistent.
+            $this->queueCustomerRefundNotifications($ride->id);
+
             return response()->json(['success' => true, 'settlement' => $snapshot]);
         } catch (\Throwable $exception) {
             if ($storedProof) {
@@ -306,6 +312,27 @@ class CustomerRefundTwoStepController extends Controller
             }
             throw $exception;
         }
+    }
+
+    private function queueCustomerRefundNotifications(string $rideId): void
+    {
+        app()->terminating(function () use ($rideId) {
+            try {
+                $response = app(RideController::class)->sendRefundEmail(request(), $rideId);
+
+                if ($response->getStatusCode() >= 400) {
+                    \Log::warning('Customer refund notification sender returned an error', [
+                        'ride_id' => $rideId,
+                        'status' => $response->getStatusCode(),
+                    ]);
+                }
+            } catch (\Throwable $exception) {
+                \Log::warning('Customer refund notification failed (refund payment remains saved)', [
+                    'ride_id' => $rideId,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
+        });
     }
 
     public function correctPayment(Request $request, string $rideId, Workflow $workflow)
