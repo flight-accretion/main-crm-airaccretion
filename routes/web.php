@@ -502,7 +502,7 @@ Route::get(
     ]
 )
     ->middleware(
-        'role:ADMIN_ROLES,SALES_ROLES,ACCOUNTS_ROLES,HR,OWNER'
+        'role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,ACCOUNTS_ROLES,HR,OWNER'
     )
     ->name(
         'admin.kpi.outreach.index'
@@ -756,11 +756,23 @@ Route::get(
         Route::post('/campaigns/preview', [\App\Http\Controllers\Msg91CampaignController::class, 'preview'])->middleware('throttle:30,1')->name('campaigns.preview');
         Route::post('/campaigns', [\App\Http\Controllers\Msg91CampaignController::class, 'store'])->middleware('throttle:10,1')->name('campaigns.store');
         Route::post('/campaigns/{campaign}/cancel', [\App\Http\Controllers\Msg91CampaignController::class, 'cancel'])->whereUuid('campaign')->name('campaigns.cancel');
+        
+        Route::post(
+            '/campaigns/{campaign}/retry-failed',
+            [\App\Http\Controllers\Msg91CampaignController::class, 'retryFailed']
+        )
+            ->whereUuid('campaign')
+            ->middleware('throttle:5,1')
+            ->name('campaigns.retry-failed');
         Route::get('/admin/subscriptions', [\App\Http\Controllers\Msg91WhatsAppAdminController::class, 'index'])->name('admin.index');
         Route::put('/admin/subscriptions', [\App\Http\Controllers\Msg91WhatsAppAdminController::class, 'save'])->name('admin.save');
         Route::get('/templates', [\App\Http\Controllers\Msg91WhatsAppTemplateController::class, 'index'])->name('templates.index');
         Route::post('/templates', [\App\Http\Controllers\Msg91WhatsAppTemplateController::class, 'save'])->name('templates.save');
         Route::post('/templates/create', [\App\Http\Controllers\Msg91WhatsAppTemplateController::class, 'create'])->name('templates.create');
+        Route::delete(
+            '/templates/{template}',
+            [\App\Http\Controllers\Msg91WhatsAppTemplateController::class, 'destroy']
+        )->whereUuid('template')->name('templates.destroy');
         Route::post('/templates/senders/{sender}/sync', [\App\Http\Controllers\Msg91WhatsAppTemplateController::class, 'sync'])->whereUuid('sender')->name('templates.sync');
         Route::post('/admin/subscriptions/refresh-senders',
         [\App\Http\Controllers\Msg91WhatsAppAdminController::class, 'refreshSenders'])
@@ -877,6 +889,9 @@ Route::get(
 
         Route::post('/', [ClientController::class, 'store'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.clients.store');
         Route::get('/{client}/edit', [ClientController::class, 'edit'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.clients.edit');
+        Route::get('/search-clients', [ClientController::class, 'searchClients'])
+        ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')
+        ->name('admin.clients.search');
         Route::put('/{client}', [ClientController::class, 'update'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.clients.update');
         Route::get('/{client}', [ClientController::class, 'view'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,HR,OWNER')->name('admin.clients.view');
         Route::delete('/{client}', [ClientController::class, 'destroy'])->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES')->name('admin.clients.destroy');
@@ -1171,7 +1186,9 @@ Route::post(
     });
 
     Route::get('/get-cities/{countryId}', [ClientController::class, 'getCitiesByCountry'])
-        ->middleware('role:ADMIN_ROLES,OPERATIONS_ROLES,OWNER');
+    ->middleware('role:ADMIN_ROLES,SALES_ROLES,OPERATIONS_ROLES,OWNER')
+    ->whereUuid('countryId')
+    ->name('admin.clients.cities');
 
     Route::post('/change-password', [UserController::class, 'updatePassword'])->name('user.password.update');
     Route::get('change-password', [UserController::class, 'showChangePasswordForm'])->name('password.change');

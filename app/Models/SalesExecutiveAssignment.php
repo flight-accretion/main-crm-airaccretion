@@ -74,9 +74,32 @@ class SalesExecutiveAssignment extends Model
     {
         return self::active()
             ->forManager($managerId)
+            ->whereHas('salesExecutive', function ($query) {
+                $query->where('status', 1);
+            })
             ->with('salesExecutive.userType')
             ->get()
             ->pluck('salesExecutive');
+    }
+
+    /**
+     * Get only active sales executives assigned to a manager.
+     *
+     * Use for current staff dropdowns and active-team UI.
+     * Do not use for historical reports or lead authorization.
+     */
+    public static function getActiveSalesExecutivesForManager($managerId)
+    {
+        return self::active()
+            ->forManager($managerId)
+            ->whereHas('salesExecutive', function ($query) {
+                $query->where('status', 1);
+            })
+            ->with('salesExecutive.userType')
+            ->get()
+            ->pluck('salesExecutive')
+            ->filter()
+            ->values();
     }
 
     /**

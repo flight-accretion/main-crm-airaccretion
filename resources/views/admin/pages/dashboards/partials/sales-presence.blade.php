@@ -1,8 +1,6 @@
 @php
     $salesPresenceRows = collect($salesPresenceRows ?? []);
     $canViewAllSalesPresence = (bool) ($canViewAllSalesPresence ?? false);
-    $presentCount = $salesPresenceRows->where('is_present_today', true)->count();
-    $absentCount = $salesPresenceRows->count() - $presentCount;
 @endphp
 
 <div class="grid grid-cols-12 gap-x-6">
@@ -17,15 +15,21 @@
                         {{ $canViewAllSalesPresence ? 'Live lead assignment uses only people who clicked Yes today.' : 'Your lead assignment status for today.' }}
                     </p>
                 </div>
-                <div class="flex gap-2 text-sm">
-                    <span class="rounded bg-success/10 px-3 py-1 font-semibold text-success">Yes: {{ $presentCount }}</span>
-                    <span class="rounded bg-danger/10 px-3 py-1 font-semibold text-danger">No: {{ $absentCount }}</span>
-                </div>
             </div>
             <div class="box-body">
                 @if($salesPresenceRows->isEmpty())
                     <div class="rounded bg-gray-50 p-3 text-sm text-gray-600">No sales presence data found.</div>
-                @elseif($canViewAllSalesPresence)
+                @elseif(
+                    $canViewAllSalesPresence
+                    || in_array(
+                        auth()->user()?->userType?->user_type,
+                        [
+                            \App\Models\UserType::SALES_MANAGER,
+                            \App\Models\UserType::SENIOR_SALES_MANAGER,
+                        ],
+                        true
+                    )
+                )
                     <div class="overflow-x-auto">
                         <table class="table whitespace-nowrap min-w-full">
                             <thead>

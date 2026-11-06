@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\UserType;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
+use App\Models\SalesExecutiveAssignment;
 
 class SalespersonPresenceService
 {
@@ -53,7 +54,7 @@ class SalespersonPresenceService
                     'user_id' => $user->id,
                     'name' => $user->name,
                     'role' => $user->userType->user_type ?? 'N/A',
-                    'status_label' => $isPresent ? 'Yes' : 'No',
+                    'status_label' => $isPresent ? 'Present' : 'Absent',
                     'is_present_today' => $isPresent,
                     'state' => $availability->state ?? 'unasked',
                     'last_response_at' => $availability->last_response_at ?? null,
@@ -79,6 +80,24 @@ class SalespersonPresenceService
                 ->orderBy('name')
                 ->get();
         }
+
+        if (in_array($role, [
+        UserType::SALES_MANAGER,
+        UserType::SENIOR_SALES_MANAGER,
+    ], true)) {
+        $teamIds = SalesExecutiveAssignment::getActiveSalesExecutivesForManager(
+            $viewer->id
+        )->pluck('id');
+
+        $teamIds->push($viewer->id);
+
+        return User::query()
+            ->with('userType')
+            ->where('status', 1)
+            ->whereIn('id', $teamIds->unique()->values()->all())
+            ->orderBy('name')
+            ->get();
+    }
 
         return User::query()
             ->with('userType')

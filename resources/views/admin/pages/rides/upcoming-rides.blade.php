@@ -6,7 +6,7 @@
         $summary = $schedule['summary'];
         $isDefaultPeriod = $currentFilters['from_date'] === now()->toDateString() && $currentFilters['to_date'] === now()->addDays(13)->toDateString();
         $period = \Carbon\Carbon::parse($currentFilters['from_date'])->format('d M') . ' - ' . \Carbon\Carbon::parse($currentFilters['to_date'])->format('d M Y');
-        $hasFilters = request()->hasAny(['from_date', 'to_date', 'status', 'representative_user_id', 'product_id', 'is_tba']);
+        $hasFilters = request()->hasAny(['from_date', 'to_date', 'payment_status', 'representative_user_id', 'product_id', 'is_tba']);
     @endphp
     <div class="crm-upcoming" id="upcoming-rides" data-user="{{ auth()->id() }}" data-today="{{ now()->toDateString() }}"
         data-period-start="{{ $currentFilters['from_date'] }}" data-period-end="{{ $currentFilters['to_date'] }}"
@@ -35,7 +35,8 @@
         <section class="ur-stats" aria-label="Ride summary">
             <div>
                 <strong>{{ $summary['total'] }}</strong><span>{{ $isDefaultPeriod ? 'Rides next 14 days' : 'Rides in selected period' }}</span><small>{{ $summary['today'] }}
-                    today &middot; {{ $summary['tomorrow'] }} tomorrow</small></div>
+                    today &middot; {{ $summary['tomorrow'] }} tomorrow</small>
+            </div>
             <div><strong>{{ $summary['unconfirmed'] }}</strong><span>Time TBA within 48h</span><small>Service time not
                     confirmed</small></div>
             <div><strong>{{ $summary['payment_pending'] }}</strong><span>Payment pending</span><small>Approved payment
@@ -51,16 +52,27 @@
                 <label>To date<input type="date" name="to_date" value="{{ $currentFilters['to_date'] }}"></label>
                 <label>Sales representative<select name="representative_user_id">
                         <option value="">All staff</option>
-                        <option value="unassigned" @if($currentFilters['representative_user_id'] === 'unassigned') selected
-                        @endif>Unassigned</option>@foreach($salesReps as $rep)
-                                <option value="{{ $rep->id }}" @if($currentFilters['representative_user_id'] === $rep->id) selected
-                            @endif>{{ $rep->name }}</option>@endforeach
+
+                        @foreach($salesReps as $rep)
+                            <option value="{{ $rep->id }}" @if($currentFilters['representative_user_id'] === $rep->id) selected
+                        @endif>{{ $rep->name }}</option>@endforeach
                     </select></label>
-                <label>Ride status<select name="status">
-                        <option value="">All current statuses</option>@foreach($availableStatuses as $id => $label)
-                            <option value="{{ $id }}" @if(!is_array($currentFilters['status']) && (string) $currentFilters['status'] === (string) $id) selected @endif>{{ $label }}</option>
-                        @endforeach
-                    </select></label>
+               <label>Payment Status
+                <select name="payment_status">
+                    @foreach([
+                        '' => 'All payment statuses',
+                        'paid' => 'Paid in full',
+                        'partial' => 'Partially paid',
+                        'pending' => 'Pending',
+                        'not_recorded' => 'Amount not recorded',
+                    ] as $value => $label)
+                        <option value="{{ $value }}"
+                            @selected(($currentFilters['payment_status'] ?? '') === $value)>
+                            {{ $label }}
+                        </option>
+                    @endforeach
+                </select>
+            </label>
                 <label>Product<select name="product_id">
                         <option value="">All products</option>@foreach($products as $product)
                             <option value="{{ $product->id }}" @if($currentFilters['product_id'] === $product->id) selected
@@ -69,7 +81,7 @@
                 <label>Time<select name="is_tba">
                         <option value="">All times</option>
                         <option value="1" @if((string) $currentFilters['is_tba'] === '1') selected @endif>TBA</option>
-                        <option value="0" @if((string) $currentFilters['is_tba'] === '0') selected @endif>Time recorded
+                        <option value="0" @if((string) $currentFilters['is_tba'] === '0') selected @endif>Time allotted
                         </option>
                     </select></label>
                 <div class="ur-filter-actions"><a class="ur-button" href="{{ route('admin.rides.upcoming') }}"
@@ -110,7 +122,8 @@
                                 </td>
                                 <td data-label="Product">
                                     {{ $ride['product_names'] ?: 'Not specified' }}<small>{{ $ride['from_place'] }} &rarr;
-                                        {{ $ride['to_place'] }}</small></td>
+                                        {{ $ride['to_place'] }}</small>
+                                </td>
                                 <td data-label="Time">{{ $ride['ride_time'] }}</td>
                                 <td data-label="Status"><span
                                         class="ur-tag">{{ $ride['status_name'] }}</span>@unless($ride['has_vendor'])<small
@@ -122,7 +135,8 @@
                                 class="ur-tag ur-payment">&#8377;{{ number_format($ride['pending_amount_value'], 2) }}</span>@else
                                         &mdash; @endif</td>
                                 <td data-label="Owner">
-                                    {{ $ride['sales_person_name'] === 'N/A' ? 'Unassigned' : $ride['sales_person_name'] }}</td>
+                                    {{ $ride['sales_person_name'] === 'N/A' ? 'Unassigned' : $ride['sales_person_name'] }}
+                                </td>
                                 <td data-label="Details"><button type="button" class="ur-button ur-icon"
                                         data-ride-details="{{ $ride['id'] }}" title="View ride details"
                                         aria-label="View ride details for {{ $ride['client_name'] }}"><i class="ri-eye-line"

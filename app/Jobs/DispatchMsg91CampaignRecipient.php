@@ -81,6 +81,44 @@ class DispatchMsg91CampaignRecipient implements ShouldQueue
         }
     }
 
+public function failed(Throwable $exception): void
+{
+    $recipient = Msg91WhatsAppCampaignRecipient::query()
+        ->with('campaign')
+        ->find($this->recipientId);
+
+    if (
+        !$recipient
+        || !in_array(
+            $recipient->status,
+            ['queued', 'retry_scheduled'],
+            true
+        )
+    ) {
+        return;
+    }
+
+    $recipient->forceFill([
+        'status' => 'failed',
+        'failure_code' => 'unexpected_dispatch_failure',
+        'failure_reason' =>
+            'The MSG91 delivery job stopped before a safe result was recorded. No automatic resend was made.',
+        'next_retry_at' => null,
+    ])->save();
+
+    $this->event(
+        $recipient,
+        'failed',
+        'failed',
+        ['failure_code' => 'unexpected_dispatch_failure']
+    );
+
+    if ($recipient->campaign) {
+        app(Msg91CampaignService::class)
+            ->refreshCounters($recipient->campaign);
+    }
+}
+
     private function components(Msg91WhatsAppCampaignRecipient $recipient, ?array $schema): array
     {
         // Static MSG91 templates have no variables and therefore require no

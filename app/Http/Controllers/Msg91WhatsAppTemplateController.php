@@ -13,6 +13,8 @@ use Illuminate\Http\Request;
 use Throwable;
 use App\Services\WhatsApp\Msg91\Msg91ProviderException;
 use Illuminate\Support\Facades\Log;
+use App\Models\Msg91WhatsAppCampaign;
+use Illuminate\Support\Facades\DB;
 
 class Msg91WhatsAppTemplateController extends Controller
 {
@@ -71,6 +73,130 @@ class Msg91WhatsAppTemplateController extends Controller
         $template->save();
         return back()->with('success', $template->crm_enabled ? 'Template is visible in CRM campaigns.' : 'Template is hidden from CRM campaigns.');
     }
+
+    public function destroy(
+    Request $request,
+    Msg91WhatsAppTemplate $template
+): RedirectResponse {
+    // Super Admin only.
+    abort_unless(
+        $this->access->canManageTemplateVisibility($request->user()),
+        403
+    );
+
+    // Do not let an active campaign lose its template while messages are queued.
+    $hasOpenCampaign = Msg91WhatsAppCampaign::query()
+        ->where('template_id', $template->id)
+        ->whereIn('status', ['queued', 'processing'])
+        ->exists();
+
+    if ($hasOpenCampaign) {
+        return back()->withErrors([
+            'msg91_template' =>
+                'This template has an active campaign. Cancel or complete that campaign before deleting the template.',
+        ]);
+    }
+
+    $bindings = $template->bindings()
+        ->with('sender')
+        ->get();
+
+    if ($bindings->isEmpty()) {
+        return back()->withErrors([
+            'msg91_template' =>
+                'No MSG91 sender is linked to this template. The CRM record was kept for safety.',
+        ]);
+    }
+
+    // Validate all senders before any provider deletion begins.
+    foreach ($bindings as $binding) {
+        if (
+            !$binding->sender
+            || blank($binding->sender->integrated_number)
+        ) {
+            return back()->withErrors([
+                'msg91_template' =>
+                    'A linked MSG91 sender is missing. The template was not deleted.',
+            ]);
+        }
+    }
+
+    foreach ($bindings as $binding) {
+        // A previous attempt may already have removed this sender’s copy.
+        if ($binding->provider_status === 'deleted') {
+            continue;
+        }
+
+        try {
+            $this->client->deleteTemplate(
+                $binding->sender->integrated_number,
+                $template->name
+            );
+
+            // Store progress immediately. If another sender fails, retry skips
+            // the sender already removed successfully from MSG91.
+            $binding->forceFill([
+                'provider_status' => 'deleted',
+                'last_synced_at' => now(),
+                'provider_meta' => array_merge(
+                    is_array($binding->provider_meta)
+                        ? $binding->provider_meta
+                        : [],
+                    [
+                        'deleted_at' => now()->toIso8601String(),
+                        'deleted_by' => $request->user()->id,
+                    ]
+                ),
+            ])->save();
+        } catch (Msg91ProviderException $exception) {
+            Log::warning('MSG91 template deletion failed.', [
+                'template_id' => $template->id,
+                'template_name' => $template->name,
+                'sender_id' => $binding->sender_id,
+                'http_status' => $exception->httpStatus,
+            ]);
+
+            return back()->withErrors([
+                'msg91_template' =>
+                    'MSG91 could not delete this template for sender '
+                    . $binding->sender->integrated_number
+                    . '. No CRM template was removed. Please retry.',
+            ]);
+        } catch (Throwable $exception) {
+            Log::error('MSG91 template deletion failed unexpectedly.', [
+                'template_id' => $template->id,
+                'sender_id' => $binding->sender_id,
+                'exception' => $exception,
+            ]);
+
+            return back()->withErrors([
+                'msg91_template' =>
+                    'The template could not be deleted from MSG91. No CRM template was removed.',
+            ]);
+        }
+    }
+
+    DB::transaction(function () use ($template) {
+        // Do not hard-delete: historical campaigns use a restricted foreign key
+        // to this record. This safely preserves campaign history.
+        $template->bindings()->delete();
+
+        $template->forceFill([
+            'status' => 'deleted',
+            'crm_enabled' => false,
+            'crm_visibility_overridden' => true,
+            'provider_template_id' => null,
+            'last_synced_at' => now(),
+        ])->save();
+    });
+
+    return redirect()
+        ->route('admin.msg91.templates.index')
+        ->with(
+            'success',
+            'Template deleted from MSG91 and removed from CRM campaign selection.'
+        );
+}
 
     public function sync(Request $request, Msg91WhatsAppSender $sender): RedirectResponse
     {
@@ -304,13 +430,17 @@ class Msg91WhatsAppTemplateController extends Controller
         return 'MSG91 rejected the template. Check the template fields and sender configuration.';
     }
 
-    private function visibleTemplates(Request $request, bool $canManageAll)
-    {
-        return Msg91WhatsAppTemplate::query()->when(!$canManageAll, function ($query) use ($request) {
+ private function visibleTemplates(Request $request, bool $canManageAll)
+{
+    return Msg91WhatsAppTemplate::query()
+        ->where('status', '!=', 'deleted')
+        ->when(!$canManageAll, function ($query) use ($request) {
             $query->where(function ($templates) use ($request) {
-                $templates->where('scope', 'central')->orWhere('owner_user_id', $request->user()->id);
+                $templates
+                    ->where('scope', 'central')
+                    ->orWhere('owner_user_id', $request->user()->id);
             });
         });
-    }
+}
 
 }

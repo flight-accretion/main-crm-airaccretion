@@ -39,7 +39,11 @@ class KpiOutreachViewTest extends TestCase
         );
         $this->assertStringContainsString('name="remark"', $html);
         $this->assertStringContainsString('Customer / Mobile', $html);
-        $this->assertStringContainsString('data-copy-phone="6500009001"', $html);
+        
+        $this->assertStringContainsString(
+            'data-outreach-phone="6500009001"',
+            $html
+        );
         $this->assertStringContainsString('kpi-outreach-datatable', $html);
     }
 }

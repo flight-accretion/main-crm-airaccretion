@@ -21,28 +21,48 @@ class SalesLeadConversionKpiResolver implements KpiMetricResolverInterface
     int $workingDaysPerMonth,
     ?Carbon $from = null
 ): array {
-       $leadIds = $this->leadScope
-    ->incoming(
-        $user,
-        $asOf,
-        $from
-    )
-    ->pluck('id');
+     
+        $periodStart = ($from ?: $asOf->copy()->startOfMonth())
+            ->copy()
+            ->startOfDay();
+
+        $periodEndExclusive = $asOf->copy()
+            ->addDay()
+            ->startOfDay();
+
+        $leadIds = $this->leadScope
+            ->incoming($user, $asOf, $from, true)
+            ->pluck('id');
 
         $totalLeads = $leadIds->count();
 
         $bookedLeadIds = $totalLeads > 0
             ? LeadFollowup::query()
                 ->whereIn('lead_id', $leadIds)
-                ->whereHas('paymentAuditTrail', function ($query) use ($asOf) {
+                ->whereHas('paymentAuditTrail', function ($query) use (
+                    $periodStart,
+                    $periodEndExclusive
+                ) {
                     $query
-                        ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
-                        ->where('paid_amount', '>', 0);
-                    $query->where('paid_date', '<', $asOf->copy()->addDay()->startOfDay()->toDateString());
+                        ->where(
+                            'payment_status',
+                            PaymentAuditTrail::STATUS_APPROVED
+                        )
+                        ->where('paid_amount', '>', 0)
+                        ->where(
+                            'paid_date',
+                            '>=',
+                            $periodStart->toDateString()
+                        )
+                        ->where(
+                            'paid_date',
+                            '<',
+                            $periodEndExclusive->toDateString()
+                        );
                 })
+                ->distinct()
                 ->pluck('lead_id')
-                ->unique()
-            : collect();
+    : collect();
 
         $booked = $bookedLeadIds->count();
         $conversion = $totalLeads > 0

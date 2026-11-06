@@ -629,11 +629,45 @@ class DashboardController extends Controller
         return $progress;
     }
 
+    private function managerDashboardScope(Request $request, User $viewer): ?array
+    {
+        if (!in_array($viewer->userType?->user_type, [
+            UserType::SALES_MANAGER, UserType::SENIOR_SALES_MANAGER,
+        ], true)) {
+            return null;
+        }
+
+        $data = $request->validate([
+            'dashboard_view' => 'nullable|in:self,team',
+            'dashboard_member' => 'nullable|string|max:64',
+        ]);
+        $view = ($data['dashboard_view'] ?? '') ?: 'self';
+        $memberId = $data['dashboard_member'] ?? '';
+        $members = \App\Models\SalesExecutiveAssignment::
+            getActiveSalesExecutivesForManager($viewer->id)
+            ->reject(fn ($member) => (string) $member->id === (string) $viewer->id)
+            ->sortBy('name')->values();
+
+        if ($view === 'self') {
+            abort_if($memberId !== '', 422, 'Choose My Team before selecting a team member.');
+            $ids = [$viewer->id];
+        } else {
+            $ids = $members->pluck('id')->all();
+            abort_if($memberId !== '' && !in_array($memberId, $ids, true), 403);
+            if ($memberId !== '') {
+                $ids = [$memberId];
+            }
+        }
+
+        return ['view' => $view, 'member_id' => $memberId, 'ids' => $ids, 'members' => $members];
+    }
+
     public function getSalesDashboard(Request $request)
     {
 
         $currentUser = auth()->user();
         $userType = $currentUser->userType->user_type;
+        $managerDashboardScope = $this->managerDashboardScope($request, $currentUser);
         $targetPeriod = $this->resolveTargetPeriod($request);
         $todayClosed = $this->resolveTodayClosed($request);
         $currentYear = $targetPeriod['year'];
@@ -671,7 +705,7 @@ class DashboardController extends Controller
             $assignedExecutives = \App\Models\SalesExecutiveAssignment::getSalesExecutivesForManager($currentUser->id);
 
             $assignedIds = $assignedExecutives->pluck('id')->toArray();
-            $ids = array_unique(array_merge($assignedIds, [$currentUser->id]));
+            $ids = $managerDashboardScope['ids'];
             if (!empty($ids)) {
                 $teamTargetProgress = $this->calculateTargetProgressForRepIds($ids, $currentYear, $currentMonthNumber, $todayClosed);
                 $teamMemberProgress = $this->buildTeamMemberProgress($ids, $currentYear, $currentMonthNumber, $todayClosed);
@@ -713,7 +747,9 @@ class DashboardController extends Controller
         $dnpService = Service::where('service', 'Call Not Connected')->first();
         $dnpServiceId = $dnpService ? $dnpService->id : null;
 
-        $representatives = getRepresentativeIds($currentUser);
+        $representatives = $managerDashboardScope !== null
+            ? $managerDashboardScope['ids']
+            : getRepresentativeIds($currentUser);
 
         // Start with leads instead of clients to get all leads
         $leadQuery = Lead::with(['client', 'representative', 'rideSegments', 'leadFollowups.followedBy']);
@@ -721,7 +757,7 @@ class DashboardController extends Controller
         // ->whereRaw("service_ids::text != '[]'")
         // ->whereHas('rideSegments');
 
-        if ($representatives) {
+        if ($representatives !== null) {
             $leadQuery->whereIn('representative_user_id', $representatives);
         }
 
@@ -774,8 +810,11 @@ class DashboardController extends Controller
         $outreachTarget = 0;
 
         try {
+            $outreachUserIds = $managerDashboardScope !== null
+                ? $managerDashboardScope['ids']
+                : [$currentUser->id];
             $outreachQuery = KpiOutreachAssignment::query()
-                ->where('user_id', $currentUser->id);
+                ->whereIn('user_id', $outreachUserIds);
 
             $outreachCompletedToday = (clone $outreachQuery)
                 ->where('status', 'completed')
@@ -786,8 +825,9 @@ class DashboardController extends Controller
                 ->where('status', 'pending')
                 ->count();
 
-            $outreachTarget = app(\App\Services\Kpi\KpiOutreachService::class)
-                ->dailyTarget($currentUser);
+            $outreachService = app(\App\Services\Kpi\KpiOutreachService::class);
+            $outreachTarget = User::whereIn('id', $outreachUserIds)->get()
+                ->sum(fn (User $member) => $outreachService->dailyTarget($member));
         } catch (\Throwable $exception) {
             // The dashboard remains usable while an older environment is pending KPI migrations.
         }
@@ -797,7 +837,7 @@ class DashboardController extends Controller
 
         // Base query — filter by representative
         $followUpQuery = LeadFollowup::with(['enquiry', 'enquiry.representative', 'enquiry.client']);
-        if ($representatives) {
+        if ($representatives !== null) {
             $followUpQuery->whereHas('enquiry', function ($q) use ($representatives) {
                 $q->whereIn('representative_user_id', $representatives);
             });
@@ -915,7 +955,7 @@ class DashboardController extends Controller
                 ->whereDate('updated_at', '<=', $nextMonthStart)
                 ->orderby('updated_at', 'desc');
 
-            if ($representatives) {
+            if ($representatives !== null) {
                 $dnpQuery->whereIn('representative_user_id', $representatives);
             }
 
@@ -928,7 +968,7 @@ class DashboardController extends Controller
         $followupProductQuery = LeadFollowup::with(['enquiry.representative', 'enquiry.rideSegments'])
             ->whereIn('status', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
 
-        if ($representatives) {
+        if ($representatives !== null) {
             $followupProductQuery->whereHas('enquiry', function ($q) use ($representatives) {
                 $q->whereIn('representative_user_id', $representatives);
             });
@@ -968,6 +1008,10 @@ class DashboardController extends Controller
 
         $popupData = app(LeadAllocationService::class)->getPopupData($currentUser, now());
         $salesPresenceRows = app(SalespersonPresenceService::class)->rowsForDashboard($currentUser);
+        if ($managerDashboardScope !== null) {
+            $salesPresenceRows = $salesPresenceRows
+                ->whereIn('user_id', $managerDashboardScope['ids'])->values();
+        }
         $canViewAllSalesPresence = ($currentUser->userType->user_type ?? null) === UserType::SUPER_ADMIN;
 
         $dailyUpdate = null;
@@ -984,13 +1028,14 @@ class DashboardController extends Controller
 
         if ($currentUser->userType && in_array($currentUser->userType->user_type, [UserType::SALES_MANAGER, UserType::SENIOR_SALES_MANAGER])) {
             $managerUpdates = SalesDailyUpdate::with('user')
+                ->whereIn('user_id', $managerDashboardScope['ids'])
                 ->whereDate('update_date', Carbon::today())
                 ->where('manager_id', $currentUser->id)
                 ->orderByDesc('created_at')
                 ->get();
         }
 
-        return view('admin.pages.dashboards.sales-dashboard', compact('currentMonth', 'leads', 'todayFollowUps', 'todayFollowUpsCount', 'services', 'dnpLeads', 'nextWeekDnpLeads', 'productSummary', 'currentMonthTarget', 'targetProgress', 'assignedExecutives', 'teamTargetProgress', 'teamMemberProgress', 'assignedExecutivesAll', 'assignedExecutivesToday', 'popupData', 'salesPresenceRows', 'canViewAllSalesPresence', 'dailyUpdate', 'managerUpdates', 'manager', 'todayFreshLeadCount', 'outreachCompletedToday', 'outreachPendingCount', 'outreachTarget'));
+        return view('admin.pages.dashboards.sales-dashboard', compact('managerDashboardScope', 'currentMonth', 'leads', 'todayFollowUps', 'todayFollowUpsCount', 'services', 'dnpLeads', 'nextWeekDnpLeads', 'productSummary', 'currentMonthTarget', 'targetProgress', 'assignedExecutives', 'teamTargetProgress', 'teamMemberProgress', 'assignedExecutivesAll', 'assignedExecutivesToday', 'popupData', 'salesPresenceRows', 'canViewAllSalesPresence', 'dailyUpdate', 'managerUpdates', 'manager', 'todayFreshLeadCount', 'outreachCompletedToday', 'outreachPendingCount', 'outreachTarget'));
     }
 
     public function acceptPopup(Request $request)

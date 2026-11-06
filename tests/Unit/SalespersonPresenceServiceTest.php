@@ -95,8 +95,25 @@ class SalespersonPresenceServiceTest extends TestCase
             ['Akshita Borkar', 'Pallavi Singh'],
             $adminRows->pluck('name')->values()->all()
         );
-        $this->assertSame('Yes', $adminRows->firstWhere('name', 'Akshita Borkar')['status_label']);
-        $this->assertSame('No', $adminRows->firstWhere('name', 'Pallavi Singh')['status_label']);
+        
+            $this->assertSame(
+                'Present',
+                $adminRows->firstWhere('name', 'Akshita Borkar')['status_label']
+            );
+
+            $this->assertTrue(
+                $adminRows->firstWhere('name', 'Akshita Borkar')['is_present_today']
+            );
+
+            $this->assertSame(
+                'Absent',
+                $adminRows->firstWhere('name', 'Pallavi Singh')['status_label']
+            );
+
+            $this->assertFalse(
+                $adminRows->firstWhere('name', 'Pallavi Singh')['is_present_today']
+            );
+
 
         $ownRows = $presence->rowsForDashboard($presentSalesperson);
 

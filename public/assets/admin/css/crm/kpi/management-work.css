@@ -572,3 +572,8 @@
     }
 }
 
+
+/* Daily Work Done: page-specific white background */
+.crm-work-done {
+    background-color: #ffffff;
+}

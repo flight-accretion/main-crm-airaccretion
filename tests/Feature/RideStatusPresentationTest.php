@@ -59,8 +59,32 @@ class RideStatusPresentationTest extends TestCase
             'ridesData' => $ridesData,
             'tableProductNames' => [],
         ])->render();
+       
+        $dom = new \DOMDocument();
 
-        $this->assertStringContainsString('<time>03 Nov 2026, 14:01</time>', $html);
-        $this->assertStringContainsString('<time>03 Nov 2026, 14:02</time>', $html);
+        @$dom->loadHTML($html);
+
+        $xpath = new \DOMXPath($dom);
+
+        $refundDates = [];
+
+        foreach (
+            $xpath->query(
+                '//li[contains(@class, "rs-timeline-refund")]/time'
+            ) as $time
+        ) {
+            $refundDates[] = trim($time->textContent);
+        }
+
+        $this->assertContains(
+            '03 Nov 2026, 14:01',
+            $refundDates
+        );
+
+        $this->assertContains(
+            '03 Nov 2026, 14:02',
+            $refundDates
+        );
+
     }
 }

@@ -311,46 +311,71 @@ class LeadVisibilityAndDuplicateTest extends TestCase
         $this->assertSame('Close Follow-up', $labels[LeadFollowup::STATUS_CLOSE_FOLLOW_UP]);
     }
 
-    public function test_latest_payment_attempt_controls_rejected_dashboard_state(): void
-    {
-        $salesperson = $this->createUser(UserType::SALES_EXECUTIVE, 'Sales User');
-        $lead = $this->createLeadWithClient([
-            'name' => 'Latest Payment Attempt Customer',
-            'contact_number' => '+91-9437938769',
-        ], ['representative_user_id' => $salesperson->id]);
-        $followup = LeadFollowup::create([
-            'id' => (string) Str::uuid(),
-            'lead_id' => $lead->id,
-            'followup_note' => 'Payment attempt',
-            'followed_by' => $salesperson->id,
-            'status' => LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
-        ]);
-        $rejectedAt = now()->subMinute();
+   
+public function test_latest_payment_attempt_controls_rejected_dashboard_state(): void
+{
+    $salesperson = $this->createUser(
+        UserType::SALES_EXECUTIVE,
+        'Sales User'
+    );
 
-        PaymentAuditTrail::create([
-            'id' => (string) Str::uuid(),
-            'lead_followup_id' => $followup->id,
-            'paid_amount' => 1000,
-            'payment_status' => PaymentAuditTrail::STATUS_REJECTED,
+    $lead = $this->createLeadWithClient([
+        'name' => 'Latest Payment Attempt Customer',
+        'contact_number' => '+91-9437938769',
+    ], [
+        'representative_user_id' => $salesperson->id,
+    ]);
+
+    $followup = LeadFollowup::create([
+        'id' => (string) Str::uuid(),
+        'lead_id' => $lead->id,
+        'followup_note' => 'Payment attempt',
+        'followed_by' => $salesperson->id,
+        'status' => LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
+    ]);
+
+    $rejectedAt = now()->subMinutes(2)->startOfSecond();
+    $approvedAt = now()->subMinute()->startOfSecond();
+
+    $rejected = PaymentAuditTrail::create([
+        'id' => (string) Str::uuid(),
+        'lead_followup_id' => $followup->id,
+        'paid_amount' => 1000,
+        'payment_status' => PaymentAuditTrail::STATUS_REJECTED,
+    ]);
+
+    DB::table('payment_audit_trail')
+        ->where('id', $rejected->id)
+        ->update([
             'created_at' => $rejectedAt,
             'updated_at' => $rejectedAt,
         ]);
 
-        $service = app(LeadStatusTransitionService::class);
-        $this->assertTrue($service->latestPaymentAttemptIsRejected($lead));
+    $service = app(LeadStatusTransitionService::class);
 
-        $approvedAt = $rejectedAt->copy()->addSecond();
-        PaymentAuditTrail::create([
-            'id' => (string) Str::uuid(),
-            'lead_followup_id' => $followup->id,
-            'paid_amount' => 1000,
-            'payment_status' => PaymentAuditTrail::STATUS_APPROVED,
+    $this->assertTrue(
+        $service->latestPaymentAttemptIsRejected($lead)
+    );
+
+    $approved = PaymentAuditTrail::create([
+        'id' => (string) Str::uuid(),
+        'lead_followup_id' => $followup->id,
+        'paid_amount' => 1000,
+        'payment_status' => PaymentAuditTrail::STATUS_APPROVED,
+    ]);
+
+    DB::table('payment_audit_trail')
+        ->where('id', $approved->id)
+        ->update([
             'created_at' => $approvedAt,
             'updated_at' => $approvedAt,
         ]);
 
-        $this->assertFalse($service->latestPaymentAttemptIsRejected($lead));
-    }
+    $this->assertFalse(
+        $service->latestPaymentAttemptIsRejected($lead)
+    );
+}
+
 
     public function test_manual_followup_rules_require_schedule_or_closing_note(): void
     {
@@ -883,5 +908,20 @@ class LeadVisibilityAndDuplicateTest extends TestCase
             $table->decimal('paid_amount', 12, 2)->default(0);
             $table->timestamps();
         });
+
+        
+Schema::create('lead_allocation_settings', function (Blueprint $table) {
+    $table->uuid('id')->primary();
+    $table->string('office_start_time')->default('10:30');
+    $table->string('office_end_time')->default('19:20');
+    $table->unsignedInteger('popup_interval_minutes')->default(120);
+    $table->unsignedInteger('minimum_leads_before_popup')->default(1);
+    $table->boolean('auto_allocation_enabled')->default(true);
+    $table->string('allocation_method')->default('balanced');
+    $table->uuid('email_charter_owner_user_id')->nullable();
+    $table->text('email_charter_product_ids')->nullable();
+    $table->timestamps();
+});
+
     }
 }

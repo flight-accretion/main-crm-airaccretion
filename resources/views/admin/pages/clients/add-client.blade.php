@@ -196,7 +196,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!countryId) return;
 
         $.ajax({
-            url: '/get-cities/' + countryId,
+           url: @json(route('admin.clients.cities', ['countryId' => '__COUNTRY__']))
+           .replace('__COUNTRY__', encodeURIComponent(countryId)),
             type: 'GET',
             dataType: 'json',
             beforeSend: function() {

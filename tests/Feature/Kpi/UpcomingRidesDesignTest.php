@@ -66,15 +66,23 @@ class UpcomingRidesDesignTest extends KpiFeatureTestCase
         if ($dir = getenv('CRM_UPCOMING_PREVIEW_DIR')) file_put_contents($dir.'/index.html', $html);
     }
 
-    public function test_unassigned_filter_and_date_filter_work_for_both_views(): void
+    public function test_removed_unassigned_filter_is_ignored_and_date_filter_still_works(): void
     {
-        $data = app(RideController::class)->upcomingRides($this->request(['view' => 'calendar', 'representative_user_id' => 'unassigned']))->getData();
-        $this->assertSame(0, $data['schedule']['summary']['total']);
-        DB::table('leads')->where('id', $this->leadId)->update(['representative_user_id' => null]);
-        $data = app(RideController::class)->upcomingRides($this->request(['view' => 'calendar', 'representative_user_id' => 'unassigned']))->getData();
-        $this->assertSame(1, $data['schedule']['summary']['total']);
-        $data = app(RideController::class)->upcomingRides($this->request(['from_date' => now()->addDays(3)->toDateString(), 'to_date' => now()->addDays(4)->toDateString()]))->getData();
-        $this->assertSame(0, $data['schedule']['summary']['total']);
+        foreach (['list', 'calendar'] as $mode) {
+            $view = app(RideController::class)->upcomingRides($this->request([
+                'view' => $mode,
+                'representative_user_id' => 'unassigned',
+            ]));
+            $this->assertSame(1, $view->getData()['schedule']['summary']['total']);
+            $this->assertStringNotContainsString('<option value="unassigned"', $view->render());
+
+            $filtered = app(RideController::class)->upcomingRides($this->request([
+                'view' => $mode,
+                'from_date' => now()->addDays(3)->toDateString(),
+                'to_date' => now()->addDays(4)->toDateString(),
+            ]));
+            $this->assertSame(0, $filtered->getData()['schedule']['summary']['total']);
+        }
     }
 
     public function test_csv_exports_filtered_rows_without_changing_status_or_payment_records(): void

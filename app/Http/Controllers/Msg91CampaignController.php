@@ -25,9 +25,23 @@ class Msg91CampaignController extends Controller
         if ($request->filled('search')) {
             $query->whereRaw('LOWER(name) LIKE ?', ['%' . strtolower((string) $request->input('search')) . '%']);
         }
+        
+        $summary = (clone $query)
+            ->reorder()
+            ->selectRaw('
+                COALESCE(SUM(accepted_count), 0) AS accepted,
+                COALESCE(SUM(delivered_count), 0) AS delivered,
+                COALESCE(SUM(failed_count), 0) AS failed,
+                COALESCE(SUM(unknown_count), 0) AS unknown
+            ')
+            ->first();
+
         $campaigns = $query->latest()->paginate(min(100, max(10, (int) $request->input('per_page', 10))))->withQueryString();
         $canManageMsg91 = $this->access->canManage($request->user());
-        return view('admin.pages.whatsapp.campaigns.index', compact('campaigns', 'canManageMsg91'));
+        return view(
+        'admin.pages.whatsapp.campaigns.index',
+         compact('campaigns', 'canManageMsg91', 'summary')
+       );
     }
 
     public function show(Request $request, Msg91WhatsAppCampaign $campaign)
@@ -67,6 +81,25 @@ class Msg91CampaignController extends Controller
         $this->campaigns->cancel($request->user(), $campaign);
         return back()->with('success', 'Queued campaign recipients were cancelled. Accepted messages remain in the delivery history.');
     }
+
+    
+public function retryFailed(
+    Request $request,
+    Msg91WhatsAppCampaign $campaign
+) {
+    $count = $this->campaigns->retryFailed(
+        $request->user(),
+        $campaign
+    );
+
+    return back()->with(
+        'success',
+        $count > 0
+            ? "{$count} eligible recipients queued for retry."
+            : 'No safely retryable failed recipients were found.'
+    );
+}
+
 
     private function mask(string $number): string { return strlen($number) <= 4 ? '••••' : str_repeat('•', max(0, strlen($number) - 4)) . substr($number, -4); }
 }

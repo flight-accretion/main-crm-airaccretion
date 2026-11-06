@@ -46,11 +46,35 @@ class Msg91TemplateSyncService
                 $status = strtolower(trim((string) data_get($variant, 'status', data_get($row, 'status', 'unknown')))) ?: 'unknown';
                 $providerId = data_get($variant, 'msg91_template_id', data_get($variant, 'template_id', data_get($variant, 'id', data_get($row, 'template_id', data_get($row, 'id')))));
 
+                
                 $template = Msg91WhatsAppTemplate::query()
                     ->where('name', $name)
                     ->where('language', $language)
-                    ->whereHas('bindings', fn ($bindings) => $bindings->where('sender_id', $sender->id))
+                    ->whereHas('bindings', function ($bindings) use ($sender) {
+                        $bindings->where('sender_id', $sender->id);
+                    })
                     ->first();
+
+                // Reuse an existing central template when the same
+                // template name and language exist on another sender.
+                if (!$template) {
+                    $template = Msg91WhatsAppTemplate::query()
+                        ->where('scope', 'central')
+                        ->whereNull('owner_user_id')
+                        ->where('name', $name)
+                        ->where('language', $language)
+                        ->first();
+                }
+
+                if (!$template) {
+                    $template = new Msg91WhatsAppTemplate([
+                        'owner_user_id' => $central ? null : $sender->user_id,
+                        'scope' => $central ? 'central' : 'personal',
+                        'name' => $name,
+                        'language' => $language,
+                    ]);
+                }
+
 
                 if (!$template) {
                     $template = new Msg91WhatsAppTemplate([
@@ -77,6 +101,12 @@ class Msg91TemplateSyncService
                 ? $existingSchema
                 : $this->schemaForVariant($variant);
 
+                $hasUnsupportedDynamicComponents =
+                $this->hasUnsupportedDynamicComponents(
+                    $variant,
+                    $variableSchema
+                );
+
             $template->fill([
                 'category' => data_get($row, 'category'),
                 'provider_template_id' => $providerId,
@@ -87,9 +117,13 @@ class Msg91TemplateSyncService
                     data_get($row, 'components')
                 ),
                 'variable_schema' => $variableSchema,
-                'crm_enabled' => $autoVisible
-                    ? $status === 'approved'
-                    : $template->crm_enabled,
+                'crm_enabled' => $hasUnsupportedDynamicComponents
+                ? false
+                : (
+                    $autoVisible
+                        ? $status === 'approved'
+                        : $template->crm_enabled
+                ),
                 'last_synced_at' => now(),
             ]);
 
@@ -143,6 +177,52 @@ class Msg91TemplateSyncService
 
         return $this->schemaForIndexes($indexes);
     }
+
+    private function hasUnsupportedDynamicComponents(
+    array $variant,
+    array $schema
+): bool {
+    $requiredMappings = [];
+
+    foreach ((array) data_get($variant, 'variables', []) as $variable) {
+        if (preg_match(
+            '/^(header|button)_([1-9][0-9]*)$/i',
+            (string) $variable,
+            $matches
+        )) {
+            $requiredMappings[] =
+                strtolower($matches[1]) . '_' . $matches[2];
+        }
+    }
+
+    foreach ((array) data_get($variant, 'code', []) as $component) {
+        $type = strtolower(
+            (string) data_get($component, 'type', '')
+        );
+
+        if (!in_array($type, ['header', 'button'], true)) {
+            continue;
+        }
+
+        preg_match_all(
+            '/{{([1-9][0-9]*)}}/',
+            json_encode($component) ?: '',
+            $matches
+        );
+
+        foreach ($matches[1] ?? [] as $index) {
+            $requiredMappings[] = $type . '_' . $index;
+        }
+    }
+
+    foreach (array_unique($requiredMappings) as $componentKey) {
+        if (empty($schema[$componentKey])) {
+            return true;
+        }
+    }
+
+    return false;
+}
 
     private function schemaForIndexes(array $indexes): array
     {

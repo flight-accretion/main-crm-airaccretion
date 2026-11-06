@@ -18,30 +18,86 @@ class Msg91CampaignRecipientResolver
     public function resolve(User $user, array $leadIds): array
     {
         $leadIds = array_values(array_unique(array_filter(array_map('strval', $leadIds))));
-        $query = Lead::query()->with(['client.country', 'representative', 'rideSegments']);
+        $query = Lead::query()->with([
+    'client.country',
+    'representative',
+    'rideSegments',
+    'latestFollowup',
+    ]);
         $this->access->scopeLeads($query, $user);
         $leads = $query->whereIn('leads.id', $leadIds)->get()
             ->sortByDesc(fn (Lead $lead) => sprintf('%s|%s', optional($lead->created_at)->format('YmdHis.u'), $lead->id))
             ->values();
 
-        $resolved = [];
-        $excluded = ['unauthorized' => max(0, count($leadIds) - $leads->count()), 'invalid' => 0, 'suppressed' => 0, 'duplicates' => 0];
-        $seen = [];
+       
+            $resolved = [];
 
-        foreach ($leads as $lead) {
-            if (!$lead->client) { $excluded['invalid']++; continue; }
-            $phone = $this->phones->forClient($lead->client);
-            if (!$phone) { $excluded['invalid']++; continue; }
-            if (isset($seen[$phone])) { $excluded['duplicates']++; continue; }
-            if (Msg91WhatsAppSuppression::query()->where('normalized_phone', $phone)->exists()) { $excluded['suppressed']++; continue; }
-            $seen[$phone] = true;
-            $resolved[] = [
-                'lead' => $lead,
-                'client' => $lead->client,
-                'phone' => $phone,
-                'variables' => $this->variables($lead),
+            $excluded = [
+                'unauthorized' => max(0, count($leadIds) - $leads->count()),
+                'invalid' => 0,
+                'suppressed' => 0,
+                'duplicates' => 0,
             ];
-        }
+
+            $seen = [];
+            $candidates = [];
+
+            // Keep the existing newest-lead-first ordering.
+            foreach ($leads as $lead) {
+                if (!$lead->client) {
+                    $excluded['invalid']++;
+                    continue;
+                }
+
+                $phone = $this->phones->forClient($lead->client);
+
+                if (!$phone) {
+                    $excluded['invalid']++;
+                    continue;
+                }
+
+                if (isset($seen[$phone])) {
+                    $excluded['duplicates']++;
+                    continue;
+                }
+
+                $seen[$phone] = true;
+
+                $candidates[] = [
+                    'lead' => $lead,
+                    'client' => $lead->client,
+                    'phone' => $phone,
+                ];
+            }
+
+            // Fetch suppressed numbers in batches rather than
+            // querying the database for each recipient.
+            $suppressed = [];
+
+            foreach (array_chunk(array_keys($seen), 500) as $phones) {
+                $numbers = Msg91WhatsAppSuppression::query()
+                    ->whereIn('normalized_phone', $phones)
+                    ->pluck('normalized_phone');
+
+                foreach ($numbers as $number) {
+                    $suppressed[(string) $number] = true;
+                }
+            }
+
+            foreach ($candidates as $candidate) {
+                if (isset($suppressed[$candidate['phone']])) {
+                    $excluded['suppressed']++;
+                    continue;
+                }
+
+                $resolved[] = [
+                    'lead' => $candidate['lead'],
+                    'client' => $candidate['client'],
+                    'phone' => $candidate['phone'],
+                    'variables' => $this->variables($candidate['lead']),
+                ];
+            }
+
 
         return ['recipients' => collect($resolved), 'excluded' => $excluded, 'selected_count' => count($leadIds)];
     }

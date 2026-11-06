@@ -10,34 +10,36 @@ use Illuminate\Database\Eloquent\Builder;
 
 class SalesKpiLeadScopeService
 {
-   public function incoming(
+ 
+public function incoming(
     User $user,
     Carbon $asOf,
-    ?Carbon $from = null
+    ?Carbon $from = null,
+    bool $includeOutreachLeads = false
 ): Builder {
-    $from = ($from ?: $asOf->copy()->startOfMonth())
+    $periodStart = ($from ?: $asOf->copy()->startOfMonth())
         ->copy()
         ->startOfDay();
 
-    $to = $asOf->copy()->endOfDay();
+    $periodEnd = $asOf->copy()->endOfDay();
 
-    $outreachLeadIds = KpiOutreachAssignment::query()
-        ->whereNotNull('created_lead_id')
-        ->pluck('created_lead_id');
-
-    return Lead::query()
+    $query = Lead::query()
         ->where('representative_user_id', $user->id)
         ->whereBetween('created_at', [
-            $from,
-            $to,
-        ])
-        ->when(
-            $outreachLeadIds->isNotEmpty(),
-            fn ($query) =>
-                $query->whereNotIn(
-                    'id',
-                    $outreachLeadIds
-                )
+            $periodStart,
+            $periodEnd,
+        ]);
+
+    if (!$includeOutreachLeads) {
+        $query->whereNotIn(
+            'id',
+            KpiOutreachAssignment::query()
+                ->whereNotNull('created_lead_id')
+                ->select('created_lead_id')
         );
+    }
+
+    return $query;
 }
+
 }

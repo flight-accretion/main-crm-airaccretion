@@ -423,9 +423,7 @@
                                             @enderror
                                         </div>
                                     </div>
-                                    <div class="mt-5">
-                                        <button type="submit" class="ti-btn ti-btn-primary-full ti-custom-validate-btn al-original-submit">Create Lead</button>
-                                    </div>
+                                  
                                 </div>
                             </div>
                         </form>
@@ -631,79 +629,39 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    function initClientSelect2() {
-        $('#clientSelect').select2({
-            placeholder: 'Search by name, company, GST, email, or phone number...',
-            allowClear: true,
-            width: '100%',
-            matcher: function(params, data) {
-                // If there are no search terms, return all data
-                if ($.trim(params.term) === '') {
-                    return data;
-                }
+   function initClientSelect2() {
+    const $select = $('#clientSelect');
 
-                // Skip if there is no 'text' property
-                if (typeof data.text === 'undefined') {
-                    return null;
-                }
+    $select.select2({
+        placeholder: 'Search client by name, email or phone',
+        width: '100%',
+        minimumInputLength: 2,
 
-                // Get the search text from data attributes or use the text
-                var searchText = '';
-                if (data.element && data.element.dataset.searchText) {
-                    searchText = data.element.dataset.searchText.toLowerCase();
-                } else {
-                    searchText = data.text.toLowerCase();
-                }
+        ajax: {
+            url: @json(route('admin.clients.search')),
+            dataType: 'json',
+            delay: 300,
 
-                // Check if the search term matches
-                var term = params.term.toLowerCase();
-                if (searchText.indexOf(term) > -1) {
-                    return data;
-                }
-
-                // Return null if the term doesn't match
-                return null;
+            data: function (params) {
+                return {
+                    q: params.term,
+                    page: params.page || 1
+                };
             },
-            templateResult: function(data) {
-                if (data.loading) {
-                    return data.text;
-                }
 
-                // Handle "Add New Client" option
-                if (data.id === 'new') {
-                    return data.text;
-                }
-
-                // Custom template for dropdown results
-                if (data.element && data.element.dataset) {
-                    var clientName = data.text.split(' | ')[0] || data.text;
-                    var phone = data.element.dataset.phone || '';
-                    var phoneCountryCode = data.element.dataset.phoneCountryCode || '';
-                    var email = data.element.dataset.email || '';
-
-                    // Construct full phone number for display
-                    var fullPhone = phone && phoneCountryCode ? phoneCountryCode + '-' + phone : phone;
-
-                    var $container = $(
-                        '<div class="client-option">' +
-                        '<div class="client-name">' + clientName + '</div>' +
-                        '<div class="client-details" style="font-size: 0.8em; color: #666;">' +
-                        (fullPhone ? 'Phone: ' + fullPhone : '') +
-                        (email ? (fullPhone ? ' | ' : '') + 'Email: ' + email : '') +
-                        '</div>' +
-                        '</div>'
-                    );
-                    return $container;
-                }
-                return data.text;
+            processResults: function (response) {
+                return {
+                    results: response.results || [],
+                    pagination: response.pagination || {
+                        more: false
+                    }
+                };
             },
-            templateSelection: function(data) {
-                return data.text;
-            }
-        }).on('change', function(e) {
-        handleClientSelectionChange(e);
+
+            cache: false
+        }
     });
-    }
+}
 
     function initProductServiceSelects() {
         // Initialize product and service Select2 instances so .val(...).trigger('change') updates the UI
@@ -786,6 +744,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             $('#countryCodeSelect').val('').trigger('change');
             clientIdField.value = '';
+            whatsappManuallyEdited = false;
         } else if (value) {
             // Extract client name from the new format: "Name | Phone | Email"
             const clientDisplayText = selected.text.split(' | ')[0] || '';
@@ -958,7 +917,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
                 }
             });
-
+            whatsappManuallyEdited = true;
             clientIdField.value = value;
         } else {
             clientFields.forEach(field => {
@@ -1116,12 +1075,44 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     // Copy contact number to WhatsApp if empty
-    phoneInput.addEventListener('blur', function() {
-        if (phoneInput.value && !whatsappInput.value) {
-            whatsappInput.value = phoneInput.value;
-            itiWhatsapp.setNumber(phoneInput.value);
+// Automatically copy Phone Number to WhatsApp while typing.
+// Once WhatsApp is manually edited, keep it independent.
+
+let whatsappManuallyEdited = whatsappInput.value.trim() !== '';
+
+function syncPhoneToWhatsapp() {
+    if (whatsappManuallyEdited) {
+        return;
+    }
+
+    // Copy number immediately
+    whatsappInput.value = phoneInput.value;
+
+    // Match phone country code with WhatsApp country code
+    const phoneCountry = itiPhone.getSelectedCountryData();
+
+    if (phoneCountry && phoneCountry.iso2) {
+        const whatsappCountry = itiWhatsapp.getSelectedCountryData();
+
+        if (!whatsappCountry ||
+            whatsappCountry.iso2 !== phoneCountry.iso2) {
+            itiWhatsapp.setCountry(phoneCountry.iso2);
         }
-    });
+
+        whatsappCodeInput.value = '+' + phoneCountry.dialCode;
+    }
+}
+
+// User manually changes WhatsApp number
+whatsappInput.addEventListener('input', function() {
+    whatsappManuallyEdited = true;
+});
+
+// Auto-fill as the user types
+phoneInput.addEventListener('input', syncPhoneToWhatsapp);
+
+// Also sync when phone country code changes
+phoneInput.addEventListener('countrychange', syncPhoneToWhatsapp);
 
     $('#countryCodeSelect').on('change', function () {
         loadCities(this.value);
@@ -1150,7 +1141,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 // Set the country for both inputs
                 itiPhone.setCountry(isoCode);
+                if (!whatsappManuallyEdited) {
                 itiWhatsapp.setCountry(isoCode);
+               }
 
                 console.log('setCountry() called successfully');
 
@@ -1515,51 +1508,6 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     })();
 
-    // Auto Fill client data on phone number input
-    function tryMatchClientByPhone(inputValue) {
-        const clientSelect = document.getElementById("clientSelect");
-        if (!clientSelect) return;
-        
-        const phone = inputValue.trim();
-        if (!phone) return;
-        
-        let matchedOption = null;
-        
-        for (let option of clientSelect.options) {
-            if (option.value === "new") continue; // skip "Add New"
-        
-            const clientPhone = option.dataset.phone || "";
-            const clientAltPhone = option.dataset.altPhone || "";
-        
-            if (clientPhone === phone || clientAltPhone === phone) {
-                matchedOption = option;
-                break;
-            }
-        }
-    
-        if (matchedOption) {
-            // Select it in the dropdown
-            clientSelect.value = matchedOption.value;
-            $('#clientSelect').trigger('change'); // <- this will automatically call handleClientSelectionChange
-        }
-    }
-
-    // Hook into intl-tel-input phone field
-    if (phoneInput) {
-        phoneInput.addEventListener("blur", () => {
-            // get number without country code or with, depending on how you stored data
-            const phoneVal = phoneInput.value;
-            tryMatchClientByPhone(phoneVal);
-        });
-    }
-
-    // Hook into WhatsApp input
-    if (whatsappInput) {
-        whatsappInput.addEventListener("blur", () => {
-            const whatsappVal = whatsappInput.value;
-            tryMatchClientByPhone(whatsappVal);
-        });
-    }
 });
 </script>
 

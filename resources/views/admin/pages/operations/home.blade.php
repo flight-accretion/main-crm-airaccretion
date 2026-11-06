@@ -71,11 +71,36 @@
                 <strong>&#8377;{{ number_format($customerRefund + $vendorRefund, 2) }}</strong>
                 <p>Customer &#8377;{{ number_format($customerRefund, 2) }} &middot; Vendor
                     &#8377;{{ number_format($vendorRefund, 2) }}<br>Current pending refund records</p>
-            </a><a class="oh-summary" href="{{ route('admin.account.payment-review') }}">
-                <h2>Part-paid bookings nearing ride <span class="oh-badge amber">Within 7 days</span></h2>
-                <strong>{{ $partPaidCount }} <small>bookings</small></strong>
-                <p>Outstanding balance &#8377;{{ number_format($partPaidBalance, 2) }}<br>Latest CRM follow-up amounts</p>
-            </a></div>
+            </a>
+           
+            <a
+                class="oh-summary"
+                href="{{ route('admin.rides.upcoming', [
+                    'from_date' => now()->toDateString(),
+                    'to_date' => now()->addDays(7)->toDateString(),
+                    'payment_state' => 'partial'
+                ]) }}"
+            >
+                <h2>
+                    Partial paid bookings
+                    <span class="oh-badge amber">
+                        Within 7 days
+                    </span>
+                </h2>
+
+                <strong>
+                    {{ number_format($partPaidCount) }}
+                    <small>bookings</small>
+                </strong>
+
+                <p>
+                    Outstanding balance
+                    &#8377;{{ number_format($partPaidBalance, 2) }}
+                    <br>
+                    Approved payments vs booking total
+                </p>
+            </a>
+        </div>
         <div class="oh-label">
             <h2>My standing</h2><span>{{ $personalKpi ? 'Existing KPI score' : 'Personal KPI not selected' }}</span>
         </div>

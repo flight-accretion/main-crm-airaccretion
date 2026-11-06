@@ -550,3 +550,28 @@
         grid-column: 1/-1;
     }
 }
+
+
+/* View Leads: responsive table without changing bulk-action permissions */
+.crm-leads-list .leads-table-scroll {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.crm-leads-list .leads-table-scroll .leads-table {
+    min-width: 1100px;
+}
+
+.crm-leads-list .leads-selection {
+    width: 44px;
+    min-width: 44px;
+    text-align: center;
+}
+
+.crm-leads-list .leads-selection input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}

@@ -80,19 +80,134 @@ class Msg91CampaignService
         });
     }
 
-    public function cancel(User $user, Msg91WhatsAppCampaign $campaign): void
-    {
-        abort_unless($this->access->canViewCampaign($user, $campaign), 403);
-        DB::transaction(function () use ($user, $campaign) {
-            $campaign->forceFill(['status' => 'cancelled', 'cancelled_at' => now(), 'cancelled_by' => $user->id])->save();
-            $campaign->recipients()->whereIn('status', ['queued', 'retry_scheduled'])->update(['status' => 'cancelled', 'updated_at' => now()]);
-            Msg91WhatsAppCampaignEvent::create(['campaign_id' => $campaign->id, 'event_type' => 'cancelled', 'status' => 'cancelled', 'occurred_at' => now()]);
-        });
-    }
+  
+public function cancel(User $user, Msg91WhatsAppCampaign $campaign): void
+{
+    abort_unless(
+        $this->access->canViewCampaign($user, $campaign)
+        && (
+            (string) $campaign->created_by === (string) $user->id
+            || $this->access->canViewCompany($user)
+        ),
+        403
+    );
 
+    DB::transaction(function () use ($user, $campaign) {
+        $campaign = Msg91WhatsAppCampaign::query()
+            ->lockForUpdate()
+            ->findOrFail($campaign->id);
+
+        if ($campaign->cancelled_at) {
+            return;
+        }
+
+        abort_if(
+            !in_array($campaign->status, ['queued', 'processing'], true),
+            422,
+            'This campaign cannot be cancelled.'
+        );
+
+        $campaign->forceFill([
+            'status' => 'cancelled',
+            'cancelled_at' => now(),
+            'cancelled_by' => $user->id,
+        ])->save();
+
+        $campaign->recipients()
+            ->whereIn('status', ['queued', 'retry_scheduled'])
+            ->update([
+                'status' => 'cancelled',
+                'updated_at' => now(),
+            ]);
+
+        Msg91WhatsAppCampaignEvent::create([
+            'campaign_id' => $campaign->id,
+            'event_type' => 'cancelled',
+            'status' => 'cancelled',
+            'occurred_at' => now(),
+        ]);
+    });
+}
+
+
+public function retryFailed(
+    User $user,
+    Msg91WhatsAppCampaign $campaign
+): int {
+    abort_unless(
+        $this->access->canViewCampaign($user, $campaign)
+        && (
+            (string) $campaign->created_by === (string) $user->id
+            || $this->access->canViewCompany($user)
+        ),
+        403
+    );
+
+    $this->access->assertCanSend($campaign->sender->user);
+
+    return DB::transaction(function () use ($campaign) {
+        $lockedCampaign = Msg91WhatsAppCampaign::query()
+            ->lockForUpdate()
+            ->findOrFail($campaign->id);
+
+        abort_if(
+            $lockedCampaign->cancelled_at !== null,
+            422,
+            'Cancelled campaigns cannot be retried.'
+        );
+
+        // Only failures known to occur before provider submission.
+        $recipients = $lockedCampaign->recipients()
+            ->where('status', 'failed')
+            ->whereIn('failure_code', [
+                'sender_unavailable',
+                'dispatch_authorization_failed',
+            ])
+            ->where('attempts', 0)
+            ->lockForUpdate()
+            ->get();
+
+        foreach ($recipients as $recipient) {
+            $recipient->forceFill([
+                'status' => 'queued',
+                'failure_code' => null,
+                'failure_reason' => null,
+                'next_retry_at' => null,
+            ])->save();
+
+            DispatchMsg91CampaignRecipient::dispatch($recipient->id)
+                ->afterCommit();
+        }
+
+        if ($recipients->isNotEmpty()) {
+            Msg91WhatsAppCampaignEvent::create([
+                'campaign_id' => $lockedCampaign->id,
+                'event_type' => 'manual_retry',
+                'status' => 'queued',
+                'payload' => [
+                    'recipient_count' => $recipients->count(),
+                ],
+                'occurred_at' => now(),
+            ]);
+
+            $this->refreshCounters($lockedCampaign);
+        }
+
+        return $recipients->count();
+    });
+}
+
+ 
     public function refreshCounters(Msg91WhatsAppCampaign $campaign): void
     {
-        $counts = $campaign->recipients()->selectRaw("status, count(*) as total")->groupBy('status')->pluck('total', 'status');
+        $counts = $campaign->recipients()
+            ->selectRaw('status, COUNT(*) AS total')
+            ->groupBy('status')
+            ->pluck('total', 'status');
+
+        $queued = (int) ($counts['queued'] ?? 0);
+        $retryScheduled = (int) ($counts['retry_scheduled'] ?? 0);
+
         $campaign->forceFill([
             'accepted_count' => (int) ($counts['accepted'] ?? 0),
             'sent_count' => (int) ($counts['sent'] ?? 0),
@@ -102,9 +217,12 @@ class Msg91CampaignService
             'unknown_count' => (int) ($counts['unknown'] ?? 0),
             'status' => $campaign->cancelled_at
                 ? 'cancelled'
-                : (((int) ($counts['queued'] ?? 0) > 0 || (int) ($counts['retry_scheduled'] ?? 0) > 0)
-                    ? 'processing'
-                    : 'completed'),
+                : (
+                    $queued > 0 || $retryScheduled > 0
+                        ? 'processing'
+                        : 'completed'
+                ),
         ])->save();
     }
+
 }

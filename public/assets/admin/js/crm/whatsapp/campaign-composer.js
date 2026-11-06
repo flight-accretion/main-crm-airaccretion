@@ -410,67 +410,56 @@
 
 
 
-    /* =====================================================
-       SELECT PAGE
-       ===================================================== */
+   
+        /* =====================================================
+        SELECT ALL VISIBLE ROWS ON CURRENT PAGE
+        ===================================================== */
 
-    document.addEventListener(
-        'change',
-        event => {
+        document.addEventListener('change', function (event) {
+            const selectPage = event.target.closest(
+                '[data-msg91-select-page]'
+            );
 
-            const all =
-                event.target.closest(
-                    '[data-msg91-select-page]'
-                );
-
-
-            if (!all) {
+            if (!selectPage) {
                 return;
             }
 
+            const table = selectPage.closest('table');
 
-            document
-                .querySelectorAll(
-                    '[data-msg91-lead-checkbox]'
-                )
-                .forEach(
-                    box => {
+            if (!table) {
+                return;
+            }
 
-                        if (
-                            box
-                                .closest('tr')
-                                ?.hidden
-                        ) {
-                            return;
-                        }
+            table.querySelectorAll(
+                '[data-msg91-lead-checkbox]'
+            ).forEach(function (checkbox) {
+                const row = checkbox.closest('tr');
 
+                if (!row || !checkbox.value || checkbox.disabled) {
+                    return;
+                }
 
-                        box.checked =
-                            all.checked;
+                // Exclude rows hidden by filters, display:none,
+                // or the hidden attribute.
+                if (
+                    row.hidden ||
+                    window.getComputedStyle(row).display === 'none'
+                ) {
+                    return;
+                }
 
+                checkbox.checked = selectPage.checked;
 
-                        if (all.checked) {
-
-                            selected.add(
-                                box.value
-                            );
-
-                        } else {
-
-                            selected.delete(
-                                box.value
-                            );
-
-                        }
-
-                    }
-                );
-
+                if (selectPage.checked) {
+                    selected.add(checkbox.value);
+                } else {
+                    selected.delete(checkbox.value);
+                }
+            });
 
             refreshToolbar();
+        });
 
-        }
-    );
 
 
 

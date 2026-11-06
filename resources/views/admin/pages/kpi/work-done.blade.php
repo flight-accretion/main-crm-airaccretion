@@ -1,7 +1,7 @@
 @extends('admin.layouts.header')
 
 @section('content')
-<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/kpi/management-work.css') }}?v=1">
+<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/kpi/management-work.css') }}?v=2">
 <div class="crm-work-done crm-kpi-tool" data-kpi-tool>
 
 <div class="block justify-between page-header md:flex">

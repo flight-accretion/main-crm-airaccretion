@@ -19,7 +19,7 @@ use function App\Helpers\getRepresentativeIds;
 
 class UpcomingFollowUpController extends Controller
 {
-    public function index(Request $request): View
+    public function index(Request $request): View|JsonResponse
     {
         $request->validate(['from_date' => 'nullable|date', 'product_id' => 'nullable|string|max:64',
             'representative_user_id' => 'nullable|uuid', 'lead_score_temperature' => 'nullable|in:hot,neutral,cold']);
@@ -29,7 +29,7 @@ class UpcomingFollowUpController extends Controller
         // Prepare list for dropdown: for managers show assigned executives + manager, for admins show managers+execs
         $assignedExecutives = collect();
         if (in_array($currentUser->userType->user_type, [\App\Models\UserType::SALES_MANAGER, \App\Models\UserType::SENIOR_SALES_MANAGER])) {
-            $assignedExecutives = \App\Models\SalesExecutiveAssignment::getSalesExecutivesForManager($currentUser->id);
+            $assignedExecutives = \App\Models\SalesExecutiveAssignment::getActiveSalesExecutivesForManager($currentUser->id);
         } elseif (in_array($currentUser->userType->user_type, [\App\Models\UserType::ADMIN, \App\Models\UserType::SUPER_ADMIN, \App\Models\UserType::HR])) {
             // Admins/HR: include all managers and sales executives
             $managerTypes = \App\Models\UserType::whereIn('user_type', [\App\Models\UserType::SALES_MANAGER, \App\Models\UserType::SENIOR_SALES_MANAGER])->pluck('id')->toArray();
@@ -85,16 +85,33 @@ class UpcomingFollowUpController extends Controller
             $effectiveReps = $representatives;
         }
 
+      
         if ($forceNoResults) {
-            // Shortcut: render view with empty results
-            $fromDate = $request->filled('from_date')
-                ? Carbon::parse($request->from_date)->startOfDay()
-                : Carbon::now()->startOfDay();
+            if ($request->boolean('msg91_select_filtered')) {
+                abort_unless(
+                    app(\App\Services\WhatsApp\Msg91\Msg91CampaignAccess::class)
+                        ->canCompose($currentUser),
+                    403
+                );
+
+                return response()->json([
+                    'lead_ids' => [],
+                    'selected_count' => 0,
+                ]);
+            }
 
             $products = Product::where('status', 1)->get();
             $arrFollowUps = collect();
-            return $this->queueView($fromDate, $arrFollowUps, $products, $assignedExecutives, $leadAiScoringSetting);
+
+            return $this->queueView(
+                $fromDate,
+                $arrFollowUps,
+                $products,
+                $assignedExecutives,
+                $leadAiScoringSetting
+            );
         }
+
 
         // if ($effectiveReps) {
         //     // Filter by both follow-up assigned user AND lead representative
@@ -306,6 +323,34 @@ class UpcomingFollowUpController extends Controller
         }
 
         $products = Product::where('status', 1)->get();
+
+        
+if ($request->boolean('msg91_select_filtered')) {
+    abort_unless(
+        app(\App\Services\WhatsApp\Msg91\Msg91CampaignAccess::class)
+            ->canCompose($currentUser),
+        403
+    );
+
+    $ids = $arrFollowUps
+        ->pluck('lead_id')
+        ->filter()
+        ->unique()
+        ->map(fn ($id) => (string) $id)
+        ->values();
+
+    if ($ids->count() > 5000) {
+        return response()->json([
+            'message' => 'More than 5,000 follow-up leads match your filters. Please narrow your selection.',
+        ], 422);
+    }
+
+    return response()->json([
+        'lead_ids' => $ids,
+        'selected_count' => $ids->count(),
+    ]);
+}
+
 
         return $this->queueView($fromDate, $arrFollowUps, $products, $assignedExecutives, $leadAiScoringSetting);
     }

@@ -130,6 +130,37 @@
 
     @endif
 
+    
+@if(!$campaign->cancelled_at && $campaign->failed_count > 0)
+    <section class="msg91-card">
+        <div class="msg91-card__header">
+            <div>
+                <h2>Retry Failed Messages</h2>
+                <p>
+                    Retry eligible pre-submission failures only.
+                    Unknown submissions will not be resent.
+                </p>
+            </div>
+
+            <form
+                method="POST"
+                action="{{ route('admin.msg91.campaigns.retry-failed', $campaign) }}"
+            >
+                @csrf
+
+                <button
+                    type="submit"
+                    class="msg91-button msg91-button--secondary"
+                    onclick="return confirm('Retry safely eligible failed recipients?')"
+                >
+                    <i class="ri-refresh-line"></i>
+                    Retry Eligible Failed
+                </button>
+            </form>
+        </div>
+    </section>
+@endif
+
 
 
     {{-- =====================================================

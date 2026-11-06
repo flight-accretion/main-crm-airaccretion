@@ -63,6 +63,21 @@ class OperationsVendorRefundController extends Controller
             ->values();
 
         $rows = $this->applyFilters($rows, $request);
+        
+        $refundSummary = app(
+            \App\Services\Operations\RefundSummaryService::class
+        )->summary();
+
+        $refundSummary['vendor_pending'] = $rows->count();
+
+        if ($refundSummary['waiting_approval'] !== null) {
+            $refundSummary['waiting_approval'] = $rows
+                ->where(
+                    'approval_status',
+                    \App\Support\RefundApproval::PENDING
+                )
+                ->count();
+        }
 
         $perPage = (int) $request->get('per_page', 25);
 
@@ -85,7 +100,7 @@ class OperationsVendorRefundController extends Controller
 
         return view(
             'admin.pages.operations.vendor-refunds.index',
-            compact('vendorRefunds')
+            compact('vendorRefunds', 'refundSummary')
         );
     }
 

@@ -16,13 +16,38 @@ class OperationsHomeTest extends KpiFeatureTestCase
         parent::setUp();
         (require base_path('database/migrations/2026_09_23_160000_create_operation_cases_table.php'))->up();
         (require base_path('database/migrations/2026_09_23_160100_create_operation_case_activities_table.php'))->up();
-        Schema::table('operation_cases', fn ($t) => $t->timestamp('next_followup_at')->nullable());
-        Schema::table('targets', function ($t) { $t->boolean('incentive_enabled')->default(false); $t->decimal('incentive_multiplier', 12, 8)->nullable(); $t->string('incentive_basis')->nullable(); $t->text('incentive_product_ids')->nullable(); });
-        Schema::create('review_conversations', function ($t) { $t->uuid('id')->primary(); $t->uuid('operation_case_id'); $t->timestamp('initial_message_sent_at')->nullable(); $t->boolean('customer_replied')->default(false); });
-        Schema::create('lead_rides', function ($t) { $t->uuid('id')->primary(); $t->uuid('lead_id'); $t->dateTime('from_date')->nullable(); $t->string('from_place')->nullable(); $t->string('to_place')->nullable(); $t->boolean('is_tba')->default(false); });
-        Schema::create('vouchers', function ($t) { $t->uuid('id')->primary(); $t->uuid('lead_id'); });
-        Schema::create('vendor_refunds', function ($t) { $t->uuid('id')->primary(); $t->uuid('lead_id'); $t->integer('status')->nullable(); $t->decimal('refund_amount'); });
-        Schema::create('operations_lead_assignments', function ($t) { $t->uuid('id')->primary(); $t->uuid('lead_id'); $t->uuid('operations_user_id'); $t->boolean('is_active'); $t->timestamp('assigned_at')->nullable(); });
+        Schema::table('operation_cases', fn($t) => $t->timestamp('next_followup_at')->nullable());
+        Schema::table('targets', function ($t) {
+            $t->boolean('incentive_enabled')->default(false);
+            $t->decimal('incentive_multiplier', 12, 8)->nullable();
+            $t->string('incentive_basis')->nullable();
+            $t->text('incentive_product_ids')->nullable(); });
+        Schema::create('review_conversations', function ($t) {
+            $t->uuid('id')->primary();
+            $t->uuid('operation_case_id');
+            $t->timestamp('initial_message_sent_at')->nullable();
+            $t->boolean('customer_replied')->default(false); });
+        Schema::create('lead_rides', function ($t) {
+            $t->uuid('id')->primary();
+            $t->uuid('lead_id');
+            $t->dateTime('from_date')->nullable();
+            $t->string('from_place')->nullable();
+            $t->string('to_place')->nullable();
+            $t->boolean('is_tba')->default(false); });
+        Schema::create('vouchers', function ($t) {
+            $t->uuid('id')->primary();
+            $t->uuid('lead_id'); });
+        Schema::create('vendor_refunds', function ($t) {
+            $t->uuid('id')->primary();
+            $t->uuid('lead_id');
+            $t->integer('status')->nullable();
+            $t->decimal('refund_amount'); });
+        Schema::create('operations_lead_assignments', function ($t) {
+            $t->uuid('id')->primary();
+            $t->uuid('lead_id');
+            $t->uuid('operations_user_id');
+            $t->boolean('is_active');
+            $t->timestamp('assigned_at')->nullable(); });
         $this->ops = $this->createUserWithRole('Operations one', UserType::OPERATIONS_EXECUTIVE);
         $this->other = $this->createUserWithRole('Operations two', UserType::OPERATIONS_EXECUTIVE);
     }
@@ -66,14 +91,14 @@ class OperationsHomeTest extends KpiFeatureTestCase
         $before = OperationCase::all()->toJson();
 
         foreach ([UserType::OPERATIONS_MANAGER, UserType::SENIOR_OPERATIONS_MANAGER] as $role) {
-            $manager = $this->createUserWithRole('Dashboard '.$role, $role);
+            $manager = $this->createUserWithRole('Dashboard ' . $role, $role);
             $targetId = (string) Str::uuid();
             DB::table('targets')->insert(['id' => $targetId, 'sales_executive_id' => $manager->id, 'year' => now()->year, 'month' => now()->month, 'target_amount' => 100000, 'status' => 'active', 'incentive_enabled' => true]);
             $kpi = \Mockery::mock(\App\Services\Kpi\KpiDashboardService::class);
-            $kpi->shouldReceive('forUser')->twice()->withArgs(fn ($user, $asOf, $from) => $user->id === $manager->id)->andReturn(['overall_score' => 3.5]);
+            $kpi->shouldReceive('forUser')->twice()->withArgs(fn($user, $asOf, $from) => $user->id === $manager->id)->andReturn(['overall_score' => 3.5]);
             app()->instance(\App\Services\Kpi\KpiDashboardService::class, $kpi);
             $calculator = \Mockery::mock(\App\Services\TargetIncentiveService::class);
-            $calculator->shouldReceive('forTarget')->once()->with(\Mockery::on(fn ($target) => $target->id === $targetId))->andReturn(['incentive' => 125]);
+            $calculator->shouldReceive('forTarget')->once()->with(\Mockery::on(fn($target) => $target->id === $targetId))->andReturn(['incentive' => 125]);
             app()->instance(\App\Services\TargetIncentiveService::class, $calculator);
 
             $data = app(\App\Services\Operations\OperationsHomeService::class)->forUser($manager, 'due');
@@ -142,21 +167,119 @@ class OperationsHomeTest extends KpiFeatureTestCase
         $this->assertSame(0, app(\App\Services\Operations\OperationsHomeService::class)->forUser($this->ops)['todayRides']);
     }
 
-    public function test_latest_status_controls_confirmation_and_partial_balance_not_historical_status(): void
-    {
-        $case = $this->caseFor($this->ops, 2);
-        DB::table('lead_rides')->insert(['id' => Str::uuid(), 'lead_id' => $case->lead_id, 'from_date' => now()->addHour()]);
-        DB::table('vouchers')->insert(['id' => Str::uuid(), 'lead_id' => $case->lead_id]);
-        foreach ([[5, now()->subDays(2)], [4, now()->subDay()]] as [$status, $created]) {
-            DB::table('lead_followups')->insert(['id' => Str::uuid(), 'lead_id' => $case->lead_id, 'status' => $status, 'total_amount' => 10000, 'received_amount' => 3000, 'created_at' => $created]);
+   
+public function test_latest_status_controls_confirmation_and_partial_balance_not_historical_status(): void
+{
+    $case = $this->caseFor($this->ops, 2);
+
+    DB::table('lead_rides')->insert([
+        'id' => (string) Str::uuid(),
+        'lead_id' => $case->lead_id,
+        'from_date' => now()->addHour(),
+    ]);
+
+    DB::table('vouchers')->insert([
+        'id' => (string) Str::uuid(),
+        'lead_id' => $case->lead_id,
+    ]);
+
+    $partialFollowupId = null;
+
+    foreach ([
+        [5, now()->subDays(2)],
+        [4, now()->subDay()],
+    ] as [$status, $created]) {
+        $followupId = (string) Str::uuid();
+
+        DB::table('lead_followups')->insert([
+            'id' => $followupId,
+            'lead_id' => $case->lead_id,
+            'status' => $status,
+            'total_amount' => 10000,
+            'received_amount' => 3000,
+            'created_at' => $created,
+            'updated_at' => $created,
+        ]);
+
+        if ($status === 4) {
+            $partialFollowupId = $followupId;
         }
-        $data = app(\App\Services\Operations\OperationsHomeService::class)->forUser($this->ops);
-        $this->assertSame(1, $data['unconfirmed']);
-        $this->assertSame(1, $data['partPaidCount']);
-        $this->assertEquals(7000, $data['partPaidBalance']);
-        DB::table('lead_followups')->insert(['id' => Str::uuid(), 'lead_id' => $case->lead_id, 'status' => 3, 'total_amount' => 10000, 'received_amount' => 10000, 'created_at' => now()]);
-        $this->assertSame(0, app(\App\Services\Operations\OperationsHomeService::class)->forUser($this->ops)['partPaidCount']);
     }
+
+    // A recorded payment is not sufficient.
+    // The partial payment must be approved.
+    DB::table('payment_audit_trail')->insert([
+        'id' => (string) Str::uuid(),
+        'lead_followup_id' => $partialFollowupId,
+        'payment_status' =>
+            \App\Models\PaymentAuditTrail::STATUS_APPROVED,
+        'paid_amount' => 3000,
+        'paid_date' => now()->subDay(),
+        'created_at' => now()->subDay(),
+        'updated_at' => now()->subDay(),
+    ]);
+
+    $service = app(
+        \App\Services\Operations\OperationsHomeService::class
+    );
+
+    $data = $service->forUser($this->ops);
+
+    $this->assertSame(1, $data['unconfirmed']);
+    $this->assertSame(1, $data['partPaidCount']);
+    $this->assertEquals(7000, $data['partPaidBalance']);
+
+    // New follow-up status alone must not
+    // erase an outstanding approved-payment balance.
+    $fullFollowupId = (string) Str::uuid();
+
+    DB::table('lead_followups')->insert([
+        'id' => $fullFollowupId,
+        'lead_id' => $case->lead_id,
+        'status' => 3,
+        'total_amount' => 10000,
+        'received_amount' => 10000,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $afterStatusChange = $service->forUser($this->ops);
+
+    $this->assertSame(
+        1,
+        $afterStatusChange['partPaidCount']
+    );
+
+    $this->assertEquals(
+        7000,
+        $afterStatusChange['partPaidBalance']
+    );
+
+    // Approve the remaining payment.
+    DB::table('payment_audit_trail')->insert([
+        'id' => (string) Str::uuid(),
+        'lead_followup_id' => $fullFollowupId,
+        'payment_status' =>
+            \App\Models\PaymentAuditTrail::STATUS_APPROVED,
+        'paid_amount' => 7000,
+        'paid_date' => now(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $afterFullPayment = $service->forUser($this->ops);
+
+    $this->assertSame(
+        0,
+        $afterFullPayment['partPaidCount']
+    );
+
+    $this->assertEquals(
+        0,
+        $afterFullPayment['partPaidBalance']
+    );
+}
+
 
     public function test_expiry_uses_original_service_date_and_ignores_completed_or_other_users(): void
     {
@@ -181,29 +304,31 @@ class OperationsHomeTest extends KpiFeatureTestCase
         $this->assertStringNotContainsString('8,500', $html);
         $this->assertStringNotContainsString('<aside class="oh-incentive">', $html);
         $this->assertStringNotContainsString('Preview: incentive eligible', $html);
-        if ($dir = getenv('CRM_HOME_PREVIEW_DIR')) file_put_contents($dir.'/index.html', $html);
+        if ($dir = getenv('CRM_HOME_PREVIEW_DIR'))
+            file_put_contents($dir . '/index.html', $html);
         OperationCase::query()->delete();
         $empty = view('admin.pages.operations.home', app(\App\Services\Operations\OperationsHomeService::class)->forUser($this->ops))->render();
         $this->assertStringContainsString('No open cases', $empty);
-        if ($dir = getenv('CRM_HOME_PREVIEW_DIR')) file_put_contents($dir.'/empty.html', $empty);
+        if ($dir = getenv('CRM_HOME_PREVIEW_DIR'))
+            file_put_contents($dir . '/empty.html', $empty);
     }
 
     public function test_dashboard_role_gate_preserves_existing_permissions(): void
     {
         $route = app('router')->getRoutes()->getByName('admin.operations.dashboard');
-        $gate = collect($route->gatherMiddleware())->first(fn ($name) => str_starts_with($name, 'role:'));
+        $gate = collect($route->gatherMiddleware())->first(fn($name) => str_starts_with($name, 'role:'));
         $this->assertNotNull($gate);
         foreach (array_merge(UserType::OPERATIONS_ROLES, UserType::ADMIN_ROLES, UserType::SALES_ROLES, UserType::ACCOUNTS_ROLES, [UserType::HR]) as $role) {
-            $actor = $this->createUserWithRole('Home role '.$role, $role);
+            $actor = $this->createUserWithRole('Home role ' . $role, $role);
             $request = \Illuminate\Http\Request::create('/admin/operations/dashboard');
-            $request->setUserResolver(fn () => $actor);
+            $request->setUserResolver(fn() => $actor);
             $allowed = in_array($role, array_merge(UserType::OPERATIONS_ROLES, UserType::ADMIN_ROLES), true);
             try {
-                $response = app(\App\Http\Middleware\RoleMiddleware::class)->handle($request, fn () => response('ok'), ...explode(',', substr($gate, 5)));
-                $this->assertTrue($allowed, $role.' gained unauthorized access');
+                $response = app(\App\Http\Middleware\RoleMiddleware::class)->handle($request, fn() => response('ok'), ...explode(',', substr($gate, 5)));
+                $this->assertTrue($allowed, $role . ' gained unauthorized access');
                 $this->assertSame(200, $response->getStatusCode());
             } catch (\Symfony\Component\HttpKernel\Exception\HttpException $error) {
-                $this->assertFalse($allowed, $role.' lost dashboard access');
+                $this->assertFalse($allowed, $role . ' lost dashboard access');
                 $this->assertSame(403, $error->getStatusCode());
             }
         }
@@ -215,7 +340,7 @@ class OperationsHomeTest extends KpiFeatureTestCase
         DB::table('targets')->insert($target);
         DB::table('targets')->insert(array_merge($target, ['id' => Str::uuid(), 'sales_executive_id' => $this->other->id]));
         $calculator = \Mockery::mock(\App\Services\TargetIncentiveService::class);
-        $calculator->shouldReceive('forTarget')->once()->with(\Mockery::on(fn ($value) => $value->id === $target['id']))->andReturn(['incentive' => 1234.56]);
+        $calculator->shouldReceive('forTarget')->once()->with(\Mockery::on(fn($value) => $value->id === $target['id']))->andReturn(['incentive' => 1234.56]);
         app()->instance(\App\Services\TargetIncentiveService::class, $calculator);
         $data = app(\App\Services\Operations\OperationsHomeService::class)->forUser($this->ops);
         $this->assertSame('configured', $data['incentive']['status']);
@@ -225,7 +350,8 @@ class OperationsHomeTest extends KpiFeatureTestCase
         $html = view('admin.pages.operations.home', $data)->render();
         $this->assertStringContainsString('1,234.56', $html);
         $this->assertStringNotContainsString('3 of 4 criteria', $html);
-        if ($dir = getenv('CRM_HOME_PREVIEW_DIR')) file_put_contents($dir.'/incentive.html', $html);
+        if ($dir = getenv('CRM_HOME_PREVIEW_DIR'))
+            file_put_contents($dir . '/incentive.html', $html);
         DB::table('targets')->insert(array_merge($target, ['id' => Str::uuid()]));
         $this->assertSame('duplicate', app(\App\Services\Operations\OperationsHomeService::class)->forUser($this->ops)['incentive']['status']);
         $admin = $this->createUserWithRole('Incentive admin', UserType::SUPER_ADMIN);

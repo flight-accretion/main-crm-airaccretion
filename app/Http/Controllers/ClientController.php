@@ -535,6 +535,53 @@ class ClientController extends Controller
 
     public function index(Request $request)
     {
+
+    $dateGroups = [
+            'service' => ['from_date', 'to_date'],
+            'created' => ['from_created_date', 'to_created_date'],
+            'followup' => [
+                'from_followup_date',
+                'to_followup_date',
+                'followup_period',
+            ],
+        ];
+
+        $dateKind = $request->input('date_kind');
+
+        // Support older bookmarked URLs without date_kind.
+        if (!array_key_exists((string) $dateKind, $dateGroups)) {
+            if (
+                $request->filled('from_followup_date') ||
+                $request->filled('to_followup_date') ||
+                $request->filled('followup_period')
+            ) {
+                $dateKind = 'followup';
+            } elseif (
+                $request->filled('from_created_date') ||
+                $request->filled('to_created_date')
+            ) {
+                $dateKind = 'created';
+            } else {
+                $dateKind = 'service';
+            }
+        }
+
+        $normalizedFilters = $request->all();
+        $normalizedFilters['date_kind'] = $dateKind;
+
+        foreach ($dateGroups as $kind => $fields) {
+            if ($kind === $dateKind) {
+                continue;
+            }
+
+            foreach ($fields as $field) {
+                unset($normalizedFilters[$field]);
+            }
+        }
+
+        $request->replace($normalizedFilters);
+
+
         $currentUser = auth()->user();
 
         $isSuperAdmin = (bool) (
@@ -792,10 +839,52 @@ if (
             $listFilter->queue($countQuery, $queue, $leadAiScoringSetting);
             $leadQueueCounts[$queue] = $countQuery->count();
         }
-        $listFilter->queue($query, (string) $request->input('lead_queue', 'all'), $leadAiScoringSetting);
+        
+        $listFilter->queue(
+            $query,
+            (string) $request->input('lead_queue', 'all'),
+            $leadAiScoringSetting
+        );
 
-        // Order and paginate
-        $leads = $query->orderBy('leads.created_at', 'desc')->paginate($perPage);
+        /*
+        |--------------------------------------------------------------------------
+        | MSG91 - Select All Filtered Leads
+        |--------------------------------------------------------------------------
+        | Reuse the existing permission scope and applied filters.
+        | Return IDs before pagination.
+        */
+        if ($request->boolean('msg91_select_filtered')) {
+            abort_unless(
+                app(\App\Services\WhatsApp\Msg91\Msg91CampaignAccess::class)
+                    ->canCompose($currentUser),
+                403
+            );
+
+            $ids = (clone $query)
+                ->reorder()
+                ->orderByDesc('leads.created_at')
+                ->orderByDesc('leads.id')
+                ->limit(5001)
+                ->pluck('leads.id')
+                ->map(fn ($id) => (string) $id)
+                ->values();
+
+            if ($ids->count() > 5000) {
+                return response()->json([
+                    'message' => 'More than 5,000 leads match your filters. Please narrow your selection.',
+                ], 422);
+            }
+
+            return response()->json([
+                'lead_ids' => $ids,
+                'selected_count' => $ids->count(),
+            ]);
+        }
+
+        // Normal paginated Leads page remains unchanged.
+        $leads = $query
+            ->orderBy('leads.created_at', 'desc')
+            ->paginate($perPage);
 
         // Fetch supporting data (cached)
         $services = \Illuminate\Support\Facades\Cache::remember('active_services', 3600, function () {
@@ -823,11 +912,13 @@ if (
             2 => 'Cancelled',
             3 => 'Full Payment Received',
             4 => 'Partial Payment Received',
-            5 => 'confirm',
+            5 => 'Confirm',
             6 => 'Pending',
             7 => 'Reschedule',
             8 => 'Approve',
-            9 => 'Reject'
+            9 => 'Reject',
+            10 => 'Sales Follow-up',
+            11 => 'Close Follow-up',
         ];
 
         $staff = $this->getUsersInHierarchy() ?: auth()->user();
@@ -1212,10 +1303,38 @@ if ($isSuperAdmin) {
         ]);
 
         if ($validator->fails()) {
-    return back()
-        ->withErrors($validator)
-        ->withInput();
-}
+        return back()
+            ->withErrors($validator)
+            ->withInput();
+            }
+
+            $matchedClients = $this->findClientsByPhone(
+                $request->contact_country_code,
+                $request->contact_number
+            );
+
+            if ($matchedClients->count() > 1) {
+                return back()
+                    ->withInput()
+                    ->withErrors([
+                        'contact_number' =>
+                            'Multiple clients have this phone number. Please resolve the duplicate client records first.',
+                    ]);
+            }
+
+            $matchedClient = $matchedClients->first();
+
+            if ($matchedClient && $request->filled('client_id')
+                && $request->client_id !== 'new'
+                && (string) $request->client_id !== (string) $matchedClient->id
+            ) {
+                return back()
+                    ->withInput()
+                    ->withErrors([
+                        'client_id' =>
+                            'The selected client does not match the entered phone number.',
+                    ]);
+            }
 
 /*
 |--------------------------------------------------------------------------
@@ -1284,35 +1403,51 @@ try {
 
         try {
             // Handle client creation/selection
-            if ($usingExistingClient) {
-                // Find existing client and update with edited information
-                $client = Client::findOrFail($request->client_id);
+           $client = null;
 
-                // Update client with the edited data
-                $strContactNumber = $request->contact_country_code . '-' . $request->contact_number;
-                $strAlternateNumber = $request->alternate_number
-                    ? $request->whatsapp_country_code . '-' . $request->alternate_number
-                    : null;
+            if ($matchedClient) {
+                // Reuse existing client without changing its profile.
+                $client = Client::whereKey($matchedClient->id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
 
-                $client->update([
-                    'name' => $request->name,
-                    'company_name' => $request->company_name,
-                    'gst_number' => $request->gst_number,
-                    'email' => $request->email,
-                    'contact_number' => $strContactNumber,
-                    'alternate_number' => $strAlternateNumber,
-                    'date_of_birth' => $request->date_of_birth,
-                    'city_id' => $request->city,
-                    'country_id' => $request->country_id,
-                    'address' => $request->address,
-                    'description' => $request->description,
-                ]);
+            } elseif ($usingExistingClient) {
+                // Explicitly selected client. Do not silently overwrite profile.
+                $client = Client::whereKey($request->client_id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                $submittedPhone = preg_replace(
+                    '/\D+/',
+                    '',
+                    $request->contact_country_code . $request->contact_number
+                );
+
+                $savedPhone = preg_replace(
+                    '/\D+/',
+                    '',
+                    (string) $client->contact_number
+                );
+
+                if ($submittedPhone !== $savedPhone) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'contact_number' =>
+                            'The phone number does not match the selected client.',
+                    ]);
+                }
+
             } else {
-                // Create new client
-                $strContactNumber = $request->contact_country_code . '-' . $request->contact_number;
-                $strAlternateNumber = $request->alternate_number
-                    ? $request->whatsapp_country_code . '-' . $request->alternate_number
+                $strContactNumber =
+                    $request->contact_country_code
+                    . '-'
+                    . $request->contact_number;
+
+                $strAlternateNumber = $request->filled('alternate_number')
+                    ? $request->whatsapp_country_code
+                        . '-'
+                        . $request->alternate_number
                     : null;
+
                 $client = Client::create([
                     'id' => Str::uuid(),
                     'name' => $request->name,
@@ -1351,7 +1486,7 @@ try {
                 ? array_values($leadProductIds)
                 : null,
 
-            'service_ids' => !empty($serviceIds)
+                'service_ids' => !empty($serviceIds)
                 ? array_values($serviceIds)
                 : null,
                 'number_of_passengers' => $request->number_of_passengers,
@@ -2984,7 +3119,10 @@ $leadFollowUp = LeadFollowUp::create([
                 'contact_number' => $formattedContactNumber,
                 'alternate_number' => $formattedAlternateNumber,
                 'date_of_birth' => $request->date_of_birth,
-                'city_id' => $request->city ?: null,
+                'city_id' => $this->resolveCityId(
+                $request->input('country_id'),
+                $request->input('city')
+                ),
                 'country_id' => $request->country_id ?: null,
                 'address' => $request->address,
                 'description' => $request->description,
@@ -2992,6 +3130,10 @@ $leadFollowUp = LeadFollowUp::create([
             ]);
             DB::commit();
             return redirect()->back()->with('success', 'Client updated successfully.');
+        } catch (\Illuminate\Validation\ValidationException $exception) {
+            DB::rollBack();
+
+            return back()->withErrors($exception->errors())->withInput();
         } catch (\Exception $e) {
 
             DB::rollBack();
@@ -6572,4 +6714,144 @@ public function destroyLead(Lead $lead)
 
     return $query;
 }
+
+public function searchClients(Request $request)
+{
+    $data = $request->validate([
+        'q' => ['nullable', 'string', 'max:100'],
+        'page' => ['nullable', 'integer', 'min:1', 'max:1000'],
+    ]);
+
+    $term = trim($data['q'] ?? '');
+
+    if (mb_strlen($term) < 2) {
+        return response()->json([
+            'results' => [],
+            'pagination' => ['more' => false],
+        ]);
+    }
+
+    $page = (int) ($data['page'] ?? 1);
+    $limit = 20;
+
+    $clients = Client::query()
+        ->where('status', 1)
+        ->where(function ($query) use ($term) {
+            $like = '%' . $term . '%';
+
+            $query->where('name', 'ilike', $like)
+                ->orWhere('email', 'ilike', $like)
+                ->orWhere('contact_number', 'ilike', $like);
+        })
+        ->orderBy('name')
+        ->orderBy('id')
+        ->offset(($page - 1) * $limit)
+        ->limit($limit + 1)
+        ->get(['id', 'name', 'contact_number', 'email']);
+
+    $hasMore = $clients->count() > $limit;
+
+    return response()->json([
+        'results' => $clients->take($limit)->map(function ($client) {
+            return [
+                'id' => $client->id,
+                'text' => $client->name
+                    . ' | ' . ($client->contact_number ?: '-')
+                    . ' | ' . ($client->email ?: '-'),
+            ];
+        })->values(),
+        'pagination' => ['more' => $hasMore],
+    ]);
+}
+
+
+private function findClientsByPhone(
+    string $countryCode,
+    string $phone
+) {
+    $normalized = preg_replace(
+        '/\D+/',
+        '',
+        $countryCode . $phone
+    );
+
+    if ($normalized === '') {
+        return collect();
+    }
+
+    $driver = Client::query()
+        ->getModel()
+        ->getConnection()
+        ->getDriverName();
+
+    $expression = $driver === 'pgsql'
+        ? "regexp_replace(contact_number, '[^0-9]', '', 'g')"
+        : "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(contact_number, '+', ''), '-', ''), ' ', ''), '(', ''), ')', '')";
+
+    return Client::query()
+        ->whereRaw("{$expression} = ?", [$normalized])
+        ->orderBy('id')
+        ->limit(2)
+        ->get();
+}
+
+
+private function resolveCityId(
+    ?string $countryId,
+    ?string $cityValue
+): ?string {
+    $cityValue = trim((string) $cityValue);
+
+    if ($cityValue === '') {
+        return null;
+    }
+
+    if (!$countryId) {
+        throw \Illuminate\Validation\ValidationException::withMessages([
+            'country_id' => 'Select a country before entering a city.',
+        ]);
+    }
+
+    if (Str::isUuid($cityValue)) {
+        $city = City::query()
+            ->whereKey($cityValue)
+            ->where('country_id', $countryId)
+            ->first();
+
+        if (!$city) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'city' => 'The selected city does not belong to the country.',
+            ]);
+        }
+
+        return $city->id;
+    }
+
+    $name = preg_replace('/\s+/u', ' ', $cityValue);
+
+    if (mb_strlen($name) > 100) {
+        throw \Illuminate\Validation\ValidationException::withMessages([
+            'city' => 'City name cannot exceed 100 characters.',
+        ]);
+    }
+
+    $existing = City::query()
+        ->where('country_id', $countryId)
+        ->whereRaw('LOWER(name) = LOWER(?)', [$name])
+        ->first();
+
+    if ($existing) {
+        return $existing->id;
+    }
+
+    $city = City::create([
+        'id' => (string) Str::uuid(),
+        'country_id' => $countryId,
+        'name' => mb_convert_case($name, MB_CASE_TITLE, 'UTF-8'),
+        'status' => 1,
+    ]);
+
+    return $city->id;
+}
+
 }

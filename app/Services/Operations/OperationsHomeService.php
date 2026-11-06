@@ -67,9 +67,73 @@ class OperationsHomeService
         $customerRefund = LeadRefund::where('status', 1)->whereHas('leadFollowup', fn ($followup) => $followup->whereIn('lead_id', (clone $leads)->select('id')))->sum('refund_amount');
         $vendorRefund = VendorRefund::whereIn('lead_id', (clone $leads)->select('id'))
             ->where(fn ($query) => $query->whereNull('status')->orWhere('status', '!=', VendorRefund::STATUS_COMPLETED))->sum('refund_amount');
-        $partPaid = (clone $leads)->whereIn('id', (clone $rides)->whereBetween('from_date', [now(), now()->addDays(7)])->select('lead_id'))
-            ->with(['latestFollowup' => fn ($followup) => $latestStatus($followup)])
-            ->whereHas('leadFollowups', fn ($followup) => $latestStatus($followup)->where('status', LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED))->get();
+       
+        $partPaid = (clone $leads)
+            ->whereIn(
+                'id',
+                (clone $rides)
+                    ->whereBetween('from_date', [
+                        now()->startOfDay(),
+                        now()->addDays(7)->endOfDay(),
+                    ])
+                    ->select('lead_id')
+            )
+            ->with([
+                'leadFollowups' => function ($query) {
+                    $query
+                        ->with('paymentAuditTrail')
+                        ->orderByDesc('created_at')
+                        ->orderByDesc('id');
+                },
+            ])
+            ->get()
+            ->map(function ($lead) {
+                $followups = $lead->leadFollowups;
+
+                $billableFollowup = $followups->first(
+                    fn ($followup) =>
+                        (float) $followup->total_amount > 0
+                );
+
+                $totalAmount = (float) (
+                    $billableFollowup?->total_amount ?? 0
+                );
+
+                $approvedReceived = $followups
+                    ->flatMap(
+                        fn ($followup) =>
+                            $followup->paymentAuditTrail
+                    )
+                    ->where(
+                        'payment_status',
+                        \App\Models\PaymentAuditTrail::STATUS_APPROVED
+                    )
+                    ->sum('paid_amount');
+
+                $approvedReceived = round(
+                    (float) $approvedReceived,
+                    2
+                );
+
+                $totalAmount = round($totalAmount, 2);
+
+                return [
+                    'lead_id' => $lead->id,
+                    'total' => $totalAmount,
+                    'received' => $approvedReceived,
+                    'balance' => max(
+                        0,
+                        $totalAmount - $approvedReceived
+                    ),
+                ];
+            })
+            ->filter(
+                fn ($booking) =>
+                    $booking['total'] > 0
+                    && $booking['received'] > 0
+                    && $booking['received'] < $booking['total']
+            )
+            ->values();
         $kpi = ['day' => null, 'month' => null];
         if ($personalKpi) {
             $kpi['day'] = app(KpiDashboardService::class)->forUser($actor, now(), $today)['overall_score'] ?? null;
@@ -88,7 +152,7 @@ class OperationsHomeService
 
         return compact('team', 'personalKpi', 'todayRides', 'nextRide', 'unconfirmed', 'expiring', 'oldest', 'activities', 'caseRows', 'caseBucket', 'customerRefund', 'vendorRefund', 'kpi', 'incentive') + [
             'partPaidCount' => $partPaid->count(),
-            'partPaidBalance' => $partPaid->sum(fn ($lead) => max(0, (float) $lead->getRelation('latestFollowup')?->total_amount - (float) $lead->getRelation('latestFollowup')?->received_amount)),
+            'partPaidBalance' => $partPaid->sum('balance'),
             'openCount' => (clone $open)->count(),
             'dueToday' => (clone $open)->where('next_followup_at', '>=', $today)->where('next_followup_at', '<', $tomorrow)->count(),
             'nextDue' => (clone $open)->where('next_followup_at', '>=', now())->where('next_followup_at', '<', $tomorrow)->min('next_followup_at'),

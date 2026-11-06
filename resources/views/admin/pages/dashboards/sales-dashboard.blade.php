@@ -101,7 +101,49 @@
     <span class="sd-date">
         {{ now()->format('d M Y') }}
     </span>
+    @if(isset($managerDashboardScope))
+        <form method="GET" action="{{ route('admin.sales-dashboard') }}"
+              id="manager-dashboard-filter" class="sd-heading-tools">
+            @foreach(['target_year', 'target_month', 'today_closed', 'from_date'] as $periodKey)
+                @if(request()->filled($periodKey) && is_scalar(request($periodKey)))
+                    <input type="hidden" name="{{ $periodKey }}" value="{{ request($periodKey) }}">
+                @endif
+            @endforeach
+            <label>Team
+                <select name="dashboard_view" id="manager-dashboard-view" class="sd-select">
+                    <option value="self" {{ $managerDashboardScope['view'] === 'self' ? 'selected' : '' }}>My Individual Dashboard</option>
+                    <option value="team" {{ $managerDashboardScope['view'] === 'team' ? 'selected' : '' }}>My Team</option>
+                </select>
+            </label>
+            <label>Team Member
+                <select name="dashboard_member" id="manager-dashboard-member" class="sd-select"
+                    {{ $managerDashboardScope['view'] !== 'team' ? 'disabled' : '' }}>
+                    <option value="">All Assigned Active Members</option>
+                    @foreach($managerDashboardScope['members'] as $member)
+                        <option value="{{ $member->id }}"
+                            {{ $managerDashboardScope['member_id'] === (string) $member->id ? 'selected' : '' }}>{{ $member->name }}</option>
+                    @endforeach
+                </select>
+            </label>
+            <button type="submit" class="sd-select">Apply</button>
+        </form>
+    @endif
 
+@if(in_array($salesRole, [
+    \App\Models\UserType::SALES_MANAGER,
+    \App\Models\UserType::SENIOR_SALES_MANAGER,
+], true))
+    @php
+        $sender = app(
+            \App\Services\WhatsApp\Msg91\Msg91CampaignAccess::class
+        )->senderFor($salesUser);
+    @endphp
+
+    <span class="sd-pill">
+        WhatsApp Sender:
+        {{ $sender?->isVerifiedActive() ? 'Verified' : 'Not Verified / Inactive' }}
+    </span>
+@endif
 
     <form
         method="POST"
@@ -208,7 +250,7 @@
                     <span class="sd-pill"
                         id="compact-target-month">{{ ($salesTargetData['month_name'] ?? now()->format('F')) }}
                         {{ ($salesTargetData['year'] ?? now()->year) }}</span>
-                    @if($salesTeamScope)
+                    @if($salesTeamScope && !isset($managerDashboardScope))
                         <select id="compact-sales-scope" class="sd-select" aria-label="Choose sales scope">
                             <option value="">Team (All)</option>
                             @foreach(($assignedExecutivesAll ?? $assignedExecutives ?? collect()) as $executive)
@@ -1350,6 +1392,7 @@
     </script>
     <script>
         (function () {
+            if (@json(isset($managerDashboardScope))) return;
             var commonSelect = document.getElementById('dashboard_common_select');
             var spinner = document.getElementById('dashboard_loading_spinner');
             var overviewUrl = "{{ route('admin.sales-dashboard.overview-data') }}";
@@ -1652,6 +1695,20 @@
                     renderTarget(state);
                 });
             });
+
+            var managerFilter = document.getElementById('manager-dashboard-filter');
+            if (managerFilter) {
+                var managerView = document.getElementById('manager-dashboard-view');
+                var managerMember = document.getElementById('manager-dashboard-member');
+                managerView.addEventListener('change', function () {
+                    managerMember.value = '';
+                    managerMember.disabled = managerView.value !== 'team';
+                    managerFilter.requestSubmit();
+                });
+                managerMember.addEventListener('change', function () {
+                    managerFilter.requestSubmit();
+                });
+            }
 
             var scope = document.getElementById('compact-sales-scope');
             if (scope) {

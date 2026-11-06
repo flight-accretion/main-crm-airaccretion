@@ -33,7 +33,7 @@
             ['Service date', ride.ride_date], ['Time', ride.ride_time], ['From', ride.from_place], ['To', ride.to_place],
             ['Status', ride.status_name], ['Payment', ride.payment_label], ['Due', money(ride.pending_amount_value)],
             ['Owner', ride.sales_person_name], ['Extra services', ride.extra_service_names],
-            ['Passengers', ride.number_of_passengers], ['Occasion', ride.occasion], ['Description', ride.description],
+            ['Passengers', ride.number_of_passengers], ['Occasion', ride.occasion],
         ].forEach(([name, value]) => {
             const fact = element('div');
             fact.append(element('dt', name), element('dd', value ? String(value) : 'Not recorded'));
@@ -86,7 +86,7 @@
                 ['Phone', ride.contact_number], ['Service', ride.service_names], ['Product', ride.product_names],
                 ['Route', `${ride.from_place} → ${ride.to_place}`], ['Service time', ride.ride_time],
                 ['Extra services', ride.extra_service_names], ['Passengers', ride.number_of_passengers],
-                ['Occasion', ride.occasion], ['Description', ride.description],
+                ['Occasion', ride.occasion],
             ].forEach(([name, value]) => {
                 if (!value || value === 'N/A') return;
                 const fact = element('div');

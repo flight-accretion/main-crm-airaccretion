@@ -38,9 +38,48 @@ class Msg91Client
             throw new RuntimeException('MSG91 template creation did not receive a response.', 0, $exception);
         }
 
-        if (!$response->successful()) {
-            throw new Msg91ProviderException('MSG91 template creation failed with HTTP ' . $response->status(), $response->status(), $response->json() ?: []);
-        }
+       
+if (!$response->successful()) {
+    $payload = $response->json();
+
+    // MSG91 may return plain text or HTML instead of JSON.
+    // Keep a safe, bounded error message for diagnosis.
+    if (!is_array($payload) || empty($payload)) {
+        $rawBody = $response->body();
+
+        $cleanBody = strip_tags($rawBody);
+        $cleanBody = preg_replace(
+            '/[\x00-\x1F\x7F]+/u',
+            ' ',
+            $cleanBody
+        );
+
+        $cleanBody = trim(
+            preg_replace('/\s+/u', ' ', $cleanBody ?? '') ?? ''
+        );
+
+        // Avoid exposing full HTML pages, credentials or
+        // unexpected provider output to CRM users.
+        $isHtml = preg_match(
+            '/<!doctype\s+html|<html\b/i',
+            $rawBody
+        ) === 1;
+
+        $payload = [
+            'message' => (!$isHtml && $cleanBody !== '')
+                ? mb_substr($cleanBody, 0, 300)
+                : 'MSG91 returned an unexpected error response.',
+        ];
+    }
+
+    throw new Msg91ProviderException(
+        'MSG91 template creation failed with HTTP '
+            . $response->status(),
+        $response->status(),
+        $payload
+    );
+}
+
 
         $body = $response->json() ?: [];
         if (data_get($body, 'hasError') === true || strtolower((string) data_get($body, 'status')) === 'error') {
@@ -53,6 +92,83 @@ class Msg91Client
             'payload' => $body,
         ];
     }
+
+    public function deleteTemplate(
+    string $integratedNumber,
+    string $templateName
+): void {
+    if (!(bool) config('services.msg91_campaigns.template_create_enabled', false)) {
+        throw new RuntimeException('MSG91 template management is disabled.');
+    }
+
+    $authKey = trim((string) config('services.msg91_campaigns.auth_key'));
+
+    if ($authKey === '') {
+        throw new RuntimeException('MSG91 campaign credentials are not configured.');
+    }
+
+    // Never delete a real MSG91 template while dry-run mode is enabled.
+    if ((bool) config('services.msg91_campaigns.dry_run', true)) {
+        return;
+    }
+
+    $url = rtrim((string) config('services.msg91_campaigns.control_url'), '/')
+        . '/api/v5/whatsapp/client-panel-template?'
+        . http_build_query([
+            'integrated_number' => $integratedNumber,
+            'template_name' => $templateName,
+        ], '', '&', PHP_QUERY_RFC3986);
+
+    try {
+        $response = Http::acceptJson()
+            ->withHeaders([
+                'authkey' => $authKey,
+                'Content-Type' => 'application/json',
+            ])
+            ->withOptions([
+                'connect_timeout' => (int) config(
+                    'services.msg91_campaigns.connect_timeout',
+                    10
+                ),
+            ])
+            ->timeout((int) config('services.msg91_campaigns.timeout', 30))
+            ->delete($url);
+    } catch (ConnectionException $exception) {
+        throw new RuntimeException(
+            'MSG91 template deletion did not receive a response.',
+            0,
+            $exception
+        );
+    }
+
+    // Idempotent retry: template is already absent from MSG91.
+    if ($response->status() === 404) {
+        return;
+    }
+
+    if (!$response->successful()) {
+        throw new Msg91ProviderException(
+            'MSG91 template deletion failed with HTTP ' . $response->status(),
+            $response->status(),
+            $response->json() ?: [
+                'message' => mb_substr(strip_tags($response->body()), 0, 300),
+            ]
+        );
+    }
+
+    $body = $response->json() ?: [];
+
+    if (
+        data_get($body, 'hasError') === true
+        || strtolower((string) data_get($body, 'status')) === 'error'
+    ) {
+        throw new Msg91ProviderException(
+            'MSG91 rejected the template deletion.',
+            $response->status(),
+            $body
+        );
+    }
+}
 
     public function fetchTemplates(string $integratedNumber): array
     {

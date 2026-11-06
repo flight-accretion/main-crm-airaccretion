@@ -1838,11 +1838,11 @@
 
                                                     @elseif($followup->status === 3)
 
-                                                        Full payment received
+                                                        {{ \App\Models\LeadFollowup::statusLabels()[\App\Models\LeadFollowup::STATUS_FULL_PAYMENT_RECEIVED] }}
 
                                                     @elseif($followup->status === 4)
 
-                                                        Partial payment received
+                                                        {{ \App\Models\LeadFollowup::statusLabels()[\App\Models\LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED] }}
 
                                                     @elseif($followup->status === 5)
 

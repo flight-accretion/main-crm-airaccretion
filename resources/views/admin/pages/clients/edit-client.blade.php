@@ -131,7 +131,16 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     // Initialize Select2
-    $('#countryCodeSelect, #citySelect').select2({ width: '100%' });
+    $('#countryCodeSelect').select2({ width: '100%' });
+
+    $('#citySelect').select2({
+        width: '100%',
+        tags: true,
+        createTag: function (params) {
+            const name = params.term.trim().replace(/\s+/g, ' ');
+            return name ? { id: name, text: name, newTag: true } : null;
+        }
+    });
 
     // City loading function
     function loadCities(countryId) {
@@ -140,24 +149,60 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (!countryId) return;
 
-        $.ajax({
-            url: '/get-cities/' + countryId,
-            type: 'GET',
-            dataType: 'json',
-            beforeSend: () => citySelect.prop('disabled', true),
-            success: function (response) {
-                response.forEach(city => {
-                    const isSelected = city.id == "{{ old('city', $client->city) }}";
-                    citySelect.append($('<option></option>')
-                        .val(city.id)
-                        .text(city.name)
-                        .prop('selected', isSelected));
-                });
-                citySelect.prop('disabled', false);
-            },
-            error: () => citySelect.html('<option>Error loading cities</option>').prop('disabled', false)
+       $.ajax({
+    url: @json(route('admin.clients.cities', ['countryId' => '__COUNTRY__']))
+        .replace('__COUNTRY__', encodeURIComponent(countryId)),
+    type: 'GET',
+    dataType: 'json',
+
+    beforeSend: function () {
+        citySelect.prop('disabled', true);
+    },
+
+    success: function (response) {
+        citySelect.empty().append(
+            new Option('Select City', '')
+        );
+
+        if (!Array.isArray(response)) {
+            console.error('Invalid cities response:', response);
+            return;
+        }
+
+        const selectedCityId = @json(old('city', $client->city_id));
+
+        response.forEach(function (city) {
+            citySelect.append(
+                new Option(
+                    city.name,
+                    city.id,
+                    false,
+                    String(city.id) === String(selectedCityId)
+                )
+            );
         });
+
+        citySelect.trigger('change.select2');
+    },
+
+    error: function (xhr) {
+        console.error(
+            'Cities loading failed:',
+            xhr.status,
+            xhr.responseText
+        );
+
+        citySelect.empty().append(
+            new Option('Unable to load cities', '')
+        );
+
+        citySelect.trigger('change.select2');
+    },
+
+    complete: function () {
+        citySelect.prop('disabled', false);
     }
+});
 
     // Load cities when country changes
     $('#countryCodeSelect').on('change', function () {

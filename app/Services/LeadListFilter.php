@@ -39,21 +39,37 @@ class LeadListFilter
         if ($request->filled('to_created_date')) {
             $query->where('leads.created_at', '<=', Carbon::parse($request->to_created_date)->endOfDay());
         }
+      
         if ($request->filled('search')) {
-            $term = '%' . $request->input('search') . '%';
-            $query->where(function ($search) use ($term) {
-                $search->whereHas('client', function ($client) use ($term) {
-                    $client->where('name', 'like', $term)
-                        ->orWhere('company_name', 'like', $term)
-                        ->orWhere('gst_number', 'like', $term)
-                        ->orWhere('email', 'like', $term)
-                        ->orWhere('contact_number', 'like', $term);
-                })->orWhereHas('representative', fn ($rep) => $rep->where('name', 'like', $term))
-                    ->orWhereHas('rideSegments', function ($ride) use ($term) {
-                        $ride->where('from_place', 'like', $term)->orWhere('to_place', 'like', $term);
-                    })->orWhereHas('leadFollowups', fn ($followup) => $followup->where('followup_note', 'like', $term));
+            $term = '%' . trim((string) $request->input('search')) . '%';
+
+            $operator = $query->getModel()
+                ->getConnection()
+                ->getDriverName() === 'pgsql'
+                    ? 'ilike'
+                    : 'like';
+
+            $query->where(function ($search) use ($term, $operator) {
+                $search->whereHas('client', function ($client) use ($term, $operator) {
+                    $client->where('name', $operator, $term)
+                        ->orWhere('company_name', $operator, $term)
+                        ->orWhere('gst_number', $operator, $term)
+                        ->orWhere('email', $operator, $term)
+                        ->orWhere('contact_number', $operator, $term);
+                })
+                ->orWhereHas('representative', function ($rep) use ($term, $operator) {
+                    $rep->where('name', $operator, $term);
+                })
+                ->orWhereHas('rideSegments', function ($ride) use ($term, $operator) {
+                    $ride->where('from_place', $operator, $term)
+                        ->orWhere('to_place', $operator, $term);
+                })
+                ->orWhereHas('leadFollowups', function ($followup) use ($term, $operator) {
+                    $followup->where('followup_note', $operator, $term);
+                });
             });
         }
+
 
         $from = $request->input('from_followup_date');
         $to = $request->input('to_followup_date');

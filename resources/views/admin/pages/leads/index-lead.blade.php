@@ -150,7 +150,7 @@
         .followup-popup-footer > div > * { flex:1; justify-content:center; }
     }
 </style>
-<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/leads/leads-list.css') }}?v=4">
+<link rel="stylesheet" href="{{ asset('assets/admin/css/crm/leads/leads-list.css') }}?v=5">
 <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/responsive/leads-list-mobile.css') }}?v=1">
 @php
     $listRole = optional(auth()->user()->userType)->user_type;
@@ -1294,10 +1294,30 @@ $(document).ready(function () {
                 status: $('select[name="status"]').val(),
                 allocation_status: $('select[name="allocation_status"]').val(),
                 service_ids: $('select[name="service_ids"]').val(),
-                product_ids: $('select[name="product_ids"]').val()
+                product_ids: $('select[name="product_ids"]').val(),
+                date_kind: $('#date-kind').val()
             };
 
                 const exportPath = '{{ route('admin.leads.export') }}';
+                const activeDateKind = filters.date_kind || 'service';
+
+                const dateFields = {
+                    service: ['from_date', 'to_date'],
+                    created: ['from_created_date', 'to_created_date'],
+                    followup: [
+                        'from_followup_date',
+                        'to_followup_date',
+                        'followup_period'
+                    ]
+                };
+
+                Object.entries(dateFields).forEach(([kind, fields]) => {
+                    if (kind !== activeDateKind) {
+                        fields.forEach(field => {
+                            delete filters[field];
+                        });
+                    }
+                });
                 const params = new URLSearchParams();
 
                 Object.keys(filters).forEach(key => {
@@ -2051,5 +2071,50 @@ $(document).ready(function () {
                 }
             });
         });
+
+        // View Leads - Single active date filter
+document.addEventListener('DOMContentLoaded', function () {
+    const form = document.getElementById('filter-form');
+    if (!form) return;
+
+    const dateKindInput = form.querySelector('#date-kind');
+    if (!dateKindInput) return;
+
+    const tabs = form.querySelectorAll('[data-date-kind]');
+    const panels = form.querySelectorAll('[data-date-panel]');
+
+    function activateDateFilter(kind) {
+        if (!['service', 'created', 'followup'].includes(kind)) {
+            kind = 'service';
+        }
+
+        dateKindInput.value = kind;
+
+        tabs.forEach(function (tab) {
+            tab.setAttribute(
+                'aria-pressed',
+                String(tab.dataset.dateKind === kind)
+            );
+        });
+
+        panels.forEach(function (panel) {
+            const isActive = panel.dataset.datePanel === kind;
+
+            panel.hidden = !isActive;
+
+            panel.querySelectorAll('input, select').forEach(function (field) {
+                field.disabled = !isActive;
+            });
+        });
+    }
+
+    tabs.forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            activateDateFilter(tab.dataset.dateKind);
+        });
+    });
+
+    activateDateFilter(dateKindInput.value);
+});
 </script>
 @endpush

@@ -743,38 +743,61 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
      */
     public function upcomingRides(Request $request)
     {
+        
         $request->validate([
-            'from_date' => 'nullable|date_format:Y-m-d', 'to_date' => 'nullable|date_format:Y-m-d',
-            'view' => 'nullable|in:list,calendar', 'download' => 'nullable|in:csv',
+            'from_date' => 'nullable|date_format:Y-m-d',
+            'to_date' => 'nullable|date_format:Y-m-d',
+            'view' => 'nullable|in:list,calendar',
+            'download' => 'nullable|in:csv',
+            'payment_status' =>
+                'nullable|in:paid,partial,pending,not_recorded',
         ]);
-        // Get date filters
-        $fromDate = $request->input('from_date') ? Carbon::parse($request->input('from_date')) : Carbon::today();
-        $toDate = $request->input('to_date') ? Carbon::parse($request->input('to_date')) : $fromDate->copy()->addDays(13);
+
+        $fromDate = $request->filled('from_date')
+            ? Carbon::parse($request->input('from_date'))
+            : Carbon::today();
+
+        $toDate = $request->filled('to_date')
+            ? Carbon::parse($request->input('to_date'))
+            : $fromDate->copy()->addDays(13);
 
         if ($toDate->lt($fromDate)) {
-            throw ValidationException::withMessages(['to_date' => 'To date must be on or after the from date.']);
+            throw ValidationException::withMessages([
+                'to_date' => 'To date must be on or after the from date.',
+            ]);
         }
 
-        // Determine statuses filter (dynamic). If request provides 'status' use it, otherwise use defaults
+        $paymentStatus = $request->input('payment_status');
         $requestedStatuses = $request->input('status');
-        if ($requestedStatuses) {
-            $statuses = is_array($requestedStatuses) ? array_map('intval', $requestedStatuses) : [intval($requestedStatuses)];
+
+        // Partial payment is a financial condition,
+        // not a LeadFollowup status.
+        if ($paymentStatus === 'partial') {
+            $statuses = [];
+        } elseif (
+            $requestedStatuses !== null &&
+            $requestedStatuses !== '' &&
+            $requestedStatuses !== []
+        ) {
+            $statuses = is_array($requestedStatuses)
+                ? array_map('intval', $requestedStatuses)
+                : [(int) $requestedStatuses];
         } else {
-            // Default to showing most common active statuses
-            $statuses = [1, 3, 4, 5, 7]; // Active, Full Payment, Partial Payment, Complete, Reschedule
+            $statuses = [1, 3, 4, 5, 7, 8];
         }
 
         $productId = $request->input('product_id');
         $tbaFilter = $request->input('is_tba');
 
         $currentFilters = [
-            'status'                 => $requestedStatuses,
+            'payment_status' => $paymentStatus,
             'from_date'              => $fromDate->toDateString(),
             'to_date'                => $toDate->toDateString(),
             // 'representative_user_id' => $request->input('representative_user_id'), ,
             'representative_user_id' => $request->input('representative_user_id'),
             'product_id'             => $productId,
             'is_tba'                 => $tbaFilter,
+            'status' => $requestedStatuses,
         ];
 
         // Eager load vouchers, payments and paymentDetails and service/extra service relations
@@ -823,10 +846,9 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
         // }
 
         // Apply sales representative filter
-        $representativeId = $request->input('representative_user_id');
-        if ($representativeId === 'unassigned') {
-            $upcomingRidesQuery->whereHas('enquiry', fn ($q) => $q->whereNull('representative_user_id'));
-        } elseif ($representativeId) {
+      $representativeId = $request->input('representative_user_id');
+
+        if ($representativeId && $representativeId !== 'unassigned') {
             $upcomingRidesQuery->whereHas('enquiry', function ($q) use ($representativeId) {
                 $q->where('representative_user_id', $representativeId);
             });
@@ -1013,7 +1035,42 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
             // 9 => 'Payment Rejected'
         ];
         $products = app(\App\Services\MasterDataCacheService::class)->activeProducts();
-        $schedule = app(\App\Services\Operations\UpcomingRideViewData::class)->build($ridesData);
+        $viewData = app(\App\Services\Operations\UpcomingRideViewData::class);
+
+        // Build first to reuse the existing payment calculations.
+        $schedule = $viewData->build($ridesData);
+
+        if ($paymentStatus !== null && $paymentStatus !== '') {
+            $filteredRows = collect($schedule['rows'])->filter(
+                function (array $ride) use ($paymentStatus) {
+                    $total = (float) $ride['total_amount_value'];
+                    $due = (float) $ride['pending_amount_value'];
+                    $epsilon = 0.005;
+
+                    switch ($paymentStatus) {
+                        case 'paid':
+                            return $total > 0 && $due <= $epsilon;
+
+                        case 'partial':
+                            return $total > 0
+                                && $due > $epsilon
+                                && $due < $total;
+
+                        case 'pending':
+                            return $total > 0 && $due >= $total;
+
+                        case 'not_recorded':
+                            return $total <= 0;
+
+                        default:
+                            return true;
+                    }
+                }
+            )->values();
+
+            // Rebuild list, calendar, and summary from identical rows.
+            $schedule = $viewData->build($filteredRows);
+        }
         if ($request->input('download') === 'csv') {
             return response()->streamDownload(function () use ($schedule) {
                 $output = fopen('php://output', 'w');
@@ -1025,7 +1082,18 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                 fclose($output);
             }, 'upcoming-rides.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
         }
-        return view('admin.pages.rides.upcoming-rides', compact('ridesData', 'salesReps', 'availableStatuses', 'currentFilters', 'products', 'schedule'));
+        
+        return view(
+            'admin.pages.rides.upcoming-rides',
+            compact(
+                'ridesData',
+                'salesReps',
+                'availableStatuses',
+                'currentFilters',
+                'products',
+                'schedule'
+            )
+        );
     }
 
     /**
@@ -1584,16 +1652,146 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
             }
 
             // Apply status filter if provided, otherwise include common statuses
-            if ($statusFilter !== null && $statusFilter !== '') {
-                $statusArray = is_array($statusFilter) ? $statusFilter : [$statusFilter];
-                $ridesQuery->whereHas('enquiry.leadFollowups', function ($q) use ($statusArray) {
-                    $q->whereIn('status', array_map('intval', $statusArray));
+      
+            $statusArray = $statusFilter !== null && $statusFilter !== ''
+                ? array_values(array_unique(array_map(
+                    'intval',
+                    is_array($statusFilter)
+                        ? $statusFilter
+                        : [$statusFilter]
+                )))
+                : [];
+
+            // Determine the current status, rather than matching
+            // an older historical follow-up.
+            $latestFollowup = function ($query) {
+                $query->whereNotExists(function ($newer) {
+                    $newer->selectRaw('1')
+                        ->from('lead_followups as newer_followup')
+                        ->whereColumn(
+                            'newer_followup.lead_id',
+                            'lead_followups.lead_id'
+                        )
+                        ->where(function ($newerDate) {
+                            $newerDate
+                                ->whereColumn(
+                                    'newer_followup.created_at',
+                                    '>',
+                                    'lead_followups.created_at'
+                                )
+                                ->orWhere(function ($tie) {
+                                    $tie->whereColumn(
+                                        'newer_followup.created_at',
+                                        '=',
+                                        'lead_followups.created_at'
+                                    )->whereColumn(
+                                        'newer_followup.id',
+                                        '>',
+                                        'lead_followups.id'
+                                    );
+                                });
+                        });
+                });
+            };
+
+            // Financial state is determined from all approved
+            // payments belonging to the lead.
+            $approvedPaymentsSql = "(
+                SELECT COALESCE(SUM(pat.paid_amount), 0)
+                FROM payment_audit_trail AS pat
+                INNER JOIN lead_followups AS paid_lf
+                    ON paid_lf.id = pat.lead_followup_id
+                WHERE paid_lf.lead_id = leads.id
+                AND pat.payment_status = ?
+            )";
+
+            // Same latest-positive-total rule used by the
+            // existing calculatePendingAmount() method.
+            $billableAmountSql = "(
+                SELECT billable.total_amount
+                FROM lead_followups AS billable
+                WHERE billable.lead_id = leads.id
+                AND billable.total_amount > 0
+                ORDER BY billable.created_at DESC, billable.id DESC
+                LIMIT 1
+            )";
+
+            $applyPartialPayment = function ($query) use (
+                $approvedPaymentsSql,
+                $billableAmountSql
+            ) {
+                $query->whereRaw(
+                    "{$approvedPaymentsSql} > 0
+                    AND {$approvedPaymentsSql} <
+                        COALESCE({$billableAmountSql}, 0)",
+                    [
+                        PaymentAuditTrail::STATUS_APPROVED,
+                        PaymentAuditTrail::STATUS_APPROVED,
+                    ]
+                );
+            };
+
+            if (!empty($statusArray)) {
+                $otherStatuses = array_values(
+                    array_diff($statusArray, [
+                        LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
+                    ])
+                );
+
+                $ridesQuery->where(function ($query) use (
+                    $statusArray,
+                    $otherStatuses,
+                    $latestFollowup,
+                    $applyPartialPayment
+                ) {
+                    if (in_array(
+                        LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
+                        $statusArray,
+                        true
+                    )) {
+                        $query->whereHas(
+                            'enquiry',
+                            $applyPartialPayment
+                        );
+                    }
+
+                    if (!empty($otherStatuses)) {
+                        $method = in_array(
+                            LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
+                            $statusArray,
+                            true
+                        ) ? 'orWhereHas' : 'whereHas';
+
+                        $query->{$method}(
+                            'enquiry.leadFollowups',
+                            function ($followup) use (
+                                $otherStatuses,
+                                $latestFollowup
+                            ) {
+                                $latestFollowup($followup);
+
+                                $followup->whereIn(
+                                    'status',
+                                    $otherStatuses
+                                );
+                            }
+                        );
+                    }
                 });
             } else {
-                // default behaviour: include a broad set of statuses
-                $ridesQuery->whereHas('enquiry.leadFollowups', function ($q) {
-                    $q->whereIn('status', [1, 2, 3, 4, 5, 6, 7]);
-                });
+                // Default listing includes the existing statuses
+                // and Approved (8), without using payment criteria.
+                $ridesQuery->whereHas(
+                    'enquiry.leadFollowups',
+                    function ($followup) use ($latestFollowup) {
+                        $latestFollowup($followup);
+
+                        $followup->whereIn(
+                            'status',
+                            [1, 2, 3, 4, 5, 6, 7, 8]
+                        );
+                    }
+                );
             }
 
             if ($searchFilter) {
@@ -1881,13 +2079,13 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
 
             // Ensure we only include rides whose latest followup status matches the requested status
             // This prevents returning leads where an earlier followup matched the filter but the latest did not.
-            if ($statusFilter !== null && $statusFilter !== '') {
-                $statusArray = is_array($statusFilter) ? array_map('intval', $statusFilter) : [intval($statusFilter)];
-                $ridesData = array_values(array_filter($ridesData, function ($r) use ($statusArray) {
-                    $s = isset($r['status']) ? intval($r['status']) : null;
-                    return $s !== null && in_array($s, $statusArray, true);
-                }));
-            }
+            // if ($statusFilter !== null && $statusFilter !== '') {
+            //     $statusArray = is_array($statusFilter) ? array_map('intval', $statusFilter) : [intval($statusFilter)];
+            //     $ridesData = array_values(array_filter($ridesData, function ($r) use ($statusArray) {
+            //         $s = isset($r['status']) ? intval($r['status']) : null;
+            //         return $s !== null && in_array($s, $statusArray, true);
+            //     }));
+            // }
 
             // Options shown in UI for ride-status filtering (Completed, Cancel, Reschedule)
             // $statusOptions = [
@@ -5631,12 +5829,13 @@ private function formatNotificationDate($value): string
             return 0;
         }
 
-        $latestBillableFollowup = $followups
-            ->filter(function ($followup) {
-                return (float) ($followup->total_amount ?? 0) > 0;
-            })
-            ->sortByDesc('created_at')
-            ->first();
+       $latestBillableFollowup = $followups
+    ->filter(fn ($followup) => (float) ($followup->total_amount ?? 0) > 0)
+    ->sort(function ($a, $b) {
+        return $b->created_at <=> $a->created_at
+            ?: strcmp((string) $b->id, (string) $a->id);
+    })
+    ->first();
 
         $totalAmount = (float) optional($latestBillableFollowup)
             ->total_amount;

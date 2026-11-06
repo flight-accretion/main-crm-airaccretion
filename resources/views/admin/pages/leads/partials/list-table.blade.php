@@ -2,6 +2,8 @@
     $tableProductNames = app(\App\Services\LeadTableProducts::class)->forLeads($leads);
     $displayedStatusFollowups = $displayedStatusFollowups ?? collect();
 @endphp
+<div class="leads-table-scroll" role="region"
+     aria-label="Leads table" tabindex="0">
 <table class="leads-table" aria-label="Leads">
     <thead><tr>
         @if($canComposeMsg91Campaign ?? false)<th class="leads-selection"><input type="checkbox" data-msg91-select-page aria-label="Select all visible leads for WhatsApp"></th>@endif
@@ -42,3 +44,4 @@
     @endforelse
     </tbody>
 </table>
+</div>

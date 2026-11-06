@@ -659,6 +659,27 @@
                                         </button>
                                     </form>
                                 @else
+                                @if($canManageVisibility)
+                                <form
+                                    method="POST"
+                                    action="{{ route('admin.msg91.templates.destroy', $template) }}"
+                                    class="d-inline"
+                                    onsubmit="return confirm('Delete this template from MSG91 and CRM? It will no longer be available for campaigns. Campaign history will remain محفوظ.');"
+                                >
+                                    @csrf
+                                    @method('DELETE')
+
+                                    <button
+                                        type="submit"
+                                        class="msg91-edit-button"
+                                        style="border-color:#dc3545;color:#dc3545;"
+                                        title="Delete from MSG91 and CRM"
+                                    >
+                                        <i class="ri-delete-bin-line"></i>
+                                        Delete
+                                    </button>
+                                </form>
+                            @endif
                                     <span class="msg91-no-action">—</span>
                                 @endif
 
@@ -881,6 +902,26 @@
                             </button>
                         </form>
                     @endif
+
+                    @if($canManageVisibility)
+                    <form
+                        method="POST"
+                        action="{{ route('admin.msg91.templates.destroy', $template) }}"
+                        class="d-inline"
+                        onsubmit="return confirm('Delete this template from MSG91 and CRM? It will no longer be available for campaigns. Campaign history will remain safe.');"
+                    >
+                        @csrf
+                        @method('DELETE')
+
+                        <button
+                            type="submit"
+                            class="msg91-edit-button msg91-edit-button--mobile"
+                            style="border-color:#dc3545;color:#dc3545;"
+                        >
+                            Delete from MSG91
+                        </button>
+                    </form>
+                @endif
 
                 </article>
 
@@ -2137,13 +2178,39 @@ document.addEventListener(
                         'X-Requested-With': 'XMLHttpRequest'
                     }
                 })
-                    .then(function (response) {
-                        return response.json().catch(function () {
-                            return {};
-                        }).then(function (payload) {
-                            return { ok: response.ok, payload: payload };
-                        });
-                    })
+                   .then(async function (response) {
+                    const rawBody = await response.text();
+                    let payload = {};
+
+                    if (rawBody.trim() !== '') {
+                        try {
+                            payload = JSON.parse(rawBody);
+                        } catch (error) {
+                            // Never display raw HTML or unexpected server output.
+                            const isHtml =
+                                /<!doctype\s+html|<html\b/i.test(rawBody);
+
+                            const cleanBody = rawBody
+                                .replace(/<[^>]*>/g, ' ')
+                                .replace(/[\x00-\x1F\x7F]+/g, ' ')
+                                .replace(/\s+/g, ' ')
+                                .trim()
+                                .slice(0, 300);
+
+                            payload = {
+                                message: !isHtml && cleanBody
+                                    ? cleanBody
+                                    : 'Server returned an unexpected response.'
+                            };
+                        }
+                    }
+
+                    return {
+                        ok: response.ok,
+                        status: response.status,
+                        payload: payload
+                    };
+                })
                     .then(function (result) {
                         if (!result.ok) {
                             const errors = result.payload.errors || {};
