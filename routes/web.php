@@ -1501,6 +1501,14 @@ Route::post(
                 ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES,HR,OWNER')
                 ->name('export');
 
+                            Route::post('/{case}/complete-bill', [OperationsVendorFollowupController::class, 'completeBill'])
+                ->middleware('role:OPERATIONS_ROLES,SUPER_ADMIN')
+                ->name('complete-bill');
+
+            Route::get('/{case}/download-bill', [OperationsVendorFollowupController::class, 'downloadBill'])
+                ->middleware('role:OPERATIONS_ROLES,ACCOUNTS_ROLES,SUPER_ADMIN,OWNER')
+                ->name('download-bill');
+
             Route::get('/{case}', [OperationsVendorFollowupController::class, 'show'])
                 ->middleware('role:OPERATIONS_ROLES,ADMIN_ROLES,HR,OWNER')
                 ->name('show');

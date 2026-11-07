@@ -44,6 +44,16 @@
                             <div class="vf-summary-item vf-full"><small>Vendor response</small><strong>{{ data_get($metadata, 'vendor_response', 'Not recorded') ?: 'Not recorded' }}</strong></div>
                             <div class="vf-summary-item vf-full"><small>Initial remark</small><strong>{{ $case->note ?: 'Not recorded' }}</strong></div>
                         </div>
+                    @php
+                        $billRole = auth()->user()?->userType?->user_type;
+                        $canSeeBill = $billRole === \App\Models\UserType::SUPER_ADMIN
+                            || $billRole === \App\Models\UserType::OWNER
+                            || in_array($billRole, \App\Models\UserType::OPERATIONS_ROLES, true)
+                            || in_array($billRole, \App\Models\UserType::ACCOUNTS_ROLES, true);
+                    @endphp
+                    @if($canSeeBill && data_get($metadata, 'kind') === 'vendor_bill' && data_get($metadata, 'bill_path'))
+                        <a class="vf-button" href="{{ route('admin.operations.vendor-followups.download-bill', $case) }}">Download Vendor Bill</a>
+                    @endif
                     </div>
                 </section>
 
@@ -67,7 +77,27 @@
             </main>
 
             <aside>
-                @if ($canManage && !$isClosed)
+                               @if ($canManage && !$isClosed && data_get($metadata, 'kind') === \App\Services\Operations\VendorBillFollowupService::KIND)
+                    <section class="vf-card vf-update-card">
+                        <header class="vf-card-header"><h2>Collect Vendor Bill</h2></header>
+                        <div class="vf-card-body">
+                            <form method="POST"
+                                  enctype="multipart/form-data"
+                                  action="{{ route('admin.operations.vendor-followups.complete-bill', $case) }}">
+                                @csrf
+                                <label>Vendor bill (PDF/JPG/PNG, up to 10 MB)
+                                    <input type="file" name="vendor_bill" accept=".pdf,.jpg,.jpeg,.png">
+                                </label>
+                                <label>
+                                    <input type="checkbox" name="reimbursment_from_customer" value="1">
+                                    reimbursment from customer
+                                </label>
+                                <p>Bill is required unless reimbursment from customer is checked.</p>
+                                <button type="submit" class="vf-button vf-primary">Complete Vendor Bill Follow-up</button>
+                            </form>
+                        </div>
+                    </section>
+                @elseif ($canManage && !$isClosed)
                     <section class="vf-card vf-update-card">
                         <header class="vf-card-header"><div><h2>What happened with the vendor?</h2><p>Select one action below. Only the selected action will be saved.</p></div></header>
                         <div class="vf-card-body">

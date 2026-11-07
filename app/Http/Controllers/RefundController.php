@@ -115,36 +115,47 @@ class RefundController extends Controller
             ]);
             $serviceIdFilter = $validated['service_id'] ?? null;
 
+           
             if ($serviceIdFilter) {
-                $query->where(function ($q) use ($serviceIdFilter) {
-                    $q->whereRaw('JSON_CONTAINS(service_ids, ?)', [json_encode([$serviceIdFilter])])
-                        ->orWhereRaw('JSON_CONTAINS(service_ids, ?)', [json_encode($serviceIdFilter)]);
-                });
+                $query->whereJsonContains(
+                    'service_ids',
+                    (string) $serviceIdFilter
+                );
             }
 
+            
             if ($productFilter) {
-                // Search in service or extra service names
-                $query->where(function ($q) use ($productFilter) {
-                    // Search in service_ids (these are services)
-                    $serviceIds = Service::where('service', 'like', '%' . $productFilter . '%')
-                        ->pluck('id')
-                        ->toArray();
-                    
-                    if (!empty($serviceIds)) {
-                        foreach ($serviceIds as $id) {
-                            $q->orWhereRaw('JSON_CONTAINS(service_ids, ?)', [json_encode($id)]);
-                        }
+                $serviceIds = Service::query()
+                    ->where('service', 'ilike', '%' . $productFilter . '%')
+                    ->pluck('id');
+
+                $extraServiceIds = ExtraService::query()
+                    ->where('extra_service', 'ilike', '%' . $productFilter . '%')
+                    ->pluck('id');
+
+                $query->where(function ($q) use (
+                    $serviceIds,
+                    $extraServiceIds
+                ) {
+                    foreach ($serviceIds as $id) {
+                        $q->orWhereJsonContains(
+                            'service_ids',
+                            (string) $id
+                        );
                     }
-                    
-                    // Search in extra service names
-                    $extraServiceIds = ExtraService::where('service_name', 'like', '%' . $productFilter . '%')
-                        ->pluck('id')
-                        ->toArray();
-                    
-                    if (!empty($extraServiceIds)) {
-                        foreach ($extraServiceIds as $id) {
-                            $q->orWhereRaw('JSON_CONTAINS(extra_service_ids, ?)', [json_encode($id)]);
-                        }
+
+                    foreach ($extraServiceIds as $id) {
+                        $q->orWhereJsonContains(
+                            'extra_service_ids',
+                            (string) $id
+                        );
+                    }
+
+                    if (
+                        $serviceIds->isEmpty()
+                        && $extraServiceIds->isEmpty()
+                    ) {
+                        $q->whereRaw('1 = 0');
                     }
                 });
             }
@@ -159,7 +170,11 @@ class RefundController extends Controller
             // Deduplicate by lead_id: keep only the latest followup per lead
             // This prevents multiple cancelled followups for the same lead from appearing as duplicates
             $seenLeadIds = [];
-            $rides = $rides->filter(function ($ride) use (&$seenLeadIds) {
+           
+            $rides = $rides->filter(function ($ride) use (
+                &$seenLeadIds,
+                $hasTwoStepSettlements
+            ) {
                 // Only include if refund is notified (status>=1: email/WA sent via popup OK)
                 $hasRefund = LeadRefund::where('lead_followup_id', $ride->id)
                     ->where(function ($refundQ) use ($hasTwoStepSettlements) {
@@ -312,6 +327,18 @@ class RefundController extends Controller
                     'approval_status' => $existingRefund->approval_status ?? null,
                 ];
             }
+
+            
+            // Count pending entries using the same records and filters
+            // that populate the customer refund list.
+            $customerPendingCount = collect($refundsData)
+                ->filter(function ($item) {
+                    return strtolower(
+                        (string) ($item['refund_status'] ?? '')
+                    ) !== 'completed';
+                })
+                ->count();
+
             //dd($refundsData);
             // Apply refund status filter: request param 'refund_status' can be 'pending' or 'complete'
             // By default show pending refunds so Accounts / Operations can process them first
@@ -334,12 +361,38 @@ class RefundController extends Controller
 
             // Get services for filter dropdown
             $services = Service::select('id', 'service')->get();
-            return view('admin.pages.refund-notes.index', compact('refundsData', 'services'))
-                ->with('selectedStatus', $requestedStatus);
-        } catch (\Exception $e) {
-            Log::error("Error in refund index: " . $e->getMessage());
-            return view('admin.pages.refund-notes.index', ['refundsData' => [], 'services' => []]);
-        }
+            
+            $refundSummary = app(
+                \App\Services\Operations\RefundSummaryService::class
+            )->summary();
+
+            // Keep the customer pending card consistent with
+            // the customer refund list's current filters.
+            $refundSummary['customer_pending'] = $customerPendingCount;
+
+          
+            return view(
+                'admin.pages.refund-notes.index',
+                compact(
+                    'refundsData',
+                    'services',
+                    'refundSummary'
+                )
+            )->with('selectedStatus', $requestedStatus);
+
+       
+            } catch (\Throwable $e) {
+                Log::error('Refund Queue index failed', [
+                    'exception' => $e,
+                    'user_id' => auth()->id(),
+                    'filters' => $request->except(['_token']),
+                ]);
+
+                abort(
+                    500,
+                    'Unable to load refund records. Please contact the administrator.'
+                );
+            }
     }
 
     /**
@@ -839,43 +892,78 @@ class RefundController extends Controller
         }
     }
 
-    private function closeOperationsRefundCase(LeadRefund $refund): void
-    {
-        try {
-            if (!Schema::hasTable('operation_cases')) {
-                return;
-            }
+  
+private function closeOperationsRefundCase(LeadRefund $refund): void
+{
+    try {
+        if (!Schema::hasTable('operation_cases')) {
+            return;
+        }
 
-            $refund->loadMissing('leadFollowup');
-            $leadId = optional($refund->leadFollowup)->lead_id;
+        $actor = auth()->user();
 
-            if (!$leadId || !auth()->user()) {
-                return;
-            }
+        if (!$actor) {
+            return;
+        }
 
-            $case = OperationCase::query()
-                ->where('lead_id', $leadId)
-                ->where('type', OperationCase::TYPE_REFUND)
-                ->whereNull('completed_at')
-                ->latest('opened_at')
-                ->first();
+        $refund->loadMissing('leadFollowup');
 
-            if (!$case) {
-                return;
-            }
+        $leadId = $refund->leadFollowup?->lead_id;
 
-            app(OperationCaseService::class)->complete(
-                $case,
-                auth()->user(),
-                'Customer refund completed.'
-            );
-        } catch (\Throwable $e) {
-            Log::warning('Unable to close Operations refund case.', [
+        if (!$leadId) {
+            return;
+        }
+
+        // Close only after this refund is completed.
+        if ((int) $refund->status !== 2) {
+            return;
+        }
+
+        // Do not close a shared Operations refund case
+        // while other customer refunds remain pending.
+        $hasPendingCustomerRefunds = LeadRefund::query()
+            ->whereHas('leadFollowup', function ($query) use ($leadId) {
+                $query->where('lead_id', $leadId);
+            })
+            ->where('status', '!=', 2)
+            ->whereIn('status', [0, 1])
+            ->exists();
+
+        if ($hasPendingCustomerRefunds) {
+            return;
+        }
+
+        // Find the most recent open Operations refund case.
+        $case = OperationCase::query()
+            ->where('lead_id', $leadId)
+            ->where('type', OperationCase::TYPE_REFUND)
+            ->whereNull('completed_at')
+            ->orderByDesc('opened_at')
+            ->orderByDesc('id')
+            ->first();
+
+        if (!$case) {
+            return;
+        }
+
+        // Reuse existing service to preserve case
+        // completion, assignment and activity history.
+        app(OperationCaseService::class)->complete(
+            $case,
+            $actor,
+            'Customer refund completed.'
+        );
+
+    } catch (\Throwable $e) {
+        Log::warning(
+            'Unable to close Operations refund case.',
+            [
                 'refund_id' => $refund->id,
                 'error' => $e->getMessage(),
-            ]);
-        }
+            ]
+        );
     }
+}
 
     /**
      * Delete refund proof and add remarks (only allowed for Accounts or Admin)

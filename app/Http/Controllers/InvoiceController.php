@@ -22,6 +22,7 @@ use Carbon\Carbon;
 use App\Services\ActivityAuditService;
 use App\Models\InvoiceRegenerationLog;
 use App\Models\UserType;
+use App\Services\Operations\InvoiceVendorBillService;
 
 class InvoiceController extends Controller
 {
@@ -1434,6 +1435,8 @@ class InvoiceController extends Controller
         // build service and vendor data once so we can reuse values and keep paths consistent
         $service = $this->getServiceInformation($lead, $voucher);
         $vendor = $this->getVendorInformation($voucher);
+        $vendorBills = app(InvoiceVendorBillService::class)
+       ->forVoucher($voucher);
 
         // ensure compatibility: copy aggregated vendor total into service.total_service_amount
         if (!isset($service['total_service_amount'])) {
@@ -1454,7 +1457,8 @@ class InvoiceController extends Controller
                 'latest_payment' => $latestPayment
             ],
             'voucher_customer_items' => $voucherInvoiceData['items'],
-            'profit_loss' => $totalReceived - ($vendor['totalVendorCost'] ?? 0)
+            'profit_loss' => $totalReceived - ($vendor['totalVendorCost'] ?? 0),
+            'vendor_bills' => $vendorBills,
         ];
     }
 

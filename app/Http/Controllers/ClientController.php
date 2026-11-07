@@ -24,6 +24,7 @@ use App\Models\PaymentAuditTrail;
 use App\Models\LeadAuditTrail;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
@@ -5785,6 +5786,139 @@ $this->abortUnlessRepresentativeInScope($staff ? $staff->id : null);
     {
             $this->abortUnlessCanAccessLead($lead);
 
+            
+$actor = $request->user();
+$actor->loadMissing('userType');
+
+$isSales = in_array(
+    $actor->userType?->user_type,
+    \App\Models\UserType::SALES_ROLES,
+    true
+);
+
+$hasApprovedPayment = $isSales
+    && app(\App\Services\LeadStatusTransitionService::class)
+        ->hasApprovedPayment($lead);
+
+if ($hasApprovedPayment) {
+    // Compare ID sets, ignoring only selection order.
+    $normalizeIds = static function ($ids): array {
+        if (is_string($ids)) {
+            $ids = json_decode($ids, true);
+        }
+
+        $ids = is_array($ids) ? $ids : [];
+
+        $ids = array_values(array_unique(
+            array_map('strval', $ids)
+        ));
+
+        sort($ids);
+
+        return $ids;
+    };
+
+    $existingProducts = $normalizeIds(
+        $lead->product_ids_array
+    );
+
+    $submittedProducts = $normalizeIds(
+        $request->input('product_ids', [])
+    );
+
+    $existingServices = $normalizeIds(
+        $lead->service_ids_array
+    );
+
+    $submittedServices = $normalizeIds(
+        $request->input('service_ids', [])
+    );
+
+    if (
+        $existingProducts !== $submittedProducts
+        || $existingServices !== $submittedServices
+    ) {
+        throw \Illuminate\Validation\ValidationException::withMessages([
+            'product_ids' =>
+                'Product and Service details are locked after payment approval.',
+        ]);
+    }
+
+    // Passenger count is part of Travel Details.
+    if (
+        (int) $request->input('number_of_passengers')
+        !== (int) $lead->number_of_passengers
+    ) {
+        throw \Illuminate\Validation\ValidationException::withMessages([
+            'number_of_passengers' =>
+                'Travel Details cannot be changed after payment approval.',
+        ]);
+    }
+
+    // Verify all existing trip segments remain unchanged.
+    $existingTrips = $lead->rideSegments()
+        ->get()
+        ->keyBy(fn ($trip) => (string) $trip->id);
+
+    $submittedTrips = $request->input('trips', []);
+
+    if (
+        !is_array($submittedTrips)
+        || count($submittedTrips) !== $existingTrips->count()
+    ) {
+        throw \Illuminate\Validation\ValidationException::withMessages([
+            'trips' =>
+                'Travel Details cannot be added or removed after payment approval.',
+        ]);
+    }
+
+    foreach ($submittedTrips as $tripData) {
+        $tripId = (string) ($tripData['id'] ?? '');
+        $existing = $existingTrips->get($tripId);
+
+        if (!$existing) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'trips' => 'Travel segment changes are not allowed.',
+            ]);
+        }
+
+        foreach (['from_date', 'to_date'] as $field) {
+            try {
+                $oldDate = $existing->{$field}
+                    ? \Carbon\Carbon::parse($existing->{$field})
+                        ->format('Y-m-d H:i:s')
+                    : null;
+
+                $newDate = !empty($tripData[$field])
+                    ? \Carbon\Carbon::parse($tripData[$field])
+                        ->format('Y-m-d H:i:s')
+                    : null;
+            } catch (\Throwable $e) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'trips' => 'Invalid travel date.',
+                ]);
+            }
+
+            if ($oldDate !== $newDate) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'trips' => 'Travel dates are locked after payment approval.',
+                ]);
+            }
+        }
+
+        foreach (['from_place', 'to_place'] as $field) {
+            if (
+                (string) ($existing->{$field} ?? '')
+                !== (string) ($tripData[$field] ?? '')
+            ) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'trips' => 'Travel locations are locked after payment approval.',
+                ]);
+            }
+        }
+    }
+}
+
         // Get the client associated with this lead
         $client = $lead->client;
 
@@ -6050,19 +6184,21 @@ $this->abortUnlessRepresentativeInScope($staff ? $staff->id : null);
                             'to_place' => $tripData['to_place'] ?? null,
                         ]);
                         $tripSegment->save();
-                    } else {
-                        // Update existing segment
-                        $tripSegment = LeadRide::updateOrCreate(
-                            ['id' => $tripData['id']],
-                            [
-                                'lead_id' => $lead->id,
+                  
+                        } else {
+                            // Update only a trip that belongs to this lead.
+                            // Do not create a new trip for an unknown ID.
+                            $tripSegment = LeadRide::query()
+                                ->where('lead_id', $lead->id)
+                                ->findOrFail($tripData['id']);
+
+                            $tripSegment->update([
                                 'from_date' => $tripData['from_date'] ?? null,
                                 'to_date' => $tripData['to_date'] ?? null,
                                 'from_place' => $tripData['from_place'] ?? null,
                                 'to_place' => $tripData['to_place'] ?? null,
-                            ]
-                        );
-                    }
+                            ]);
+                        }
 
                     $updatedTripIds[] = $tripSegment->id;
                 }
@@ -6282,6 +6418,23 @@ $this->abortUnlessRepresentativeInScope($staff ? $staff->id : null);
             ->latest()
             ->get() : collect();
 
+        $billRole = auth()->user()?->userType?->user_type;
+        $canViewVendorBills = $billRole === UserType::SUPER_ADMIN
+            || $billRole === UserType::OWNER
+            || in_array($billRole, UserType::OPERATIONS_ROLES, true)
+            || in_array($billRole, UserType::ACCOUNTS_ROLES, true);
+
+        $vendorBillCases = collect();
+        if ($canViewVendorBills && Schema::hasTable('operation_cases')) {
+            $vendorBillCases = \App\Models\OperationCase::query()
+                ->where('lead_id', $lead->id)
+                ->where('type', \App\Models\OperationCase::TYPE_VENDOR_FOLLOWUP)
+                ->where('metadata->kind', 'vendor_bill')
+                ->whereNotNull('metadata->bill_path')
+                ->latest('completed_at')
+                ->get();
+        }
+
         return view('admin.pages.leads.view-lead', compact(
             'client',
             'leads',
@@ -6300,7 +6453,9 @@ $this->abortUnlessRepresentativeInScope($staff ? $staff->id : null);
             'followups',
             'clientPaymentHistory',
             'clientInfo',
-            'auditTimeline'
+            'auditTimeline',
+            'canViewVendorBills',
+            'vendorBillCases'
         ));
     }
 

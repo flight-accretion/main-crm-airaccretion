@@ -4,12 +4,12 @@ namespace App\Services;
 
 use App\Models\Lead;
 use App\Models\LeadFollowup;
-use App\Models\PaymentAuditTrail;
 use App\Models\SalesExecutiveAssignment;
 use App\Models\Target;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use App\Services\Sales\SalesBookingCohortService;
 
 class TargetIncentiveService
 {
@@ -79,32 +79,65 @@ class TargetIncentiveService
         return $this->ledgers[$key] = $this->ledgerForPeriod($from, $from->copy()->endOfMonth());
     }
 
-    public function ledgerForPeriod(Carbon $from, Carbon $to): Collection
-    {
-        $paidFollowups = PaymentAuditTrail::where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
-            ->where('paid_date', '>=', $from->toDateString())->where('paid_date', '<', $to->copy()->addDay()->startOfDay()->toDateString())
-            ->select('lead_followup_id');
-        $paidLeads = LeadFollowup::whereIn('id', $paidFollowups)->select('lead_id');
-        $ledger = collect();
+   
+public function ledgerForPeriod(Carbon $from, Carbon $to): Collection
+{
+    $paidLeadIds = app(SalesBookingCohortService::class)
+        ->leadIdsForPeriod($from, $to);
 
-        // One sale per paid lead; match Target's existing qualifying-follow-up and net-sale rules.
-        Lead::whereIn('id', $paidLeads)->select(['id', 'representative_user_id', 'product_ids'])
-            ->chunkById(250, function ($leads) use ($ledger) {
-                $ids = $leads->pluck('id');
-                $latest = LeadFollowup::whereIn('lead_id', $ids)->whereIn('status', LeadFollowup::salesAmountStatuses())
-                    ->orderByDesc('created_at')->orderByDesc('id')->get()->unique('lead_id')->keyBy('lead_id');
-                $refunds = DB::table('lead_refunds')->join('lead_followups', 'lead_followups.id', '=', 'lead_refunds.lead_followup_id')
-                    ->whereIn('lead_followups.lead_id', $ids)->whereIn('lead_refunds.status', [1, 2])
-                    ->groupBy('lead_followups.lead_id')->selectRaw('lead_followups.lead_id, SUM(lead_refunds.refund_amount) AS refunded')
-                    ->pluck('refunded', 'lead_id');
-                foreach ($leads as $lead) {
-                    $followup = $latest->get($lead->id);
-                    if (!$followup) continue;
-                    $ledger->push(['lead_id' => (string) $lead->id, 'owner' => (string) $lead->representative_user_id,
-                        'products' => $lead->product_ids_array,
-                        'amount' => SalesAmountCalculator::salesAmountForFollowup($followup, (float) $refunds->get($lead->id, 0))]);
+    $ledger = collect();
+
+    // One sale per booking, attributed to the month
+    // of the first approved payment.
+    Lead::whereIn('id', $paidLeadIds)
+        ->select(['id', 'representative_user_id', 'product_ids'])
+        ->chunkById(250, function ($leads) use ($ledger) {
+            $ids = $leads->pluck('id');
+
+            $latest = LeadFollowup::whereIn('lead_id', $ids)
+                ->whereIn('status', LeadFollowup::salesAmountStatuses())
+                ->orderByDesc('created_at')
+                ->orderByDesc('id')
+                ->get()
+                ->unique('lead_id')
+                ->keyBy('lead_id');
+
+            $refunds = DB::table('lead_refunds')
+                ->join(
+                    'lead_followups',
+                    'lead_followups.id',
+                    '=',
+                    'lead_refunds.lead_followup_id'
+                )
+                ->whereIn('lead_followups.lead_id', $ids)
+                ->whereIn('lead_refunds.status', [1, 2])
+                ->groupBy('lead_followups.lead_id')
+                ->selectRaw(
+                    'lead_followups.lead_id,
+                     SUM(lead_refunds.refund_amount) AS refunded'
+                )
+                ->pluck('refunded', 'lead_id');
+
+            foreach ($leads as $lead) {
+                $followup = $latest->get($lead->id);
+
+                if (!$followup) {
+                    continue;
                 }
-            });
-        return $ledger;
-    }
+
+                $ledger->push([
+                    'lead_id' => (string) $lead->id,
+                    'owner' => (string) $lead->representative_user_id,
+                    'products' => $lead->product_ids_array,
+                    'amount' => SalesAmountCalculator::salesAmountForFollowup(
+                        $followup,
+                        (float) $refunds->get($lead->id, 0)
+                    ),
+                ]);
+            }
+        });
+
+    return $ledger;
+}
+
 }

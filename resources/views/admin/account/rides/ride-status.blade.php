@@ -9,6 +9,18 @@
         $controlsActionRoute = $controlsActionRoute ?? route('admin.rides.ride-status');
         $resetRoute = $resetRoute ?? route('admin.rides.ride-status');
         $exportRoute = $exportRoute ?? ($operationsRescheduleMode ? null : route('admin.rides.ride-status.export'));
+        
+        $role = optional(auth()->user()->userType)->user_type;
+
+        $canChangeRideStatus = in_array(
+            $role,
+            array_merge(
+                \App\Models\UserType::ADMIN_ROLES,
+                \App\Models\UserType::OPERATIONS_ROLES
+            ),
+            true
+        );
+
     @endphp
     @if($operationsRescheduleMode)
         @include('admin.pages.operations.reschedules.index')
@@ -406,17 +418,22 @@
                                                         class="badge !rounded-full bg-secondary/10 text-secondary">Loading...</span>
                                                 </div>
                                             </div>
-                                            <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
-                                                <label class="ti-form-label dark:text-defaulttextcolor/70 mb-2">Ride
-                                                    Status</label>
-                                                <select class="ti-form-select form-control-sm rounded-sm"
-                                                    id="ride-status-dropdown">
-                                                    <option value="">Select Status</option>
-                                                    <option value="2">Ride Cancelled</option>
-                                                    <option value="5">Ride Completed</option>
-                                                    <option value="7">Ride Reschedule</option>
-                                                </select>
-                                            </div>
+                                          
+                                    @if($canChangeRideStatus)
+                                        <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
+                                            <label class="ti-form-label dark:text-defaulttextcolor/70 mb-2">
+                                                Ride Status
+                                            </label>
+                                            <select class="ti-form-select form-control-sm rounded-sm"
+                                                id="ride-status-dropdown">
+                                                <option value="">Select Status</option>
+                                                <option value="2">Ride Cancelled</option>
+                                                <option value="5">Ride Completed</option>
+                                                <option value="7">Ride Reschedule</option>
+                                            </select>
+                                        </div>
+                                    @endif
+
                                             <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
                                                 <label class="ti-form-label dark:text-defaulttextcolor/70 mb-2">Payment
                                                     Progress</label>
@@ -458,13 +475,20 @@
                                 {{-- Ride Status page: small popup under the Ride Status button (moved there by JS).
                                 Same element IDs as the drawer, so the existing status/refund/date handlers are unchanged. --}}
                                 <div id="rs-status-popover" class="rs-popover" role="dialog" aria-label="Ride status" hidden>
-                                    <label class="ti-form-label mb-1" for="ride-status-dropdown">Ride Status</label>
-                                    <select class="ti-form-select form-control-sm rounded-sm" id="ride-status-dropdown">
-                                        <option value="">Select Status</option>
-                                        <option value="2">Ride Cancelled</option>
-                                        <option value="5">Ride Completed</option>
-                                        <option value="7">Ride Reschedule</option>
-                                    </select>
+                                    
+                            @if($canChangeRideStatus)
+                                <label class="ti-form-label mb-1" for="ride-status-dropdown">
+                                    Ride Status
+                                </label>
+                                <select class="ti-form-select form-control-sm rounded-sm"
+                                    id="ride-status-dropdown">
+                                    <option value="">Select Status</option>
+                                    <option value="2">Ride Cancelled</option>
+                                    <option value="5">Ride Completed</option>
+                                    <option value="7">Ride Reschedule</option>
+                                </select>
+                            @endif
+
                                     <div class="rs-popover-actions" id="action-buttons" style="display: none;">
                                         <button type="button" class="ti-btn bg-theme ti-btn-primary-full ti-btn-sm"
                                             id="generate-invoice-btn" style="display: none;">Generate Invoice</button>
@@ -473,10 +497,18 @@
                                         <button type="button" class="ti-btn ti-btn-info ti-btn-sm" id="vendor-refund-btn"
                                             style="display: none;"><i class="ri-bank-card-line me-1"></i>Vendor Refund</button>
                                     </div>
-                                    <div class="rs-popover-actions" id="edit-dates-container" style="display: none;">
-                                        <button type="button" class="ti-btn ti-btn-outline-primary ti-btn-sm"
-                                            id="edit-dates-btn">Edit Dates</button>
+                                   
+                                @if($canChangeRideStatus)
+                                    <div class="rs-popover-actions"
+                                        id="edit-dates-container" style="display: none;">
+                                        <button type="button"
+                                            class="ti-btn ti-btn-outline-primary ti-btn-sm"
+                                            id="edit-dates-btn">
+                                            Edit Dates
+                                        </button>
                                     </div>
+                                @endif
+
                                 </div>
                             @endif
 

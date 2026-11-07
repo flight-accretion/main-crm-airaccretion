@@ -71,4 +71,23 @@ class Msg91CampaignClientTest extends TestCase
                 && str_contains($request->body(), '"integrated_number":"919876543210"');
         });
     }
+
+    public function test_template_deletion_uses_query_parameters_and_treats_missing_template_as_already_deleted(): void
+    {
+        config()->set('services.msg91_campaigns.template_create_enabled', true);
+        Http::fake([
+            '*' => Http::response([], 404),
+        ]);
+
+        app(Msg91Client::class)->deleteTemplate(
+            '919876543210',
+            'follow up & reminders'
+        );
+
+        Http::assertSent(function ($request) {
+            return $request->method() === 'DELETE'
+                && $request->url() === 'https://msg91.example.test/api/v5/whatsapp/client-panel-template?integrated_number=919876543210&template_name=follow%20up%20%26%20reminders'
+                && $request->hasHeader('authkey', 'test-auth-key');
+        });
+    }
 }

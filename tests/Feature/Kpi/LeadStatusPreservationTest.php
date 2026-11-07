@@ -242,6 +242,7 @@ class LeadStatusPreservationTest extends KpiFeatureTestCase
         [, $lead] = $this->fixture($role);
         $product = (string) Str::uuid();
         DB::table('products')->insert(['id' => $product, 'product' => 'No requirement', 'status' => 1]);
+        $lead->forceFill(['product_ids' => [$product]])->save();
         Event::fake();
         $request = $this->request([
             'name' => 'Updated customer', 'contact_number' => '9876543210', 'contact_country_code' => '+91',

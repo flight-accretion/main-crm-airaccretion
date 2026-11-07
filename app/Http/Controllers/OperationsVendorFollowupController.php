@@ -11,6 +11,10 @@ use App\Services\Operations\VendorFollowupService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use App\Services\Operations\VendorBillFollowupService;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class OperationsVendorFollowupController extends Controller
 {
@@ -32,7 +36,17 @@ class OperationsVendorFollowupController extends Controller
             'upcoming' => (clone $countsBase)->whereNull('completed_at')->whereDate('next_followup_at', '>', now()->toDateString())->count(),
             'closed' => (clone $countsBase)->whereNotNull('completed_at')->count(),
             'all' => (clone $countsBase)->count(),
-            'completed' => (clone $countsBase)->whereNotNull('completed_at')->where('metadata->resolution', 'confirmed')->count(),
+           
+            'completed' => (clone $countsBase)
+                ->whereNotNull('completed_at')
+                ->where(function ($q) {
+                    $q->where('metadata->resolution', 'confirmed')
+                    ->orWhere(
+                        'metadata->resolution',
+                        'bill_collected'
+                    );
+                })
+                ->count(),
             'cancelled' => (clone $countsBase)->whereNotNull('completed_at')->where('metadata->resolution', 'cancelled')->count(),
             'completed_week' => (clone $countsBase)->where('metadata->resolution', 'confirmed')->whereBetween('completed_at', [now()->startOfWeek(), now()->endOfWeek()])->count(),
             'age_2_7' => (clone $countsBase)->whereNull('completed_at')->where('opened_at', '>=', now()->subDays(7)->startOfDay())->where('opened_at', '<', now()->subDay()->startOfDay())->count(),
@@ -168,6 +182,7 @@ class OperationsVendorFollowupController extends Controller
     {
         $this->abortUnlessCanManage($request);
         $this->abortUnlessVendorFollowup($case);
+        abort_if(data_get($case->metadata, 'kind') === VendorBillFollowupService::KIND, 404);
         $data = $request->validate([
             'confirmed_ride_date' => ['required', 'date'],
             'confirmed_ride_time' => ['required', 'date_format:H:i'],
@@ -179,10 +194,167 @@ class OperationsVendorFollowupController extends Controller
         return back()->with('success', 'Vendor Follow-up completed.');
     }
 
+        public function completeBill(Request $request, OperationCase $case, VendorBillFollowupService $service)
+    {
+        $this->abortUnlessCanManage($request);
+        $this->abortUnlessVendorFollowup($case);
+        abort_unless(data_get($case->metadata, 'kind') === VendorBillFollowupService::KIND, 404);
+
+        $data = $request->validate([
+            'reimbursment_from_customer' => ['nullable', 'boolean'],
+            'vendor_bill' => [
+                'required_unless:reimbursment_from_customer,1',
+                'nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240',
+            ],
+        ]);
+
+        $service->complete(
+            $case,
+            $request->user(),
+            $request->file('vendor_bill'),
+            $request->boolean('reimbursment_from_customer')
+        );
+
+        return back()->with('success', 'Vendor bill follow-up completed.');
+    }
+
+   
+        public function downloadBill(
+            Request $request,
+            OperationCase $case
+        ): BinaryFileResponse {
+            $this->abortUnlessVendorFollowup($case);
+
+            abort_unless(
+                data_get($case->metadata, 'kind')
+                    === VendorBillFollowupService::KIND,
+                404
+            );
+
+            $user = $request->user();
+
+            abort_unless($user, 401);
+
+            $role = $user->userType?->user_type;
+
+            $allowed = $role === UserType::SUPER_ADMIN
+                || $role === UserType::OWNER
+                || in_array($role, UserType::OPERATIONS_ROLES, true)
+                || in_array($role, UserType::ACCOUNTS_ROLES, true);
+
+            abort_unless($allowed, 403);
+
+            $lead = $case->lead;
+
+            abort_unless($lead, 404);
+
+            if (in_array($role, UserType::ACCOUNTS_ROLES, true)) {
+                abort_unless(
+                    \App\Support\LeadDetailAccess::canViewRideBooking(
+                        $user,
+                        $lead
+                    ),
+                    403
+                );
+            } else {
+                // Match the lead-scope check used by ClientController.
+                $representatives = getRepresentativeIds($user);
+
+                if ($representatives !== null) {
+                    if ($representatives instanceof
+                        \Illuminate\Support\Collection) {
+                        $representatives = $representatives->all();
+                    }
+
+                    $representatives = array_map(
+                        'strval',
+                        (array) $representatives
+                    );
+
+                    abort_unless(
+                        in_array(
+                            (string) $lead->representative_user_id,
+                            $representatives,
+                            true
+                        ),
+                        403
+                    );
+                }
+            }
+
+            $path = data_get($case->metadata, 'bill_path');
+
+            abort_unless(
+                is_string($path)
+                && str_starts_with($path, 'vendor-bills/')
+                && !str_contains($path, '..'),
+                404
+            );
+
+            $disk = Storage::disk('local');
+
+            abort_unless($disk->exists($path), 404);
+
+            $originalName = basename(
+                (string) (
+                    data_get($case->metadata, 'bill_original_name')
+                    ?: 'vendor-bill'
+                )
+            );
+
+         
+            $filePath = $disk->path($path);
+
+            if ($request->boolean('preview')) {
+                $mime = $disk->mimeType($path);
+
+                abort_unless(
+                    in_array(
+                        $mime,
+                        ['application/pdf', 'image/jpeg', 'image/png'],
+                        true
+                    ),
+                    415,
+                    'Bill preview is not supported for this file.'
+                );
+
+                $response = response()->file($filePath, [
+                    'Content-Type' => $mime,
+                    'X-Content-Type-Options' => 'nosniff',
+                    'Cache-Control' => 'private, no-store',
+                ]);
+
+                $response->setContentDisposition(
+                    'inline',
+                    $originalName
+                );
+
+                return $response;
+            }
+
+            $response = response()->download(
+                $filePath,
+                $originalName
+            );
+
+            $response->headers->set(
+                'Cache-Control',
+                'private, no-store'
+            );
+
+            return $response;
+
+        }
+
     public function cancel(Request $request, OperationCase $case, VendorFollowupService $service)
     {
         $this->abortUnlessCanManage($request);
         $this->abortUnlessVendorFollowup($case);
+        abort_if(
+            data_get($case->metadata, 'kind') === VendorBillFollowupService::KIND,
+            403,
+            'Vendor Bill Collection tasks cannot be cancelled through the vendor confirmation workflow.'
+        );
         $data = $request->validate([
             'reason' => ['required', 'string', 'max:5000'],
         ]);
@@ -202,6 +374,7 @@ class OperationsVendorFollowupController extends Controller
             'vendor_id' => ['nullable', 'uuid'],
             'assigned_to' => ['nullable', 'uuid'],
             'per_page' => ['nullable', 'integer', 'in:10,25,50,100'],
+            'kind' => ['nullable', 'in:vendor_bill,standard'],
         ]);
 
         return [
@@ -210,11 +383,29 @@ class OperationsVendorFollowupController extends Controller
             'vendor_id' => $data['vendor_id'] ?? null,
             'assigned_to' => $data['assigned_to'] ?? null,
             'per_page' => (int) ($data['per_page'] ?? 25),
+            'kind' => $data['kind'] ?? null,
         ];
     }
 
     private function applyFilters($query, array $filters): void
     {
+
+        if (($filters['kind'] ?? null) === 'vendor_bill') {
+            $query->where(
+                'metadata->kind',
+                VendorBillFollowupService::KIND
+            );
+        } elseif (($filters['kind'] ?? null) === 'standard') {
+            $query->where(function ($q) {
+                $q->whereNull('metadata->kind')
+                ->orWhere(
+                    'metadata->kind',
+                    '!=',
+                    VendorBillFollowupService::KIND
+                );
+            });
+        }
+
         if ($filters['vendor_id']) {
             $query->where('metadata->vendor_id', $filters['vendor_id']);
         }
@@ -238,14 +429,22 @@ class OperationsVendorFollowupController extends Controller
     }
 
     private function applyBucket($query, string $bucket): void
-    {
+    {   
         if ($bucket === 'all') {
             return;
         }
 
         if ($bucket === 'completed') {
-            $query->whereNotNull('completed_at')
-                ->where('metadata->resolution', 'confirmed');
+            $query->whereNotNull('completed_at');
+
+            $query->where(function ($q) {
+                $q->where('metadata->resolution', 'confirmed')
+                ->orWhere(
+                    'metadata->resolution',
+                    'bill_collected'
+                );
+            });
+
             return;
         }
 

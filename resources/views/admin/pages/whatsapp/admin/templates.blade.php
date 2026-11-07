@@ -4,7 +4,7 @@
 
 <link
     rel="stylesheet"
-    href="{{ asset('assets/admin/css/crm/whatsapp/admin.css') }}?v=9"
+    href="{{ asset('assets/admin/css/crm/whatsapp/admin.css') }}?v=10"
 >
 
 
@@ -454,7 +454,7 @@
 
                     @forelse($templates as $template)
 
-                        <tr>
+                       <tr data-msg91-template-id="{{ $template->id }}">
 
 
                             {{-- TEMPLATE --}}
@@ -646,44 +646,65 @@
 
 
                             {{-- ACTION --}}
-                            <td>
+                            <td style="display: flex; gap: 10px;">
 
-                                @if($canManageVisibility)
-                                    <form method="POST" action="{{ route('admin.msg91.templates.save') }}">
-                                        @csrf
-                                        <input type="hidden" name="template_id" value="{{ $template->id }}">
-                                        <input type="hidden" name="crm_enabled" value="{{ $template->crm_enabled ? '0' : '1' }}">
-                                        <button type="submit" class="msg91-edit-button">
-                                            <i class="ri-eye{{ $template->crm_enabled ? '-off' : '' }}-line"></i>
-                                            {{ $template->crm_enabled ? 'Hide' : 'Show' }}
-                                        </button>
-                                    </form>
-                                @else
-                                @if($canManageVisibility)
-                                <form
-                                    method="POST"
-                                    action="{{ route('admin.msg91.templates.destroy', $template) }}"
-                                    class="d-inline"
-                                    onsubmit="return confirm('Delete this template from MSG91 and CRM? It will no longer be available for campaigns. Campaign history will remain محفوظ.');"
+                        @if($canManageVisibility)
+
+                            {{-- Hide / Show --}}
+                            <form
+                                method="POST"
+                                action="{{ route('admin.msg91.templates.save') }}"
+                                class="d-inline"
+                            >
+                                @csrf
+
+                                <input
+                                    type="hidden"
+                                    name="template_id"
+                                    value="{{ $template->id }}"
                                 >
-                                    @csrf
-                                    @method('DELETE')
 
-                                    <button
-                                        type="submit"
-                                        class="msg91-edit-button"
-                                        style="border-color:#dc3545;color:#dc3545;"
-                                        title="Delete from MSG91 and CRM"
-                                    >
-                                        <i class="ri-delete-bin-line"></i>
-                                        Delete
-                                    </button>
-                                </form>
-                            @endif
-                                    <span class="msg91-no-action">—</span>
-                                @endif
+                                <input
+                                    type="hidden"
+                                    name="crm_enabled"
+                                    value="{{ $template->crm_enabled ? '0' : '1' }}"
+                                >
 
-                            </td>
+                                <button
+                                    type="submit"
+                                    class="msg91-edit-button"
+                                >
+                                    <i
+                                        class="ri-eye{{ $template->crm_enabled ? '-off' : '' }}-line"
+                                    ></i>
+
+                                    {{ $template->crm_enabled ? 'Hide' : 'Show' }}
+                                </button>
+                            </form>
+
+
+                            {{-- Delete --}}
+
+                               <button
+                                type="button"
+                                class="msg91-edit-button"
+                                style="border-color:#dc3545;color:#dc3545;"
+                                data-msg91-open-delete-modal
+                                data-template-id="{{ $template->id }}"
+                                data-template-name="{{ $template->name }}"
+                                data-delete-url="{{ route('admin.msg91.templates.destroy', $template) }}"
+                            >
+                                <i class="ri-delete-bin-line"></i>
+                                Delete
+                            </button>
+                          
+                        @else
+
+                            <span class="msg91-no-action">—</span>
+
+                        @endif
+
+                    </td>
 
                         </tr>
 
@@ -737,7 +758,10 @@
 
             @forelse($templates as $template)
 
-                <article class="msg91-template-mobile-card">
+                <article
+                class="msg91-template-mobile-card"
+                data-msg91-template-id="{{ $template->id }}"
+                >
 
 
                     <div class="msg91-template-mobile-card__head">
@@ -904,23 +928,20 @@
                     @endif
 
                     @if($canManageVisibility)
-                    <form
-                        method="POST"
-                        action="{{ route('admin.msg91.templates.destroy', $template) }}"
-                        class="d-inline"
-                        onsubmit="return confirm('Delete this template from MSG91 and CRM? It will no longer be available for campaigns. Campaign history will remain safe.');"
+                    
+                       <button
+                        type="button"
+                        class="msg91-edit-button msg91-edit-button--mobile"
+                        style="border-color:#dc3545;color:#dc3545;"
+                        data-msg91-open-delete-modal
+                        data-template-id="{{ $template->id }}"
+                        data-template-name="{{ $template->name }}"
+                        data-delete-url="{{ route('admin.msg91.templates.destroy', $template) }}"
                     >
-                        @csrf
-                        @method('DELETE')
-
-                        <button
-                            type="submit"
-                            class="msg91-edit-button msg91-edit-button--mobile"
-                            style="border-color:#dc3545;color:#dc3545;"
-                        >
-                            Delete from MSG91
-                        </button>
-                    </form>
+                        <i class="ri-delete-bin-line"></i>
+                        Delete from MSG91
+                    </button>
+                   
                 @endif
 
                 </article>
@@ -1858,7 +1879,104 @@
 </div>
 @endif
 
+@if($canManageVisibility)
+    <div
+        class="msg91-modal"
+        id="msg91-delete-template-modal"
+        aria-hidden="true"
+    >
+        <div
+            class="msg91-modal__backdrop"
+            data-msg91-close-modal
+        ></div>
 
+        <div
+            class="msg91-modal__dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="msg91-delete-template-title"
+        >
+            <header class="msg91-modal__header">
+                <div>
+                    <p class="msg91-modal__eyebrow">MSG91 WhatsApp</p>
+
+                    <h2 id="msg91-delete-template-title">
+                        Delete Template
+                    </h2>
+
+                    <p>
+                        This removes the template from MSG91 and CRM campaign selection.
+                    </p>
+                </div>
+
+                <button
+                    type="button"
+                    class="msg91-modal__close"
+                    data-msg91-close-modal
+                    aria-label="Close"
+                >
+                    <i class="ri-close-line"></i>
+                </button>
+            </header>
+
+            <form data-msg91-delete-template-form>
+                @csrf
+                @method('DELETE')
+
+                <div class="msg91-modal__scroll">
+                    <div
+                        class="msg91-form-feedback"
+                        data-msg91-delete-feedback
+                        role="status"
+                        aria-live="polite"
+                        hidden
+                    ></div>
+
+                    <div class="msg91-modal-info">
+                        <i class="ri-error-warning-line"></i>
+
+                        <span>
+                            You are deleting:
+                            <strong data-msg91-delete-template-name></strong>
+                        </span>
+                    </div>
+
+                    <p class="mb-0">
+                        This template will no longer be available for WhatsApp campaigns.
+                        Existing campaign history will remain safe.
+                    </p>
+                </div>
+
+                <footer class="msg91-modal__footer">
+                    <button
+                        type="button"
+                        class="msg91-button msg91-button--secondary"
+                        data-msg91-close-modal
+                        data-msg91-delete-cancel
+                    >
+                        Cancel
+                    </button>
+
+                    <button
+                        type="submit"
+                        class="msg91-button"
+                        style="background:#dc3545;border-color:#dc3545;"
+                        data-msg91-delete-submit
+                    >
+                        <i
+                            class="ri-delete-bin-line"
+                            data-msg91-delete-submit-icon
+                        ></i>
+
+                        <span data-msg91-delete-submit-label>
+                            Delete Template
+                        </span>
+                    </button>
+                </footer>
+            </form>
+        </div>
+    </div>
+@endif
 
 {{-- =========================================================
      MODAL JAVASCRIPT
@@ -2070,11 +2188,16 @@ document.addEventListener(
                     event.preventDefault();
 
                     const modal = closeButton.closest('.msg91-modal');
-                    const createForm = modal ? modal.querySelector('[data-msg91-create-template-form]') : null;
+                const submittingForm = modal
+                    ? modal.querySelector(
+                        '[data-msg91-create-template-form].is-submitting, ' +
+                        '[data-msg91-delete-template-form].is-submitting'
+                    )
+                    : null;
 
-                    if (createForm && createForm.classList.contains('is-submitting')) {
-                        return;
-                    }
+                if (submittingForm) {
+                    return;
+                }
 
                     closeModal(
                         modal
@@ -2232,7 +2355,161 @@ document.addEventListener(
             });
         }
 
+const deleteTemplateModal = document.getElementById(
+    'msg91-delete-template-modal'
+);
 
+if (deleteTemplateModal) {
+    const deleteTemplateForm = deleteTemplateModal.querySelector(
+        '[data-msg91-delete-template-form]'
+    );
+
+    const deleteFeedback = deleteTemplateModal.querySelector(
+        '[data-msg91-delete-feedback]'
+    );
+
+    const deleteTemplateName = deleteTemplateModal.querySelector(
+        '[data-msg91-delete-template-name]'
+    );
+
+    const deleteSubmitButton = deleteTemplateModal.querySelector(
+        '[data-msg91-delete-submit]'
+    );
+
+    const deleteSubmitLabel = deleteTemplateModal.querySelector(
+        '[data-msg91-delete-submit-label]'
+    );
+
+    const deleteSubmitIcon = deleteTemplateModal.querySelector(
+        '[data-msg91-delete-submit-icon]'
+    );
+
+    let deletingTemplateId = null;
+
+    function showDeleteFeedback(message, type) {
+        deleteFeedback.textContent = message;
+        deleteFeedback.hidden = false;
+        deleteFeedback.classList.toggle('is-error', type === 'error');
+        deleteFeedback.classList.toggle('is-success', type === 'success');
+    }
+
+    function setDeleteSubmitting(submitting) {
+        deleteTemplateForm.classList.toggle('is-submitting', submitting);
+        deleteSubmitButton.disabled = submitting;
+
+        deleteSubmitLabel.textContent = submitting
+            ? 'Deleting…'
+            : 'Delete Template';
+
+        deleteSubmitIcon.className = submitting
+            ? 'ri-loader-4-line ri-spin'
+            : 'ri-delete-bin-line';
+
+        deleteTemplateModal
+            .querySelectorAll('[data-msg91-close-modal]')
+            .forEach(function (button) {
+                button.disabled = submitting;
+            });
+    }
+
+    document.addEventListener('click', function (event) {
+        const button = event.target.closest(
+            '[data-msg91-open-delete-modal]'
+        );
+
+        if (!button) {
+            return;
+        }
+
+        event.preventDefault();
+
+        deletingTemplateId = button.dataset.templateId;
+
+        deleteTemplateForm.action = button.dataset.deleteUrl;
+        deleteTemplateName.textContent = button.dataset.templateName;
+        deleteFeedback.hidden = true;
+
+        openModal('msg91-delete-template-modal');
+    });
+
+    deleteTemplateForm.addEventListener('submit', function (event) {
+        event.preventDefault();
+
+        if (deleteTemplateForm.classList.contains('is-submitting')) {
+            return;
+        }
+
+        deleteFeedback.hidden = true;
+        setDeleteSubmitting(true);
+
+        fetch(deleteTemplateForm.action, {
+            method: 'POST',
+            body: new FormData(deleteTemplateForm),
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+            .then(async function (response) {
+                const rawBody = await response.text();
+                let payload = {};
+
+                if (rawBody.trim() !== '') {
+                    try {
+                        payload = JSON.parse(rawBody);
+                    } catch (error) {
+                        payload = {
+                            message: 'The server returned an unexpected response.'
+                        };
+                    }
+                }
+
+                return {
+                    ok: response.ok,
+                    payload: payload
+                };
+            })
+            .then(function (result) {
+                if (!result.ok) {
+                    throw new Error(
+                        result.payload.message
+                        || 'Template could not be deleted. Please try again.'
+                    );
+                }
+
+                showDeleteFeedback(
+                    result.payload.message
+                    || 'Template deleted successfully.',
+                    'success'
+                );
+
+                document
+                    .querySelectorAll('[data-msg91-template-id]')
+                    .forEach(function (element) {
+                        if (
+                            element.dataset.msg91TemplateId
+                            === deletingTemplateId
+                        ) {
+                            element.remove();
+                        }
+                    });
+
+                window.setTimeout(function () {
+                    closeModal(deleteTemplateModal);
+                }, 1200);
+            })
+            .catch(function (error) {
+                showDeleteFeedback(
+                    error.message
+                    || 'Template could not be deleted. Please try again.',
+                    'error'
+                );
+
+                setDeleteSubmitting(false);
+            });
+    });
+}
 
         /*
         |--------------------------------------------------------------------------
@@ -2265,10 +2542,14 @@ document.addEventListener(
                     openModalElement
                 ) {
 
-                    const createForm = openModalElement.querySelector('[data-msg91-create-template-form]');
-                    if (createForm && createForm.classList.contains('is-submitting')) {
-                        return;
-                    }
+                const submittingForm = openModalElement.querySelector(
+                    '[data-msg91-create-template-form].is-submitting, ' +
+                    '[data-msg91-delete-template-form].is-submitting'
+                );
+
+                if (submittingForm) {
+                    return;
+                }
 
                     closeModal(
                         openModalElement

@@ -25,6 +25,12 @@ class RefundSummaryTest extends KpiFeatureTestCase
             $table->uuid('id')->primary(); $table->uuid('lead_vendor_payment_id')->nullable(); $table->integer('status')->nullable();
             $table->timestamp('completed_at')->nullable(); $table->timestamps();
         });
+        
+        Schema::create('lead_vendor_payments', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->timestamps();
+        });
+
     }
 
     public function test_counts_follow_existing_statuses_and_average_uses_actual_completion_dates(): void
@@ -32,10 +38,26 @@ class RefundSummaryTest extends KpiFeatureTestCase
         foreach ([0, 1, 1, 2] as $status) {
             DB::table('lead_refunds')->insert(['id' => (string) Str::uuid(), 'lead_followup_id' => (string) Str::uuid(), 'status' => $status]);
         }
-        foreach ([null, 1, 2, 2] as $index => $status) {
-            DB::table('vendor_refunds')->insert(['id' => (string) Str::uuid(), 'status' => $status,
-                'created_at' => now()->subDays(8), 'completed_at' => $status === 2 ? now()->subDays($index === 2 ? 6 : 4) : null]);
-        }
+        
+            foreach ([null, 1, 2, 2] as $index => $status) {
+                $paymentId = (string) Str::uuid();
+
+                DB::table('lead_vendor_payments')->insert([
+                    'id' => $paymentId,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                DB::table('vendor_refunds')->insert([
+                    'id' => (string) Str::uuid(),
+                    'lead_vendor_payment_id' => $paymentId,
+                    'status' => $status,
+                    'created_at' => now()->subDays(8),
+                    'completed_at' => $status === 2
+                        ? now()->subDays($index === 2 ? 6 : 4)
+                        : null,
+                ]);
+            }
         $summary = app(RefundSummaryService::class)->summary();
         $this->assertSame(2, $summary['customer_pending']);
         $this->assertSame(2, $summary['vendor_pending']);

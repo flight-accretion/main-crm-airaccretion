@@ -63,8 +63,7 @@
                         '' => 'All payment statuses',
                         'paid' => 'Paid in full',
                         'partial' => 'Partially paid',
-                        'pending' => 'Pending',
-                        'not_recorded' => 'Amount not recorded',
+                        
                     ] as $value => $label)
                         <option value="{{ $value }}"
                             @selected(($currentFilters['payment_status'] ?? '') === $value)>

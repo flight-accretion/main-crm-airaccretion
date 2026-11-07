@@ -5,6 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Services\SalesAmountCalculator;
+use App\Services\Sales\SalesBookingCohortService;
+use Carbon\Carbon;
 
 class Target extends Model
 {
@@ -102,42 +104,89 @@ class Target extends Model
     /**
      * Calculate and update achieved amount from approved payments
      */
-    public function updateAchievedAmount()
-    {
-        // Achieved = Sum of Total Amount (latest followup per lead with payment in this month) - refunds
-        // Find leads with approved payments in the target month/year (based on paid_date)
-        $paidFollowupIds = PaymentAuditTrail::where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
-            ->whereYear('paid_date', $this->year)
-            ->whereMonth('paid_date', $this->month)
-            ->pluck('lead_followup_id')->unique();
-        $paidLeadIds = \App\Models\LeadFollowup::whereIn('id', $paidFollowupIds)
-            ->whereHas('enquiry', function ($query) {
-                $query->where('representative_user_id', $this->sales_executive_id);
-            })
-            ->pluck('lead_id')->unique();
+  public function updateAchievedAmount()
+{
+    // 1. Resolve the selected target month.
+    $from = \Carbon\Carbon::create(
+        (int) $this->year,
+        (int) $this->month,
+        1
+    )->startOfMonth();
 
-        // Get ALL followups for those paid leads
-        $allFollowups = \App\Models\LeadFollowup::whereIn('lead_id', $paidLeadIds)
-            ->whereHas('enquiry', function ($query) {
-                $query->where('representative_user_id', $this->sales_executive_id);
-            })
-            ->get();
+    $to = $from->copy()->endOfMonth();
 
-        // Calculate per-lead: Sales Amount = max(0, Total Amount - Refund Amount)
-        // Filter to qualifying statuses FIRST, then take latest (matches Sales Report)
-        $achievedAmount = $allFollowups->groupBy('lead_id')->map(function ($group) {
-            $qualifying = $group->filter(function ($f) {
-                return in_array((int) $f->status, LeadFollowup::salesAmountStatuses(), true);
+    // 2. Find bookings whose FIRST approved payment
+    // falls within this target month.
+    // Only include bookings owned by this employee.
+    $paidLeadIds = app(SalesBookingCohortService::class)
+        ->leadIdsForPeriod(
+            $from,
+            $to,
+            [(string) $this->sales_executive_id]
+        );
+
+    // 3. Fetch all follow-ups for the qualifying bookings.
+    $allFollowups = \App\Models\LeadFollowup::whereIn(
+        'lead_id',
+        $paidLeadIds
+    )
+        ->whereHas('enquiry', function ($query) {
+            $query->where(
+                'representative_user_id',
+                $this->sales_executive_id
+            );
+        })
+        ->get();
+
+    // 4. Calculate achieved sales amount.
+    // Use only the latest qualifying follow-up per lead.
+    $achievedAmount = $allFollowups
+        ->groupBy('lead_id')
+        ->map(function ($group) {
+            $qualifying = $group->filter(function ($followup) {
+                return in_array(
+                    (int) $followup->status,
+                    \App\Models\LeadFollowup::salesAmountStatuses(),
+                    true
+                );
             });
-            return $qualifying->sortByDesc('created_at')->first();
-        })->filter()->sum(function ($f) {
-            $allFollowupIdsForLead = \App\Models\LeadFollowup::where('lead_id', $f->lead_id)->pluck('id');
-            $refund = \App\Models\LeadRefund::whereIn('lead_followup_id', $allFollowupIdsForLead)
-                ->whereIn('status', [1, 2])->sum('refund_amount');
-            return SalesAmountCalculator::salesAmountForFollowup($f, (float) $refund);
+
+            return $qualifying
+                ->sortBy([
+                    ['created_at', 'desc'],
+                    ['id', 'desc'],
+                ])
+                ->first();
+        })
+        ->filter()
+        ->sum(function ($followup) {
+
+            // Collect all follow-up IDs for this booking.
+            $allFollowupIdsForLead = \App\Models\LeadFollowup::where(
+                'lead_id',
+                $followup->lead_id
+            )->pluck('id');
+
+            // Deduct applicable processed/completed refunds.
+            $refund = \App\Models\LeadRefund::whereIn(
+                'lead_followup_id',
+                $allFollowupIdsForLead
+            )
+                ->whereIn('status', [1, 2])
+                ->sum('refund_amount');
+
+            // Reuse the existing CRM sales calculation.
+            return SalesAmountCalculator::salesAmountForFollowup(
+                $followup,
+                (float) $refund
+            );
         });
 
-        $this->update(['achieved_amount' => $achievedAmount]);
-        return $achievedAmount;
-    }
+    // 5. Save the updated achieved amount.
+    $this->update([
+        'achieved_amount' => round((float) $achievedAmount, 2),
+    ]);
+
+    return round((float) $achievedAmount, 2);
+}
 }

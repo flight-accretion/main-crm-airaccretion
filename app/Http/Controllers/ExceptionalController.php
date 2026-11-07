@@ -38,6 +38,13 @@ class ExceptionalController extends Controller
             }
 
             $allPayments = $query->orderBy('created_at', 'desc')->get();
+            
+            $addedToSalesCount = $allPayments
+                ->filter(fn ($followup) => (bool) $followup->added_to_sales)
+                ->pluck('lead_id')
+                ->filter()
+                ->unique()
+                ->count();
 
             $payments = $allPayments
                 ->groupBy('lead_id')
@@ -96,7 +103,14 @@ class ExceptionalController extends Controller
 
             $services = Service::select('id', 'service')->get();
 
-            return view('admin.account.exceptional.exceptional', compact('payments', 'services', 'fromDate', 'toDate'));
+            
+        return view('admin.account.exceptional.exceptional', compact(
+            'payments',
+            'services',
+            'fromDate',
+            'toDate',
+            'addedToSalesCount'
+        ));
         } catch (\Exception $e) {
             Log::error('Error loading exceptional dashboard: ' . $e->getMessage());
             return view('admin.account.exceptional.exceptional', [

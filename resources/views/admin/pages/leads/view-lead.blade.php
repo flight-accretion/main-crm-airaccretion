@@ -927,4 +927,20 @@
 @endif
 </div>
 <script src="{{ asset('assets/admin/js/crm/lead-detail.js') }}" defer></script>
+
+@if($canViewVendorBills && $vendorBillCases->isNotEmpty())
+<section class="box mt-5" aria-labelledby="vendor-bills-heading">
+    <div class="box-header"><h3 id="vendor-bills-heading">Vendor Bills</h3></div>
+    <div class="box-body">
+        @foreach($vendorBillCases as $billCase)
+            <div class="flex items-center justify-between gap-3 py-2 border-b">
+                <span>{{ data_get($billCase->metadata, 'vendor_name_snapshot', 'Vendor') }}</span>
+                <a class="ti-btn ti-btn-primary" href="{{ route('admin.operations.vendor-followups.download-bill', $billCase) }}">
+                    View / Download Bill
+                </a>
+            </div>
+        @endforeach
+    </div>
+</section>
+@endif
 @endsection

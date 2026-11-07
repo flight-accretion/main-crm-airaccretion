@@ -2865,36 +2865,82 @@ return [
         }
     }
 
+  
     private function mirrorRideStatusToOperations(
         LeadRide $ride,
         int $status,
         string $rideId
     ): void {
-        if ($status === 5) {
-            try {
-                $lead = $ride->enquiry;
+        // Ride Completed
+        if ($status === \App\Models\LeadFollowup::STATUS_RIDE_COMPLETED) {
+            $lead = $ride->enquiry;
 
-                if ($lead) {
-                    app(\App\Services\Review\ReviewWorkflowService::class)
-                        ->startForCompletedRide($lead);
-                }
+            if (!$lead) {
+                Log::warning('Completed ride has no associated lead', [
+                    'ride_id' => $rideId,
+                ]);
+
+                return;
+            }
+
+            // 1. Preserve the existing post-ride review workflow.
+            try {
+                app(\App\Services\Review\ReviewWorkflowService::class)
+                    ->startForCompletedRide($lead);
             } catch (\Throwable $e) {
                 Log::error('Post-ride review start failed', [
                     'ride_id' => $rideId,
+                    'lead_id' => $lead->id,
                     'error' => $e->getMessage(),
                 ]);
             }
+
+            // 2. Automatically create Vendor Bill Collection follow-ups.
+            // A review failure must not prevent vendor bill creation.
+            try {
+                $actor = auth()->user();
+
+                if (!$actor) {
+                    Log::warning(
+                        'Vendor bill automation skipped: no authenticated actor',
+                        ['ride_id' => $rideId]
+                    );
+                } else {
+                    $created = app(
+                        \App\Services\Operations\VendorBillFollowupService::class
+                    )->createForCompletedRide($ride, $actor);
+
+                    Log::info('Vendor bill follow-up automation finished', [
+                        'ride_id' => $rideId,
+                        'lead_id' => $lead->id,
+                        'cases_created' => $created,
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                // Do not reverse Ride Completed because a secondary task failed.
+                Log::error('Vendor bill follow-up creation failed', [
+                    'ride_id' => $rideId,
+                    'lead_id' => $lead->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
+            return;
         }
 
-        if ($status === 7) {
+        // Ride Rescheduled
+        if ($status === \App\Models\LeadFollowup::STATUS_RESCHEDULED) {
             $this->openRideOperationCase(
                 $ride,
                 'reschedule',
                 $rideId
             );
+
+            return;
         }
 
-        if ($status === 2) {
+        // Ride Cancelled
+        if ($status === \App\Models\LeadFollowup::STATUS_CANCELLED) {
             $this->openRideOperationCase(
                 $ride,
                 'cancelled',
@@ -3836,382 +3882,256 @@ return [
     //     }
     // }
 
-    public function sendRefundEmail(Request $request, $rideId)
-    {
-        try {
-            // ── 1. Load ride ─────────────────────────────────────────────────────
-            $ride = \App\Models\LeadRide::with([
-                'enquiry.client',
-                'enquiry.leadFollowups',
-                'enquiry.leadVendorPayments.vendor',
-                'enquiry.leadVendorPayments.paymentDetails.service',
-                'serviceAddress',
-            ])->findOrFail($rideId);
+public function sendRefundEmail(Request $request, $rideId)
+{
+    try {
+        $ride = \App\Models\LeadRide::with([
+            'enquiry.client',
+            'enquiry.leadFollowups',
+            'enquiry.leadVendorPayments.vendor',
+            'enquiry.leadVendorPayments.paymentDetails.service',
+            'serviceAddress',
+        ])->findOrFail($rideId);
 
-            $lead   = $ride->enquiry;
-            $client = $lead->client;
+        $lead = $ride->enquiry;
+        $client = $lead?->client;
+        if (!$lead || !$client) {
+            return response()->json(['success' => false, 'message' => 'Refund lead or customer not found.'], 404);
+        }
 
-            Log::info('sendRefundEmail: started', ['ride_id' => $rideId, 'lead_id' => $lead->id]);
+        $refund = \App\Models\LeadRefund::whereHas('leadFollowup', function ($query) use ($lead) {
+            $query->where('lead_id', $lead->id);
+        })->latest()->first();
 
-            // ── 2. Get latest refund ─────────────────────────────────────────────
-            $refund = \App\Models\LeadRefund::whereHas('leadFollowup', function ($q) use ($lead) {
-                $q->where('lead_id', $lead->id);
-            })
-                ->latest()
-                ->first();
+        if (!$refund) {
+            return response()->json(['success' => false, 'message' => 'No refund record found.'], 404);
+        }
 
-            if (!$refund) {
-                return response()->json(['success' => false, 'message' => 'No refund record found.'], 404);
-            }
+        Log::info('sendRefundEmail: started', [
+            'ride_id' => $rideId, 'lead_id' => $lead->id, 'refund_id' => $refund->id,
+        ]);
 
-            Log::info('sendRefundEmail: refund found', [
-                'refund_id' => $refund->id,
-                'amount'    => $refund->refund_amount,
-                'proof'     => $refund->refund_proof,
-            ]);
+        $firstPayment = $lead->leadVendorPayments->first();
+        $firstDetail = $firstPayment?->paymentDetails?->first();
+        $service = $firstDetail?->service;
+        $serviceName = $service?->service ?? $service?->service_name ?? 'N/A';
 
-            // ── 3. Build data fields ─────────────────────────────────────────────
-            $firstVendorPayment = $lead->leadVendorPayments->first();
-            $firstDetail        = $firstVendorPayment ? $firstVendorPayment->paymentDetails->first() : null;
-            $serviceObj         = $firstDetail ? ($firstDetail->service ?? null) : null;
-            $serviceName        = $serviceObj->service ?? ($serviceObj->service_name ?? 'N/A');
-
-            $pickup_date = 'N/A';
-            if ($ride && !empty($ride->from_date)) {
-                try {
-                    $pickup_date = Carbon::parse($ride->from_date)->format('jS F, Y');
-                } catch (\Throwable $ex) {
-                    $pickup_date = is_string($ride->from_date)
-                        ? date('jS F, Y', strtotime($ride->from_date))
-                        : 'N/A';
-                }
-            }
-
-            $refundAmountFormatted = number_format($refund->refund_amount ?? 0, 2);
-            $refundDateFormatted   = 'N/A';
+        $serviceDate = 'N/A';
+        if ($ride->from_date) {
             try {
-                if (!empty($refund->refund_date)) {
-                    $refundDateFormatted = Carbon::parse($refund->refund_date)->format('jS F, Y');
+                $serviceDate = Carbon::parse($ride->from_date)->format('jS F, Y');
+            } catch (\Throwable $e) {
+                Log::warning('Refund service date could not be formatted', ['ride_id' => $rideId]);
+            }
+        }
+        $refundDate = 'N/A';
+        if ($refund->refund_date) {
+            try {
+                $refundDate = Carbon::parse($refund->refund_date)->format('jS F, Y');
+            } catch (\Throwable $e) {
+                Log::warning('Refund payment date could not be formatted', ['refund_id' => $refund->id]);
+            }
+        }
+
+        // Retain the existing legacy refund amount contract. The two-step workflow
+        // must eventually supply a transaction-specific amount for installment messages.
+        $refundAmount = (float) ($refund->refund_amount ?? 0);
+        $body = array_map('strval', [
+            $client->name ?? 'Customer', $serviceName, $serviceDate,
+            number_format($refundAmount, 2), $refundDate,
+        ]);
+
+        $proofPath = null;
+        $proofUrl = null;
+        $isImage = false;
+        if ($refund->refund_proof) {
+            $relative = ltrim((string) $refund->refund_proof, '/');
+            $candidate = storage_path('app/public/' . $relative);
+            if (is_file($candidate)) {
+                $proofPath = $candidate;
+                $proofUrl = rtrim((string) config('app.url'), '/') . '/storage/' . $relative;
+                $isImage = in_array(strtolower(pathinfo($relative, PATHINFO_EXTENSION)),
+                    ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'], true);
+            } else {
+                Log::warning('Refund proof not found on disk', ['refund_id' => $refund->id]);
+            }
+        }
+        $template = $isImage ? 'refund_cust_notify_v2_img' : 'refund_cust_notify_v2';
+
+        $customerNumber = $client->whatsapp_number
+            ?: ($client->alternate_number ?: $client->contact_number);
+        if ($customerNumber) {
+            try {
+                $customerNumber = WhatsAppPhoneNumber::e164(
+                    $customerNumber,
+                    $client->whatsapp_country_code ?: $client->contact_country_code ?: null
+                );
+            } catch (\InvalidArgumentException $e) {
+                Log::warning('Refund customer WhatsApp number invalid', [
+                    'refund_id' => $refund->id, 'error' => $e->getMessage(),
+                ]);
+                $customerNumber = null;
+            }
+        }
+
+        $vendorEmails = $lead->leadVendorPayments
+            ->map(fn ($payment) => $payment->vendor?->email)->filter()->values()->all();
+        $vendorPhones = $lead->leadVendorPayments->flatMap(function ($payment) {
+            $vendor = $payment->vendor;
+            return $vendor ? [
+                $vendor->whatsapp_number, $vendor->alternate_number,
+                $vendor->contact_number, $vendor->phone,
+            ] : [];
+        })->filter()->values()->all();
+
+        $masters = \App\Models\NotificationMaster::activeInternalRecipients(
+            array_merge([$client->email ?? null], $vendorEmails),
+            array_merge([
+                $customerNumber, $client->contact_number ?? null,
+                $client->alternate_number ?? null,
+            ], $vendorPhones)
+        );
+        $ccEmails = $masters->pluck('email_id')
+            ->map(fn ($email) => trim((string) $email))
+            ->filter(fn ($email) => filter_var($email, FILTER_VALIDATE_EMAIL))
+            ->unique(fn ($email) => strtolower($email))->values()->all();
+
+        // Keep delivery reporting separate from the legacy refund-queue status.
+        $emailErrors = [];
+        $deliveryErrors = [];
+        $channels = ['customer_email' => 'skipped', 'customer_whatsapp' => 'skipped'];
+        $customerEmail = $client->email ?? null;
+        if (NotificationRecipientGuard::overlaps([$customerEmail], [], $vendorEmails, [])) {
+            $emailErrors[] = 'Customer email matches a vendor contact.';
+            Log::warning('Refund email blocked: vendor/customer contact conflict', ['refund_id' => $refund->id]);
+        } elseif ($customerEmail && filter_var($customerEmail, FILTER_VALIDATE_EMAIL)) {
+            try {
+                $mail = Mail::to($customerEmail);
+                if ($ccEmails) $mail->cc($ccEmails);
+                $mail->send(new \App\Mail\RefundMail(
+                    'emails.refund-customer',
+                    'Refund Processed for Your Booking – ' . $serviceName,
+                    [
+                        'client_name' => $client->name ?? 'Customer',
+                        'service' => $serviceName,
+                        'service_date' => $serviceDate,
+                        'refund_amount' => $refundAmount,
+                        'refund_type' => $refund->refund_type ?? 'N/A',
+                        'refund_date' => $refundDate,
+                        'refund_reason' => $refund->refund_reason ?? '',
+                    ],
+                    $proofPath
+                ));
+                $channels['customer_email'] = 'accepted';
+                Log::info('Refund customer email accepted by mail transport', ['refund_id' => $refund->id]);
+            } catch (\Throwable $e) {
+                $emailErrors[] = 'Customer email sending failed.';
+                Log::error('Refund customer email failed', ['refund_id' => $refund->id, 'error' => $e->getMessage()]);
+            }
+        } else {
+            $emailErrors[] = 'Customer email is missing or invalid.';
+            Log::warning('Refund customer email missing/invalid', ['refund_id' => $refund->id]);
+        }
+
+        $sender = new SendMessageController();
+        if (NotificationRecipientGuard::overlaps([], [$customerNumber], [], $vendorPhones)) {
+            $deliveryErrors[] = 'Customer WhatsApp number matches a vendor contact.';
+            Log::warning('Refund customer WhatsApp blocked: contact conflict', ['refund_id' => $refund->id]);
+        } elseif (!$customerNumber) {
+            $deliveryErrors[] = 'Customer WhatsApp number is missing or invalid.';
+            Log::warning('Refund customer WhatsApp missing/invalid', ['refund_id' => $refund->id]);
+        } else {
+            try {
+                $result = $sender->sendWhatsCrmRefundMessage(
+                    $customerNumber, $body, $proofUrl, $refund->refund_proof, $template
+                );
+                if (!is_array($result) || ($result['success'] ?? false) !== true) {
+                    $deliveryErrors[] = 'Customer WhatsApp provider rejected the message.';
+                    Log::error('Refund customer WhatsApp failed', [
+                        'refund_id' => $refund->id,
+                        'provider_error' => is_array($result) ? ($result['message'] ?? $result['error'] ?? null) : 'Unexpected response',
+                    ]);
+                } else {
+                    $channels['customer_whatsapp'] = 'accepted';
+                    Log::info('Refund customer WhatsApp accepted by provider', ['refund_id' => $refund->id]);
                 }
             } catch (\Throwable $e) {
+                $deliveryErrors[] = 'Customer WhatsApp sending failed.';
+                Log::error('Refund customer WhatsApp exception', ['refund_id' => $refund->id, 'error' => $e->getMessage()]);
             }
+        }
 
-            // ── 4. Sanitize helper ───────────────────────────────────────────────
-            $sanitize = function ($arr) {
-                return array_map(function ($v) {
-                    if (is_null($v))                   return '';
-                    if (is_array($v) || is_object($v)) return json_encode($v);
-                    return (string) $v;
-                }, $arr);
-            };
+        // Internal recipient failures must not prevent other recipients being processed.
+        foreach ($masters as $nm) {
+            $number = null;
+            if ($nm->mobile_number) {
+                try {
+                    $number = WhatsAppPhoneNumber::e164(
+                        $nm->mobile_number, $nm->contact_country_code ?: null
+                    );
+                } catch (\InvalidArgumentException $e) {
+                    Log::warning('Refund internal recipient WhatsApp number invalid', [
+                        'refund_id' => $refund->id, 'notification_master_id' => $nm->id,
+                    ]);
+                }
+            }
+            if (!$number) continue;
 
-            // ── 5. Resolve refund proof file & detect type ────────────────────────
-            $waFileUrl     = null;
-            $proofFilePath = null;
-            $fileExtension = null;
-            $isImageFile   = false;
-            $isPdfFile     = false;
-
-            if (!empty($refund->refund_proof)) {
-                $relative      = ltrim($refund->refund_proof, '/');
-                $fullPath      = storage_path('app/public/' . $relative);
-                $fileExtension = strtolower(pathinfo($relative, PATHINFO_EXTENSION));
-
-                // Determine file type
-                $imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'];
-                $isImageFile      = in_array($fileExtension, $imageExtensions);
-                $isPdfFile        = ($fileExtension === 'pdf');
-
-                if (file_exists($fullPath)) {
-                    $proofFilePath = $fullPath;
-                    $waFileUrl     = rtrim(config('app.url'), '/') . '/storage/' . $relative;
-                    Log::info('sendRefundEmail: proof file ready', [
-                        'url'       => $waFileUrl,
-                        'type'      => $isImageFile ? 'IMAGE' : ($isPdfFile ? 'PDF' : 'OTHER'),
-                        'extension' => $fileExtension,
+            try {
+                $result = $sender->sendWhatsCrmRefundMessage(
+                    $number, $body, $proofUrl, $refund->refund_proof, $template
+                );
+                if (!is_array($result) || ($result['success'] ?? false) !== true) {
+                    Log::error('Refund internal WhatsApp failed', [
+                        'refund_id' => $refund->id,
+                        'notification_master_id' => $nm->id,
+                        'provider_error' => is_array($result) ? ($result['message'] ?? $result['error'] ?? null) : 'Unexpected response',
                     ]);
                 } else {
-                    Log::warning('sendRefundEmail: proof file NOT found on disk', ['path' => $fullPath]);
+                    Log::info('Refund internal WhatsApp accepted by provider', [
+                        'refund_id' => $refund->id, 'notification_master_id' => $nm->id,
+                    ]);
                 }
-            } else {
-                Log::warning('sendRefundEmail: no refund proof uploaded', ['refund_id' => $refund->id]);
-            }
-
-            // ── 6. Select template based on file type ────────────────────────────
-            $customerWaTemplate = $isImageFile
-                ? 'refund_cust_notify_v2_img'
-                : 'refund_cust_notify_v2';
-
-            // ── 7. WhatsApp data — CUSTOMER (5 variables) ────────────────────────
-            $customerWaData = $sanitize([
-                $client->name ?? 'Customer',   // {{1}} Customer Name
-                $serviceName,                   // {{2}} Service Name
-                $pickup_date,                   // {{3}} Service Date
-                $refundAmountFormatted,         // {{4}} Refund Amount
-                $refundDateFormatted,           // {{5}} Refund Date
-            ]);
-
-            $waType       = 2; // Document header
-            // A proof is attached when available, but it is not allowed to suppress
-            // the payment notification itself.
-            $skipWhatsApp = false;
-
-            if (!empty($waFileUrl)) {
-                Log::info('sendRefundEmail: WhatsApp template selected', [
-                    'template'  => $customerWaTemplate,
-                    'file_type' => $isImageFile ? 'IMAGE' : ($isPdfFile ? 'PDF' : 'OTHER'),
-                    'extension' => $fileExtension,
+            } catch (\Throwable $e) {
+                Log::error('Refund internal WhatsApp exception', [
+                    'refund_id' => $refund->id,
+                    'notification_master_id' => $nm->id,
+                    'error' => $e->getMessage(),
                 ]);
             }
-
-            // ── 7. Phone numbers ─────────────────────────────────────────────────
-            $customerWhatsApp = !empty($client->alternate_number)
-                ? $client->alternate_number
-                : $client->contact_number;
-
-            if (!empty($customerWhatsApp)) {
-                $customerWhatsApp = WhatsAppPhoneNumber::e164(
-                    $customerWhatsApp,
-                    $client->whatsapp_country_code
-                        ?: $client->contact_country_code
-                        ?: null
-                );
-            }
-
-            // ── 8. Blade email data — CUSTOMER ───────────────────────────────────
-            $customerEmailData = [
-                'client_name'   => $client->name          ?? 'Customer',
-                'service'       => $serviceName,
-                'service_date'  => $pickup_date,
-                'refund_amount' => floatval($refund->refund_amount ?? 0),
-                'refund_type'   => $refund->refund_type   ?? 'N/A',
-                'refund_date'   => $refundDateFormatted,
-                'refund_reason' => $refund->refund_reason ?? '',
-            ];
-
-            // ── 9. Notification masters ──────────────────────────────────────────
-            $vendorEmails = $lead->leadVendorPayments
-                ->map(fn ($payment) => $payment->vendor?->email)
-                ->filter()
-                ->values()
-                ->all();
-            $vendorPhones = $lead->leadVendorPayments
-                ->flatMap(function ($payment) {
-                    $vendor = $payment->vendor;
-
-                    return $vendor ? [
-                        $vendor->whatsapp_number,
-                        $vendor->alternate_number,
-                        $vendor->contact_number,
-                        $vendor->phone,
-                    ] : [];
-                })
-                ->filter()
-                ->values()
-                ->all();
-
-            $notificationMasters = \App\Models\NotificationMaster::activeInternalRecipients(
-                array_merge([$client->email ?? null], $vendorEmails),
-                array_merge(
-                    [
-                        $customerWhatsApp ?? null,
-                        $client->contact_number ?? null,
-                        $client->alternate_number ?? null,
-                    ],
-                    $vendorPhones
-                )
-            );
-            $notificationMasterCcEmails = $notificationMasters
-                ->pluck('email_id')
-                ->map(fn ($email) => trim((string) $email))
-                ->filter(fn ($email) => filter_var($email, FILTER_VALIDATE_EMAIL))
-                ->unique(fn ($email) => strtolower($email))
-                ->values()
-                ->all();
-            Log::info('sendRefundEmail: notification masters', ['count' => $notificationMasters->count()]);
-
-            $smc    = new SendMessageController();
-            $errors = [];
-
-            // Refund notifications must be delivered no matter which authorised
-            // CRM role processes the refund.  Operations creates customer refund
-            // cases as part of the normal workflow, so restricting delivery to
-            // Accounts silently prevented both the customer and Notification
-            // Master recipients (including Operations) from receiving updates.
-            Log::info('sendRefundEmail: dispatching customer and internal notifications', [
-                'user_id' => \Illuminate\Support\Facades\Auth::id(),
-                'refund_id' => $refund->id,
-                'notification_master_count' => $notificationMasters->count(),
-            ]);
-
-                // ════════════════════════════════════════════════════════════════
-                // CUSTOMER — Blade Email
-                // ════════════════════════════════════════════════════════════════
-                $customerEmail = $client->email ?? null;
-                $customerEmailConflict = NotificationRecipientGuard::overlaps(
-                    [$customerEmail],
-                    [],
-                    $vendorEmails,
-                    []
-                );
-
-                if ($customerEmailConflict) {
-                    Log::warning('sendRefundEmail: customer email blocked because it matches a vendor contact', [
-                        'refund_id' => $refund->id,
-                    ]);
-                    $errors[] = 'Customer email matches a vendor contact; notification was blocked.';
-                } elseif (!empty($customerEmail) && filter_var($customerEmail, FILTER_VALIDATE_EMAIL)) {
-                    try {
-                        $mail = Mail::to($customerEmail);
-                        if (!empty($notificationMasterCcEmails)) {
-                            $mail->cc($notificationMasterCcEmails);
-                        }
-
-                        $mail->send(new \App\Mail\RefundMail(
-                            'emails.refund-customer',
-                            'Refund Processed for Your Booking – ' . $serviceName,
-                            $customerEmailData,
-                            $proofFilePath
-                        ));
-                        Log::info('sendRefundEmail: customer blade email sent', ['to' => $customerEmail]);
-                    } catch (\Exception $e) {
-                        Log::error('sendRefundEmail: customer email failed', ['error' => $e->getMessage()]);
-                        $errors[] = 'Customer email failed: ' . $e->getMessage();
-                    }
-                } else {
-                    Log::warning('sendRefundEmail: customer email missing/invalid', ['email' => $customerEmail]);
-                    $errors[] = 'Customer email is missing or invalid.';
-                }
-
-                // MSG91 customer email — commented, use when auth key available
-                // $smc->sendMsg91Email('refund_processed_customer', $customerEmail, $client->name ?? 'Customer', $customerMsg91Vars);
-
-                // ════════════════════════════════════════════════════════════════
-                // CUSTOMER — WhatsApp (dynamic template: image or PDF)
-                // ════════════════════════════════════════════════════════════════
-                $customerWhatsAppConflict = NotificationRecipientGuard::overlaps(
-                    [],
-                    [$customerWhatsApp ?? null],
-                    [],
-                    $vendorPhones
-                );
-
-                if ($customerWhatsAppConflict) {
-                    Log::warning('sendRefundEmail: customer WhatsApp blocked because number matches a vendor contact', [
-                        'refund_id' => $refund->id,
-                    ]);
-                } elseif ($skipWhatsApp) {
-                    Log::warning('sendRefundEmail: skipping customer WhatsApp — no proof file');
-                } elseif (empty($customerWhatsApp)) {
-                    Log::warning('sendRefundEmail: customer WhatsApp number missing');
-                } else {
-                    Log::info('sendRefundEmail: sending customer WhatsApp', [
-                        'template'  => $customerWaTemplate,
-                        'file_type' => $isImageFile ? 'IMAGE' : ($isPdfFile ? 'PDF' : 'OTHER'),
-                        'number'    => $customerWhatsApp,
-                        'file'      => $waFileUrl,
-                        'data'      => $customerWaData,
-                    ]);
-                    try {
-                        $waResult = $smc->sendWhatsCrmRefundMessage($customerWhatsApp, $customerWaData, $waFileUrl, $refund->refund_proof, $customerWaTemplate);
-                        Log::info('sendRefundEmail: customer WhatsApp response', [
-                            'template' => $customerWaTemplate,
-                            'result'   => $waResult,
-                        ]);
-                        if (isset($waResult['success']) && $waResult['success'] == false) {
-                            Log::error('sendRefundEmail: customer WhatsApp FAILED', [
-                                'reason' => $waResult['message'] ?? 'unknown',
-                            ]);
-                        }
-                    } catch (\Exception $e) {
-                        Log::error('sendRefundEmail: customer WhatsApp exception', ['error' => $e->getMessage()]);
-                    }
-                }
-
-                // ════════════════════════════════════════════════════════════════
-                // NOTIFICATION MASTER — Blade Email + WhatsApp (customer template)
-                // ════════════════════════════════════════════════════════════════
-                foreach ($notificationMasters as $nm) {
-
-                    $nmWaData = $sanitize([
-                        $client->name ?? 'Customer',   // {{1}}
-                        $serviceName,                   // {{2}}
-                        $pickup_date,                   // {{3}}
-                        $refundAmountFormatted,         // {{4}}
-                        $refundDateFormatted,           // {{5}}
-                    ]);
-
-                    // WhatsApp
-                    $nmPhone = WhatsAppPhoneNumber::e164(
-                        $nm->mobile_number,
-                        $nm->contact_country_code ?: null
-                    );
-
-                    if ($skipWhatsApp) {
-                        Log::warning('sendRefundEmail: skipping NM WhatsApp', ['nm_id' => $nm->id]);
-                    } elseif (empty($nm->mobile_number)) {
-                        Log::warning('sendRefundEmail: NM phone missing', ['nm_id' => $nm->id]);
-                    } else {
-                        Log::info('sendRefundEmail: sending NM WhatsApp', [
-                            'nm_id'     => $nm->id,
-                            'template'  => $customerWaTemplate,
-                            'file_type' => $isImageFile ? 'IMAGE' : ($isPdfFile ? 'PDF' : 'OTHER'),
-                            'number'    => $nmPhone,
-                        ]);
-                        try {
-                            $nmWaResult = $smc->sendWhatsCrmRefundMessage($nmPhone, $nmWaData, $waFileUrl, $refund->refund_proof, $customerWaTemplate);
-                            Log::info('sendRefundEmail: NM WhatsApp response', [
-                                'nm_id'     => $nm->id,
-                                'template'  => $customerWaTemplate,
-                                'result'    => $nmWaResult,
-                            ]);
-                            if (isset($nmWaResult['success']) && $nmWaResult['success'] == false) {
-                                Log::error('sendRefundEmail: NM WhatsApp FAILED', [
-                                    'nm_id'  => $nm->id,
-                                    'reason' => $nmWaResult['message'] ?? 'unknown',
-                                ]);
-                            }
-                        } catch (\Exception $e) {
-                            Log::error('sendRefundEmail: NM WhatsApp exception', [
-                                'nm_id' => $nm->id,
-                                'error' => $e->getMessage(),
-                            ]);
-                        }
-                    }
-                }
-
-            // ── 10. Mark refund status=1 (notifications sent, pending in Refund Notes) ──
-            // status=1 = processed/notified → shows in Refund Notes PENDING tab
-            // status=2 = completed → set by markAsDone button in Refund Notes page
-            if (empty($errors) && (int) $refund->status !== 2) {
-                try {
-                    $refund->update(['status' => 1]);
-                    Log::info('sendRefundEmail: refund status=1 set (notified, pending)', ['refund_id' => $refund->id]);
-                } catch (\Exception $e) {
-                    Log::warning('sendRefundEmail: could not set refund status=1', ['error' => $e->getMessage()]);
-                }
-            }
-
-            if (!empty($errors)) {
-                return response()->json(['success' => false, 'message' => implode(' | ', $errors)], 422);
-            }
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Refund notifications sent via email and WhatsApp.',
-            ]);
-        } catch (\Exception $e) {
-            Log::error('sendRefundEmail: unexpected error', [
-                'ride_id' => $rideId,
-                'error'   => $e->getMessage(),
-                'trace'   => $e->getTraceAsString(),
-            ]);
-            return response()->json([
-                'success' => false,
-                'message' => 'Error: ' . $e->getMessage(),
-            ], 500);
         }
+
+        // Preserve the existing legacy queue transition rather than tying it to
+        // every recipient's WhatsApp acceptance. Do not reopen completed refunds.
+        if (!$emailErrors && (int) $refund->status !== 2) {
+            try {
+                $refund->update(['status' => 1]);
+            } catch (\Throwable $e) {
+                Log::warning('Refund notified status update failed', [
+                    'refund_id' => $refund->id, 'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        $errors = array_merge($emailErrors, $deliveryErrors);
+        return response()->json([
+            'success' => !$errors,
+            'message' => $errors
+                ? 'Refund saved. Some notifications were not accepted. Review the delivery logs.'
+                : 'Refund notification requests accepted by email transport and WhatsApp provider.',
+            'channels' => $channels,
+            'errors' => $errors,
+        ], $errors ? 207 : 200);
+    } catch (\Throwable $e) {
+        Log::error('sendRefundEmail: unexpected error', [
+            'ride_id' => $rideId, 'error' => $e->getMessage(),
+        ]);
+        return response()->json([
+            'success' => false,
+            'message' => 'Unable to send refund notifications.',
+        ], 500);
     }
+}
 
 
     /**

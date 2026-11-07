@@ -259,4 +259,34 @@ class TargetIncentiveReportTest extends LeadListFixtureTestCase
         $this->assertSame(254,count($rows)); $total=end($rows);
         $this->assertSame(1051.0,$this->amount($total[7])); $this->assertSame(2.1,(float)$total[21]);
     }
+
+        public function test_followup_payment_next_month_does_not_duplicate_sale_or_break_export(): void
+    {
+        // The fixture has two October bookings. Add a later November payment
+        // against one October booking, then create a genuine November booking.
+        $octoberLead = $this->saleIds['sales'];
+        $octoberFollowup = DB::table('lead_followups')
+            ->where('lead_id', $octoberLead)->value('id');
+
+        DB::table('payment_audit_trail')->insert([
+            'id' => (string) Str::uuid(),
+            'lead_followup_id' => $octoberFollowup,
+            'payment_status' => 1,
+            'paid_amount' => 50,
+            'paid_date' => '2026-11-02 12:00:00',
+        ]);
+        $novemberLead = $this->sale('sales', 300, 0, 0, '2026-11-03');
+
+        $ledger = (new TargetIncentiveService())->ledger(2026, 11);
+        $this->assertFalse($ledger->contains('lead_id', $octoberLead));
+        $this->assertTrue($ledger->contains('lead_id', $novemberLead));
+
+        // If export and ledger disagree, these calls previously could throw.
+        $novemberRows = $this->csv(null, 11);
+        $this->assertSame(3, count($novemberRows)); // header + one sale + total
+        $this->assertSame(300.0, $this->amount(end($novemberRows)[7]));
+
+        $octoberRows = $this->csv(null, 10);
+        $this->assertSame(4, count($octoberRows)); // header + two sales + total
+    }
 }

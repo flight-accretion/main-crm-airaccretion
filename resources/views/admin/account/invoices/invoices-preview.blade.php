@@ -523,6 +523,50 @@
             @endif
         </div>
 
+        
+        <div class="box">
+            <h3>Bill from vendor :</h3>
+
+            @forelse(($invoiceData['vendor_bills'] ?? []) as $bill)
+                <table style="
+                    width:100%;
+                    border-collapse:collapse;
+                    margin-bottom:12px;
+                    font-size:13px;
+                ">
+                    <tr>
+                        <td style="padding:6px 0;">
+                            {{ $bill['vendor_name'] ?? 'Vendor' }}
+                        </td>
+
+                        <td style="padding:6px 0; text-align:right;">
+                            <strong>
+                                {{ $bill['status'] ?? 'Not recorded' }}
+                            </strong>
+                        </td>
+                    </tr>
+
+                    @if(!empty($bill['has_bill']))
+                        <tr>
+                            <td colspan="2" style="
+                                font-size:11px;
+                                color:#666;
+                                padding:4px 0;
+                            ">
+                                Vendor bill uploaded — available
+                                for authorized users in CRM.
+                            </td>
+                        </tr>
+                    @endif
+                </table>
+            @empty
+                <p style="color:#666; font-size:13px;">
+                    No vendor bill follow-up recorded.
+                </p>
+            @endforelse
+        </div>
+
+
         <!-- Footer Section -->
         <table
             style="width:100%; border-collapse:collapse; margin-top:30px; font-family:Arial, sans-serif; font-size:14px; text-align:center;">

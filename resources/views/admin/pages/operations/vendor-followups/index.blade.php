@@ -10,6 +10,14 @@
         <div><strong>{{ $counts[$key] }}</strong><span>{{ $label }}</span><small>{{ ['open' => 'All pending vendor tasks', 'overdue' => 'Past follow-up date', 'today' => now()->format('d M Y'), 'completed_week' => 'Confirmed completions only'][$key] }}</small></div>
         @endforeach
     </section>
+        <nav class="vf-chips" aria-label="Vendor task category">
+        <a href="{{ route('admin.operations.vendor-followups.index', ['kind' => 'standard', 'bucket' => 'open']) }}"
+           @if(($filters['kind'] ?? null) === 'standard') aria-current="page" @endif>Vendor Confirmations</a>
+        <a href="{{ route('admin.operations.vendor-followups.index', ['kind' => 'vendor_bill', 'bucket' => 'open']) }}"
+           @if(($filters['kind'] ?? null) === 'vendor_bill') aria-current="page" @endif>Vendor Bills</a>
+        <a href="{{ route('admin.operations.vendor-followups.index', ['bucket' => 'open']) }}"
+           @if(empty($filters['kind'])) aria-current="page" @endif>All</a>
+    </nav>
     <nav class="vf-chips" aria-label="Follow-up filters">
         @foreach(['open' => 'Open', 'today' => 'Today', 'overdue' => 'Overdue', 'upcoming' => 'Upcoming', 'age_2_7' => 'Age 2-7 days', 'age_over_7' => 'Age >7 days', 'completed' => 'Completed', 'cancelled' => 'Cancelled', 'all' => 'All'] as $key => $label)
         <a href="{{ route('admin.operations.vendor-followups.index', array_merge(request()->except('page'), ['bucket' => $key])) }}" @if($filters['bucket'] === $key) aria-current="page" @endif>{{ $label }} <span>{{ $counts[$key] }}</span></a>
@@ -17,6 +25,9 @@
     </nav>
     <form method="GET" action="{{ route('admin.operations.vendor-followups.index') }}" class="vf-filters vf-card">
         <input type="hidden" name="bucket" value="{{ $filters['bucket'] }}">
+                @if(!empty($filters['kind']))
+                <input type="hidden" name="kind" value="{{ $filters['kind'] }}">
+                @endif
         @foreach(['vendor_id', 'assigned_to'] as $key)@if($filters[$key])<input type="hidden" name="{{ $key }}" value="{{ $filters[$key] }}">@endif @endforeach
         <label>Search<input type="search" name="search" value="{{ $filters['search'] }}" placeholder="Client, vendor, phone or lead ID"></label>
         <label>Rows<select name="per_page">@foreach([10,25,50,100] as $size)<option value="{{ $size }}" {{ $filters['per_page'] === $size ? 'selected' : '' }}>{{ $size }}</option>@endforeach</select></label>

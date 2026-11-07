@@ -78,7 +78,7 @@
                 href="{{ route('admin.rides.upcoming', [
                     'from_date' => now()->toDateString(),
                     'to_date' => now()->addDays(7)->toDateString(),
-                    'payment_state' => 'partial'
+                    'payment_status' => 'partial'
                 ]) }}"
             >
                 <h2>

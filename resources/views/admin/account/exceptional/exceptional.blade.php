@@ -36,10 +36,11 @@
                 <span>Open overpayments</span>
                 <small>{{ $oldestOpen ? 'oldest ' . \Illuminate\Support\Carbon::parse($oldestOpen)->diffForHumans(null, true) : 'nothing open' }}</small>
             </div>
+           
             <div class="ex-stat is-green">
-                <strong>{{ $absorbedRows->count() }}</strong>
+                <strong>{{ $addedToSalesCount ?? 0 }}</strong>
                 <span>Added to sales</span>
-                <small>{{ $inr($absorbedRows->sum($excessOf)) }} excess</small>
+                <small>Processed entries</small>
             </div>
             <div class="ex-stat is-blue">
                 <strong>{{ $refundRows->count() }}</strong>
@@ -83,7 +84,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @forelse($payments as $index => $p)
+                            @foreach($payments as $index => $p)
                                 @php
                                     $initials = collect(preg_split('/\s+/', trim($p->first_name ?: '?')))->filter()->take(2)->map(fn ($part) => mb_strtoupper(mb_substr($part, 0, 1)))->implode('');
                                 @endphp
@@ -137,9 +138,7 @@
                                         </div>
                                     </td>
                                 </tr>
-                            @empty
-                                <tr><td colspan="7" class="text-center">No exceptional entries found.</td></tr>
-                            @endforelse
+                            @endforeach
                         </tbody>
                     </table>
                 </div>

@@ -1952,7 +1952,7 @@
                         </li>
                     @endif
                         <!-- Payment Review Direct Link -->
-                        @if ($canAccess($userType, $adminRoles) || $canAccess($userType, $accountRoles) || $canAccess($userType, $operationsManagerRoles))
+                        @if ($canAccess($userType, $adminRoles) || $canAccess($userType, $accountRoles) || $canAccess($userType, $operationsRoles) || $userType === \App\Models\UserType::OWNER)
                             <li class="slide {{ Route::is('admin.account.payment-review*') ? 'active' : '' }}">
                                 <a href="{{ route('admin.account.payment-review') }}" class="side-menu__item">
                                     <i class="bx bx-wallet side-menu__icon"></i>

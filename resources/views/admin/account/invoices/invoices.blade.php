@@ -246,6 +246,23 @@
                             </div>
                         </div>
                     </div>
+
+                    
+                    <div class="box">
+                        <div class="box-header">
+                            <h5 class="box-title">
+                                Vendor Bill Follow-up
+                            </h5>
+                        </div>
+
+                        <div class="box-body bg-gray-50"
+                            id="invoice-vendor-bills">
+                            <p class="text-muted">
+                                Loading vendor bill status...
+                            </p>
+                        </div>
+                    </div>
+
                     <!-- Payment Information removed -->
                     <div class="box">
                         <div class="box-header flex justify-between items-center">
@@ -497,6 +514,9 @@
                     const data = resp.data || {};
                     const voucher = data.voucher || {};
                     const invoiceData = data.invoiceData || {};
+                    renderInvoiceVendorBills(
+                    invoiceData.vendor_bills || []
+                    );
                     const paymentHistory = data.paymentHistory || [];
                     const regenerationHistory = data.regenerationHistory || [];
 
@@ -1068,6 +1088,70 @@
             });
             document.getElementById('vendor-sections').innerHTML = html;
         }
+
+        
+function renderInvoiceVendorBills(bills) {
+    const container = document.getElementById(
+        'invoice-vendor-bills'
+    );
+
+    if (!container) return;
+
+    container.replaceChildren();
+
+    if (!Array.isArray(bills) || bills.length === 0) {
+        container.textContent =
+            'No vendor bill follow-up recorded.';
+        return;
+    }
+
+    bills.forEach(bill => {
+        const item = document.createElement('div');
+        item.className = 'mb-4 p-3 border rounded';
+
+        const vendor = document.createElement('strong');
+        vendor.textContent = bill.vendor_name || 'Vendor';
+
+        const ride = document.createElement('div');
+        ride.className = 'text-muted text-xs mt-1';
+        ride.textContent = bill.ride_id
+            ? 'Ride reference: ' + bill.ride_id
+            : '';
+
+        const status = document.createElement('p');
+        status.className = 'mt-2 mb-2';
+        status.textContent =
+            'Bill from vendor: ' +
+            (bill.status || 'Not recorded');
+
+        item.append(vendor, ride, status);
+
+        if (bill.has_bill && bill.preview_url) {
+            const preview = document.createElement('a');
+            preview.textContent = 'Preview Bill';
+            preview.href = bill.preview_url;
+            preview.target = '_blank';
+            preview.rel = 'noopener noreferrer';
+            preview.className =
+                'ti-btn ti-btn-sm ti-btn-outline-primary me-2';
+
+            item.appendChild(preview);
+        }
+
+        if (bill.has_bill && bill.download_url) {
+            const download = document.createElement('a');
+            download.textContent = 'Download Bill';
+            download.href = bill.download_url;
+            download.className =
+                'ti-btn ti-btn-sm ti-btn-outline-secondary';
+
+            item.appendChild(download);
+        }
+
+        container.appendChild(item);
+    });
+}
+
 
         function renderClientPaymentHistory(history) {
             history = invoiceHtml(history);
