@@ -103,4 +103,17 @@ class Msg91CampaignClientTest extends TestCase
             $this->assertSame('Template cannot be deleted while pending approval.', data_get($exception->payload, 'message'));
         }
     }
+    public function test_template_deletion_treats_msg91_already_missing_template_as_success(): void
+    {
+        config()->set('services.msg91_campaigns.template_create_enabled', true);
+        Http::fake(['*' => Http::response([
+            'status' => 'fail',
+            'hasError' => true,
+            'errors' => "Template doesn't exist in our database, please use 'Sync template' option before trying again",
+        ], 400)]);
+
+        app(Msg91Client::class)->deleteTemplate('919575303162', 'xyz');
+
+        Http::assertSent(fn ($request) => $request->method() === 'DELETE');
+    }
 }

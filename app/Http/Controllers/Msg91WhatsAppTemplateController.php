@@ -450,6 +450,7 @@ private function templateDeleteFailure(
             data_get($payload, 'errors.0.message'),
             data_get($payload, 'errors.0'),
             data_get($payload, 'errors.message'),
+            data_get($payload, 'errors'),
             data_get($payload, 'error.message'),
             data_get($payload, 'error_description'),
             data_get($payload, 'data.message'),

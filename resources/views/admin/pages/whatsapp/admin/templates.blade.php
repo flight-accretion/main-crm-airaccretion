@@ -2496,7 +2496,7 @@ if (deleteTemplateModal) {
                     });
 
                 window.setTimeout(function () {
-                    closeModal(deleteTemplateModal);
+                    window.location.reload();
                 }, 1200);
             })
             .catch(function (error) {

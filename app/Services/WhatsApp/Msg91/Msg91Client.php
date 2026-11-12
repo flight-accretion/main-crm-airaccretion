@@ -146,17 +146,29 @@ if (!$response->successful()) {
         return;
     }
 
+    $body = $response->json() ?: [];
+
+    // MSG91 reports an already-absent template as HTTP 400. Treat that exact
+    // provider response as an idempotent success so stale CRM records can be
+    // cleaned up without leaving provider/CRM state mismatched.
+    $providerError = data_get($body, 'errors');
+    if (
+        $response->status() === 400
+        && is_string($providerError)
+        && stripos($providerError, "Template doesn't exist in our database") !== false
+    ) {
+        return;
+    }
+
     if (!$response->successful()) {
         throw new Msg91ProviderException(
             'MSG91 template deletion failed with HTTP ' . $response->status(),
             $response->status(),
-            $response->json() ?: [
+            $body ?: [
                 'message' => mb_substr(strip_tags($response->body()), 0, 300),
             ]
         );
     }
-
-    $body = $response->json() ?: [];
 
     if (
         data_get($body, 'hasError') === true
