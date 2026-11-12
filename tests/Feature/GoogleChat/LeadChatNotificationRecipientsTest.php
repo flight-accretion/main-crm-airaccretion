@@ -74,4 +74,117 @@ class LeadChatNotificationRecipientsTest extends GoogleChatTestCase
         $this->assertNotContains($unassignedManager, LeadChatNotification::pluck('user_id')->all());
         $this->assertNotContains($admin, LeadChatNotification::pluck('user_id')->all());
     }
+
+
+public function test_manager_owned_lead_receives_google_reply_once(): void
+{
+    // 1. Create Sales Manager role.
+    $roleId = (string) Str::uuid();
+
+    DB::table('user_types')->insert([
+        'id' => $roleId,
+        'user_type' => UserType::SALES_MANAGER,
+    ]);
+
+    // 2. Create an active Sales Manager.
+    $managerId = (string) Str::uuid();
+
+    DB::table('users')->insert([
+        'id' => $managerId,
+        'name' => 'Direct Lead Manager',
+        'user_type_id' => $roleId,
+        'status' => 1,
+    ]);
+
+    // 3. Assign the lead directly to the Sales Manager.
+    $leadId = (string) Str::uuid();
+
+    DB::table('leads')->insert([
+        'id' => $leadId,
+        'representative_user_id' => $managerId,
+    ]);
+
+    // 4. Create the lead's chat conversation.
+    $conversation = ChatConversation::create([
+        'lead_id' => $leadId,
+    ]);
+
+    // 5. Create an incoming Google Chat message.
+    $message = ChatMessage::create([
+        'lead_id' => $leadId,
+        'conversation_id' => $conversation->id,
+        'body' => 'Customer replied to manager-owned lead',
+        'source' => 'google_chat',
+    ]);
+
+    $lead = Lead::findOrFail($leadId);
+
+    $notificationService = app(
+        LeadChatNotificationService::class
+    );
+
+    // 6. Process the same message twice.
+    // This verifies idempotency.
+    $notificationService->notifyGoogleMessage(
+        $lead,
+        $conversation,
+        $message,
+        'Customer'
+    );
+
+    $notificationService->notifyGoogleMessage(
+        $lead,
+        $conversation,
+        $message,
+        'Customer'
+    );
+
+    // 7. Manager must receive exactly one notification.
+    $notifications = LeadChatNotification::query()
+        ->where('user_id', $managerId)
+        ->where('message_id', $message->id)
+        ->get();
+
+    $this->assertCount(1, $notifications);
+
+    // 8. Verify the notification belongs to the correct lead.
+    $notification = $notifications->first();
+
+    $this->assertSame(
+        $leadId,
+        (string) $notification->lead_id
+    );
+
+    $this->assertSame(
+        (string) $conversation->id,
+        (string) $notification->conversation_id
+    );
+
+    $this->assertSame(
+        'new_message',
+        $notification->type
+    );
+
+    $this->assertSame(
+        'Google Chat reply from Customer',
+        $notification->title
+    );
+
+    $this->assertSame(
+        'Customer replied to manager-owned lead',
+        $notification->body
+    );
+
+    // 9. It should initially be unread.
+    $this->assertNull($notification->read_at);
+
+    // 10. No duplicate notifications for this message.
+    $this->assertSame(
+        1,
+        LeadChatNotification::query()
+            ->where('message_id', $message->id)
+            ->count()
+    );
+}
+
 }

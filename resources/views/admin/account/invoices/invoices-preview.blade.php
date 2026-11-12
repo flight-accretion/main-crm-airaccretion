@@ -349,6 +349,16 @@
         <div class="box">
             <h3>Service Details :</h3>
             <p style="text-align:right; font-size:14px; color:#333; margin-bottom:8px;">Total Customer Amount: <strong>Rs.{{ number_format($invoiceData['payment']['total_amount'] ?? 0, 0) }}</strong></p>
+            @if(!empty($invoiceData['invoice_discount']))
+            <div style="text-align:right; font-size:13px; margin-bottom:12px;">
+                <div>Gross service amount:
+                    Rs.{{ number_format($invoiceData['invoice_discount']['gross'], 2) }}</div>
+                <div>Less discount:
+                    - Rs.{{ number_format($invoiceData['invoice_discount']['discount'], 2) }}</div>
+                <div><strong>Final payable:
+                    Rs.{{ number_format($invoiceData['invoice_discount']['net'], 2) }}</strong></div>
+              </div>
+          @endif
             <table class="service-table">
                 <thead>
                     <tr>

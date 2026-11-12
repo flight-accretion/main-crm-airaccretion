@@ -325,24 +325,41 @@ class LeadChatNotificationService
             ->first();
 
 
-    if (!$recipient || $recipient->userType?->user_type !== \App\Models\UserType::SALES_EXECUTIVE) {
-        return;
-    }
+        if (!$recipient) {
+            return;
+        }
 
-    $recipientIds = collect([$recipient->id]);
-    $managerIds = \App\Models\SalesExecutiveAssignment::query()
-        ->active()
-        ->where('sales_executive_id', $recipient->id)
-        ->whereHas('manager', function ($query) {
-            $query->where('status', 1)
-                ->whereHas('userType', function ($type) {
-                    $type->whereIn('user_type', [
-                        \App\Models\UserType::SALES_MANAGER,
-                        \App\Models\UserType::SENIOR_SALES_MANAGER,
-                    ]);
-                });
-        })
-        ->pluck('manager_id');
+        $role = $recipient->userType?->user_type;
+        $allowedDirectOwners = [
+            \App\Models\UserType::SALES_EXECUTIVE,
+            \App\Models\UserType::SALES_MANAGER,
+            \App\Models\UserType::SENIOR_SALES_MANAGER,
+        ];
+
+        if (!in_array($role, $allowedDirectOwners, true)) {
+            return;
+        }
+
+        // Notify the active lead owner, including manager-owned leads.
+        $recipientIds = collect([$recipient->id]);
+        $managerIds = collect();
+
+        // For executive-owned leads, also notify ACTIVE assigned managers.
+        if ($role === \App\Models\UserType::SALES_EXECUTIVE) {
+            $managerIds = \App\Models\SalesExecutiveAssignment::query()
+                ->active()
+                ->where('sales_executive_id', $recipient->id)
+                ->whereHas('manager', function ($query) {
+                    $query->where('status', 1)
+                        ->whereHas('userType', function ($type) {
+                            $type->whereIn('user_type', [
+                                \App\Models\UserType::SALES_MANAGER,
+                                \App\Models\UserType::SENIOR_SALES_MANAGER,
+                            ]);
+                        });
+                })
+                ->pluck('manager_id');
+        }
 
     $body = \Illuminate\Support\Str::limit(trim((string) $message->body), 180);
     foreach ($recipientIds->merge($managerIds)->unique() as $recipientId) {

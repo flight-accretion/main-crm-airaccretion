@@ -1426,9 +1426,15 @@ class InvoiceController extends Controller
             ->first();
 
         $voucherInvoiceData = $this->getVoucherCustomerInvoiceData($voucher);
-        $totalAmount = !empty($voucherInvoiceData['items'])
+        $voucherTotal = !empty($voucherInvoiceData['items'])
             ? (float) $voucherInvoiceData['total_amount']
             : (float) ($latestPayment->total_amount ?? 0);
+
+        $discountInfo = !empty($voucherInvoiceData['items'])
+            ? $this->reconciledInvoiceDiscount($lead, $voucherTotal)
+            : null;
+
+        $totalAmount = $discountInfo['net'] ?? $voucherTotal;
         // Sum all approved payments for this lead (across followups)
         $totalReceived = PaymentAuditTrail::whereHas('leadFollowup', function($q) use ($lead) {
             $q->where('lead_id', $lead->id);
@@ -1466,6 +1472,7 @@ class InvoiceController extends Controller
             'profit_loss' => $financial['booking_profit']
                 ?? ((float) $totalAmount - (float) ($vendor['totalVendorCost'] ?? 0)),
             'vendor_bills' => $vendorBills,
+            'invoice_discount' => $discountInfo,
         ];
     }
 
@@ -1669,6 +1676,60 @@ private function getCanonicalInvoiceTotal(Lead $lead): float
         ->first();
 
     return (float) ($latestPayment->total_amount ?? 0);
+}
+
+/**
+ * Discount presentation only. Return null for unreconciled/legacy data.
+ * Voucher items can already contain discounted prices, so never subtract twice.
+ */
+private function reconciledInvoiceDiscount(Lead $lead, float $voucherTotal): ?array
+{
+    $pricing = $lead->leadFollowups()
+        ->whereNotNull('service_details')
+        ->orderByDesc('created_at')
+        ->orderByDesc('id')
+        ->first();
+
+    if (!$pricing) {
+        return null;
+    }
+
+    $details = $pricing->service_details_array;
+    if (!is_array($details) || !$details) {
+        return null;
+    }
+
+    $gross = 0.0;
+    $discount = 0.0;
+    foreach ($details as $line) {
+        if (!is_array($line)
+            || !isset($line['original_amount'])
+            || !is_numeric($line['original_amount'])
+            || !is_numeric($line['discount_amount'] ?? 0)) {
+            return null;
+        }
+        $original = (float) $line['original_amount'];
+        $lineDiscount = (float) ($line['discount_amount'] ?? 0);
+        if ($original < 0 || $lineDiscount < 0 || $lineDiscount > $original) {
+            return null;
+        }
+        $gross += $original;
+        $discount += $lineDiscount;
+    }
+
+    $gross = round($gross, 2);
+    $discount = round($discount, 2);
+    $net = round($gross - $discount, 2);
+    if ($discount <= 0 || abs((float) $pricing->total_amount - $net) > 0.01) {
+        return null;
+    }
+
+    // Either voucher has the undiscounted gross or already-discounted net.
+    if (abs($voucherTotal - $gross) > 0.01 && abs($voucherTotal - $net) > 0.01) {
+        return null;
+    }
+
+    return compact('gross', 'discount', 'net');
 }
 
 /**

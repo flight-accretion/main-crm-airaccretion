@@ -144,7 +144,7 @@ class OwnerDashboardTest extends TestCase
             ->assertSee('Owner Dashboard')
             ->assertSee('Owner Rahul ji')
             ->assertSee('Live executive snapshot')
-            ->assertSee('Net Profit / Loss')
+            ->assertSee('Booking Profit')
             ->assertSee('Email lead fetch')
             ->assertSee('Lead AI scoring')
             ->assertSee('Exceptional Dashboard')

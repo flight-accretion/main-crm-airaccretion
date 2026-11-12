@@ -350,9 +350,9 @@ class RefundController extends Controller
             $refundsData = array_values($refundsData);
 
             // Cards summarize the same status-filtered rows currently shown.
-            $customerPendingCount = collect($refundsData)
-                ->filter(fn ($item) => strtolower((string) ($item['refund_status'] ?? '')) !== 'completed')
-                ->count();
+            // $customerPendingCount = collect($refundsData)
+            //     ->filter(fn ($item) => strtolower((string) ($item['refund_status'] ?? '')) !== 'completed')
+            //     ->count();
 
             // Get services for filter dropdown
             $services = Service::select('id', 'service')->get();
@@ -363,7 +363,7 @@ class RefundController extends Controller
 
             // Keep the customer pending card consistent with
             // the customer refund list's current filters.
-            $refundSummary['customer_pending'] = $customerPendingCount;
+            // $refundSummary['customer_pending'] = $customerPendingCount;
 
           
             return view(

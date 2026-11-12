@@ -1824,7 +1824,20 @@ $balanceAmount =
             Log::warning('Error calculating totals in getServiceInfo: ' . $e->getMessage());
         }
 
-        $profitLoss = $totalServiceAmount - $totalVendorAmount;
+        // Use the centralized booking-profit definition for the displayed profit.
+        // Do not alter vendor-specific header totals or payment amounts.
+        $pricingFollowup = \App\Models\LeadFollowup::query()
+            ->where('lead_id', $lead->id)
+            ->where('total_amount', '>', 0)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->first();
+
+        $profitLoss = null;
+        if ($pricingFollowup) {
+            $profitLoss = app(\App\Services\Reports\ProfitLossSummaryService::class)
+                ->forFollowup($pricingFollowup)['booking_profit'];
+        }
 
         return [
             'services' => $services,
@@ -1834,7 +1847,9 @@ $balanceAmount =
             'total_service_amount' => $totalServiceAmount,
             'total_vendor_amount' => $totalVendorAmount,
             'profit_loss' => $profitLoss,
-            'profit_loss_label' => ($profitLoss >= 0) ? 'Profit' : 'Loss',
+            'profit_loss_label' => $profitLoss === null
+            ? 'Not available'
+            : ($profitLoss >= 0 ? 'Profit' : 'Loss'),
         ];
     }
 
