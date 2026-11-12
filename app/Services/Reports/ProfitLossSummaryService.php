@@ -55,16 +55,21 @@ class ProfitLossSummaryService
 
         $profit = $earnedRevenue - $vendorCost;
         $margin = $earnedRevenue > 0 ? ($profit / $earnedRevenue) * 100 : 0.0;
+        $bookingProfit = $chargeableRevenue - $vendorCost;
+        $bookingMargin = $chargeableRevenue > 0 ? ($bookingProfit / $chargeableRevenue) * 100 : 0.0;
 
         return [
             'has_approved_payment' => $cashReceived > 0,
             'cash_received' => round($cashReceived, 2),
             'customer_refunded' => round($customerRefunded, 2),
             'earned_revenue' => round($earnedRevenue, 2),
+            'chargeable_revenue' => round($chargeableRevenue, 2),
             'overpayment' => round($overpayment, 2),
             'vendor_cost' => round($vendorCost, 2),
             'profit' => round($profit, 2),
             'margin' => round($margin, 2),
+            'booking_profit' => round($bookingProfit, 2),
+            'booking_margin' => round($bookingMargin, 2),
             'vendor_names' => array_values(array_unique(array_filter($vendorNames))),
         ];
     }
@@ -91,14 +96,19 @@ class ProfitLossSummaryService
             ->filter(fn ($row) => $row['has_approved_payment']);
 
         $revenue = (float) $rows->sum('earned_revenue');
+        $bookingRevenue = (float) $rows->sum('chargeable_revenue');
         $vendorCost = (float) $rows->sum('vendor_cost');
         $profit = $revenue - $vendorCost;
+        $bookingProfit = $bookingRevenue - $vendorCost;
 
         return [
             'revenue' => round($revenue, 2),
             'vendor_cost' => round($vendorCost, 2),
             'commission' => round($profit, 2),
             'margin' => $revenue > 0 ? round(($profit / $revenue) * 100, 2) : 0.0,
+            'booking_revenue' => round($bookingRevenue, 2),
+            'booking_profit' => round($bookingProfit, 2),
+            'booking_margin' => $bookingRevenue > 0 ? round(($bookingProfit / $bookingRevenue) * 100, 2) : 0.0,
             'lead_count' => $rows->count(),
         ];
     }
@@ -110,6 +120,9 @@ class ProfitLossSummaryService
             'vendor_cost' => 0.0,
             'commission' => 0.0,
             'margin' => 0.0,
+            'booking_revenue' => 0.0,
+            'booking_profit' => 0.0,
+            'booking_margin' => 0.0,
             'lead_count' => 0,
         ];
     }

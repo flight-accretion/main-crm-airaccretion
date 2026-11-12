@@ -1733,14 +1733,14 @@ class ReportController extends Controller
 
             }
 
-            // Use the shared financial definition: customer overpayments are not
-            // revenue and approved refunds reduce the revenue that is earned.
+            // Keep cash received separate from chargeable booking revenue used
+            // for booking profit; refunds reduce the chargeable amount.
             $financial = $profitLossService->forFollowup($latest);
-            $clientReceivedAmount = $financial['earned_revenue'];
+            $clientReceivedAmount = $financial['cash_received'];
             $totalVendorAmount = $financial['vendor_cost'];
             $vendorNames = $financial['vendor_names'];
-            $profitLoss = $financial['profit'];
-            $profitLossPercent = $financial['margin'];
+            $profitLoss = $financial['booking_profit'];
+            $profitLossPercent = $financial['booking_margin'];
 
             // Get sales person (representative)
             $salesPerson = $latest->enquiry->representative ?? null;
@@ -1778,6 +1778,7 @@ class ReportController extends Controller
                 'lead_id' => $latest->lead_id,
                 'customer_name' => $client->name ?? 'N/A',
                 'client_received_amount' => $clientReceivedAmount,
+                'booking_revenue_amount' => $financial['chargeable_revenue'],
                 'cash_received_amount' => $financial['cash_received'],
                 'overpayment_amount' => $financial['overpayment'],
                 'customer_refunded_amount' => $financial['customer_refunded'],
@@ -1795,7 +1796,7 @@ class ReportController extends Controller
             ];
         })->filter()->values();
 
-        $revenue = (float) $profitLossData->sum('client_received_amount');
+        $revenue = (float) $profitLossData->sum('booking_revenue_amount');
         $vendorCost = (float) $profitLossData->sum('vendor_amount');
         $grossProfit = $revenue - $vendorCost;
         $profitSummary = [

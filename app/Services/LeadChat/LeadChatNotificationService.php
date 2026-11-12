@@ -325,61 +325,41 @@ class LeadChatNotificationService
             ->first();
 
 
-    if (
-        !$recipient
-    ) {
-
+    if (!$recipient || $recipient->userType?->user_type !== \App\Models\UserType::SALES_EXECUTIVE) {
         return;
     }
 
+    $recipientIds = collect([$recipient->id]);
+    $managerIds = \App\Models\SalesExecutiveAssignment::query()
+        ->active()
+        ->where('sales_executive_id', $recipient->id)
+        ->whereHas('manager', function ($query) {
+            $query->where('status', 1)
+                ->whereHas('userType', function ($type) {
+                    $type->whereIn('user_type', [
+                        \App\Models\UserType::SALES_MANAGER,
+                        \App\Models\UserType::SENIOR_SALES_MANAGER,
+                    ]);
+                });
+        })
+        ->pluck('manager_id');
 
-    if (
-        $recipient
-            ->userType
-            ?->user_type
-
-        !==
-
-        \App\Models\UserType::SALES_EXECUTIVE
-    ) {
-
-        return;
+    $body = \Illuminate\Support\Str::limit(trim((string) $message->body), 180);
+    foreach ($recipientIds->merge($managerIds)->unique() as $recipientId) {
+        \App\Models\LeadChatNotification::firstOrCreate(
+            [
+                'user_id' => $recipientId,
+                'message_id' => $message->id,
+                'type' => 'new_message',
+            ],
+            [
+                'lead_id' => $lead->id,
+                'conversation_id' => $conversation->id,
+                'title' => 'Google Chat reply from ' . $senderName,
+                'body' => $body,
+            ]
+        );
     }
-
-
-    \App\Models\LeadChatNotification::create([
-
-        'user_id' =>
-            $recipient->id,
-
-        'lead_id' =>
-            $lead->id,
-
-        'conversation_id' =>
-            $conversation->id,
-
-        'message_id' =>
-            $message->id,
-
-        'type' =>
-            'new_message',
-
-        'title' =>
-            'Google Chat reply from '
-            .
-            $senderName,
-
-        'body' =>
-            \Illuminate\Support\Str::limit(
-
-                trim(
-                    (string)
-                    $message->body
-                ),
-
-                180
-            ),
-    ]);
 }
 
 }

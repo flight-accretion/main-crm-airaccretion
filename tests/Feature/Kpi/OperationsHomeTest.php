@@ -68,15 +68,26 @@ class OperationsHomeTest extends KpiFeatureTestCase
         $before = OperationCase::all()->toJson();
         $data = app(\App\Services\Operations\OperationsHomeService::class)->forUser($this->ops);
         $this->assertSame(2, $data['openCount']);
-        $this->assertSame(1, $data['dueToday']);
+        $this->assertSame(2, $data['dueToday']);
         $this->assertSame($old->id, $data['oldest']->first()->id);
         $this->assertSame(['recent' => 0, 'week' => 1, 'older' => 1], $data['age']);
         $this->assertSame($before, OperationCase::all()->toJson());
         $due = app(\App\Services\Operations\OperationsHomeService::class)->forUser($this->ops, 'due');
-        $this->assertSame(1, $due['caseRows']->total());
+        $this->assertSame(2, $due['caseRows']->total());
         $this->assertSame($old->id, $due['caseRows']->first()->id);
         $admin = $this->createUserWithRole('Admin home', UserType::SUPER_ADMIN);
         $this->assertSame(3, app(\App\Services\Operations\OperationsHomeService::class)->forUser($admin)['openCount']);
+    }
+
+    public function test_open_cases_without_a_followup_date_are_in_due_work(): void
+    {
+        $undated = $this->caseFor($this->ops, 4, ['next_followup_at' => null]);
+
+        $data = app(\App\Services\Operations\OperationsHomeService::class)->forUser($this->ops, 'due');
+
+        $this->assertSame(1, $data['dueToday']);
+        $this->assertSame(1, $data['caseRows']->total());
+        $this->assertSame($undated->id, $data['caseRows']->first()->id);
     }
 
     public function test_managers_see_team_work_but_keep_their_own_kpi_and_incentive(): void
@@ -105,9 +116,9 @@ class OperationsHomeTest extends KpiFeatureTestCase
             $this->assertTrue($data['team']);
             $this->assertTrue($data['personalKpi']);
             $this->assertSame(3, $data['openCount']);
-            $this->assertSame(1, $data['dueToday']);
-            $this->assertSame(1, $data['caseRows']->total());
-            $this->assertSame($own->id, $data['caseRows']->first()->id);
+            $this->assertSame(3, $data['dueToday']);
+            $this->assertSame(3, $data['caseRows']->total());
+            $this->assertTrue($data['caseRows']->getCollection()->contains('id', $own->id));
             $this->assertSame(1, $data['vendorCount']);
             $this->assertSame(1, $data['todayRides']);
             $this->assertSame($own->lead_id, $data['nextRide']->lead_id);

@@ -86,8 +86,21 @@ class Msg91CampaignClientTest extends TestCase
 
         Http::assertSent(function ($request) {
             return $request->method() === 'DELETE'
-                && $request->url() === 'https://msg91.example.test/api/v5/whatsapp/client-panel-template?integrated_number=919876543210&template_name=follow%20up%20%26%20reminders'
+                && $request->url() === 'https://msg91.example.test/api/v5/whatsapp/client-panel-template/?integrated_number=919876543210&template_name=follow+up+%26+reminders'
                 && $request->hasHeader('authkey', 'test-auth-key');
         });
+    }
+    public function test_template_deletion_preserves_provider_validation_details_on_rejection(): void
+    {
+        config()->set('services.msg91_campaigns.template_create_enabled', true);
+        Http::fake(['*' => Http::response(['message' => 'Template cannot be deleted while pending approval.'], 422)]);
+
+        try {
+            app(Msg91Client::class)->deleteTemplate('919876543210', 'follow_up');
+            $this->fail('A provider rejection must not be treated as a successful deletion.');
+        } catch (\App\Services\WhatsApp\Msg91\Msg91ProviderException $exception) {
+            $this->assertSame(422, $exception->httpStatus);
+            $this->assertSame('Template cannot be deleted while pending approval.', data_get($exception->payload, 'message'));
+        }
     }
 }

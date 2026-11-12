@@ -84,8 +84,12 @@ class OwnerDashboardService
             ->count('lead_id');
 
         return [
+            // Keep the legacy keys as realized cash profit for other consumers.
             'profit_loss' => $profitLoss['commission'],
             'profit_loss_delta' => $this->delta($profitLoss['commission'], $previousProfitLoss['commission']),
+            'booking_profit' => $profitLoss['booking_profit'],
+            'booking_profit_delta' => $this->delta($profitLoss['booking_profit'], $previousProfitLoss['booking_profit']),
+            'realized_profit' => $profitLoss['commission'],
             'net' => $money['net'],
             'net_delta' => $this->delta($money['net'], $previous['net']),
             'collected' => $money['collected'],

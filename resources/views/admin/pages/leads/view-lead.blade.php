@@ -934,10 +934,15 @@
     <div class="box-body">
         @foreach($vendorBillCases as $billCase)
             <div class="flex items-center justify-between gap-3 py-2 border-b">
-                <span>{{ data_get($billCase->metadata, 'vendor_name_snapshot', 'Vendor') }}</span>
-                <a class="ti-btn ti-btn-primary" href="{{ route('admin.operations.vendor-followups.download-bill', $billCase) }}">
-                    View / Download Bill
-                </a>
+                <div>
+                    <strong>{{ data_get($billCase->metadata, 'vendor_name_snapshot', 'Vendor') }}</strong>
+                    <span class="ml-2">{{ $billCase->vendor_bill_status }}</span>
+                </div>
+                @if($billCase->has_downloadable_bill)
+                    <a class="ti-btn ti-btn-primary" href="{{ route('admin.operations.vendor-followups.download-bill', $billCase) }}">
+                        View / Download Bill
+                    </a>
+                @endif
             </div>
         @endforeach
     </div>

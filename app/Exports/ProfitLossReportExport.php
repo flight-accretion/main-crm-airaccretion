@@ -344,11 +344,12 @@ class ProfitLossReportExport implements FromGenerator, WithHeadings, WithMapping
         }
 
         $financial = $profitLossService->forFollowup($latest);
-        $clientReceivedAmount = $financial['earned_revenue'];
+        $clientReceivedAmount = $financial['cash_received'];
         $totalVendorAmount = $financial['vendor_cost'];
         $vendorNames = $financial['vendor_names'];
-        $profitLoss = $financial['profit'];
-        $profitLossPercent = $financial['margin'];
+        $bookingRevenueAmount = $financial['chargeable_revenue'];
+        $profitLoss = $financial['booking_profit'];
+        $profitLossPercent = $financial['booking_margin'];
 
         $salesPerson = $latest->enquiry->representative ?? null;
         $salesPersonName = $salesPerson ? $salesPerson->name : 'N/A';
@@ -368,6 +369,7 @@ class ProfitLossReportExport implements FromGenerator, WithHeadings, WithMapping
         return (object) [
             'customer_name'          => $client->name ?? 'N/A',
             'client_received_amount' => $clientReceivedAmount,
+            'booking_revenue_amount' => $bookingRevenueAmount,
             'vendor_name'            => !empty($vendorNames) ? implode(', ', $vendorNames) : 'N/A',
             'vendor_amount'          => $totalVendorAmount,
             'profit_loss'            => $profitLoss,
@@ -383,7 +385,8 @@ class ProfitLossReportExport implements FromGenerator, WithHeadings, WithMapping
     {
         return [
             'Customer Name',
-            'Client Received Amount',
+            'Chargeable Booking Amount',
+            'Cash Received Amount',
             'Vendor Name',
             'Vendor Amount',
             'Profit/Loss',
@@ -397,6 +400,7 @@ class ProfitLossReportExport implements FromGenerator, WithHeadings, WithMapping
     {
         return [
             $row->customer_name,
+            number_format($row->booking_revenue_amount, 2),
             number_format($row->client_received_amount, 2),
             $row->vendor_name,
             number_format($row->vendor_amount, 2),
@@ -422,7 +426,7 @@ class ProfitLossReportExport implements FromGenerator, WithHeadings, WithMapping
                 $sheet = $event->sheet->getDelegate();
                 
                 // Auto-size columns
-                foreach(range('A', 'H') as $col) {
+                foreach(range('A', 'I') as $col) {
                     $sheet->getColumnDimension($col)->setAutoSize(true);
                 }
                 
@@ -435,7 +439,7 @@ class ProfitLossReportExport implements FromGenerator, WithHeadings, WithMapping
                     ],
                 ];
                 
-                $cellRange = 'A1:H' . $sheet->getHighestRow();
+                $cellRange = 'A1:I' . $sheet->getHighestRow();
                 $sheet->getStyle($cellRange)->applyFromArray($styleArray);
                 
                 // Style header row

@@ -6430,9 +6430,30 @@ if ($hasApprovedPayment) {
                 ->where('lead_id', $lead->id)
                 ->where('type', \App\Models\OperationCase::TYPE_VENDOR_FOLLOWUP)
                 ->where('metadata->kind', 'vendor_bill')
-                ->whereNotNull('metadata->bill_path')
                 ->latest('completed_at')
-                ->get();
+                ->get()
+                ->each(function ($case) use ($canViewVendorBills) {
+                    $metadata = $case->metadata ?? [];
+                    $path = data_get($metadata, 'bill_path');
+                    $hasBill = is_string($path)
+                        && str_starts_with($path, 'vendor-bills/')
+                        && !str_contains($path, '..')
+                        && \Illuminate\Support\Facades\Storage::disk('local')->exists($path);
+                    $completed = $case->completed_at !== null
+                        && $case->status === \App\Models\OperationCase::STATUS_COMPLETED
+                        && data_get($metadata, 'resolution') === 'bill_collected';
+                    $reimbursement = filter_var(
+                        data_get($metadata, 'reimbursment_from_customer', false),
+                        FILTER_VALIDATE_BOOLEAN
+                    );
+
+                    $case->setAttribute('vendor_bill_status', !$completed
+                        ? 'Awaiting vendor'
+                        : ($reimbursement
+                            ? 'Reimbursement from customer'
+                            : ($hasBill ? 'Bill received' : 'Awaiting vendor')));
+                    $case->setAttribute('has_downloadable_bill', $canViewVendorBills && $hasBill);
+                });
         }
 
         return view('admin.pages.leads.view-lead', compact(

@@ -329,16 +329,6 @@ class RefundController extends Controller
             }
 
             
-            // Count pending entries using the same records and filters
-            // that populate the customer refund list.
-            $customerPendingCount = collect($refundsData)
-                ->filter(function ($item) {
-                    return strtolower(
-                        (string) ($item['refund_status'] ?? '')
-                    ) !== 'completed';
-                })
-                ->count();
-
             //dd($refundsData);
             // Apply refund status filter: request param 'refund_status' can be 'pending' or 'complete'
             // By default show pending refunds so Accounts / Operations can process them first
@@ -358,6 +348,11 @@ class RefundController extends Controller
 
             // Reindex array to keep the view indexes consistent
             $refundsData = array_values($refundsData);
+
+            // Cards summarize the same status-filtered rows currently shown.
+            $customerPendingCount = collect($refundsData)
+                ->filter(fn ($item) => strtolower((string) ($item['refund_status'] ?? '')) !== 'completed')
+                ->count();
 
             // Get services for filter dropdown
             $services = Service::select('id', 'service')->get();

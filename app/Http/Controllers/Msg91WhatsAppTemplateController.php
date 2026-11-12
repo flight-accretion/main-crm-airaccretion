@@ -143,7 +143,10 @@ class Msg91WhatsAppTemplateController extends Controller
 
     $providerReason =
         $this->providerRejectionReason(
-            $exception->payload
+            $exception->payload,
+            'MSG91 did not accept the delete request (HTTP '
+                . $exception->httpStatus
+                . '). Confirm the template and sender in MSG91, then try again.'
         );
 
     Log::warning(
@@ -438,7 +441,10 @@ private function templateDeleteFailure(
         return redirect()->route('admin.msg91.templates.index')->with('success', $message);
     }
 
-    private function providerRejectionReason(array $payload): string
+    private function providerRejectionReason(
+        array $payload,
+        string $fallback = 'MSG91 rejected the template. Check the template fields and sender configuration.'
+    ): string
     {
         $candidates = [
             data_get($payload, 'errors.0.message'),
@@ -467,7 +473,7 @@ private function templateDeleteFailure(
             }
         }
 
-        return 'MSG91 rejected the template. Check the template fields and sender configuration.';
+        return $fallback;
     }
 
  private function visibleTemplates(Request $request, bool $canManageAll)

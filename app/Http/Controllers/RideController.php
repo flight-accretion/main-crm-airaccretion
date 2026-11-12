@@ -753,13 +753,14 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
                 'nullable|in:paid,partial,pending,not_recorded',
         ]);
 
+        $isCalendarView = $request->input('view') === 'calendar';
         $fromDate = $request->filled('from_date')
             ? Carbon::parse($request->input('from_date'))
-            : Carbon::today();
+            : ($isCalendarView ? Carbon::today()->startOfMonth() : Carbon::today());
 
         $toDate = $request->filled('to_date')
             ? Carbon::parse($request->input('to_date'))
-            : $fromDate->copy()->addDays(13);
+            : ($isCalendarView ? $fromDate->copy()->endOfMonth() : $fromDate->copy()->addDays(13));
 
         if ($toDate->lt($fromDate)) {
             throw ValidationException::withMessages([
@@ -818,6 +819,23 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
             ->whereHas('enquiry.vouchers')
             // Cancelled rides never show, whatever status filter is used.
             ->whereLeadNotCancelled();
+
+        $currentUser = $request->user();
+        $currentRole = optional($currentUser->userType)->user_type;
+        if (in_array($currentRole, UserType::SALES_ROLES, true)) {
+            $representativeIds = [$currentUser->id];
+            if (in_array($currentRole, [UserType::SENIOR_SALES_MANAGER, UserType::SALES_MANAGER], true)) {
+                $representativeIds = SalesExecutiveAssignment::getSalesExecutivesForManager($currentUser->id)
+                    ->pluck('id')
+                    ->push($currentUser->id)
+                    ->unique()
+                    ->values()
+                    ->all();
+            }
+            $upcomingRidesQuery->whereHas('enquiry', function ($query) use ($representativeIds) {
+                $query->whereIn('representative_user_id', $representativeIds);
+            });
+        }
 
         // Apply status filter
         if (!empty($statuses)) {

@@ -68,15 +68,14 @@
             {{-- ================= KPI ROW ================= --}}
             <section class="ow-grid" aria-label="Business health">
                 <div class="ow-card ow-kpi s3">
-                    <div class="ow-kpi-top"><span class="ow-kpi-label">Net Profit / Loss</span><span
+                    <div class="ow-kpi-top"><span class="ow-kpi-label">Booking Profit</span><span
                             class="ow-kpi-ico green"><i class="ri-funds-line" aria-hidden="true"></i></span></div>
                     <div class="ow-kpi-mid">
                         <span class="ow-kpi-value" data-tnum
-                            title="&#8377;{{ $rupees($health['profit_loss']) }}">&#8377;{!! $compact($health['profit_loss']) !!}</span>
-                        <span
-                            class="ow-spark">{!! $sparkline($salesChart['company'], $health['profit_loss_delta'] === null || $health['profit_loss_delta'] >= 0 ? '#178a4c' : '#e5484d') !!}</span>
+                            title="&#8377;{{ $rupees($health['booking_profit']) }}">&#8377;{!! $compact($health['booking_profit']) !!}</span>
                     </div>
-                    <div>{!! $deltaPill($health['profit_loss_delta']) !!} <span class="ow-kpi-foot">earned revenue less vendor cost &middot; refunds applied &middot; vs previous month</span></div>
+                    <div>{!! $deltaPill($health['booking_profit_delta']) !!} <span class="ow-kpi-foot">booking value less adjusted vendor cost &middot; vs previous month</span></div>
+                    <div class="ow-kpi-foot">Realized cash profit: &#8377;{{ $rupees($health['realized_profit']) }} <span>approved collections less vendor cost and applied refunds</span></div>
                 </div>
                 <div class="ow-card ow-kpi s3">
                     <div class="ow-kpi-top"><span class="ow-kpi-label">Collected</span><span class="ow-kpi-ico brand"><i

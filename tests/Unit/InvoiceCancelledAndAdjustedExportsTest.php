@@ -11,6 +11,7 @@ use App\Models\Client;
 use App\Models\Invoice;
 use App\Models\Lead;
 use App\Models\LeadFollowup;
+use App\Models\LeadRefund;
 use App\Models\LeadRide;
 use App\Models\LeadVendorPayment;
 use App\Models\PaymentAuditTrail;
@@ -235,6 +236,64 @@ class InvoiceCancelledAndAdjustedExportsTest extends TestCase
         $this->assertSame(85.71, round((float) $row->profit_loss_percent, 2));
     }
 
+    public function test_booking_profit_uses_chargeable_booking_value_when_customer_payment_is_partial(): void
+    {
+        $this->actingAs($this->createAdminUser());
+        $this->createPaidCancelledScenario(40000);
+
+        $report = app(ReportController::class)
+            ->profitLossReport(Request::create('/admin/report/profit-loss', 'GET'));
+        $reportRow = $report->getData()['profitLossData']->first();
+
+        $this->assertSame(70000.0, (float) $reportRow->booking_revenue_amount);
+        $this->assertSame(40000.0, (float) $reportRow->client_received_amount);
+        $this->assertSame(10000.0, (float) $reportRow->vendor_amount);
+        $this->assertSame(60000.0, (float) $reportRow->profit_loss);
+        $this->assertSame(85.71, round((float) $reportRow->profit_loss_percent, 2));
+
+        $exportRow = (new ProfitLossReportExport([]))->collection()->first();
+        $this->assertSame(70000.0, (float) $exportRow->booking_revenue_amount);
+        $this->assertSame(40000.0, (float) $exportRow->client_received_amount);
+        $this->assertSame(60000.0, (float) $exportRow->profit_loss);
+    }
+
+    public function test_customer_refund_reduces_booking_profit_without_changing_cash_received(): void
+    {
+        $scenario = $this->createPaidCancelledScenario(40000);
+        Schema::create('lead_refunds', function (Blueprint $table) {
+            $table->string('id')->primary();
+            $table->string('lead_followup_id');
+            $table->decimal('refund_amount', 12, 2);
+            $table->unsignedTinyInteger('status')->default(0);
+            $table->timestamps();
+        });
+
+        LeadRefund::forceCreate([
+            'id' => (string) Str::uuid(),
+            'lead_followup_id' => $scenario['followup']->id,
+            'refund_amount' => 5000,
+            'status' => 2,
+        ]);
+
+        $financial = app(\App\Services\Reports\ProfitLossSummaryService::class)
+            ->forFollowup($scenario['followup']->fresh());
+
+        $this->assertSame(40000.0, $financial['cash_received']);
+        $this->assertSame(40000.0, $financial['earned_revenue']);
+        $this->assertSame(65000.0, $financial['chargeable_revenue']);
+        $this->assertSame(10000.0, $financial['vendor_cost']);
+        $this->assertSame(55000.0, $financial['booking_profit']);
+        $this->assertSame(30000.0, $financial['profit'], 'Existing cash-based profit remains available to existing callers.');
+
+        $paidDate = PaymentAuditTrail::where('lead_followup_id', $scenario['followup']->id)->value('paid_date');
+        $period = app(\App\Services\Reports\ProfitLossSummaryService::class)->forPeriod(
+            \Carbon\Carbon::parse($paidDate)->startOfMonth(),
+            \Carbon\Carbon::parse($paidDate)->endOfMonth()
+        );
+        $this->assertSame(55000.0, $period['booking_profit']);
+        $this->assertSame(30000.0, $period['commission'], 'Realized cash profit stays available alongside booking profit.');
+    }
+
     public function test_vendor_report_screen_uses_refund_adjusted_vendor_amounts(): void
     {
         $this->actingAs($this->createAdminUser());
@@ -302,7 +361,7 @@ class InvoiceCancelledAndAdjustedExportsTest extends TestCase
         $this->assertSame(85.71, round((float) $row->profit_loss_percent, 2));
     }
 
-    private function createPaidCancelledScenario(): array
+    private function createPaidCancelledScenario(float $customerPaymentAmount = 70000): array
     {
         $client = Client::forceCreate([
             'id' => (string) Str::uuid(),
@@ -348,7 +407,7 @@ class InvoiceCancelledAndAdjustedExportsTest extends TestCase
         PaymentAuditTrail::forceCreate([
             'id' => (string) Str::uuid(),
             'lead_followup_id' => $followup->id,
-            'paid_amount' => 70000,
+            'paid_amount' => $customerPaymentAmount,
             'paid_date' => '2026-08-21 10:30:00',
             'payment_method' => 'Bank Transfer',
             'narration' => 'Approved customer payment before cancellation.',

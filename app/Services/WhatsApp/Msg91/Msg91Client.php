@@ -113,11 +113,11 @@ if (!$response->successful()) {
     }
 
     $url = rtrim((string) config('services.msg91_campaigns.control_url'), '/')
-        . '/api/v5/whatsapp/client-panel-template?'
+        . '/api/v5/whatsapp/client-panel-template/?'
         . http_build_query([
             'integrated_number' => $integratedNumber,
             'template_name' => $templateName,
-        ], '', '&', PHP_QUERY_RFC3986);
+        ]);
 
     try {
         $response = Http::acceptJson()

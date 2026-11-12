@@ -58,7 +58,7 @@ class OperationsHomeService
         $caseRows = null;
         if ($caseBucket) {
             $selection = (clone $open)->with('lead.client');
-            if ($caseBucket === 'due') $selection->where('next_followup_at', '>=', $today)->where('next_followup_at', '<', $tomorrow);
+            if ($caseBucket === 'due') $this->whereDueToday($selection, $today, $tomorrow);
             if ($caseBucket === 'recent') $selection->where('opened_at', '>=', $today->copy()->subDay());
             if ($caseBucket === 'week') $selection->where('opened_at', '>=', $today->copy()->subDays(7))->where('opened_at', '<', $today->copy()->subDay());
             if ($caseBucket === 'older') $selection->where('opened_at', '<', $today->copy()->subDays(7));
@@ -154,7 +154,7 @@ class OperationsHomeService
             'partPaidCount' => $partPaid->count(),
             'partPaidBalance' => $partPaid->sum('balance'),
             'openCount' => (clone $open)->count(),
-            'dueToday' => (clone $open)->where('next_followup_at', '>=', $today)->where('next_followup_at', '<', $tomorrow)->count(),
+            'dueToday' => $this->whereDueToday(clone $open, $today, $tomorrow)->count(),
             'nextDue' => (clone $open)->where('next_followup_at', '>=', now())->where('next_followup_at', '<', $tomorrow)->min('next_followup_at'),
             'age' => [
                 'recent' => (clone $open)->where('opened_at', '>=', $today->copy()->subDay())->count(),
@@ -169,5 +169,16 @@ class OperationsHomeService
             'callsCount' => (clone $calls)->count(),
             'callsOldest' => (clone $calls)->min('opened_at'),
         ];
+    }
+
+    /** Include un-dated open cases in today's follow-up work queue. */
+    private function whereDueToday($query, $today, $tomorrow)
+    {
+        return $query->where(function ($due) use ($today, $tomorrow) {
+            $due->where(function ($dated) use ($today, $tomorrow) {
+                $dated->where('next_followup_at', '>=', $today)
+                    ->where('next_followup_at', '<', $tomorrow);
+            })->orWhereNull('next_followup_at');
+        });
     }
 }

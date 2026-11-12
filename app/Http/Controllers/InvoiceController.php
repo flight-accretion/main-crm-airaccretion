@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Invoice;
 use App\Models\Voucher;
+use App\Services\Reports\ProfitLossSummaryService;
 use App\Models\Lead;
 use App\Models\Client;
 use App\Models\LeadPayment;
@@ -281,7 +282,8 @@ class InvoiceController extends Controller
 
                 $serviceInfo = $this->getServiceInformation($lead, $voucher);
                 $vendorInfo = $this->getVendorInformation($voucher);
-                $profitLoss = $totalReceived - $vendorInfo['totalVendorCost'];
+                $financial = app(ProfitLossSummaryService::class)->forFollowup($latestPayment);
+                $profitLoss = $financial['booking_profit'];
                 $rideInfo = $this->getRideInformation($lead);
                 $allRides = $this->getAllRideSegments($lead);
                 $existingInvoiceModel = Invoice::where('voucher_id', $voucher->id)->first();
@@ -1438,6 +1440,10 @@ class InvoiceController extends Controller
         $vendorBills = app(InvoiceVendorBillService::class)
        ->forVoucher($voucher);
 
+        $financial = $latestPayment
+            ? app(ProfitLossSummaryService::class)->forFollowup($latestPayment)
+            : null;
+
         // ensure compatibility: copy aggregated vendor total into service.total_service_amount
         if (!isset($service['total_service_amount'])) {
             $service['total_service_amount'] = $vendor['total_service_amount'] ?? $vendor['totalVendorCost'] ?? 0;
@@ -1457,7 +1463,8 @@ class InvoiceController extends Controller
                 'latest_payment' => $latestPayment
             ],
             'voucher_customer_items' => $voucherInvoiceData['items'],
-            'profit_loss' => $totalReceived - ($vendor['totalVendorCost'] ?? 0),
+            'profit_loss' => $financial['booking_profit']
+                ?? ((float) $totalAmount - (float) ($vendor['totalVendorCost'] ?? 0)),
             'vendor_bills' => $vendorBills,
         ];
     }
