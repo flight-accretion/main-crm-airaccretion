@@ -68,17 +68,6 @@ class OperationsVendorRefundController extends Controller
             \App\Services\Operations\RefundSummaryService::class
         )->summary();
 
-        $refundSummary['vendor_pending'] = $rows->count();
-
-        if ($refundSummary['waiting_approval'] !== null) {
-            $refundSummary['waiting_approval'] = $rows
-                ->where(
-                    'approval_status',
-                    \App\Support\RefundApproval::PENDING
-                )
-                ->count();
-        }
-
         $perPage = (int) $request->get('per_page', 25);
 
         if (!in_array($perPage, [10, 25, 50, 100], true)) {

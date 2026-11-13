@@ -53,10 +53,11 @@ class ExceptionalController extends Controller
                     $latest = $sortedGroup->first();
                     $client = $latest->enquiry->client ?? null;
                     $ride = $latest->enquiry->rideSegments->first() ?? null;
-                    // Use latest followup having a valid total amount.
-                    // If latest status row has 0/null total, fallback to previous non-zero total.
+                    // An explicit zero price is authoritative. Legacy zero rows can be notes.
                     $latestWithAmount = $sortedGroup->first(function ($f) {
-                        return isset($f->total_amount) && (float) $f->total_amount > 0;
+                        return isset($f->total_amount)
+                            && ((float) $f->total_amount > 0
+                                || ((float) $f->total_amount === 0.0 && $f->pricing_revision === true));
                     });
                     $effectiveTotalFollowup = $latestWithAmount ?: $latest;
                     $totalAmount = (float) ($effectiveTotalFollowup->total_amount ?? 0);
@@ -85,6 +86,7 @@ class ExceptionalController extends Controller
                         'email' => $client->email ?? '',
                         'from_date' => $ride->from_date ?? null,
                         'total_amount' => $totalAmount,
+                        'explicit_zero_price' => $totalAmount === 0.0 && $effectiveTotalFollowup->pricing_revision === true,
                         'received_amount' => $effectiveReceived,
                         'received_amount_approved' => $totalReceivedApproved,
                         'balance' => $totalAmount - $effectiveReceived,
@@ -95,9 +97,9 @@ class ExceptionalController extends Controller
                         'created_at' => $latest->created_at,
                     ];
                 })
-                // Keep only cases where received > total (and total > 0)
                 ->filter(function ($item) {
-                    return isset($item->total_amount) && $item->total_amount > 0 && (float) $item->received_amount > (float) $item->total_amount;
+                    return (float) $item->received_amount > $item->total_amount
+                        && ($item->total_amount > 0 || $item->explicit_zero_price);
                 })
                 ->values();
 

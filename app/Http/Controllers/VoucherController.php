@@ -1415,7 +1415,7 @@ $allVendors =
                 $deletedIds = array_filter((array) $request->input('deleted_passenger_ids'));
                 $deletedPassengerIds = $deletedIds;
                 if (!empty($deletedIds)) {
-                    LeadPassenger::whereIn('id', $deletedIds)->delete();
+                    // LeadPassenger::whereIn('id', $deletedIds)->delete();
                     $this->debugLog('Deleted passengers via deleted_passenger_ids', ['deleted_ids' => $deletedIds]);
                 }
             }
@@ -1974,7 +1974,18 @@ foreach ($existingPayments as $payment) {
                     // Determine if this is an existing passenger (has ID) or new (no ID)
                     if (!empty($passengerData['id'])) {
                         // Update existing passenger by ID
-                        $passenger = LeadPassenger::find($passengerData['id']);
+                        $passenger = LeadPassenger::query()
+                            ->where(function ($query) use ($voucherId, $request) {
+                                $query->where('voucher_id', $voucherId)
+                                    ->orWhere(function ($query) use ($request) {
+                                        $query->whereNull('voucher_id')
+                                            ->where('lead_id', $request->lead_id);
+                                    });
+                            })
+                            ->find($passengerData['id']);
+                        if (!$passenger) {
+                            throw new \InvalidArgumentException('The selected passenger does not belong to this booking.');
+                        }
                         if ($passenger) {
                             $passenger->update([
                                 'voucher_id' => $voucherId,
@@ -3863,6 +3874,7 @@ private function createFollowUpForAddedServices(
                     ),
 
                 'updated_at' => now(),
+                'pricing_revision' => true,
 
                 // IMPORTANT:
                 // DO NOT put 'status' here.
@@ -3964,6 +3976,7 @@ private function createFollowUpForAddedServices(
                 json_encode(
                     $serviceDetailsArray
                 ),
+                'pricing_revision' => true,
         ];
 
         $newFollowup =

@@ -1,0 +1,289 @@
+diff --git a/app/Exports/ProfitLossReportExport.php b/app/Exports/ProfitLossReportExport.php
+index 06771051..2236dcf5 100644
+--- a/app/Exports/ProfitLossReportExport.php
++++ b/app/Exports/ProfitLossReportExport.php
+@@ -19,6 +19,7 @@
+ use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
+ use Illuminate\Support\Collection;
+ use Carbon\Carbon;
++use App\Services\Sales\SalesBookingCohortService;
+ 
+ class ProfitLossReportExport implements FromGenerator, WithHeadings, WithMapping, WithStyles, WithEvents
+ {
+@@ -199,7 +200,35 @@ private function exportQuery()
+         'enquiry.leadVendorPayments.vendorPayments',
+         'enquiry.leadVendorPayments.vendorRefunds',
+         'followedBy.userType'
+-    ])->whereIn('status', [2, 3, 4, 5, 6, 7, 8]);
++    ])->whereIn(
++        'status',
++        LeadFollowup::FINANCIAL_REPORT_STATUSES
++    );
++    $fromPaymentDate = $this->filters['from_payment_date'] ?? null;
++    $toPaymentDate = $this->filters['to_payment_date'] ?? null;
++
++    if ($fromPaymentDate || $toPaymentDate) {
++        $fromDate = $fromPaymentDate
++            ? Carbon::parse($fromPaymentDate)->startOfDay()
++            : Carbon::create(1970, 1, 1)->startOfDay();
++
++        $toDate = $toPaymentDate
++            ? Carbon::parse($toPaymentDate)->endOfDay()
++            : now()->endOfDay();
++
++        $allowedRepresentativeIds =
++            $this->filters['_allowed_representative_ids'] ?? null;
++
++        $periodLeadIds = app(
++            SalesBookingCohortService::class
++        )->leadIdsForPeriod(
++            $fromDate,
++            $toDate,
++            $allowedRepresentativeIds
++        );
++
++        $query->whereIn('lead_id', $periodLeadIds);
++    }
+ 
+     if (!empty($this->filters['from_date'])) {
+         $fromDate = Carbon::parse($this->filters['from_date'])->startOfDay();
+@@ -318,9 +347,12 @@ public function collection()
+         if (!$approvedLeadIds->contains($latest->lead_id)) {
+             return null;
+         }
+-
+         // Skip if latest status is not qualifying
+-        if (!in_array($latest->status, [2, 3, 4, 5, 6, 7, 8])) {
++        if (!in_array(
++            (int) $latest->status,
++            LeadFollowup::FINANCIAL_REPORT_STATUSES,
++            true
++        )) {
+             return null;
+         }
+ 
+diff --git a/app/Http/Controllers/ReportController.php b/app/Http/Controllers/ReportController.php
+index 8e70050a..5b08aa8b 100644
+--- a/app/Http/Controllers/ReportController.php
++++ b/app/Http/Controllers/ReportController.php
+@@ -1522,6 +1522,8 @@ public function profitLossReport(Request $request)
+             6 => 'Pending',
+             7 => 'Rescheduled',
+             8 => 'Approved',
++            10 => 'Sales Follow-up',
++            11 => 'Close Follow-up',
+             // 9 => 'Rejected'
+         ];
+ 
+@@ -1535,7 +1537,10 @@ public function profitLossReport(Request $request)
+             'enquiry.leadVendorPayments.vendorPayments',
+             'enquiry.leadVendorPayments.vendorRefunds',
+             'followedBy.userType'
+-        ])->whereIn('status', [2, 3, 4, 5, 6, 7, 8]);
++        ])->whereIn(
++        'status',
++        LeadFollowup::FINANCIAL_REPORT_STATUSES
++      );
+ 
+         $query = $this->applyRepresentativeScope($query);
+ 
+@@ -1701,9 +1706,12 @@ public function profitLossReport(Request $request)
+             if (!$approvedLeadIds->contains($latest->lead_id)) {
+                 return null;
+             }
+-
+             // Also skip if latest followup status is not in qualifying statuses
+-            if (!in_array($latest->status, [2, 3, 4, 5, 6, 7, 8])) {
++            if (!in_array(
++                (int) $latest->status,
++                LeadFollowup::FINANCIAL_REPORT_STATUSES,
++                true
++            )) {
+                 return null;
+             }
+ 
+diff --git a/app/Models/LeadFollowup.php b/app/Models/LeadFollowup.php
+index c7d08b8b..7e7e1054 100644
+--- a/app/Models/LeadFollowup.php
++++ b/app/Models/LeadFollowup.php
+@@ -27,6 +27,18 @@ class LeadFollowup extends Model
+     public const STATUS_SALES_FOLLOW_UP = 10;
+     public const STATUS_CLOSE_FOLLOW_UP = 11;
+ 
++    public const FINANCIAL_REPORT_STATUSES = [
++        self::STATUS_CANCELLED,
++        self::STATUS_FULL_PAYMENT_RECEIVED,
++        self::STATUS_PARTIAL_PAYMENT_RECEIVED,
++        self::STATUS_RIDE_COMPLETED,
++        self::STATUS_PENDING,
++        self::STATUS_RESCHEDULED,
++        self::STATUS_APPROVED,
++        self::STATUS_SALES_FOLLOW_UP,
++        self::STATUS_CLOSE_FOLLOW_UP,
++    ];
++
+     public const FOLLOWUP_ONLY_STATUSES = [
+         self::STATUS_SALES_FOLLOW_UP,
+         self::STATUS_CLOSE_FOLLOW_UP,
+diff --git a/app/Services/Reports/ProfitLossSummaryService.php b/app/Services/Reports/ProfitLossSummaryService.php
+index f7b81beb..891786b0 100644
+--- a/app/Services/Reports/ProfitLossSummaryService.php
++++ b/app/Services/Reports/ProfitLossSummaryService.php
+@@ -80,12 +80,15 @@ public function forPeriod(Carbon $from, Carbon $to, ?array $representativeIds =
+         if ($leadIds->isEmpty()) {
+             return $this->emptyResult();
+         }
+-
+         $latestFollowups = LeadFollowup::query()
+             ->with(['enquiry.leadVendorPayments.vendor'])
+             ->whereIn('lead_id', $leadIds)
+-            ->whereIn('status', [2, 3, 4, 5, 6, 7, 8])
++            ->whereIn(
++                'status',
++                LeadFollowup::FINANCIAL_REPORT_STATUSES
++            )
+             ->orderByDesc('created_at')
++            ->orderByDesc('id')
+             ->get()
+             ->groupBy('lead_id')
+             ->map(fn ($rows) => $rows->first())
+diff --git a/app/Services/Sales/SalesBookingCohortService.php b/app/Services/Sales/SalesBookingCohortService.php
+index 7d7cac25..475ffff7 100644
+--- a/app/Services/Sales/SalesBookingCohortService.php
++++ b/app/Services/Sales/SalesBookingCohortService.php
+@@ -26,12 +26,15 @@ public function leadIdsForPeriod(
+         if ($representativeIds !== null && empty($representativeIds)) {
+             return collect();
+         }
+-
+-        $query = DB::table('payment_audit_trail as pat')
+-            ->join('lead_followups as lf', 'lf.id', '=', 'pat.lead_followup_id')
+-            ->join('leads as l', 'l.id', '=', 'lf.lead_id')
+-            ->where('pat.payment_status', PaymentAuditTrail::STATUS_APPROVED)
+-            ->whereNotNull('pat.paid_date');
++    $query = DB::table('payment_audit_trail as pat')
++        ->join('lead_followups as lf', 'lf.id', '=', 'pat.lead_followup_id')
++        ->join('leads as l', 'l.id', '=', 'lf.lead_id')
++        ->where(
++            'pat.payment_status',
++            PaymentAuditTrail::STATUS_APPROVED
++        )
++        ->where('pat.paid_amount', '>', 0)
++        ->whereNotNull('pat.paid_date');
+ 
+         if ($representativeIds !== null) {
+             $query->whereIn('l.representative_user_id', $representativeIds);
+diff --git a/tests/Unit/InvoiceCancelledAndAdjustedExportsTest.php b/tests/Unit/InvoiceCancelledAndAdjustedExportsTest.php
+index 11ad831a..b021e1af 100644
+--- a/tests/Unit/InvoiceCancelledAndAdjustedExportsTest.php
++++ b/tests/Unit/InvoiceCancelledAndAdjustedExportsTest.php
+@@ -753,4 +753,109 @@ private function createSchema(): void
+             $table->timestamps();
+         });
+     }
++public function test_paid_booking_remains_in_original_month_after_sales_followups(): void
++{
++    $this->actingAs($this->createAdminUser());
++
++    $scenario = $this->createPaidCancelledScenario(40000);
++    $lead = $scenario['lead'];
++
++    // Adapt the existing financial fixture to a paid,
++    // non-cancelled booking.
++    $scenario['followup']->update([
++        'status' => LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
++    ]);
++
++    $salesFollowup = LeadFollowup::forceCreate([
++        'id' => (string) Str::uuid(),
++        'lead_id' => $lead->id,
++        'status' => LeadFollowup::STATUS_SALES_FOLLOW_UP,
++        'total_amount' => 75000,
++        'received_amount' => 0,
++        'service_ids' => [],
++        'extra_service_ids' => [],
++        'service_details' => [],
++        'created_at' => '2026-08-25 10:00:00',
++        'updated_at' => '2026-08-25 10:00:00',
++    ]);
++
++    $cohort = app(
++        \App\Services\Sales\SalesBookingCohortService::class
++    );
++
++    $augustIds = $cohort->leadIdsForPeriod(
++        \Carbon\Carbon::parse('2026-08-01'),
++        \Carbon\Carbon::parse('2026-08-31')
++    );
++
++    $this->assertTrue($augustIds->contains($lead->id));
++
++    $salesPeriod = app(
++        \App\Services\Reports\ProfitLossSummaryService::class
++    )->forPeriod(
++        \Carbon\Carbon::parse('2026-08-01'),
++        \Carbon\Carbon::parse('2026-08-31')
++    );
++
++    $this->assertSame(1, $salesPeriod['lead_count']);
++    $this->assertSame(75000.0, $salesPeriod['booking_revenue']);
++    $this->assertSame(65000.0, $salesPeriod['booking_profit']);
++
++    // Later follow-up in another month must not create
++    // another booking or change the original cohort.
++    $closeFollowup = LeadFollowup::forceCreate([
++        'id' => (string) Str::uuid(),
++        'lead_id' => $lead->id,
++        'status' => LeadFollowup::STATUS_CLOSE_FOLLOW_UP,
++        'total_amount' => 75000,
++        'received_amount' => 0,
++        'service_ids' => [],
++        'extra_service_ids' => [],
++        'service_details' => [],
++        'created_at' => '2026-09-02 10:00:00',
++        'updated_at' => '2026-09-02 10:00:00',
++    ]);
++
++    $septemberIds = $cohort->leadIdsForPeriod(
++        \Carbon\Carbon::parse('2026-09-01'),
++        \Carbon\Carbon::parse('2026-09-30')
++    );
++
++    $this->assertFalse($septemberIds->contains($lead->id));
++
++    $report = app(ReportController::class)->profitLossReport(
++        Request::create('/admin/report/profit-loss', 'GET', [
++            'from_payment_date' => '2026-08-01',
++            'to_payment_date' => '2026-08-31',
++        ])
++    );
++
++    $reportRow = $report->getData()['profitLossData']->first();
++
++    $this->assertNotNull($reportRow);
++    $this->assertSame(
++        $closeFollowup->id,
++        $reportRow->followup_id
++    );
++    $this->assertSame(65000.0, (float) $reportRow->profit_loss);
++
++    $augustExport = (new ProfitLossReportExport([
++        'from_payment_date' => '2026-08-01',
++        'to_payment_date' => '2026-08-31',
++    ]))->collection();
++
++    $this->assertCount(1, $augustExport);
++    $this->assertSame(
++        65000.0,
++        (float) $augustExport->first()->profit_loss
++    );
++
++    $septemberExport = (new ProfitLossReportExport([
++        'from_payment_date' => '2026-09-01',
++        'to_payment_date' => '2026-09-30',
++    ]))->collection();
++
++    $this->assertCount(0, $septemberExport);
++}
++
+ }

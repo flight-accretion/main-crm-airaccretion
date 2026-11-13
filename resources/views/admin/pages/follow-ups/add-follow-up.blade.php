@@ -614,7 +614,10 @@
                         <input type="hidden" id="discount_amount" name="discount_amount" value="">
                         <input type="hidden" id="total_amount" name="total_amount" value="">
                         <input type="hidden" id="service_details" name="service_details" value="">
-
+                        <input type="hidden"
+                            id="pricing_action"
+                            name="pricing_action"
+                            value="preserve">
                         <!-- Payment Fields - Shown only for payment-related statuses -->
                         <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12"
                             id="received_amount_field" style="display: none;">
@@ -2645,6 +2648,41 @@
         const discountAmountInput = document.getElementById('discount_amount');
         const totalAmountInput = document.getElementById('total_amount');
         const serviceDetailsInput = document.getElementById('service_details');
+        const pricingActionInput = document.getElementById('pricing_action');
+        const pricingEditable = @json(!$operationsMode);
+
+        let pricingValueEdited = false;
+        let pricingSelectionTouched = false;
+        let pricingSelectionBaseline = null;
+
+        function pricingSelectionKey() {
+            return JSON.stringify(
+                ['services', 'extra_services'].map(id => {
+                    const select = document.getElementById(id);
+
+                    if (!select) {
+                        return [];
+                    }
+
+                    return Array.from(
+                        select.selectedOptions,
+                        option => String(option.value)
+                    ).sort();
+                })
+            );
+        }
+
+        function markPricingRevised() {
+            if (pricingEditable) {
+                pricingValueEdited = true;
+            }
+        }
+
+        function markPricingSelectionTouched() {
+            if (pricingEditable) {
+                pricingSelectionTouched = true;
+            }
+        }
         const totalFinalAmountDisplay = document.getElementById('total_final_amount_display');
         const totalFinalAmountEdit = document.getElementById('total_final_amount_edit');
         const editTotalBtn = document.getElementById('edit_total_btn');
@@ -3010,7 +3048,10 @@
 
             // Add event listeners for final inputs (user edits final -> discount is auto-calculated)
             document.querySelectorAll('.final-input').forEach(input => {
-                input.addEventListener('input', function() {
+                input.addEventListener('input', function(event) {
+                if (event.isTrusted) {
+                    markPricingRevised();
+                }
                     // Any change to final should cancel manual override
                     isManualTotalEdited = false;
                     const key = this.getAttribute('data-key');
@@ -3040,7 +3081,10 @@
 
             // Add event listeners for original amount inputs (editable when original is 0)
             document.querySelectorAll('.original-input').forEach(input => {
-                input.addEventListener('input', function() {
+                input.addEventListener('input', function(event) {
+                    if (event.isTrusted) {
+                        markPricingRevised();
+                    }
                     // Changing original amount should cancel manual override
                     isManualTotalEdited = false;
                     const key = this.getAttribute('data-key');
@@ -3080,7 +3124,10 @@
 
             // Add event listeners for remove buttons
             document.querySelectorAll('.remove-service-btn').forEach(btn => {
-                btn.addEventListener('click', function() {
+                btn.addEventListener('click', function(event) {
+                    if (event.isTrusted) {
+                        markPricingSelectionTouched();
+                    }
                     // Removing a service should cancel manual override
                     isManualTotalEdited = false;
                     const key = this.getAttribute('data-key');
@@ -3279,8 +3326,33 @@
 
             // Save Total button
             if (saveTotalBtn) {
-                saveTotalBtn.addEventListener('click', function() {
-                    const manualTotal = parseFloat(totalFinalAmountEdit.value) || 0;
+               saveTotalBtn.addEventListener('click', function() {
+            const rawTotal = totalFinalAmountEdit.value.trim();
+
+            if (rawTotal === '' || !Number.isFinite(Number(rawTotal))) {
+                alert('Enter a valid total amount, including 0 if intentional.');
+                totalFinalAmountEdit.focus();
+                return;
+            }
+
+            const manualTotal = Number(rawTotal);
+
+            if (manualTotal < 0) {
+                alert('Total amount cannot be negative.');
+                totalFinalAmountEdit.focus();
+                return;
+            }
+
+            if (
+                manualTotal === 0 &&
+                !window.confirm(
+                    'Confirm final agreed customer booking amount is ₹0?'
+                )
+            ) {
+                return;
+            }
+
+            markPricingRevised();
 
                     // Update display and mark manual override
                     totalFinalAmountDisplay.textContent = `₹${manualTotal.toFixed(2)}`;
@@ -3396,6 +3468,27 @@
             }
 
             // Handle status change to show/hide payment fields
+            queueMicrotask(() => {
+                pricingSelectionBaseline = pricingSelectionKey();
+            });
+
+            pricingActionInput?.form?.addEventListener('submit', () => {
+                const selectionChanged = pricingSelectionTouched && pricingSelectionBaseline !== null
+                    && pricingSelectionKey() !== pricingSelectionBaseline;
+                pricingActionInput.value = pricingEditable && (pricingValueEdited || selectionChanged)
+                    ? 'revise' : 'preserve';
+            });
+
+            for (const select of [servicesSelect, extraServicesSelect]) {
+                select.addEventListener('change', event => {
+                    if (event.isTrusted) markPricingSelectionTouched();
+                });
+                if (typeof $ !== 'undefined' && $.fn.select2) {
+                    $(select).on('select2:select.pricing select2:unselect.pricing select2:clear.pricing',
+                        markPricingSelectionTouched);
+                }
+            }
+
             function togglePaymentFields() {
                 const selectedStatus = statusSelect.value;
                 const showPaymentFields = selectedStatus === '3' || selectedStatus === '4';
@@ -3973,7 +4066,7 @@
             const preview = document.getElementById('image-preview');
             const errorEl = document.getElementById('image-error');
             const helpEl = document.getElementById('image-help');
-            const form = document.querySelector('form.ti-custom-validation');
+            const form = imageInput?.form;
             const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
 
             const MAX_KB = 2048; // 2MB
@@ -4023,8 +4116,7 @@
                     if (!file) return;
 
                     // Validate size
-                    const kb = Math.round(file.size / 1024);
-                    if (kb > MAX_KB) {
+                    if (file.size > MAX_KB * 1024) {
                         showError('File size must not exceed 2MB');
                         return;
                     }
@@ -6128,13 +6220,21 @@ document
             if (existingExtraServices && workspaceExtraServicePickers.length) {
                 refreshExtraServicePickers();
                 workspaceExtraServicePickers.forEach(function (picker) {
-                    picker.addEventListener('change', function () {
+                    const applySelection = function () {
+                        markPricingSelectionTouched();
                         const selectedValues = new Set(Array.from(picker.selectedOptions).map(function (option) { return option.value; }));
                         Array.from(existingExtraServices.options).forEach(function (option) {
                             option.selected = selectedValues.has(option.value);
                         });
                         existingExtraServices.dispatchEvent(new Event('change', { bubbles: true }));
+                    };
+                    picker.addEventListener('change', event => {
+                        if (event.isTrusted) applySelection();
                     });
+                    if (hasSelect2) {
+                        $(picker).on('select2:select.pricing select2:unselect.pricing select2:clear.pricing',
+                            applySelection);
+                    }
                 });
                 new MutationObserver(refreshExtraServicePickers).observe(existingExtraServices, { childList: true, subtree: true, attributes: true });
             }
@@ -6184,11 +6284,20 @@ document
                 // Add Follow-up extra-service picker filters against the same service.
                 syncServiceWithExistingFollowup();
                 const handleProductEditorChange = function () {
+                    markPricingSelectionTouched();
                     filterServicesForProduct();
                     syncServiceWithExistingFollowup();
                 };
-                productEditor.addEventListener('change', handleProductEditorChange);
-                serviceEditor.addEventListener('change', syncServiceWithExistingFollowup);
+                const handleServiceEditorChange = function () {
+                    markPricingSelectionTouched();
+                    syncServiceWithExistingFollowup();
+                };
+                productEditor.addEventListener('change', event => {
+                    if (event.isTrusted) handleProductEditorChange();
+                });
+                serviceEditor.addEventListener('change', event => {
+                    if (event.isTrusted) handleServiceEditorChange();
+                });
                 initialiseSearchableSelect(productEditor, 'Search and select a product');
 
                 // Select2 events are bound explicitly as well as the native change event.
@@ -6196,7 +6305,7 @@ document
                 // clear-icon, and search-result selections.
                 if (hasSelect2) {
                     $(productEditor).on('select2:select.workspace-product select2:clear.workspace-product', handleProductEditorChange);
-                    $(serviceEditor).on('select2:select.workspace-service select2:clear.workspace-service', syncServiceWithExistingFollowup);
+                    $(serviceEditor).on('select2:select.workspace-service select2:clear.workspace-service', handleServiceEditorChange);
                 }
             }
 

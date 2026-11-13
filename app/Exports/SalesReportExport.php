@@ -483,6 +483,10 @@ class SalesReportExport implements FromGenerator, WithHeadings, WithMapping, Wit
                     ],
                 ]);
 
+                if ($lastRow < 2) {
+                    return;
+                }
+
                 // Format numeric columns (D: Received, E: Pending, F: Total, G: Refund, H: Sales)
                 $sheet->getStyle('D2:H' . $lastRow)
                     ->getNumberFormat()

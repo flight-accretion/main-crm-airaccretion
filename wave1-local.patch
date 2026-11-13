@@ -1,0 +1,1910 @@
+diff --git a/app/Exports/ProfitLossReportExport.php b/app/Exports/ProfitLossReportExport.php
+index 06771051..374d3cd9 100644
+--- a/app/Exports/ProfitLossReportExport.php
++++ b/app/Exports/ProfitLossReportExport.php
+@@ -19,6 +19,7 @@
+ use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
+ use Illuminate\Support\Collection;
+ use Carbon\Carbon;
++use App\Services\Sales\SalesBookingCohortService;
+ 
+ class ProfitLossReportExport implements FromGenerator, WithHeadings, WithMapping, WithStyles, WithEvents
+ {
+@@ -199,7 +200,35 @@ private function exportQuery()
+         'enquiry.leadVendorPayments.vendorPayments',
+         'enquiry.leadVendorPayments.vendorRefunds',
+         'followedBy.userType'
+-    ])->whereIn('status', [2, 3, 4, 5, 6, 7, 8]);
++    ])->whereIn(
++        'status',
++        LeadFollowup::FINANCIAL_REPORT_STATUSES
++    );
++    $fromPaymentDate = $this->filters['from_payment_date'] ?? null;
++    $toPaymentDate = $this->filters['to_payment_date'] ?? null;
++
++    if ($fromPaymentDate || $toPaymentDate) {
++        $fromDate = $fromPaymentDate
++            ? Carbon::parse($fromPaymentDate)->startOfDay()
++            : Carbon::create(1970, 1, 1)->startOfDay();
++
++        $toDate = $toPaymentDate
++            ? Carbon::parse($toPaymentDate)->endOfDay()
++            : now()->endOfDay();
++
++        $allowedRepresentativeIds =
++            $this->filters['_allowed_representative_ids'] ?? null;
++
++        $periodLeadIds = app(
++            SalesBookingCohortService::class
++        )->leadIdsForPeriod(
++            $fromDate,
++            $toDate,
++            $allowedRepresentativeIds
++        );
++
++        $query->whereIn('lead_id', $periodLeadIds);
++    }
+ 
+     if (!empty($this->filters['from_date'])) {
+         $fromDate = Carbon::parse($this->filters['from_date'])->startOfDay();
+@@ -312,15 +341,18 @@ public function collection()
+ 
+     $profitLossService = app(ProfitLossSummaryService::class);
+     $profitLossData = $allData->groupBy('lead_id')->map(function ($group) use ($approvedLeadIds, $profitLossService) {
+-        $latest = $group->sortByDesc('created_at')->first();
++        $latest = $group->sortBy([['created_at', 'desc'], ['id', 'desc']])->first();
+ 
+         // Only include leads with at least one approved payment
+         if (!$approvedLeadIds->contains($latest->lead_id)) {
+             return null;
+         }
+-
+         // Skip if latest status is not qualifying
+-        if (!in_array($latest->status, [2, 3, 4, 5, 6, 7, 8])) {
++        if (!in_array(
++            (int) $latest->status,
++            LeadFollowup::FINANCIAL_REPORT_STATUSES,
++            true
++        )) {
+             return null;
+         }
+ 
+diff --git a/app/Exports/SalesReportExport.php b/app/Exports/SalesReportExport.php
+index a556115d..7faba631 100644
+--- a/app/Exports/SalesReportExport.php
++++ b/app/Exports/SalesReportExport.php
+@@ -483,6 +483,10 @@ public function registerEvents(): array
+                     ],
+                 ]);
+ 
++                if ($lastRow < 2) {
++                    return;
++                }
++
+                 // Format numeric columns (D: Received, E: Pending, F: Total, G: Refund, H: Sales)
+                 $sheet->getStyle('D2:H' . $lastRow)
+                     ->getNumberFormat()
+diff --git a/app/Exports/VendorReportExport.php b/app/Exports/VendorReportExport.php
+index 1298f8d1..d5d9b987 100644
+--- a/app/Exports/VendorReportExport.php
++++ b/app/Exports/VendorReportExport.php
+@@ -15,6 +15,7 @@
+ class VendorReportExport implements FromQuery, WithHeadings, WithMapping, WithStyles, WithEvents
+ {
+     protected $filters;
++    private int $rowNumber = 0;
+ 
+     public function __construct($filters = [])
+     {
+@@ -243,9 +244,8 @@ public function map($row): array
+         if ($row instanceof LeadVendorPayment) {
+             $row = $this->buildRow($row);
+         }
+-        static $i = 0; $i++;
+         return [
+-            $i,
++            ++$this->rowNumber,
+             $row['vendor_name'],
+             $row['booking_slip'],
+             $row['product'],
+diff --git a/app/Http/Controllers/ClientController.php b/app/Http/Controllers/ClientController.php
+index 58a77d42..dfa196f5 100644
+--- a/app/Http/Controllers/ClientController.php
++++ b/app/Http/Controllers/ClientController.php
+@@ -373,6 +373,7 @@ public function buildLeadFollowupViewData(Lead $lead): array
+         $lastFollowupWithAmount = $lead->leadFollowups()
+             ->whereNotNull('total_amount')
+             ->latest('created_at')
++             ->orderByDesc('id')
+             ->first();
+ 
+         $selectedServices = [];
+@@ -473,14 +474,29 @@ public function buildLeadFollowupViewData(Lead $lead): array
+         $totalExtraServiceAmount = $selectedExtraServiceModels->sum('extra_service_amount');
+         $totalAmount = 0;
+         $isStoredAmount = false;
++            if (
++                $latestFollowup &&
++                $latestFollowup->total_amount !== null &&
++                (
++                    $latestFollowup->pricing_revision !== null ||
++                    (float) $latestFollowup->total_amount > 0
++                )
++            ) {
++                $totalAmount = (float) $latestFollowup->total_amount;
++                $isStoredAmount = true;
++            } else {
++                $pricingSnapshot = LeadFollowup::latestPricingSnapshot(
++                    (string) $lead->id
++                );
+ 
+-        if ($latestFollowup && $latestFollowup->total_amount && $latestFollowup->total_amount > 0) {
+-            $totalAmount = $latestFollowup->total_amount;
+-            $isStoredAmount = true;
+-        } else {
+-            $totalAmount = $totalServiceAmount + $totalExtraServiceAmount;
+-        }
+-
++                if ($pricingSnapshot !== null) {
++                    $totalAmount = (float) $pricingSnapshot->total_amount;
++                    $isStoredAmount = true;
++                } else {
++                    $totalAmount =
++                        $totalServiceAmount + $totalExtraServiceAmount;
++                }
++            }
+         return [
+             'clientInfo' => $clientInfo,
+             'followups' => $followups,
+@@ -3267,6 +3283,37 @@ public function storeLeadFollowUp(Request $request, Lead $lead)
+     {
+             $this->abortUnlessCanAccessLead($lead);
+ 
++            $pricingAction = $request->input('pricing_action');
++
++            if (
++                $pricingAction !== null &&
++                !in_array($pricingAction, ['preserve', 'revise'], true)
++            ) {
++                throw \Illuminate\Validation\ValidationException::withMessages([
++                    'pricing_action' => 'Invalid pricing action.',
++                ]);
++            }
++
++            $role = $request->user()?->userType?->user_type;
++            $canRevisePricing = in_array($role, array_merge(
++                UserType::ADMIN_ROLES,
++                UserType::SALES_ROLES,
++                UserType::OWNER_ROLES
++            ), true);
++            abort_if($pricingAction === 'revise' && !$canRevisePricing, 403);
++            $preservePricing = $pricingAction === 'preserve' || !$canRevisePricing;
++
++if ($preservePricing) {
++    $request->merge([
++        'services' => null,
++        'extra_services' => null,
++        'service_amount' => null,
++        'discount_amount' => null,
++        'service_details' => null,
++        'total_amount' => null,
++    ]);
++}
++
+         $preserveStatus = !$request->filled('status') || $request->input('status') === 'keep';
+         if ($preserveStatus) {
+             // Keeping a payment status is not a new payment or points redemption.
+@@ -3348,14 +3395,33 @@ function ($attribute, $value, $fail) use ($request) {
+                 ],
+                 'status' => ['required', Rule::in(['keep', 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])],
+                 'next_followup_date' => ['nullable', 'date_format:Y-m-d\TH:i'],
+-                'services' => 'required_if:status,3,4|array',
++                'services' => [
++                    'nullable',
++                    'array',
++                    Rule::requiredIf(function () use ($request, $preservePricing) {
++                        return !$preservePricing
++                            && in_array(
++                                (int) $request->input('status'),
++                                [
++                                    LeadFollowup::STATUS_FULL_PAYMENT_RECEIVED,
++                                    LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
++                                ],
++                                true
++                            );
++                    }),
++                ],
+                 'services.*' => 'exists:services,id',
+                 'extra_services' => 'nullable|array',
+                 'extra_services.*' => 'exists:extra_services,id',
+                 'service_details' => 'nullable|json',
+                 'service_amount' => 'nullable|numeric|min:0',
+                 'discount_amount' => 'nullable',
+-                'total_amount' => 'nullable|numeric|min:0',
++                'total_amount' => [
++                    'nullable',
++                    'required_if:pricing_action,revise',
++                    'numeric',
++                    'min:0',
++                ],
+                 'received_amount' => [
+                     'required_if:status,3,4',
+                     'nullable',
+@@ -3376,6 +3442,7 @@ function ($attribute, $value, $fail) use ($request) {
+                     'min:1'
+                 ],
+                 'customer_not_picked_up' => ['nullable', 'boolean'],
++                'pricing_action' => ['nullable', Rule::in(['preserve', 'revise'])],
+             ];
+ 
+             // Conditionally set image and paid_date validation based on payment method
+@@ -3440,6 +3507,9 @@ function ($attribute, $value, $fail) use ($request) {
+         try {
+             // Serialize note saves so Keep uses the current server-side status, not a stale form value.
+             Lead::whereKey($lead->id)->lockForUpdate()->firstOrFail();
++            $pricingSnapshot = $preservePricing
++                ? LeadFollowup::latestPricingSnapshot((string) $lead->id)
++                : null;
+             $previousStatus = LeadFollowup::query()
+                 ->where('lead_id', $lead->id)
+                 ->orderByDesc('created_at')
+@@ -3449,6 +3519,15 @@ function ($attribute, $value, $fail) use ($request) {
+                 ? ($previousStatus === null ? LeadFollowup::STATUS_INITIATED : (int) $previousStatus)
+                 : (int) $request->status;
+ 
++            if ($preservePricing && !$preserveStatus && in_array($statusToSave, [
++                LeadFollowup::STATUS_FULL_PAYMENT_RECEIVED,
++                LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
++            ], true) && ($pricingSnapshot === null || empty($this->normalizeIdList($pricingSnapshot->service_ids)))) {
++                throw \Illuminate\Validation\ValidationException::withMessages([
++                    'pricing_action' => 'Save booking pricing and services before recording a payment.',
++                ]);
++            }
++
+             if (!$preserveStatus) {
+                 app(LeadStatusTransitionService::class)->assertManualTransition(
+                     $lead,
+@@ -3506,7 +3585,8 @@ function ($attribute, $value, $fail) use ($request) {
+                 $lead->update(array_merge($leadUpdates, ['updated_at' => now()]));
+             }
+ 
+-            if (!empty($services)) {
++
++            if (!$preservePricing && !empty($services)) {
+                 $lead->update([
+                     'service_ids' => json_encode(array_values($services)),
+                     'updated_at' => now()
+@@ -3656,15 +3736,38 @@ function ($attribute, $value, $fail) use ($request) {
+             // Ensure total is not negative as a final safeguard
+             $totalAmount = max(0, $totalAmount);
+ 
+-            if ($preserveStatus && empty($services) && empty($extraServices)
+-                && !$request->filled('service_details') && !$request->filled('total_amount')) {
+-                // A note-only save must not replace the last quotation with a zero total.
+-                $pricing = $lead->leadFollowups()->whereNotNull('total_amount')
+-                    ->orderByDesc('created_at')->orderByDesc('id')->first();
+-                if ($pricing) {
+-                    $services = $pricing->service_ids ?: [];
+-                    $extraServices = $pricing->extra_service_ids ?: [];
+-                    $serviceDetails = $pricing->service_details ?: [];
++            if ($preservePricing) {
++                if ($pricingSnapshot !== null) {
++                    $services = $pricingSnapshot->service_ids_array;
++                    $extraServices = $pricingSnapshot->extra_service_ids_array;
++                    $serviceDetails = $pricingSnapshot->service_details_array;
++                    $calculatedServiceAmount = $pricingSnapshot->service_amount;
++                    $discountAmount = $pricingSnapshot->discount_amount;
++                    $totalAmount = $pricingSnapshot->total_amount;
++                } else {
++                    $services = [];
++                    $extraServices = [];
++                    $serviceDetails = [];
++                    $calculatedServiceAmount = null;
++                    $discountAmount = null;
++                    $totalAmount = null;
++                }
++            } elseif (
++                $pricingAction === null &&
++                $preserveStatus &&
++                empty($services) &&
++                empty($extraServices) &&
++                !$request->filled('service_details') &&
++                !$request->filled('total_amount')
++            ) {
++                $pricing = LeadFollowup::latestPricingSnapshot(
++                    (string) $lead->id
++                );
++
++                if ($pricing !== null) {
++                    $services = $pricing->service_ids_array;
++                    $extraServices = $pricing->extra_service_ids_array;
++                    $serviceDetails = $pricing->service_details_array;
+                     $calculatedServiceAmount = $pricing->service_amount;
+                     $discountAmount = $pricing->discount_amount;
+                     $totalAmount = $pricing->total_amount;
+@@ -3704,6 +3807,11 @@ function ($attribute, $value, $fail) use ($request) {
+                 'discount_amount' => $discountAmount,
+                 'service_details' => !empty($serviceDetails) ? array_values($serviceDetails) : null,
+                 'total_amount' => $totalAmount,
++                'pricing_revision' => $pricingAction === 'revise'
++                    ? true
++                    : ($preservePricing && $pricingSnapshot !== null
++                        ? false
++                        : null),
+                 'received_amount' => $request->received_amount,
+                 'payment_method' => $request->payment_method,
+                 'paid_date' => $request->paid_date,
+diff --git a/app/Http/Controllers/InvoiceController.php b/app/Http/Controllers/InvoiceController.php
+index 4bf27f81..9288a74c 100644
+--- a/app/Http/Controllers/InvoiceController.php
++++ b/app/Http/Controllers/InvoiceController.php
+@@ -1430,9 +1430,7 @@ private function getComprehensiveInvoiceData($voucher)
+             ? (float) $voucherInvoiceData['total_amount']
+             : (float) ($latestPayment->total_amount ?? 0);
+ 
+-        $discountInfo = !empty($voucherInvoiceData['items'])
+-            ? $this->reconciledInvoiceDiscount($lead, $voucherTotal)
+-            : null;
++        $discountInfo = $this->reconciledInvoiceDiscount($lead, $voucherTotal);
+ 
+         $totalAmount = $discountInfo['net'] ?? $voucherTotal;
+         // Sum all approved payments for this lead (across followups)
+diff --git a/app/Http/Controllers/OperationsDashboardController.php b/app/Http/Controllers/OperationsDashboardController.php
+index 65ff03d1..8ce64632 100644
+--- a/app/Http/Controllers/OperationsDashboardController.php
++++ b/app/Http/Controllers/OperationsDashboardController.php
+@@ -131,6 +131,7 @@ public function queue(Request $request, string $type)
+             'completed_at'
+         );
+ 
++    $unfilteredCases = clone $cases;
+     $this->applyCaseFilters(
+         $cases,
+         $filters,
+@@ -144,6 +145,10 @@ public function queue(Request $request, string $type)
+         $filters['segment'] = $selection['segment'] ?? 'all';
+         $presenter = app(\App\Services\Operations\ReviewQueueService::class);
+         $summary = $presenter->summary(clone $cases);
++        $summary['unassigned'] = (clone $unfilteredCases)->whereNull('assigned_to')->count();
++        if ($filters['segment'] === 'unassigned') {
++            $cases = clone $unfilteredCases;
++        }
+         $presenter->filter($cases, $filters['segment']);
+         $cases->withMax('activities', 'created_at');
+         $cases = $cases->with('reviewConversation.whatsappConversation')
+diff --git a/app/Http/Controllers/OperationsVendorRefundController.php b/app/Http/Controllers/OperationsVendorRefundController.php
+index db55f4bb..c0dd6409 100644
+--- a/app/Http/Controllers/OperationsVendorRefundController.php
++++ b/app/Http/Controllers/OperationsVendorRefundController.php
+@@ -68,17 +68,6 @@ public function index(Request $request)
+             \App\Services\Operations\RefundSummaryService::class
+         )->summary();
+ 
+-        $refundSummary['vendor_pending'] = $rows->count();
+-
+-        if ($refundSummary['waiting_approval'] !== null) {
+-            $refundSummary['waiting_approval'] = $rows
+-                ->where(
+-                    'approval_status',
+-                    \App\Support\RefundApproval::PENDING
+-                )
+-                ->count();
+-        }
+-
+         $perPage = (int) $request->get('per_page', 25);
+ 
+         if (!in_array($perPage, [10, 25, 50, 100], true)) {
+diff --git a/app/Http/Controllers/ReportController.php b/app/Http/Controllers/ReportController.php
+index 8e70050a..44421486 100644
+--- a/app/Http/Controllers/ReportController.php
++++ b/app/Http/Controllers/ReportController.php
+@@ -1522,6 +1522,8 @@ public function profitLossReport(Request $request)
+             6 => 'Pending',
+             7 => 'Rescheduled',
+             8 => 'Approved',
++            10 => 'Sales Follow-up',
++            11 => 'Close Follow-up',
+             // 9 => 'Rejected'
+         ];
+ 
+@@ -1535,7 +1537,10 @@ public function profitLossReport(Request $request)
+             'enquiry.leadVendorPayments.vendorPayments',
+             'enquiry.leadVendorPayments.vendorRefunds',
+             'followedBy.userType'
+-        ])->whereIn('status', [2, 3, 4, 5, 6, 7, 8]);
++        ])->whereIn(
++        'status',
++        LeadFollowup::FINANCIAL_REPORT_STATUSES
++      );
+ 
+         $query = $this->applyRepresentativeScope($query);
+ 
+@@ -1695,15 +1700,18 @@ public function profitLossReport(Request $request)
+         // Process profit/loss data
+         $profitLossService = app(ProfitLossSummaryService::class);
+         $profitLossData = $allData->groupBy('lead_id')->map(function ($group) use ($statusArray, $approvedLeadIds, $productNames, $serviceNames, $profitLossService) {
+-            $latest = $group->sortByDesc('created_at')->first();
++            $latest = $group->sortBy([['created_at', 'desc'], ['id', 'desc']])->first();
+ 
+             // ONLY show leads that have at least one approved payment
+             if (!$approvedLeadIds->contains($latest->lead_id)) {
+                 return null;
+             }
+-
+             // Also skip if latest followup status is not in qualifying statuses
+-            if (!in_array($latest->status, [2, 3, 4, 5, 6, 7, 8])) {
++            if (!in_array(
++                (int) $latest->status,
++                LeadFollowup::FINANCIAL_REPORT_STATUSES,
++                true
++            )) {
+                 return null;
+             }
+ 
+diff --git a/app/Http/Controllers/UpcomingFollowUpController.php b/app/Http/Controllers/UpcomingFollowUpController.php
+index 0eb0c047..da87461e 100644
+--- a/app/Http/Controllers/UpcomingFollowUpController.php
++++ b/app/Http/Controllers/UpcomingFollowUpController.php
+@@ -130,27 +130,6 @@ public function index(Request $request): View|JsonResponse
+             });
+         }
+ 
+-        // Get follow-ups scheduled for the selected date
+-        $todayQuery = (clone $baseQuery)->whereDate('next_followup_date', '=', $fromDate);
+-        $todayFollowUps = $todayQuery->orderBy('next_followup_date', 'desc')->get()->map(function ($f) {
+-            $f->is_missed = false;
+-            return $f;
+-        });
+-
+-        // Also include 'missed' follow-ups: those scheduled before the selected date and still open (status 0 or 1)
+-        // Adjust statuses here if your app uses different codes for 'open' follow-ups
+-        $missedQuery = (clone $baseQuery)
+-            ->whereDate('next_followup_date', '<', $fromDate)
+-            ->orderBy('next_followup_date', 'asc')
+-            ->whereIn('status', LeadFollowup::TODAY_FOLLOWUP_MISSED_OPEN_STATUSES);
+-        $missedFollowUps = $missedQuery->orderBy('next_followup_date', 'asc')->get()->map(function ($f) {
+-            $f->is_missed = true;
+-            return $f;
+-        });
+-
+-        // Combine: show today's first, then missed ones
+-        $arrFollowUps = $todayFollowUps->merge($missedFollowUps);
+-
+         // NEW LOGIC: Only show open follow-ups, properly handle completed ones
+         // Instead of complex filtering, let's simplify:
+         // 1. Get all follow-ups for the selected date that are still open (not completed/cancelled)
+diff --git a/app/Models/LeadFollowup.php b/app/Models/LeadFollowup.php
+index c7d08b8b..6ee992f4 100644
+--- a/app/Models/LeadFollowup.php
++++ b/app/Models/LeadFollowup.php
+@@ -27,6 +27,18 @@ class LeadFollowup extends Model
+     public const STATUS_SALES_FOLLOW_UP = 10;
+     public const STATUS_CLOSE_FOLLOW_UP = 11;
+ 
++    public const FINANCIAL_REPORT_STATUSES = [
++        self::STATUS_CANCELLED,
++        self::STATUS_FULL_PAYMENT_RECEIVED,
++        self::STATUS_PARTIAL_PAYMENT_RECEIVED,
++        self::STATUS_RIDE_COMPLETED,
++        self::STATUS_PENDING,
++        self::STATUS_RESCHEDULED,
++        self::STATUS_APPROVED,
++        self::STATUS_SALES_FOLLOW_UP,
++        self::STATUS_CLOSE_FOLLOW_UP,
++    ];
++
+     public const FOLLOWUP_ONLY_STATUSES = [
+         self::STATUS_SALES_FOLLOW_UP,
+         self::STATUS_CLOSE_FOLLOW_UP,
+@@ -113,6 +125,7 @@ public static function allowsManualRepeatLeadCreation($status): bool
+         'due_at',
+         'completed_by',
+         'completed_at',
++        'pricing_revision',
+     ];
+ 
+     protected $casts = [
+@@ -126,6 +139,7 @@ public static function allowsManualRepeatLeadCreation($status): bool
+         'ride_date' => 'date',
+         'due_at' => 'datetime',
+         'completed_at' => 'datetime',
++        'pricing_revision' => 'boolean',
+     ];
+ 
+     public function isCustomerNoAnswer(): bool
+@@ -314,6 +328,40 @@ public function getExtraServiceIdsArrayAttribute()
+     return ArrayIdNormalizer::normalize($this->extra_service_ids);
+ }
+ 
++public static function latestPricingSnapshot(
++    string $leadId,
++    ?self $before = null
++): ?self {
++    $query = static::query()
++        ->where('lead_id', $leadId)
++        ->whereNotNull('total_amount')
++        ->where('total_amount', '>=', 0)
++        ->where('status', '!=', self::STATUS_REJECTED)
++        ->where(function ($query) {
++            $query->whereNotNull('pricing_revision')
++                ->orWhere('total_amount', '>', 0);
++        });
++
++    if ($before !== null) {
++        $query->where(function ($query) use ($before) {
++            $query->where(
++                'created_at',
++                '<',
++                $before->created_at
++            )->orWhere(function ($sameTime) use ($before) {
++                $sameTime
++                    ->where('created_at', '=', $before->created_at)
++                    ->where('id', '<', $before->id);
++            });
++        });
++    }
++
++    return $query
++        ->orderByDesc('created_at')
++        ->orderByDesc('id')
++        ->first();
++}
++
+ public function getServiceDetailsArrayAttribute()
+ {
+     if (empty($this->service_details)) {
+diff --git a/app/Services/Attendance/AttendanceImportParser.php b/app/Services/Attendance/AttendanceImportParser.php
+index 10d9a7cf..d57a4e42 100644
+--- a/app/Services/Attendance/AttendanceImportParser.php
++++ b/app/Services/Attendance/AttendanceImportParser.php
+@@ -18,7 +18,7 @@ public function parse(string $path, Carbon $fromDate, Carbon $toDate): array
+         try {
+             foreach ($spreadsheet->getWorksheetIterator() as $sheet) {
+                 $rows[] = ['__sheet_boundary__'];
+-                foreach ($sheet->toArray(null, true, true, false) as $row) {
++                foreach ($sheet->toArray(null, true, false, false) as $row) {
+                     $rows[] = $row;
+                 }
+             }
+diff --git a/app/Services/LeadStatusTransitionService.php b/app/Services/LeadStatusTransitionService.php
+index dc217d7c..7d9cf389 100644
+--- a/app/Services/LeadStatusTransitionService.php
++++ b/app/Services/LeadStatusTransitionService.php
+@@ -104,6 +104,13 @@ public function assertManualTransition(Lead $lead, User $user, int $toStatus, ?s
+             ]);
+         }
+ 
++        if ($this->displayedBusinessStatus($lead) === LeadFollowup::STATUS_RIDE_COMPLETED
++            && !in_array($toStatus, LeadFollowup::FOLLOWUP_ONLY_STATUSES, true)) {
++            throw ValidationException::withMessages([
++                'status' => 'A completed ride cannot change business status through a follow-up.',
++            ]);
++        }
++
+         if ($isSales && !in_array($toStatus, $this->allowedSalesStatuses($lead), true)) {
+             throw ValidationException::withMessages([
+                 'status' => 'After an approved payment, Sales can only record a payment, Sales Follow-up, or Close Follow-up.',
+diff --git a/app/Services/Reports/ProfitLossSummaryService.php b/app/Services/Reports/ProfitLossSummaryService.php
+index f7b81beb..1ccc3ef9 100644
+--- a/app/Services/Reports/ProfitLossSummaryService.php
++++ b/app/Services/Reports/ProfitLossSummaryService.php
+@@ -40,7 +40,34 @@ public function forFollowup(LeadFollowup $latest): array
+                 ->sum('refund_amount')
+             : 0.0;
+ 
+-        $chargeableRevenue = max(0, (float) $latest->total_amount - $customerRefunded);
++            $bookingAmount = max(
++                0.0,
++                (float) ($latest->total_amount ?? 0)
++            );
++
++            if (
++                $latest->pricing_revision === null &&
++                $bookingAmount === 0.0 &&
++                empty($latest->service_details_array)
++            ) {
++                $pricingSnapshot = LeadFollowup::latestPricingSnapshot(
++                    (string) $latest->lead_id,
++                    $latest
++                );
++
++                if ($pricingSnapshot !== null) {
++                    $bookingAmount = max(
++                        0,
++                        (float) $pricingSnapshot->total_amount
++                    );
++                }
++            }
++
++            $chargeableRevenue = max(
++                0,
++                round($bookingAmount - $customerRefunded, 2)
++            );
++
+         $earnedRevenue = min($cashReceived, $chargeableRevenue);
+         $overpayment = max(0, $cashReceived - $earnedRevenue);
+ 
+@@ -80,12 +107,15 @@ public function forPeriod(Carbon $from, Carbon $to, ?array $representativeIds =
+         if ($leadIds->isEmpty()) {
+             return $this->emptyResult();
+         }
+-
+         $latestFollowups = LeadFollowup::query()
+             ->with(['enquiry.leadVendorPayments.vendor'])
+             ->whereIn('lead_id', $leadIds)
+-            ->whereIn('status', [2, 3, 4, 5, 6, 7, 8])
++            ->whereIn(
++                'status',
++                LeadFollowup::FINANCIAL_REPORT_STATUSES
++            )
+             ->orderByDesc('created_at')
++            ->orderByDesc('id')
+             ->get()
+             ->groupBy('lead_id')
+             ->map(fn ($rows) => $rows->first())
+diff --git a/app/Services/Sales/SalesBookingCohortService.php b/app/Services/Sales/SalesBookingCohortService.php
+index 7d7cac25..b3356f54 100644
+--- a/app/Services/Sales/SalesBookingCohortService.php
++++ b/app/Services/Sales/SalesBookingCohortService.php
+@@ -21,17 +21,23 @@ public function leadIdsForPeriod(
+         ?array $representativeIds = null
+     ): Collection {
+         $from = $from->copy()->startOfDay();
+-        $to = $to->copy()->endOfDay();
++
++        // Exclusive upper bound prevents missing payments
++        // recorded during the final fractional second of a day.
++        $toExclusive = $to->copy()->startOfDay()->addDay();
+ 
+         if ($representativeIds !== null && empty($representativeIds)) {
+             return collect();
+         }
+-
+-        $query = DB::table('payment_audit_trail as pat')
+-            ->join('lead_followups as lf', 'lf.id', '=', 'pat.lead_followup_id')
+-            ->join('leads as l', 'l.id', '=', 'lf.lead_id')
+-            ->where('pat.payment_status', PaymentAuditTrail::STATUS_APPROVED)
+-            ->whereNotNull('pat.paid_date');
++    $query = DB::table('payment_audit_trail as pat')
++        ->join('lead_followups as lf', 'lf.id', '=', 'pat.lead_followup_id')
++        ->join('leads as l', 'l.id', '=', 'lf.lead_id')
++        ->where(
++            'pat.payment_status',
++            PaymentAuditTrail::STATUS_APPROVED
++        )
++        ->where('pat.paid_amount', '>', 0)
++        ->whereNotNull('pat.paid_date');
+ 
+         if ($representativeIds !== null) {
+             $query->whereIn('l.representative_user_id', $representativeIds);
+@@ -40,7 +46,7 @@ public function leadIdsForPeriod(
+         return $query
+             ->groupBy('lf.lead_id')
+             ->havingRaw('MIN(pat.paid_date) >= ?', [$from])
+-            ->havingRaw('MIN(pat.paid_date) <= ?', [$to])
++            ->havingRaw('MIN(pat.paid_date) < ?', [$toExclusive])
+             ->pluck('lf.lead_id')
+             ->values();
+     }
+diff --git a/resources/views/admin/account/invoices/invoices-preview.blade.php b/resources/views/admin/account/invoices/invoices-preview.blade.php
+index 7a4ebd03..a8e5f7ff 100644
+--- a/resources/views/admin/account/invoices/invoices-preview.blade.php
++++ b/resources/views/admin/account/invoices/invoices-preview.blade.php
+@@ -442,6 +442,9 @@
+                 </tr>
+             </table>
+ 
++            <p style="text-align:right;">Outstanding balance:
++                <strong>Rs.{{ number_format(max(0, (float) ($invoiceData['payment']['balance'] ?? 0)), 2) }}</strong>
++            </p>
+             <span class="status-tag">
+                 @if($invoiceData['payment']['received_amount'] >= $invoiceData['payment']['total_amount'] && $invoiceData['payment']['total_amount'] > 0)
+                     Full Paid
+diff --git a/resources/views/admin/pages/follow-ups/add-follow-up.blade.php b/resources/views/admin/pages/follow-ups/add-follow-up.blade.php
+index ff56163e..b7e6356a 100644
+--- a/resources/views/admin/pages/follow-ups/add-follow-up.blade.php
++++ b/resources/views/admin/pages/follow-ups/add-follow-up.blade.php
+@@ -614,7 +614,10 @@ class="btn btn-sm btn-secondary d-none" style="display:none">
+                         <input type="hidden" id="discount_amount" name="discount_amount" value="">
+                         <input type="hidden" id="total_amount" name="total_amount" value="">
+                         <input type="hidden" id="service_details" name="service_details" value="">
+-
++                        <input type="hidden"
++                            id="pricing_action"
++                            name="pricing_action"
++                            value="preserve">
+                         <!-- Payment Fields - Shown only for payment-related statuses -->
+                         <div class="xl:col-span-4 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12"
+                             id="received_amount_field" style="display: none;">
+@@ -2645,6 +2648,41 @@ class="ti-btn ti-btn-primary-full"
+         const discountAmountInput = document.getElementById('discount_amount');
+         const totalAmountInput = document.getElementById('total_amount');
+         const serviceDetailsInput = document.getElementById('service_details');
++        const pricingActionInput = document.getElementById('pricing_action');
++        const pricingEditable = @json(!$operationsMode);
++
++        let pricingValueEdited = false;
++        let pricingSelectionTouched = false;
++        let pricingSelectionBaseline = null;
++
++        function pricingSelectionKey() {
++            return JSON.stringify(
++                ['services', 'extra_services'].map(id => {
++                    const select = document.getElementById(id);
++
++                    if (!select) {
++                        return [];
++                    }
++
++                    return Array.from(
++                        select.selectedOptions,
++                        option => String(option.value)
++                    ).sort();
++                })
++            );
++        }
++
++        function markPricingRevised() {
++            if (pricingEditable) {
++                pricingValueEdited = true;
++            }
++        }
++
++        function markPricingSelectionTouched() {
++            if (pricingEditable) {
++                pricingSelectionTouched = true;
++            }
++        }
+         const totalFinalAmountDisplay = document.getElementById('total_final_amount_display');
+         const totalFinalAmountEdit = document.getElementById('total_final_amount_edit');
+         const editTotalBtn = document.getElementById('edit_total_btn');
+@@ -3010,7 +3048,10 @@ class="form-control form-control-sm final-input text-end"
+ 
+             // Add event listeners for final inputs (user edits final -> discount is auto-calculated)
+             document.querySelectorAll('.final-input').forEach(input => {
+-                input.addEventListener('input', function() {
++                input.addEventListener('input', function(event) {
++                if (event.isTrusted) {
++                    markPricingRevised();
++                }
+                     // Any change to final should cancel manual override
+                     isManualTotalEdited = false;
+                     const key = this.getAttribute('data-key');
+@@ -3040,7 +3081,10 @@ class="form-control form-control-sm final-input text-end"
+ 
+             // Add event listeners for original amount inputs (editable when original is 0)
+             document.querySelectorAll('.original-input').forEach(input => {
+-                input.addEventListener('input', function() {
++                input.addEventListener('input', function(event) {
++                    if (event.isTrusted) {
++                        markPricingRevised();
++                    }
+                     // Changing original amount should cancel manual override
+                     isManualTotalEdited = false;
+                     const key = this.getAttribute('data-key');
+@@ -3080,7 +3124,10 @@ class="form-control form-control-sm final-input text-end"
+ 
+             // Add event listeners for remove buttons
+             document.querySelectorAll('.remove-service-btn').forEach(btn => {
+-                btn.addEventListener('click', function() {
++                btn.addEventListener('click', function(event) {
++                    if (event.isTrusted) {
++                        markPricingSelectionTouched();
++                    }
+                     // Removing a service should cancel manual override
+                     isManualTotalEdited = false;
+                     const key = this.getAttribute('data-key');
+@@ -3279,8 +3326,33 @@ function handleExtraServiceChange() {
+ 
+             // Save Total button
+             if (saveTotalBtn) {
+-                saveTotalBtn.addEventListener('click', function() {
+-                    const manualTotal = parseFloat(totalFinalAmountEdit.value) || 0;
++               saveTotalBtn.addEventListener('click', function() {
++            const rawTotal = totalFinalAmountEdit.value.trim();
++
++            if (rawTotal === '' || !Number.isFinite(Number(rawTotal))) {
++                alert('Enter a valid total amount, including 0 if intentional.');
++                totalFinalAmountEdit.focus();
++                return;
++            }
++
++            const manualTotal = Number(rawTotal);
++
++            if (manualTotal < 0) {
++                alert('Total amount cannot be negative.');
++                totalFinalAmountEdit.focus();
++                return;
++            }
++
++            if (
++                manualTotal === 0 &&
++                !window.confirm(
++                    'Confirm final agreed customer booking amount is ₹0?'
++                )
++            ) {
++                return;
++            }
++
++            markPricingRevised();
+ 
+                     // Update display and mark manual override
+                     totalFinalAmountDisplay.textContent = `₹${manualTotal.toFixed(2)}`;
+@@ -3396,6 +3468,27 @@ function handleExtraServiceChange() {
+             }
+ 
+             // Handle status change to show/hide payment fields
++            queueMicrotask(() => {
++                pricingSelectionBaseline = pricingSelectionKey();
++            });
++
++            pricingActionInput?.form?.addEventListener('submit', () => {
++                const selectionChanged = pricingSelectionTouched && pricingSelectionBaseline !== null
++                    && pricingSelectionKey() !== pricingSelectionBaseline;
++                pricingActionInput.value = pricingEditable && (pricingValueEdited || selectionChanged)
++                    ? 'revise' : 'preserve';
++            });
++
++            for (const select of [servicesSelect, extraServicesSelect]) {
++                select.addEventListener('change', event => {
++                    if (event.isTrusted) markPricingSelectionTouched();
++                });
++                if (typeof $ !== 'undefined' && $.fn.select2) {
++                    $(select).on('select2:select.pricing select2:unselect.pricing select2:clear.pricing',
++                        markPricingSelectionTouched);
++                }
++            }
++
+             function togglePaymentFields() {
+                 const selectedStatus = statusSelect.value;
+                 const showPaymentFields = selectedStatus === '3' || selectedStatus === '4';
+@@ -3973,7 +4066,7 @@ function closeDeleteFollowupModal() {
+             const preview = document.getElementById('image-preview');
+             const errorEl = document.getElementById('image-error');
+             const helpEl = document.getElementById('image-help');
+-            const form = document.querySelector('form.ti-custom-validation');
++            const form = imageInput?.form;
+             const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
+ 
+             const MAX_KB = 2048; // 2MB
+@@ -4023,8 +4116,7 @@ function showPreview(file) {
+                     if (!file) return;
+ 
+                     // Validate size
+-                    const kb = Math.round(file.size / 1024);
+-                    if (kb > MAX_KB) {
++                    if (file.size > MAX_KB * 1024) {
+                         showError('File size must not exceed 2MB');
+                         return;
+                     }
+@@ -6128,13 +6220,21 @@ function showFollowupToastMessage(message) {
+             if (existingExtraServices && workspaceExtraServicePickers.length) {
+                 refreshExtraServicePickers();
+                 workspaceExtraServicePickers.forEach(function (picker) {
+-                    picker.addEventListener('change', function () {
++                    const applySelection = function () {
++                        markPricingSelectionTouched();
+                         const selectedValues = new Set(Array.from(picker.selectedOptions).map(function (option) { return option.value; }));
+                         Array.from(existingExtraServices.options).forEach(function (option) {
+                             option.selected = selectedValues.has(option.value);
+                         });
+                         existingExtraServices.dispatchEvent(new Event('change', { bubbles: true }));
++                    };
++                    picker.addEventListener('change', event => {
++                        if (event.isTrusted) applySelection();
+                     });
++                    if (hasSelect2) {
++                        $(picker).on('select2:select.pricing select2:unselect.pricing select2:clear.pricing',
++                            applySelection);
++                    }
+                 });
+                 new MutationObserver(refreshExtraServicePickers).observe(existingExtraServices, { childList: true, subtree: true, attributes: true });
+             }
+@@ -6184,11 +6284,20 @@ function showFollowupToastMessage(message) {
+                 // Add Follow-up extra-service picker filters against the same service.
+                 syncServiceWithExistingFollowup();
+                 const handleProductEditorChange = function () {
++                    markPricingSelectionTouched();
+                     filterServicesForProduct();
+                     syncServiceWithExistingFollowup();
+                 };
+-                productEditor.addEventListener('change', handleProductEditorChange);
+-                serviceEditor.addEventListener('change', syncServiceWithExistingFollowup);
++                const handleServiceEditorChange = function () {
++                    markPricingSelectionTouched();
++                    syncServiceWithExistingFollowup();
++                };
++                productEditor.addEventListener('change', event => {
++                    if (event.isTrusted) handleProductEditorChange();
++                });
++                serviceEditor.addEventListener('change', event => {
++                    if (event.isTrusted) handleServiceEditorChange();
++                });
+                 initialiseSearchableSelect(productEditor, 'Search and select a product');
+ 
+                 // Select2 events are bound explicitly as well as the native change event.
+@@ -6196,7 +6305,7 @@ function showFollowupToastMessage(message) {
+                 // clear-icon, and search-result selections.
+                 if (hasSelect2) {
+                     $(productEditor).on('select2:select.workspace-product select2:clear.workspace-product', handleProductEditorChange);
+-                    $(serviceEditor).on('select2:select.workspace-service select2:clear.workspace-service', syncServiceWithExistingFollowup);
++                    $(serviceEditor).on('select2:select.workspace-service select2:clear.workspace-service', handleServiceEditorChange);
+                 }
+             }
+ 
+diff --git a/resources/views/admin/report/partials/vendor_report_redesign.blade.php b/resources/views/admin/report/partials/vendor_report_redesign.blade.php
+index 576a2a5e..ab6ba1f3 100644
+--- a/resources/views/admin/report/partials/vendor_report_redesign.blade.php
++++ b/resources/views/admin/report/partials/vendor_report_redesign.blade.php
+@@ -49,9 +49,9 @@
+       <div class="vr-field"><label for="vendor-report-search">Name or number</label><input id="vendor-report-search" type="search" name="search" class="ti-form-input" value="{{ request('search') }}" placeholder="Search client or vendor name/number"></div>
+       <div class="vr-field"><label for="vendor-report-service-from">Service date from</label><input id="vendor-report-service-from" type="date" name="service_date_from" class="ti-form-input" value="{{ request('service_date_from') }}"></div>
+       <div class="vr-field"><label for="vendor-report-service-to">Service date to</label><input id="vendor-report-service-to" type="date" name="service_date_to" class="ti-form-input" value="{{ request('service_date_to') }}"></div>
+-      <div class="vr-field"><label for="vendor-report-vendor">Vendor</label><select id="vendor-report-vendor" name="vendor_id" class="ti-form-select"><option value="">All vendors</option>@foreach($vendors as $vendor)<option value="{{ $vendor->id }}" @selected((string) request('vendor_id') === (string) $vendor->id)>{{ $vendor->name }}</option>@endforeach</select></div>
+-      <div class="vr-field"><label for="vendor-report-service">Service</label><select id="vendor-report-service" name="service_id" class="ti-form-select"><option value="">All services</option>@foreach($services as $service)<option value="{{ $service->id }}" @selected((string) request('service_id') === (string) $service->id)>{{ $service->service }}</option>@endforeach</select></div>
+-      <div class="vr-field"><label for="vendor-report-status">Payment status</label><select id="vendor-report-status" name="status" class="ti-form-select"><option value="">All statuses</option><option value="paid" @selected(request('status') === 'paid')>Full paid</option><option value="partial" @selected(request('status') === 'partial')>Partial paid</option><option value="unpaid" @selected(request('status') === 'unpaid')>Unpaid</option></select></div>
++      <div class="vr-field"><label for="vendor-report-vendor">Vendor</label><select id="vendor-report-vendor" name="vendor_id" class="ti-form-select"><option value="">All vendors</option>@foreach($vendors as $vendor)<option value="{{ $vendor->id }}" {{ (string) request('vendor_id') === (string) $vendor->id ? 'selected' : '' }}>{{ $vendor->name }}</option>@endforeach</select></div>
++      <div class="vr-field"><label for="vendor-report-service">Service</label><select id="vendor-report-service" name="service_id" class="ti-form-select"><option value="">All services</option>@foreach($services as $service)<option value="{{ $service->id }}" {{ (string) request('service_id') === (string) $service->id ? 'selected' : '' }}>{{ $service->service }}</option>@endforeach</select></div>
++      <div class="vr-field"><label for="vendor-report-status">Payment status</label><select id="vendor-report-status" name="status" class="ti-form-select"><option value="">All statuses</option><option value="paid" {{ request('status') === 'paid' ? 'selected' : '' }}>Full paid</option><option value="partial" {{ request('status') === 'partial' ? 'selected' : '' }}>Partial paid</option><option value="unpaid" {{ request('status') === 'unpaid' ? 'selected' : '' }}>Unpaid</option></select></div>
+       <div class="vr-field"><label for="vendor-report-payment-from">Payment date from</label><input id="vendor-report-payment-from" type="date" name="from_payment_date" class="ti-form-input" value="{{ request('from_payment_date') }}"></div>
+       <div class="vr-field"><label for="vendor-report-payment-to">Payment date to</label><input id="vendor-report-payment-to" type="date" name="to_payment_date" class="ti-form-input" value="{{ request('to_payment_date') }}"></div>
+       <div class="vr-filter-actions"><a href="{{ route('admin.report.vendor') }}" class="ti-btn ti-btn-outline-secondary">Reset</a><button type="submit" class="ti-btn ti-btn-primary-full">Apply</button></div>
+@@ -61,14 +61,12 @@
+   <section class="vr-section">
+     <div class="vr-section__head"><div><h4>Vendor settlement ledger</h4><p>One row per vendor booking. Exports retain the complete payment, refund and settlement breakdown.</p></div><span class="vr-badge">{{ $rows->count() }} records</span></div>
+     <div class="vr-desktop-table"><table id="vendor-report-table" class="vr-table" width="100%"><thead><tr><th style="width:19%">Vendor / booking</th><th style="width:18%">Client / number</th><th style="width:18%">Product / service date</th><th style="width:18%">Vendor settlement</th><th style="width:15%">Outstanding</th><th style="width:12%">Ride / payment</th></tr></thead><tbody>
+-      @forelse($rows as $row)
++      @foreach($rows as $row)
+         @php($paymentClass = $row->status === 'Full Paid' ? 'paid' : ($row->status === 'Partial Paid' ? 'partial' : 'unpaid'))
+         @php($outstanding = $row->refund_due_amount > 0 ? $row->refund_due_amount : $row->balance_amount)
+         @php($outstandingLabel = $row->refund_due_amount > 0 ? 'Refund due' : ($row->balance_amount > 0 ? 'Payment due' : 'Settled'))
+         <tr><td><span class="vr-line">{{ $row->vendor_name }}</span><span class="vr-sub">{{ $row->booking_slip_number }}</span></td><td><span class="vr-line">{{ $row->client_name }}</span><span class="vr-sub">{{ $row->client_contact }}</span></td><td><span class="vr-line">{{ $row->product }}</span><span class="vr-sub">Service: {{ $row->service_date }}</span></td><td><span class="vr-money">Payable {{ $money($row->vendor_service_cost) }}</span><span class="vr-sub">Net paid {{ $money($row->paid_amount) }} · Original {{ $money($row->original_vendor_amount) }}</span></td><td><span class="vr-money">{{ $money($outstanding) }}</span><span class="vr-sub">{{ $outstandingLabel }}</span></td><td><span class="vr-status vr-status--{{ $paymentClass }}">{{ $row->status }}</span><span class="vr-sub">{{ $row->ride_status }} · {{ $row->paid_date }}</span></td></tr>
+-      @empty
+-        <tr><td colspan="6" class="vr-empty">No vendor payments match these filters.</td></tr>
+-      @endforelse
++      @endforeach
+     </tbody></table></div>
+     <div class="vr-mobile-list">
+       @forelse($rows as $row)
+diff --git a/tests/Unit/InvoiceCancelledAndAdjustedExportsTest.php b/tests/Unit/InvoiceCancelledAndAdjustedExportsTest.php
+index 11ad831a..8736efd5 100644
+--- a/tests/Unit/InvoiceCancelledAndAdjustedExportsTest.php
++++ b/tests/Unit/InvoiceCancelledAndAdjustedExportsTest.php
+@@ -22,6 +22,8 @@
+ use App\Models\VendorRefund;
+ use App\Models\Voucher;
+ use Illuminate\Database\Schema\Blueprint;
++use Illuminate\Contracts\Console\Kernel;
++use Illuminate\Foundation\Bootstrap\LoadConfiguration;
+ use Illuminate\Http\Request;
+ use Illuminate\Support\Facades\DB;
+ use Illuminate\Support\Facades\Schema;
+@@ -31,25 +33,42 @@
+ 
+ class InvoiceCancelledAndAdjustedExportsTest extends TestCase
+ {
+-    protected function setUp(): void
++    public function createApplication()
+     {
+-        parent::setUp();
+-
+-        config()->set('database.default', 'sqlite');
+-        config()->set('database.connections.sqlite', [
++        $app = require __DIR__.'/../../bootstrap/app.php';
++        $connection = [
+             'driver' => 'sqlite',
+             'database' => ':memory:',
+             'prefix' => '',
+             'foreign_key_constraints' => false,
+-        ]);
++        ];
++        $app->afterBootstrapping(LoadConfiguration::class, static function ($app) use ($connection): void {
++            $app['config']->set('database.default', 'sqlite');
++            $app['config']->set('database.connections', ['sqlite' => $connection]);
++        });
++        $app->make(Kernel::class)->bootstrap();
++
++        return $app;
++    }
+ 
+-        DB::purge('sqlite');
+-        DB::reconnect('sqlite');
++    protected function setUp(): void
++    {
++        parent::setUp();
+ 
+         $this->createSchema();
+         (require base_path('database/migrations/2026_10_24_130000_add_finalized_date_to_invoices_table.php'))->up();
+     }
+ 
++    public function test_empty_sales_report_download_contains_only_headings(): void
++    {
++        $export = new \App\Exports\SalesReportExport(['_allowed_representative_ids' => []]);
++        $csv = \Maatwebsite\Excel\Facades\Excel::raw($export, 'Csv');
++        $lines = preg_split('/\r\n|\n|\r/', trim($csv));
++
++        $this->assertCount(1, $lines);
++        $this->assertSame($export->headings(), str_getcsv($lines[0]));
++    }
++
+     public function test_paid_cancelled_customer_ride_is_excluded_from_invoice_index(): void
+     {
+         $scenario = $this->createPaidCancelledScenario();
+@@ -202,6 +221,606 @@ public function test_clearing_optional_gst_does_not_restore_the_clients_old_gst_
+         $this->assertSame('GST-CANCEL-1', $scenario['client']->fresh()->gst_number, 'Client master must remain unchanged');
+     }
+ 
++    public function test_invoice_preview_has_discounted_total_and_approved_payment_balance(): void
++    {
++        Schema::create('operation_cases', function (Blueprint $table) {
++            $table->string('id')->primary();
++            $table->string('lead_id');
++            $table->string('type');
++            $table->text('metadata')->nullable();
++            $table->timestamps();
++        });
++        $this->actingAs($this->createAdminUser());
++        $scenario = $this->createPaidCancelledScenario(8500);
++        $scenario['followup']->update([
++            'status' => LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
++            'service_amount' => 18000,
++            'discount_amount' => 1000,
++            'total_amount' => 17000,
++            'service_details' => [['original_amount' => 18000, 'discount_amount' => 1000, 'final_amount' => 17000]],
++        ]);
++        $controller = app(InvoiceController::class);
++        $method = new \ReflectionMethod($controller, 'getComprehensiveInvoiceData');
++        $data = $method->invoke($controller, $scenario['voucher']->fresh());
++        $this->assertSame(17000.0, (float) $data['payment']['total_amount']);
++        $this->assertSame(8500.0, (float) $data['payment']['received_amount']);
++        $this->assertSame(8500.0, (float) $data['payment']['balance']);
++        $preview = $controller->previewHTML($scenario['voucher']->id);
++        $this->assertSame(200, $preview->getStatusCode(), $preview->getContent());
++        $this->assertStringContainsString('17,000', $preview->getContent());
++        $this->assertStringContainsString('8,500', $preview->getContent());
++        $this->assertStringContainsString('Gross service amount:', $preview->getContent());
++        $this->assertStringContainsString('18,000.00', $preview->getContent());
++        $this->assertStringContainsString('1,000.00', $preview->getContent());
++        $this->assertStringContainsString('Outstanding balance:', $preview->getContent());
++        config()->set('dompdf.options.enable_remote', false);
++        config()->set('dompdf.options.enable_font_subsetting', false);
++        $beforePayments = DB::table('payment_audit_trail')->orderBy('id')->get()->toJson();
++        $beforeFollowups = DB::table('lead_followups')->orderBy('id')->get()->toJson();
++        $pdf = $controller->generatePDF($scenario['voucher']->id);
++        $this->assertSame(200, $pdf->getStatusCode(), $pdf->getContent());
++        $this->assertStringStartsWith('%PDF-', $pdf->getContent());
++        $this->assertStringContainsString('application/pdf', $pdf->headers->get('Content-Type'));
++        $regenerated = $controller->generateInvoice(
++            Request::create('/', 'POST'), $scenario['voucher']->id
++        );
++        $this->assertTrue($regenerated->getData(true)['success']);
++        $after = $method->invoke($controller, $scenario['voucher']->fresh());
++        $this->assertSame($data['payment']['total_amount'], $after['payment']['total_amount']);
++        $this->assertSame($data['payment']['balance'], $after['payment']['balance']);
++        $this->assertSame($beforePayments, DB::table('payment_audit_trail')->orderBy('id')->get()->toJson());
++        $this->assertSame($beforeFollowups, DB::table('lead_followups')->orderBy('id')->get()->toJson());
++    }
++
++    public function test_http_operations_pricing_revision_is_denied_without_financial_writes(): void
++    {
++        config()->set('session.driver', 'array');
++        $scenario = $this->createPaidCancelledScenario();
++        $user = $this->createAdminUser();
++        $user->userType()->update(['user_type' => UserType::OPERATIONS_MANAGER]);
++        $scenario['lead']->forceFill(['representative_user_id' => $user->id])->save();
++        $this->actingAs($user->fresh());
++        $before = DB::table('lead_followups')->orderBy('id')->get()->toJson();
++        $payments = DB::table('payment_audit_trail')->orderBy('id')->get()->toJson();
++        $lead = DB::table('leads')->where('id', $scenario['lead']->id)->first();
++
++        $this->postJson(route('admin.leads.follow-up.store', $scenario['lead']), [
++            'status' => LeadFollowup::STATUS_SALES_FOLLOW_UP,
++            'pricing_action' => 'revise',
++            'total_amount' => 0,
++            'notes' => 'Unauthorized pricing attempt',
++        ])->assertForbidden();
++
++        $this->assertSame($before, DB::table('lead_followups')->orderBy('id')->get()->toJson());
++        $this->assertSame($payments, DB::table('payment_audit_trail')->orderBy('id')->get()->toJson());
++        $this->assertEquals($lead, DB::table('leads')->where('id', $scenario['lead']->id)->first());
++    }
++
++    public function test_http_admin_cannot_reopen_a_completed_ride_with_a_followup(): void
++    {
++        config()->set('session.driver', 'array');
++        Schema::create('service_addresses', function (Blueprint $table) {
++            $table->string('id')->primary();
++        });
++        $this->actingAs($this->createAdminUser());
++        $scenario = $this->createPaidCancelledScenario();
++        $scenario['followup']->update(['status' => LeadFollowup::STATUS_RIDE_COMPLETED]);
++        $before = DB::table('lead_followups')->orderBy('id')->get()->toJson();
++        $response = $this->postJson(route('admin.leads.follow-up.store', $scenario['lead']), [
++            'status' => LeadFollowup::STATUS_ACTIVE,
++            'pricing_action' => 'preserve',
++            'notes' => 'Attempt to reopen completed ride',
++            'next_followup_date' => now()->addDay()->format('Y-m-d H:i'),
++        ], ['X-Requested-With' => 'XMLHttpRequest']);
++        $response->assertStatus(422)->assertJsonPath('message', 'A completed ride cannot change business status through a follow-up.');
++        $this->assertSame($before, DB::table('lead_followups')->orderBy('id')->get()->toJson());
++    }
++
++    public function test_http_hr_cannot_submit_sales_pricing_revision(): void
++    {
++        config()->set('session.driver', 'array');
++        $scenario = $this->createPaidCancelledScenario();
++        $user = $this->createAdminUser();
++        $user->userType()->update(['user_type' => UserType::HR]);
++        $this->actingAs($user->fresh());
++        $before = LeadFollowup::count();
++
++        $this->postJson(route('admin.leads.follow-up.store', $scenario['lead']), [
++            'status' => LeadFollowup::STATUS_SALES_FOLLOW_UP,
++            'pricing_action' => 'revise',
++            'total_amount' => 0,
++        ])->assertForbidden();
++
++        $this->assertSame($before, LeadFollowup::count());
++    }
++
++    public function test_hr_followup_queue_does_not_load_discarded_followup_collections(): void
++    {
++        Schema::create((new \App\Models\LeadAiScoringSetting())->getTable(), function (Blueprint $table) {
++            $table->string('id')->primary();
++            $table->boolean('enabled');
++            $table->timestamps();
++        });
++        DB::table((new \App\Models\LeadAiScoringSetting())->getTable())->insert(['id' => 'test', 'enabled' => false]);
++        Schema::create((new \App\Models\LeadAiScore())->getTable(), function (Blueprint $table) {
++            $table->string('lead_id');
++            $table->timestamps();
++        });
++        $scenario = $this->createPaidCancelledScenario();
++        $user = $this->createAdminUser();
++        $user->userType()->update(['user_type' => UserType::HR]);
++        $this->actingAs($user->fresh());
++        $scenario['followup']->update(['status' => LeadFollowup::STATUS_ACTIVE, 'next_followup_date' => '2026-11-12 09:00:00']);
++        $template = (array) DB::table('lead_followups')->where('id', $scenario['followup']->id)->first();
++        for ($index = 0; $index < 200; $index++) {
++            DB::table('lead_followups')->insert(array_replace($template, ['id' => (string) Str::uuid()]));
++        }
++        DB::enableQueryLog();
++        try {
++            $response = app(\App\Http\Controllers\UpcomingFollowUpController::class)->index(
++                Request::create('/admin/upcoming-follow-up', 'GET', ['from_date' => '2026-11-12'])
++            );
++            $this->assertCount(1, $response->getData()['arrFollowUps']);
++            $reads = collect(DB::getQueryLog())->filter(fn ($entry) =>
++                str_contains($entry['query'], 'from "lead_followups"')
++            );
++            $this->assertCount(4, $reads);
++        } finally {
++            DB::disableQueryLog();
++        }
++    }
++
++    public function test_google_chat_reply_notifies_manager_owner_once(): void
++    {
++        Schema::create('lead_chat_notifications', function (Blueprint $table) {
++            $table->string('id')->primary();
++            foreach (['user_id', 'lead_id', 'conversation_id', 'message_id', 'type', 'title', 'body'] as $column) {
++                $table->string($column);
++            }
++            $table->timestamps();
++            $table->timestamp('read_at')->nullable();
++            $table->timestamp('cleared_at')->nullable();
++        });
++        $manager = $this->createAdminUser();
++        $manager->userType()->update(['user_type' => UserType::SALES_MANAGER]);
++        $lead = new Lead();
++        $lead->forceFill(['id' => 'test-lead', 'representative_user_id' => $manager->id]);
++        $conversation = new \App\Models\LeadChatConversation();
++        $conversation->forceFill(['id' => 'test-conversation']);
++        $message = new \App\Models\LeadChatMessage();
++        $message->forceFill(['id' => 'test-message', 'body' => 'Test reply']);
++        $service = app(\App\Services\LeadChat\LeadChatNotificationService::class);
++        $service->notifyGoogleMessage($lead, $conversation, $message, 'Fixture Sender');
++        $service->notifyGoogleMessage($lead, $conversation, $message, 'Fixture Sender');
++
++        $this->assertSame(1, DB::table('lead_chat_notifications')->count());
++        $row = DB::table('lead_chat_notifications')->first();
++        $this->assertSame($manager->id, $row->user_id);
++        $this->assertSame($message->id, $row->message_id);
++        $this->assertSame($conversation->id, $row->conversation_id);
++        $this->actingAs($manager->fresh());
++        $controller = app(\App\Http\Controllers\LeadChatNotificationController::class);
++        $response = $controller->index();
++        $this->assertSame(200, $response->getStatusCode());
++        $this->assertSame(1, $response->getData(true)['unread_count']);
++        $this->assertSame($row->id, $response->getData(true)['notifications'][0]['id']);
++        $notification = \App\Models\LeadChatNotification::findOrFail($row->id);
++        $notification->user_id = 'different-user';
++        try {
++            $controller->markRead($notification);
++            $this->fail('A user must not mark another user notification read.');
++        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $exception) {
++            $this->assertSame(404, $exception->getStatusCode());
++        }
++    }
++
++    public function test_pricing_revision_migration_preserves_legacy_null_and_rolls_back(): void
++    {
++        Schema::table('lead_followups', function (Blueprint $table) {
++            $table->dropColumn('pricing_revision');
++        });
++        $scenario = $this->createPaidCancelledScenario();
++        require_once base_path('database/migrations/2026_11_12_162509_add_pricing_revision_to_lead_followups_table.php');
++        $migration = new \AddPricingRevisionToLeadFollowupsTable();
++        $migration->up();
++        $this->assertTrue(Schema::hasColumn('lead_followups', 'pricing_revision'));
++        $this->assertNull(DB::table('lead_followups')->where('id', $scenario['followup']->id)->value('pricing_revision'));
++        $migration->down();
++        $this->assertFalse(Schema::hasColumn('lead_followups', 'pricing_revision'));
++    }
++
++    public function test_november_incentive_report_reconciles_sale_without_configured_target(): void
++    {
++        Schema::create('lead_refunds', function (Blueprint $table) {
++            $table->string('lead_followup_id');
++            $table->integer('status');
++            $table->decimal('refund_amount', 12, 2);
++        });
++        $scenario = $this->createPaidCancelledScenario(10000);
++        $person = $this->createAdminUser();
++        $scenario['lead']->forceFill(['representative_user_id' => $person->id])->save();
++        $scenario['followup']->update([
++            'status' => LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
++            'total_amount' => 35000,
++        ]);
++        DB::table('payment_audit_trail')->where('lead_followup_id', $scenario['followup']->id)
++            ->update(['paid_date' => '2026-11-04 10:00:00']);
++
++        $service = app(\App\Services\TargetIncentiveReportService::class);
++        foreach ([true, false] as $singlePerson) {
++            $report = $service->build(collect([$person]), collect(), 2026, 11, $singlePerson);
++            $this->assertCount(1, $report['summary']);
++            $this->assertCount(1, $report['detail']);
++            $this->assertSame('No configured incentive', collect($report['detail']->first())->last());
++        }
++    }
++
++    public function test_profit_loss_streams_201_bookings_without_duplicates_and_matches_accounts(): void
++    {
++        $this->actingAs($this->createAdminUser());
++        $scenario = $this->createPaidCancelledScenario(10000);
++        $leadTemplate = (array) DB::table('leads')->where('id', $scenario['lead']->id)->first();
++        $followupTemplate = (array) DB::table('lead_followups')->where('id', $scenario['followup']->id)->first();
++        $paymentTemplate = (array) DB::table('payment_audit_trail')->where('lead_followup_id', $followupTemplate['id'])->first();
++        $leadRows = $followupRows = $paymentRows = [];
++        for ($index = 1; $index <= 200; $index++) {
++            $leadId = (string) Str::uuid();
++            $followupId = (string) Str::uuid();
++            $leadRows[] = array_replace($leadTemplate, ['id' => $leadId]);
++            $followupRows[] = array_replace($followupTemplate, [
++                'id' => $followupId, 'lead_id' => $leadId, 'total_amount' => 35000 + $index,
++            ]);
++            $paymentRows[] = array_replace($paymentTemplate, [
++                'id' => (string) Str::uuid(), 'lead_followup_id' => $followupId,
++            ]);
++        }
++        foreach (['leads' => $leadRows, 'lead_followups' => $followupRows, 'payment_audit_trail' => $paymentRows] as $table => $rows) {
++            foreach (array_chunk($rows, 25) as $batch) {
++                DB::table($table)->insert($batch);
++            }
++        }
++
++        $filters = ['from_payment_date' => '2026-08-01', 'to_payment_date' => '2026-08-31'];
++        $rows = collect(iterator_to_array((new ProfitLossReportExport($filters))->generator()));
++        $screen = app(ReportController::class)->profitLossReport(
++            Request::create('/admin/report/profit-loss', 'GET', $filters)
++        )->getData()['profitLossData'];
++        $this->assertCount(201, $rows);
++        $this->assertCount(201, $rows->pluck('booking_revenue_amount')->unique());
++        $this->assertCount(201, $screen);
++        foreach (['booking_revenue_amount', 'client_received_amount', 'vendor_amount', 'profit_loss'] as $field) {
++            $this->assertSame((float) $screen->sum($field), (float) $rows->sum($field));
++        }
++        $summary = app(\App\Services\Reports\ProfitLossSummaryService::class);
++        $august = \Carbon\Carbon::parse('2026-08-01');
++        $financial = $summary->forPeriod($august, $august->copy()->endOfMonth());
++        $this->assertSame(201, $financial['lead_count']);
++        $this->assertSame((float) $screen->sum('booking_revenue_amount'), $financial['booking_revenue']);
++        $owner = app(\App\Services\Owner\OwnerDashboardService::class);
++        $health = new \ReflectionMethod($owner, 'health');
++        $money = ['vendor_paid' => 0, 'customer_refunded' => 0, 'net' => 0, 'collected' => 0];
++        $kpis = $health->invoke($owner, $money, $money, $august, $financial, $financial);
++        $this->assertSame((float) $screen->sum('profit_loss'), $kpis['booking_profit']);
++        $this->assertSame($financial['commission'], $kpis['realized_profit']);
++        $csv = \Maatwebsite\Excel\Facades\Excel::raw(new ProfitLossReportExport($filters), 'Csv');
++        $csvRows = array_map('str_getcsv', preg_split('/\r?\n/', trim($csv)));
++        $file = tempnam(sys_get_temp_dir(), 'crm-profit-loss-');
++        try {
++            file_put_contents($file, \Maatwebsite\Excel\Facades\Excel::raw(new ProfitLossReportExport($filters), 'Xlsx'));
++            $workbook = (new \PhpOffice\PhpSpreadsheet\Reader\Xlsx())->load($file);
++            $xlsxRows = $workbook->getActiveSheet()->toArray();
++            $workbook->disconnectWorksheets();
++            $this->assertCount(202, $csvRows);
++            $this->assertCount(202, $xlsxRows);
++            foreach ([$csvRows, $xlsxRows] as $decodedRows) {
++                foreach ([1 => 'booking_revenue_amount', 2 => 'client_received_amount', 4 => 'vendor_amount', 5 => 'profit_loss'] as $column => $field) {
++                    $total = collect(array_slice($decodedRows, 1))->sum(
++                        fn (array $row) => (float) str_replace(',', '', $row[$column])
++                    );
++                    $this->assertSame((float) $screen->sum($field), (float) $total);
++                }
++            }
++        } finally {
++            unlink($file);
++        }
++        $this->assertSame(0, iterator_count((new ProfitLossReportExport(
++            $filters + ['_allowed_representative_ids' => []]
++        ))->generator()));
++    }
++
++    public function test_exceptional_dashboard_moves_overpayment_to_added_sales_once(): void
++    {
++        Schema::table('lead_followups', function (Blueprint $table) {
++            $table->boolean('added_to_sales')->default(false);
++        });
++        Schema::create('lead_refunds', function (Blueprint $table) {
++            $table->string('lead_followup_id');
++        });
++        $scenario = $this->createPaidCancelledScenario(40000);
++        $followup = $scenario['followup'];
++        $followup->update(['total_amount' => 35000]);
++        $user = $this->createAdminUser();
++        $user->userType()->update(['user_type' => UserType::ACCOUNTS_MANAGER]);
++        $this->actingAs($user->fresh());
++        $controller = app(\App\Http\Controllers\ExceptionalController::class);
++        $request = Request::create('/admin/account/exceptional', 'GET');
++
++        $before = $controller->index($request)->getData();
++        $this->assertCount(1, $before['payments']);
++        $this->assertSame(0, $before['addedToSalesCount']);
++        $response = $controller->addToSales(Request::create('/admin/account/exceptional', 'POST'), $followup->id);
++        $this->assertSame(200, $response->getStatusCode(), $response->getContent());
++        $this->assertSame(5000.0, (float) $response->getData(true)['extra_added']);
++        $this->assertSame(40000.0, (float) $followup->fresh()->total_amount);
++        $after = $controller->index($request)->getData();
++        $this->assertCount(0, $after['payments']);
++        $this->assertSame(1, $after['addedToSalesCount']);
++        $this->assertSame(422, $controller->addToSales(
++            Request::create('/admin/account/exceptional', 'POST'), $followup->id
++        )->getStatusCode());
++    }
++
++    public function test_invoice_discount_reconciles_gross_and_net_voucher_without_double_discount(): void
++    {
++        $scenario = $this->createPaidCancelledScenario(8500);
++        $scenario['followup']->update([
++            'total_amount' => 17000,
++            'service_details' => [['original_amount' => 18000, 'discount_amount' => 1000]],
++        ]);
++        $controller = app(InvoiceController::class);
++        $method = new \ReflectionMethod($controller, 'reconciledInvoiceDiscount');
++        $expected = ['gross' => 18000.0, 'discount' => 1000.0, 'net' => 17000.0];
++        foreach ([18000.0, 17000.0] as $voucherTotal) {
++            $this->assertSame($expected, $method->invoke($controller, $scenario['lead'], $voucherTotal));
++        }
++        $this->assertNull($method->invoke($controller, $scenario['lead'], 16000.0));
++    }
++
++    public function test_operations_due_today_excludes_overdue_future_closed_and_out_of_scope_cases(): void
++    {
++        Schema::create('operation_cases', function (Blueprint $table) {
++            $table->string('id')->primary();
++            $table->string('team');
++            $table->string('status');
++            $table->timestamp('next_followup_at')->nullable();
++        });
++        DB::table('operation_cases')->insert([
++            ['id' => 'undated', 'team' => 'mine', 'status' => 'open', 'next_followup_at' => null],
++            ['id' => 'today', 'team' => 'mine', 'status' => 'open', 'next_followup_at' => '2026-11-12 00:00:00'],
++            ['id' => 'overdue', 'team' => 'mine', 'status' => 'open', 'next_followup_at' => '2026-11-11 23:59:59'],
++            ['id' => 'future', 'team' => 'mine', 'status' => 'open', 'next_followup_at' => '2026-11-13 00:00:00'],
++            ['id' => 'closed', 'team' => 'mine', 'status' => 'completed', 'next_followup_at' => null],
++            ['id' => 'other-team', 'team' => 'other', 'status' => 'open', 'next_followup_at' => null],
++        ]);
++        $service = app(\App\Services\Operations\OperationsHomeService::class);
++        $method = new \ReflectionMethod($service, 'whereDueToday');
++        $today = \Carbon\Carbon::parse('2026-11-12');
++        $query = DB::table('operation_cases')->where('team', 'mine')->where('status', 'open');
++
++        $this->assertSame(['today', 'undated'], $method->invoke(
++            $service, $query, $today, $today->copy()->addDay()
++        )->orderBy('id')->pluck('id')->all());
++    }
++
++    public function test_review_queue_counts_match_scoped_segment_queries(): void
++    {
++        Schema::create('operation_cases', function (Blueprint $table) {
++            $table->string('id')->primary();
++            $table->string('type')->default('review');
++            $table->string('status')->default('pending');
++            $table->string('lead_id')->nullable();
++            $table->timestamp('completed_at')->nullable();
++            $table->string('assigned_to')->nullable();
++            $table->timestamp('opened_at');
++        });
++        Schema::create('operation_case_activities', function (Blueprint $table) {
++            $table->string('operation_case_id');
++            $table->timestamps();
++        });
++        Schema::create((new \App\Models\ReviewConversation())->getTable(), function (Blueprint $table) {
++            $table->string('operation_case_id');
++            $table->timestamp('initial_message_sent_at')->nullable();
++            $table->boolean('customer_replied');
++            $table->string('sentiment')->nullable();
++        });
++        DB::table('operation_cases')->insert([
++            ['id' => 'assigned', 'assigned_to' => 'manager', 'opened_at' => '2026-11-10 00:00:00'],
++            ['id' => 'unassigned', 'assigned_to' => null, 'opened_at' => '2026-11-10 00:00:00'],
++            ['id' => 'outside', 'assigned_to' => 'other', 'opened_at' => '2026-11-10 00:00:00'],
++        ]);
++        DB::table((new \App\Models\ReviewConversation())->getTable())->insert([
++            'operation_case_id' => 'assigned',
++            'initial_message_sent_at' => '2026-11-11 00:00:00',
++            'customer_replied' => false,
++        ]);
++        $scope = \App\Models\OperationCase::query()->where(function ($query) {
++            $query->where('assigned_to', 'manager')->orWhereNull('assigned_to');
++        });
++        $service = app(\App\Services\Operations\ReviewQueueService::class);
++        $summary = $service->summary($scope);
++        $this->assertSame(2, $summary['all']);
++        foreach (['waiting' => 'assigned', 'not_sent' => 'unassigned', 'unassigned' => 'unassigned'] as $segment => $id) {
++            $filtered = clone $scope;
++            $service->filter($filtered, $segment);
++            $this->assertSame([$id], $filtered->pluck('id')->all());
++            $this->assertSame(1, $summary[$segment]);
++        }
++        $this->actingAs($this->createAdminUser());
++        $response = app(\App\Http\Controllers\OperationsDashboardController::class)->queue(
++            Request::create('/admin/operations/queue/review', 'GET', [
++                'segment' => 'unassigned', 'search' => 'no-matching-review', 'from_date' => '2027-01-01',
++                'status' => 'in_progress',
++            ]),
++            'review'
++        );
++        $this->assertSame(['unassigned'], $response->getData()['cases']->pluck('id')->all());
++        $this->assertSame(1, $response->getData()['summary']['unassigned']);
++    }
++
++    public function test_refund_summary_counts_pending_vendor_payments_once_and_combines_approval(): void
++    {
++        Schema::table('vendor_refunds', function (Blueprint $table) {
++            $table->integer('status')->nullable();
++            $table->string('approval_status')->nullable();
++            $table->timestamp('completed_at')->nullable();
++        });
++        Schema::create('lead_refunds', function (Blueprint $table) {
++            $table->string('id')->primary();
++            $table->integer('status');
++            $table->string('approval_status');
++        });
++        $this->createPaidCancelledScenario();
++        $vendorRefund = (array) DB::table('vendor_refunds')->first();
++        DB::table('vendor_refunds')->where('id', $vendorRefund['id'])->update(['approval_status' => 'pending']);
++        $vendorRefund['id'] = (string) Str::uuid();
++        $vendorRefund['approval_status'] = 'pending';
++        DB::table('vendor_refunds')->insert($vendorRefund);
++        DB::table('lead_refunds')->insert([
++            ['id' => 'waiting', 'status' => 1, 'approval_status' => 'pending'],
++            ['id' => 'approved', 'status' => 1, 'approval_status' => 'approved'],
++            ['id' => 'complete', 'status' => 2, 'approval_status' => 'pending'],
++        ]);
++
++        $summary = app(\App\Services\Operations\RefundSummaryService::class)->summary();
++        $this->assertSame(2, $summary['customer_pending']);
++        $this->assertSame(1, $summary['vendor_pending']);
++        $this->assertSame(2, $summary['waiting_approval']);
++        $this->actingAs($this->createAdminUser());
++        $vendorPage = app(\App\Http\Controllers\OperationsVendorRefundController::class)->index(
++            Request::create('/vendor-refunds', 'GET')
++        );
++        $this->assertSame($summary, $vendorPage->getData()['refundSummary']);
++    }
++
++    public function test_attendance_workbook_uses_native_dates_and_rejects_outside_range(): void
++    {
++        $workbook = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
++        $sheet = $workbook->getActiveSheet();
++        $sheet->setTitle('Attendance Data');
++        $sheet->fromArray([
++            ['Date', 'Day', 'Name', 'In', 'Out', 'Status'],
++            [\PhpOffice\PhpSpreadsheet\Shared\Date::PHPToExcel(new \DateTimeImmutable('2026-10-05')), 'Monday', 'Test Employee', 0.375, 3, 'MIS'],
++            ['06/10/2026', 'Tuesday', 'Test Employee', '09:00', '17:00', 'P'],
++            ['07/10/2026', 'Wednesday', 'Test Employee', null, null, 'A'],
++        ]);
++        $sheet->getStyle('A2')->getNumberFormat()->setFormatCode('m/d/yy');
++        $workbook->createSheet()->setTitle('Instructions')->setCellValue('A1', 'Enter attendance in the first sheet.');
++        $file = tempnam(sys_get_temp_dir(), 'crm-attendance-');
++
++        try {
++            (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($workbook))->save($file);
++            $parser = new \App\Services\Attendance\AttendanceImportParser();
++            $parsed = $parser->parse($file, \Carbon\Carbon::parse('2026-10-01'), \Carbon\Carbon::parse('2026-10-31'));
++            $this->assertSame(['2026-10-05', '2026-10-06', '2026-10-07'], array_column($parsed['rows'], 'attendance_date'));
++            $this->assertSame('09:00:00', $parsed['rows'][0]['in_time']);
++            $this->assertNull($parsed['rows'][0]['out_time']);
++            $this->assertSame(['MIS', 'P', 'A'], array_column($parsed['rows'], 'raw_status'));
++
++            $november = \Carbon\Carbon::parse('2026-11-04');
++            try {
++                $parser->parse($file, $november, $november);
++                $this->fail('An October-only workbook must not import November attendance.');
++            } catch (\Illuminate\Validation\ValidationException $exception) {
++                $this->assertStringContainsString(
++                    'No attendance rows were found inside the selected range.',
++                    $exception->errors()['excel_file'][0]
++                );
++            }
++        } finally {
++            $workbook->disconnectWorksheets();
++            unlink($file);
++        }
++    }
++
++    public function test_city_endpoint_returns_only_active_cities_in_selected_country(): void
++    {
++        DB::table('cities')->insert([
++            ['id' => 'active', 'country_id' => 'india', 'name' => 'Mumbai', 'status' => true],
++            ['id' => 'inactive', 'country_id' => 'india', 'name' => 'Inactive city', 'status' => false],
++            ['id' => 'other', 'country_id' => 'other', 'name' => 'Other city', 'status' => true],
++        ]);
++
++        $controller = app(\App\Http\Controllers\ClientController::class);
++        $response = $controller->getCitiesByCountry('india');
++
++        $this->assertSame(200, $response->getStatusCode());
++        $this->assertSame([['id' => 'active', 'name' => 'Mumbai']], $response->getData(true));
++        $this->assertSame([], $controller->getCitiesByCountry('null')->getData(true));
++    }
++
++    public function test_accounts_can_save_and_replace_customer_refund_screenshot(): void
++    {
++        $scenario = $this->createPaidCancelledScenario();
++        $user = $this->createAdminUser();
++        $user->userType()->update(['user_type' => UserType::ACCOUNTS_MANAGER]);
++        $this->actingAs($user->fresh());
++
++        Schema::create('lead_refunds', function (Blueprint $table) {
++            $table->string('id')->primary();
++            $table->string('lead_followup_id');
++            $table->decimal('original_amount', 12, 2);
++            $table->decimal('refund_amount', 12, 2);
++            $table->string('refund_type')->nullable();
++            $table->date('refund_date')->nullable();
++            $table->text('refund_reason')->nullable();
++            $table->string('refund_proof')->nullable();
++            $table->unsignedTinyInteger('status');
++            $table->timestamps();
++        });
++
++        config()->set('session.driver', 'array');
++        $testStorage = sys_get_temp_dir().'/crm-refund-'.Str::uuid();
++        $root = $testStorage.'/app/public';
++        mkdir($root, 0777, true);
++        $disk = app('filesystem')->createLocalDriver(['driver' => 'local', 'root' => $root]);
++        \Illuminate\Support\Facades\Storage::set('public', $disk);
++        $originalStorage = storage_path();
++        $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/P8sAAAAASUVORK5CYII=');
++        $payload = [
++            'followup_id' => $scenario['followup']->id,
++            'original_amount' => 70000,
++            'refund_amount' => 5000,
++            'refund_type' => 'Bank Transfer',
++            'refund_date' => '2026-08-20',
++        ];
++        foreach (['proof.png', 'replacement.png'] as $name) {
++            $file = \Illuminate\Http\UploadedFile::fake()->createWithContent($name, $png);
++            $response = $this->post(route('admin.refunds.store'), $payload + ['refund_proof' => $file]);
++            $response->assertOk();
++            $refund = LeadRefund::findOrFail($response->json('refund_id'));
++            $this->assertNotEmpty($refund->refund_proof);
++            $this->assertSame($png, file_get_contents($root.'/'.$refund->refund_proof));
++            $this->app->useStoragePath($testStorage);
++            try {
++                $download = $this->get(route('admin.refunds.download', $refund->id));
++                $download->assertOk();
++                $this->assertSame($png, file_get_contents($download->baseResponse->getFile()->getPathname()));
++            } finally {
++                $this->app->useStoragePath($originalStorage);
++            }
++        }
++        $this->assertSame(1, LeadRefund::count());
++        $user->userType()->update(['user_type' => UserType::HR]);
++        $this->actingAs($user->fresh());
++        $this->get(route('admin.refunds.download', $refund->id))->assertForbidden();
++    }
++
++    public function test_empty_vendor_report_leaves_datatables_body_empty(): void
++    {
++        $this->actingAs($this->createAdminUser());
++        $request = Request::create('/admin/report/vendor-payments', 'GET', ['status' => 'unpaid']);
++        app()->instance('request', $request);
++        $response = app(ReportController::class)->vendorReport($request);
++        $data = $response->getData();
++        $this->assertCount(0, $data['rows']);
++
++        $html = view('admin.report.partials.vendor_report_redesign', $data)->render();
++        $this->assertMatchesRegularExpression('/id="vendor-report-table".*?<tbody>\s*<\/tbody>/s', $html);
++        $this->assertStringContainsString('No vendor payments match these filters.', $html);
++        $this->assertStringNotContainsString('@selected', $html);
++        $this->assertStringContainsString('value="unpaid" selected', $html);
++    }
++
+     public function test_vendor_report_export_uses_refund_adjusted_vendor_amounts(): void
+     {
+         $this->createPaidCancelledScenario();
+@@ -221,6 +840,32 @@ public function test_vendor_report_export_uses_refund_adjusted_vendor_amounts():
+         $this->assertSame('Full Paid', $row['status']);
+     }
+ 
++    public function test_vendor_report_generates_matching_csv_and_xlsx_rows(): void
++    {
++        $this->createPaidCancelledScenario();
++        $filters = ['search' => 'Cancelled'];
++        $csv = \Maatwebsite\Excel\Facades\Excel::raw(new VendorReportExport($filters), 'Csv');
++        $csvRows = array_map('str_getcsv', preg_split('/\r?\n/', trim($csv)));
++        $this->assertCount(2, $csvRows);
++        $this->assertContains('Cancelled Customer', $csvRows[1]);
++        $this->assertContains('10,000.00', $csvRows[1]);
++
++        $xlsx = \Maatwebsite\Excel\Facades\Excel::raw(new VendorReportExport($filters), 'Xlsx');
++        $file = tempnam(sys_get_temp_dir(), 'crm-vendor-');
++        try {
++            file_put_contents($file, $xlsx);
++            $workbook = (new \PhpOffice\PhpSpreadsheet\Reader\Xlsx())->load($file);
++            $rows = $workbook->getActiveSheet()->toArray();
++            $workbook->disconnectWorksheets();
++            $this->assertSame($csvRows, array_map(
++                fn (array $row) => array_map(fn ($value) => (string) $value, $row),
++                $rows
++            ));
++        } finally {
++            unlink($file);
++        }
++    }
++
+     public function test_profit_loss_export_includes_paid_cancelled_ride_with_adjusted_vendor_amount(): void
+     {
+         $this->createPaidCancelledScenario();
+@@ -534,6 +1179,7 @@ private function createSchema(): void
+             $table->uuid('id')->primary();
+             $table->uuid('country_id')->nullable();
+             $table->string('city')->nullable();
++            $table->string('name')->nullable();
+             $table->integer('status')->default(1);
+             $table->timestamps();
+         });
+@@ -590,6 +1236,7 @@ private function createSchema(): void
+             $table->json('extra_service_ids')->nullable();
+             $table->decimal('total_amount', 15, 2)->nullable();
+             $table->decimal('discount_amount', 15, 2)->nullable();
++            $table->boolean('pricing_revision')->nullable();
+             $table->decimal('service_amount', 15, 2)->nullable();
+             $table->json('service_details')->nullable();
+             $table->decimal('received_amount', 15, 2)->nullable();
+@@ -753,4 +1400,221 @@ private function createSchema(): void
+             $table->timestamps();
+         });
+     }
++
++    public function test_note_only_sales_followup_preserves_booking_profit(): void
++    {
++        $lead = $this->createPartiallyPaidBooking();
++
++        $this->addBookingFollowup($lead, LeadFollowup::STATUS_SALES_FOLLOW_UP, 0, '2026-09-02');
++        $this->assertBookingFinancials($lead, 35000.0, 10000.0);
++    }
++
++    public function test_note_only_close_followup_preserves_booking_profit(): void
++    {
++        $lead = $this->createPartiallyPaidBooking();
++        $this->addBookingFollowup($lead, LeadFollowup::STATUS_CLOSE_FOLLOW_UP, 0, '2026-09-03');
++        $this->assertBookingFinancials($lead, 35000.0, 10000.0);
++    }
++
++    public function test_priced_sales_add_on_increases_booking_profit(): void
++    {
++        $lead = $this->createPartiallyPaidBooking();
++
++        $this->addBookingFollowup($lead, LeadFollowup::STATUS_SALES_FOLLOW_UP, 40000, '2026-09-02');
++        $this->assertBookingFinancials($lead, 40000.0, 15000.0);
++    }
++
++    public function test_legacy_note_after_authoritative_zero_keeps_zero_booking_revenue(): void
++    {
++        $lead = $this->createPartiallyPaidBooking();
++        $this->addBookingFollowup($lead, LeadFollowup::STATUS_SALES_FOLLOW_UP, 0, '2026-09-02');
++        $revision = LeadFollowup::where('lead_id', $lead->id)->latest('created_at')->firstOrFail();
++        $revision->update(['pricing_revision' => true]);
++        $this->assertBookingFinancials($lead, 0.0, -25000.0);
++
++        $this->addBookingFollowup($lead, LeadFollowup::STATUS_CLOSE_FOLLOW_UP, 0, '2026-09-03');
++        $this->assertBookingFinancials($lead, 0.0, -25000.0);
++    }
++
++    private function createPartiallyPaidBooking(): Lead
++    {
++        $scenario = $this->createPaidCancelledScenario(10000);
++        $scenario['followup']->update([
++            'status' => LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
++            'total_amount' => 35000,
++        ]);
++        VendorRefund::where('lead_vendor_payment_id', $scenario['lead_vendor_payment']->id)
++            ->update(['cancellation_amount' => 25000]);
++
++        return $scenario['lead'];
++    }
++
++    private function addBookingFollowup(Lead $lead, int $status, int $total, string $date): void
++    {
++        LeadFollowup::forceCreate([
++            'id' => (string) Str::uuid(),
++            'lead_id' => $lead->id,
++            'status' => $status,
++            'total_amount' => $total,
++            'received_amount' => 0,
++            'service_ids' => [],
++            'extra_service_ids' => [],
++            'service_details' => [],
++            'created_at' => $date.' 10:00:00',
++            'updated_at' => $date.' 10:00:00',
++        ]);
++    }
++
++    private function assertBookingFinancials(Lead $lead, float $revenue, float $profit): void
++    {
++        $summary = app(\App\Services\Reports\ProfitLossSummaryService::class);
++        $cohort = app(\App\Services\Sales\SalesBookingCohortService::class);
++        $augustStart = \Carbon\Carbon::parse('2026-08-01');
++        $augustEnd = \Carbon\Carbon::parse('2026-08-31');
++        $septemberStart = \Carbon\Carbon::parse('2026-09-01');
++        $septemberEnd = \Carbon\Carbon::parse('2026-09-30');
++
++        $this->assertTrue($cohort->leadIdsForPeriod($augustStart, $augustEnd)->contains($lead->id));
++        $this->assertFalse($cohort->leadIdsForPeriod($septemberStart, $septemberEnd)->contains($lead->id));
++        $financial = $summary->forPeriod($augustStart, $augustEnd);
++        $latest = LeadFollowup::where('lead_id', $lead->id)->latest('created_at')->firstOrFail();
++        $this->assertSame(10000.0, $summary->forFollowup($latest)['cash_received']);
++        $this->assertSame(1, $financial['lead_count']);
++        $this->assertSame(25000.0, $financial['vendor_cost']);
++        $this->assertSame($profit, $financial['booking_profit']);
++        $this->assertSame($revenue, $financial['booking_revenue']);
++    }
++public function test_fractional_second_payment_is_counted_in_december(): void
++{
++    $lead = $this->createPartiallyPaidBooking();
++
++    PaymentAuditTrail::query()
++        ->whereIn(
++            'lead_followup_id',
++            LeadFollowup::query()
++                ->where('lead_id', $lead->id)
++                ->select('id')
++        )
++        ->update([
++            'paid_date' => '2026-12-31 23:59:59.500000',
++        ]);
++
++    $cohort = app(
++        \App\Services\Sales\SalesBookingCohortService::class
++    );
++
++    $december = $cohort->leadIdsForPeriod(
++        \Carbon\Carbon::parse('2026-12-01'),
++        \Carbon\Carbon::parse('2026-12-31')
++    );
++
++    $january = $cohort->leadIdsForPeriod(
++        \Carbon\Carbon::parse('2027-01-01'),
++        \Carbon\Carbon::parse('2027-01-31')
++    );
++
++    $this->assertTrue($december->contains($lead->id));
++    $this->assertFalse($january->contains($lead->id));
++}
++
++public function test_midnight_payment_is_counted_in_january(): void
++{
++    $lead = $this->createPartiallyPaidBooking();
++
++    PaymentAuditTrail::query()
++        ->whereIn(
++            'lead_followup_id',
++            LeadFollowup::query()
++                ->where('lead_id', $lead->id)
++                ->select('id')
++        )
++        ->update([
++            'paid_date' => '2027-01-01 00:00:00.000000',
++        ]);
++
++    $cohort = app(
++        \App\Services\Sales\SalesBookingCohortService::class
++    );
++
++    $december = $cohort->leadIdsForPeriod(
++        \Carbon\Carbon::parse('2026-12-01'),
++        \Carbon\Carbon::parse('2026-12-31')
++    );
++
++    $january = $cohort->leadIdsForPeriod(
++        \Carbon\Carbon::parse('2027-01-01'),
++        \Carbon\Carbon::parse('2027-01-31')
++    );
++
++    $this->assertFalse($december->contains($lead->id));
++    $this->assertTrue($january->contains($lead->id));
++}
++
++
++public function test_historical_followup_does_not_use_future_booking_price(): void
++{
++    $lead = $this->createPartiallyPaidBooking();
++
++    $this->addBookingFollowup(
++        $lead,
++        LeadFollowup::STATUS_SALES_FOLLOW_UP,
++        40000,
++        '2026-09-01'
++    );
++
++    $this->addBookingFollowup(
++        $lead,
++        LeadFollowup::STATUS_SALES_FOLLOW_UP,
++        0,
++        '2026-09-03'
++    );
++
++    $historical = LeadFollowup::query()
++        ->where('lead_id', $lead->id)
++        ->whereDate('created_at', '2026-09-03')
++        ->firstOrFail();
++
++    $this->addBookingFollowup(
++        $lead,
++        LeadFollowup::STATUS_SALES_FOLLOW_UP,
++        55000,
++        '2026-09-04'
++    );
++
++    $summary = app(
++        \App\Services\Reports\ProfitLossSummaryService::class
++    );
++
++    $historicalFinancial = $summary->forFollowup($historical);
++
++    $this->assertSame(
++        40000.0,
++        $historicalFinancial['chargeable_revenue']
++    );
++
++    $this->assertSame(
++        15000.0,
++        $historicalFinancial['booking_profit']
++    );
++
++    $current = LeadFollowup::query()
++        ->where('lead_id', $lead->id)
++        ->orderByDesc('created_at')
++        ->orderByDesc('id')
++        ->firstOrFail();
++
++    $currentFinancial = $summary->forFollowup($current);
++
++    $this->assertSame(
++        55000.0,
++        $currentFinancial['chargeable_revenue']
++    );
++
++    $this->assertSame(
++        30000.0,
++        $currentFinancial['booking_profit']
++    );
++}
++
++
+ }

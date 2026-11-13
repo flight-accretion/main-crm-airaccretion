@@ -131,6 +131,7 @@ class OperationsDashboardController extends Controller
             'completed_at'
         );
 
+    $unfilteredCases = clone $cases;
     $this->applyCaseFilters(
         $cases,
         $filters,
@@ -144,6 +145,10 @@ class OperationsDashboardController extends Controller
         $filters['segment'] = $selection['segment'] ?? 'all';
         $presenter = app(\App\Services\Operations\ReviewQueueService::class);
         $summary = $presenter->summary(clone $cases);
+        $summary['unassigned'] = (clone $unfilteredCases)->whereNull('assigned_to')->count();
+        if ($filters['segment'] === 'unassigned') {
+            $cases = clone $unfilteredCases;
+        }
         $presenter->filter($cases, $filters['segment']);
         $cases->withMax('activities', 'created_at');
         $cases = $cases->with('reviewConversation.whatsappConversation')

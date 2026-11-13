@@ -916,7 +916,7 @@ public function previewForLead(
         ?User $actor,
         array $paymentData = []
     ): array {
-        $lead->loadMissing([
+        $lead = $lead->fresh([
             'client',
             'representative',
             'rideSegments',
@@ -961,21 +961,13 @@ public function previewForLead(
             ?: $actor;
 
 
-        $freshLead =
-            $lead->fresh([
-                'client',
-                'representative',
-                'rideSegments',
-            ]);
-
-
         /*
          * Email-only overrides chosen by the sender in the popup.
          * Nothing here is saved to the CRM.
          */
         $context =
             $this->emailContext(
-                $freshLead,
+                $lead,
                 $agent,
                 $registration[
                     'display_link'
@@ -1203,20 +1195,30 @@ private function emailContext(
     string $registrationLink,
     array $travelOverrides = []
 ): array {
-    $amountFollowup =
-        $this->amountFollowup(
-            $lead
-        );
+    $amountFollowup = LeadFollowup::latestPricingSnapshot((string) $lead->id);
+
+    $selectionFollowup = $lead->leadFollowups()
+        ->where(function ($query) {
+            $query->whereNotNull('service_ids')
+                ->orWhereNotNull('extra_service_ids');
+        })
+        ->latest('created_at')
+        ->orderByDesc('id')
+        ->cursor()
+        ->first(fn (LeadFollowup $followup) =>
+            $this->ids($followup->service_ids) !== []
+            || $this->ids($followup->extra_service_ids) !== []
+        ) ?? $amountFollowup;
 
     $serviceIds =
         $this->selectedServiceIds(
             $lead,
-            $amountFollowup
+            $selectionFollowup
         );
 
     $extraServiceIds =
         $this->selectedExtraServiceIds(
-            $amountFollowup
+            $selectionFollowup
         );
 
     $services =
@@ -2347,27 +2349,6 @@ private function paymentSectionPositions(
      * EXISTING CRM DATA HELPERS
      * =========================================================
      */
-    private function amountFollowup(
-        Lead $lead
-    ): ?LeadFollowup {
-        return
-            $lead->leadFollowups()
-                ->whereNotNull(
-                    'total_amount'
-                )
-                ->latest(
-                    'created_at'
-                )
-                ->first()
-            ?:
-            $lead->leadFollowups()
-                ->latest(
-                    'created_at'
-                )
-                ->first();
-    }
-
-
     private function selectedServiceIds(
         Lead $lead,
         ?LeadFollowup $followup

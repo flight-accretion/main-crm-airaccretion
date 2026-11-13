@@ -15,6 +15,7 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 class VendorReportExport implements FromQuery, WithHeadings, WithMapping, WithStyles, WithEvents
 {
     protected $filters;
+    private int $rowNumber = 0;
 
     public function __construct($filters = [])
     {
@@ -243,9 +244,8 @@ class VendorReportExport implements FromQuery, WithHeadings, WithMapping, WithSt
         if ($row instanceof LeadVendorPayment) {
             $row = $this->buildRow($row);
         }
-        static $i = 0; $i++;
         return [
-            $i,
+            ++$this->rowNumber,
             $row['vendor_name'],
             $row['booking_slip'],
             $row['product'],

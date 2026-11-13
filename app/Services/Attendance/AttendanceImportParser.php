@@ -18,7 +18,7 @@ class AttendanceImportParser
         try {
             foreach ($spreadsheet->getWorksheetIterator() as $sheet) {
                 $rows[] = ['__sheet_boundary__'];
-                foreach ($sheet->toArray(null, true, true, false) as $row) {
+                foreach ($sheet->toArray(null, true, false, false) as $row) {
                     $rows[] = $row;
                 }
             }

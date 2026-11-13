@@ -373,6 +373,7 @@ class ClientController extends Controller
         $lastFollowupWithAmount = $lead->leadFollowups()
             ->whereNotNull('total_amount')
             ->latest('created_at')
+             ->orderByDesc('id')
             ->first();
 
         $selectedServices = [];
@@ -473,14 +474,29 @@ class ClientController extends Controller
         $totalExtraServiceAmount = $selectedExtraServiceModels->sum('extra_service_amount');
         $totalAmount = 0;
         $isStoredAmount = false;
+            if (
+                $latestFollowup &&
+                $latestFollowup->total_amount !== null &&
+                (
+                    $latestFollowup->pricing_revision !== null ||
+                    (float) $latestFollowup->total_amount > 0
+                )
+            ) {
+                $totalAmount = (float) $latestFollowup->total_amount;
+                $isStoredAmount = true;
+            } else {
+                $pricingSnapshot = LeadFollowup::latestPricingSnapshot(
+                    (string) $lead->id
+                );
 
-        if ($latestFollowup && $latestFollowup->total_amount && $latestFollowup->total_amount > 0) {
-            $totalAmount = $latestFollowup->total_amount;
-            $isStoredAmount = true;
-        } else {
-            $totalAmount = $totalServiceAmount + $totalExtraServiceAmount;
-        }
-
+                if ($pricingSnapshot !== null) {
+                    $totalAmount = (float) $pricingSnapshot->total_amount;
+                    $isStoredAmount = true;
+                } else {
+                    $totalAmount =
+                        $totalServiceAmount + $totalExtraServiceAmount;
+                }
+            }
         return [
             'clientInfo' => $clientInfo,
             'followups' => $followups,
@@ -3267,6 +3283,37 @@ $leadFollowUp = LeadFollowUp::create([
     {
             $this->abortUnlessCanAccessLead($lead);
 
+            $pricingAction = $request->input('pricing_action');
+
+            if (
+                $pricingAction !== null &&
+                !in_array($pricingAction, ['preserve', 'revise'], true)
+            ) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'pricing_action' => 'Invalid pricing action.',
+                ]);
+            }
+
+            $role = $request->user()?->userType?->user_type;
+            $canRevisePricing = in_array($role, array_merge(
+                UserType::ADMIN_ROLES,
+                UserType::SALES_ROLES,
+                UserType::OWNER_ROLES
+            ), true);
+            abort_if($pricingAction === 'revise' && !$canRevisePricing, 403);
+            $preservePricing = $pricingAction === 'preserve' || !$canRevisePricing;
+
+if ($preservePricing) {
+    $request->merge([
+        'services' => null,
+        'extra_services' => null,
+        'service_amount' => null,
+        'discount_amount' => null,
+        'service_details' => null,
+        'total_amount' => null,
+    ]);
+}
+
         $preserveStatus = !$request->filled('status') || $request->input('status') === 'keep';
         if ($preserveStatus) {
             // Keeping a payment status is not a new payment or points redemption.
@@ -3348,14 +3395,33 @@ $leadFollowUp = LeadFollowUp::create([
                 ],
                 'status' => ['required', Rule::in(['keep', 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])],
                 'next_followup_date' => ['nullable', 'date_format:Y-m-d\TH:i'],
-                'services' => 'required_if:status,3,4|array',
+                'services' => [
+                    'nullable',
+                    'array',
+                    Rule::requiredIf(function () use ($request, $preservePricing) {
+                        return !$preservePricing
+                            && in_array(
+                                (int) $request->input('status'),
+                                [
+                                    LeadFollowup::STATUS_FULL_PAYMENT_RECEIVED,
+                                    LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
+                                ],
+                                true
+                            );
+                    }),
+                ],
                 'services.*' => 'exists:services,id',
                 'extra_services' => 'nullable|array',
                 'extra_services.*' => 'exists:extra_services,id',
                 'service_details' => 'nullable|json',
                 'service_amount' => 'nullable|numeric|min:0',
                 'discount_amount' => 'nullable',
-                'total_amount' => 'nullable|numeric|min:0',
+                'total_amount' => [
+                    'nullable',
+                    'required_if:pricing_action,revise',
+                    'numeric',
+                    'min:0',
+                ],
                 'received_amount' => [
                     'required_if:status,3,4',
                     'nullable',
@@ -3376,6 +3442,7 @@ $leadFollowUp = LeadFollowUp::create([
                     'min:1'
                 ],
                 'customer_not_picked_up' => ['nullable', 'boolean'],
+                'pricing_action' => ['nullable', Rule::in(['preserve', 'revise'])],
             ];
 
             // Conditionally set image and paid_date validation based on payment method
@@ -3440,6 +3507,9 @@ $leadFollowUp = LeadFollowUp::create([
         try {
             // Serialize note saves so Keep uses the current server-side status, not a stale form value.
             Lead::whereKey($lead->id)->lockForUpdate()->firstOrFail();
+            $pricingSnapshot = $preservePricing
+                ? LeadFollowup::latestPricingSnapshot((string) $lead->id)
+                : null;
             $previousStatus = LeadFollowup::query()
                 ->where('lead_id', $lead->id)
                 ->orderByDesc('created_at')
@@ -3448,6 +3518,15 @@ $leadFollowUp = LeadFollowUp::create([
             $statusToSave = $preserveStatus
                 ? ($previousStatus === null ? LeadFollowup::STATUS_INITIATED : (int) $previousStatus)
                 : (int) $request->status;
+
+            if ($preservePricing && !$preserveStatus && in_array($statusToSave, [
+                LeadFollowup::STATUS_FULL_PAYMENT_RECEIVED,
+                LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
+            ], true) && ($pricingSnapshot === null || empty($this->normalizeIdList($pricingSnapshot->service_ids)))) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'pricing_action' => 'Save booking pricing and services before recording a payment.',
+                ]);
+            }
 
             if (!$preserveStatus) {
                 app(LeadStatusTransitionService::class)->assertManualTransition(
@@ -3506,7 +3585,8 @@ $leadFollowUp = LeadFollowUp::create([
                 $lead->update(array_merge($leadUpdates, ['updated_at' => now()]));
             }
 
-            if (!empty($services)) {
+
+            if (!$preservePricing && !empty($services)) {
                 $lead->update([
                     'service_ids' => json_encode(array_values($services)),
                     'updated_at' => now()
@@ -3656,15 +3736,38 @@ $leadFollowUp = LeadFollowUp::create([
             // Ensure total is not negative as a final safeguard
             $totalAmount = max(0, $totalAmount);
 
-            if ($preserveStatus && empty($services) && empty($extraServices)
-                && !$request->filled('service_details') && !$request->filled('total_amount')) {
-                // A note-only save must not replace the last quotation with a zero total.
-                $pricing = $lead->leadFollowups()->whereNotNull('total_amount')
-                    ->orderByDesc('created_at')->orderByDesc('id')->first();
-                if ($pricing) {
-                    $services = $pricing->service_ids ?: [];
-                    $extraServices = $pricing->extra_service_ids ?: [];
-                    $serviceDetails = $pricing->service_details ?: [];
+            if ($preservePricing) {
+                if ($pricingSnapshot !== null) {
+                    $services = $pricingSnapshot->service_ids_array;
+                    $extraServices = $pricingSnapshot->extra_service_ids_array;
+                    $serviceDetails = $pricingSnapshot->service_details_array;
+                    $calculatedServiceAmount = $pricingSnapshot->service_amount;
+                    $discountAmount = $pricingSnapshot->discount_amount;
+                    $totalAmount = $pricingSnapshot->total_amount;
+                } else {
+                    $services = [];
+                    $extraServices = [];
+                    $serviceDetails = [];
+                    $calculatedServiceAmount = null;
+                    $discountAmount = null;
+                    $totalAmount = null;
+                }
+            } elseif (
+                $pricingAction === null &&
+                $preserveStatus &&
+                empty($services) &&
+                empty($extraServices) &&
+                !$request->filled('service_details') &&
+                !$request->filled('total_amount')
+            ) {
+                $pricing = LeadFollowup::latestPricingSnapshot(
+                    (string) $lead->id
+                );
+
+                if ($pricing !== null) {
+                    $services = $pricing->service_ids_array;
+                    $extraServices = $pricing->extra_service_ids_array;
+                    $serviceDetails = $pricing->service_details_array;
                     $calculatedServiceAmount = $pricing->service_amount;
                     $discountAmount = $pricing->discount_amount;
                     $totalAmount = $pricing->total_amount;
@@ -3704,6 +3807,11 @@ $leadFollowUp = LeadFollowUp::create([
                 'discount_amount' => $discountAmount,
                 'service_details' => !empty($serviceDetails) ? array_values($serviceDetails) : null,
                 'total_amount' => $totalAmount,
+                'pricing_revision' => $pricingAction === 'revise'
+                    ? true
+                    : ($preservePricing && $pricingSnapshot !== null
+                        ? false
+                        : null),
                 'received_amount' => $request->received_amount,
                 'payment_method' => $request->payment_method,
                 'paid_date' => $request->paid_date,

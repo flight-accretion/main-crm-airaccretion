@@ -1522,6 +1522,8 @@ class ReportController extends Controller
             6 => 'Pending',
             7 => 'Rescheduled',
             8 => 'Approved',
+            10 => 'Sales Follow-up',
+            11 => 'Close Follow-up',
             // 9 => 'Rejected'
         ];
 
@@ -1535,7 +1537,10 @@ class ReportController extends Controller
             'enquiry.leadVendorPayments.vendorPayments',
             'enquiry.leadVendorPayments.vendorRefunds',
             'followedBy.userType'
-        ])->whereIn('status', [2, 3, 4, 5, 6, 7, 8]);
+        ])->whereIn(
+        'status',
+        LeadFollowup::FINANCIAL_REPORT_STATUSES
+      );
 
         $query = $this->applyRepresentativeScope($query);
 
@@ -1695,15 +1700,18 @@ class ReportController extends Controller
         // Process profit/loss data
         $profitLossService = app(ProfitLossSummaryService::class);
         $profitLossData = $allData->groupBy('lead_id')->map(function ($group) use ($statusArray, $approvedLeadIds, $productNames, $serviceNames, $profitLossService) {
-            $latest = $group->sortByDesc('created_at')->first();
+            $latest = $group->sortBy([['created_at', 'desc'], ['id', 'desc']])->first();
 
             // ONLY show leads that have at least one approved payment
             if (!$approvedLeadIds->contains($latest->lead_id)) {
                 return null;
             }
-
             // Also skip if latest followup status is not in qualifying statuses
-            if (!in_array($latest->status, [2, 3, 4, 5, 6, 7, 8])) {
+            if (!in_array(
+                (int) $latest->status,
+                LeadFollowup::FINANCIAL_REPORT_STATUSES,
+                true
+            )) {
                 return null;
             }
 

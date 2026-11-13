@@ -10,7 +10,7 @@ use Illuminate\Support\Str;
 
 class GoogleChatInboundTest extends GoogleChatTestCase
 {
-    private function fixture(): array
+    private function fixture(bool $mockNotifications = true): array
     {
         $this->harden();
         config(['services.google_chat.allowed_spaces' => ['spaces/one']]);
@@ -26,8 +26,72 @@ class GoogleChatInboundTest extends GoogleChatTestCase
             ['state' => 'JOINED', 'member' => ['name' => 'users/actual', 'type' => 'HUMAN']],
         ]);
         $client->shouldReceive('getMessage')->andReturn($google);
-        $this->mock(LeadChatNotificationService::class)->shouldReceive('notifyGoogleMessage')->zeroOrMoreTimes();
+        if ($mockNotifications) {
+            $this->mock(LeadChatNotificationService::class)->shouldReceive('notifyGoogleMessage')->zeroOrMoreTimes();
+        }
         return [$c, $google];
+    }
+
+    public function test_authenticated_delivery_replay_notifies_manager_once(): void
+    {
+        [$conversation, $google] = $this->fixture(false);
+        $role = (string) Str::uuid();
+        $manager = (string) Str::uuid();
+        DB::table('user_types')->insert(['id' => $role, 'user_type' => \App\Models\UserType::SALES_MANAGER]);
+        DB::table('users')->insert(['id' => $manager, 'name' => 'QA Manager', 'user_type_id' => $role]);
+        DB::table('leads')->where('id', $conversation->lead_id)->update(['representative_user_id' => $manager]);
+
+        config(['services.google_chat.enabled' => true]);
+        \Illuminate\Support\Facades\Bus::fake();
+        $this->mock(\App\Services\GoogleChat\GoogleChatPushVerifier::class)
+            ->shouldReceive('verify')->with('synthetic-token')->twice()->andReturn([]);
+        $payload = ['message' => [
+            'messageId' => 'synthetic-delivery',
+            'attributes' => ['ce-type' => 'google.workspace.chat.message.v1.created'],
+            'data' => base64_encode(json_encode(['message' => ['name' => $google['name']]])),
+        ]];
+        $headers = ['Authorization' => 'Bearer synthetic-token'];
+        $this->postJson('/api/google-chat/pubsub', $payload, $headers)->assertNoContent();
+        $event = \App\Models\GoogleChatEvent::sole();
+        $job = new \App\Jobs\ProcessGoogleChatEvent($event->id);
+        $job->handle(app(GoogleChatInboundService::class));
+        $this->postJson('/api/google-chat/pubsub', $payload, $headers)->assertNoContent();
+        $job->handle(app(GoogleChatInboundService::class));
+
+        $this->assertSame('processed', $event->fresh()->status);
+        $this->assertSame(1, \App\Models\GoogleChatEvent::count());
+        $message = LeadChatMessage::sole();
+        $this->assertSame($conversation->id, $message->conversation_id);
+        $notification = \App\Models\LeadChatNotification::sole();
+        $this->assertSame($manager, $notification->user_id);
+        $this->assertSame($message->id, $notification->message_id);
+
+        $otherManager = (string) Str::uuid();
+        DB::table('users')->insert(['id' => $otherManager, 'name' => 'Other Manager', 'user_type_id' => $role]);
+        $url = route('admin.chat-notifications.index');
+        $managerUser = \App\Models\User::findOrFail($manager);
+        $open = route('admin.chat-notifications.open', $notification);
+        $read = route('admin.chat-notifications.read', $notification);
+        $this->actingAs($managerUser)->getJson($url)
+            ->assertOk()
+            ->assertJsonPath('unread_count', 1)
+            ->assertJsonPath('notifications.0.id', $notification->id)
+            ->assertJsonPath('notifications.0.body', 'Reply')
+            ->assertJsonPath('notifications.0.title', 'Google Chat reply from Actual sender')
+            ->assertJsonPath('notifications.0.open_url', $open);
+        $this->actingAs(\App\Models\User::findOrFail($otherManager))->getJson($url)
+            ->assertOk()
+            ->assertJsonPath('unread_count', 0)
+            ->assertJsonCount(0, 'notifications');
+        $this->get($open)->assertNotFound();
+        $this->postJson($read)->assertNotFound();
+        $this->actingAs($managerUser)->postJson($read)->assertOk()->assertJsonPath('success', true);
+        $this->getJson($url)->assertOk()
+            ->assertJsonPath('unread_count', 0)
+            ->assertJsonPath('notifications.0.is_read', true)
+            ->assertJsonCount(1, 'notifications');
+        $this->get($open)->assertRedirect(route('admin.leads.follow-up.create', $conversation->lead_id)
+            .'?chat=1&message='.$message->id.'#lead-chat-panel');
     }
 
     public function test_inbound_create_has_uuid_and_actual_identity(): void

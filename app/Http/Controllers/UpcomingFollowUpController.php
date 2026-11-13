@@ -130,27 +130,6 @@ class UpcomingFollowUpController extends Controller
             });
         }
 
-        // Get follow-ups scheduled for the selected date
-        $todayQuery = (clone $baseQuery)->whereDate('next_followup_date', '=', $fromDate);
-        $todayFollowUps = $todayQuery->orderBy('next_followup_date', 'desc')->get()->map(function ($f) {
-            $f->is_missed = false;
-            return $f;
-        });
-
-        // Also include 'missed' follow-ups: those scheduled before the selected date and still open (status 0 or 1)
-        // Adjust statuses here if your app uses different codes for 'open' follow-ups
-        $missedQuery = (clone $baseQuery)
-            ->whereDate('next_followup_date', '<', $fromDate)
-            ->orderBy('next_followup_date', 'asc')
-            ->whereIn('status', LeadFollowup::TODAY_FOLLOWUP_MISSED_OPEN_STATUSES);
-        $missedFollowUps = $missedQuery->orderBy('next_followup_date', 'asc')->get()->map(function ($f) {
-            $f->is_missed = true;
-            return $f;
-        });
-
-        // Combine: show today's first, then missed ones
-        $arrFollowUps = $todayFollowUps->merge($missedFollowUps);
-
         // NEW LOGIC: Only show open follow-ups, properly handle completed ones
         // Instead of complex filtering, let's simplify:
         // 1. Get all follow-ups for the selected date that are still open (not completed/cancelled)

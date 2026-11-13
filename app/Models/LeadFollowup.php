@@ -27,6 +27,18 @@ class LeadFollowup extends Model
     public const STATUS_SALES_FOLLOW_UP = 10;
     public const STATUS_CLOSE_FOLLOW_UP = 11;
 
+    public const FINANCIAL_REPORT_STATUSES = [
+        self::STATUS_CANCELLED,
+        self::STATUS_FULL_PAYMENT_RECEIVED,
+        self::STATUS_PARTIAL_PAYMENT_RECEIVED,
+        self::STATUS_RIDE_COMPLETED,
+        self::STATUS_PENDING,
+        self::STATUS_RESCHEDULED,
+        self::STATUS_APPROVED,
+        self::STATUS_SALES_FOLLOW_UP,
+        self::STATUS_CLOSE_FOLLOW_UP,
+    ];
+
     public const FOLLOWUP_ONLY_STATUSES = [
         self::STATUS_SALES_FOLLOW_UP,
         self::STATUS_CLOSE_FOLLOW_UP,
@@ -113,6 +125,7 @@ class LeadFollowup extends Model
         'due_at',
         'completed_by',
         'completed_at',
+        'pricing_revision',
     ];
 
     protected $casts = [
@@ -126,6 +139,7 @@ class LeadFollowup extends Model
         'ride_date' => 'date',
         'due_at' => 'datetime',
         'completed_at' => 'datetime',
+        'pricing_revision' => 'boolean',
     ];
 
     public function isCustomerNoAnswer(): bool
@@ -312,6 +326,40 @@ public function getServiceIdsArrayAttribute()
 public function getExtraServiceIdsArrayAttribute()
 {
     return ArrayIdNormalizer::normalize($this->extra_service_ids);
+}
+
+public static function latestPricingSnapshot(
+    string $leadId,
+    ?self $before = null
+): ?self {
+    $query = static::query()
+        ->where('lead_id', $leadId)
+        ->whereNotNull('total_amount')
+        ->where('total_amount', '>=', 0)
+        ->where('status', '!=', self::STATUS_REJECTED)
+        ->where(function ($query) {
+            $query->whereNotNull('pricing_revision')
+                ->orWhere('total_amount', '>', 0);
+        });
+
+    if ($before !== null) {
+        $query->where(function ($query) use ($before) {
+            $query->where(
+                'created_at',
+                '<',
+                $before->created_at
+            )->orWhere(function ($sameTime) use ($before) {
+                $sameTime
+                    ->where('created_at', '=', $before->created_at)
+                    ->where('id', '<', $before->id);
+            });
+        });
+    }
+
+    return $query
+        ->orderByDesc('created_at')
+        ->orderByDesc('id')
+        ->first();
 }
 
 public function getServiceDetailsArrayAttribute()

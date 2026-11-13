@@ -442,6 +442,9 @@
                 </tr>
             </table>
 
+            <p style="text-align:right;">Outstanding balance:
+                <strong>Rs.{{ number_format(max(0, (float) ($invoiceData['payment']['balance'] ?? 0)), 2) }}</strong>
+            </p>
             <span class="status-tag">
                 @if($invoiceData['payment']['received_amount'] >= $invoiceData['payment']['total_amount'] && $invoiceData['payment']['total_amount'] > 0)
                     Full Paid

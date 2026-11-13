@@ -19,6 +19,7 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use Illuminate\Support\Collection;
 use Carbon\Carbon;
+use App\Services\Sales\SalesBookingCohortService;
 
 class ProfitLossReportExport implements FromGenerator, WithHeadings, WithMapping, WithStyles, WithEvents
 {
@@ -199,7 +200,35 @@ class ProfitLossReportExport implements FromGenerator, WithHeadings, WithMapping
         'enquiry.leadVendorPayments.vendorPayments',
         'enquiry.leadVendorPayments.vendorRefunds',
         'followedBy.userType'
-    ])->whereIn('status', [2, 3, 4, 5, 6, 7, 8]);
+    ])->whereIn(
+        'status',
+        LeadFollowup::FINANCIAL_REPORT_STATUSES
+    );
+    $fromPaymentDate = $this->filters['from_payment_date'] ?? null;
+    $toPaymentDate = $this->filters['to_payment_date'] ?? null;
+
+    if ($fromPaymentDate || $toPaymentDate) {
+        $fromDate = $fromPaymentDate
+            ? Carbon::parse($fromPaymentDate)->startOfDay()
+            : Carbon::create(1970, 1, 1)->startOfDay();
+
+        $toDate = $toPaymentDate
+            ? Carbon::parse($toPaymentDate)->endOfDay()
+            : now()->endOfDay();
+
+        $allowedRepresentativeIds =
+            $this->filters['_allowed_representative_ids'] ?? null;
+
+        $periodLeadIds = app(
+            SalesBookingCohortService::class
+        )->leadIdsForPeriod(
+            $fromDate,
+            $toDate,
+            $allowedRepresentativeIds
+        );
+
+        $query->whereIn('lead_id', $periodLeadIds);
+    }
 
     if (!empty($this->filters['from_date'])) {
         $fromDate = Carbon::parse($this->filters['from_date'])->startOfDay();
@@ -312,15 +341,18 @@ class ProfitLossReportExport implements FromGenerator, WithHeadings, WithMapping
 
     $profitLossService = app(ProfitLossSummaryService::class);
     $profitLossData = $allData->groupBy('lead_id')->map(function ($group) use ($approvedLeadIds, $profitLossService) {
-        $latest = $group->sortByDesc('created_at')->first();
+        $latest = $group->sortBy([['created_at', 'desc'], ['id', 'desc']])->first();
 
         // Only include leads with at least one approved payment
         if (!$approvedLeadIds->contains($latest->lead_id)) {
             return null;
         }
-
         // Skip if latest status is not qualifying
-        if (!in_array($latest->status, [2, 3, 4, 5, 6, 7, 8])) {
+        if (!in_array(
+            (int) $latest->status,
+            LeadFollowup::FINANCIAL_REPORT_STATUSES,
+            true
+        )) {
             return null;
         }
 

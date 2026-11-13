@@ -853,6 +853,49 @@ class BookingConfirmationEmailServiceTest extends TestCase
         }
     }
 
+    public function test_preview_uses_service_saved_after_the_priced_followup(): void
+    {
+        [$lead, $agent] = $this->leadWithRide([
+            'from_date' => '2026-10-04 12:00:00',
+            'to_date' => '2026-10-04 12:00:00',
+        ]);
+        $updatedService = Service::findOrFail($lead->service_ids[0])->replicate();
+        $updatedService->id = (string) Str::uuid();
+        $updatedService->service = 'Updated Charter';
+        $updatedService->save();
+
+        foreach ([
+            [now()->subDays(2), $lead->service_ids, 10000],
+            [now()->subDay(), [$updatedService->id], null],
+            [now(), null, null],
+        ] as [$createdAt, $serviceIds, $totalAmount]) {
+            DB::table('lead_followups')->insert([
+                'id' => (string) Str::uuid(),
+                'lead_id' => $lead->id,
+                'service_ids' => $serviceIds === null ? null : json_encode($serviceIds),
+                'total_amount' => $totalAmount,
+                'created_at' => $createdAt,
+            ]);
+        }
+
+        $result = app(BookingConfirmationEmailService::class)->previewForLead($lead, $agent);
+
+        $this->assertTrue($result['success']);
+        $this->assertStringStartsWith('Booking Confirmation | Updated Charter | Ref:', $result['subject']);
+        $this->assertEquals(10000, $result['total_amount']);
+
+        $latestFollowup = DB::table('lead_followups')->where('lead_id', $lead->id)
+            ->whereNull('service_ids');
+        $latestFollowup->update(['total_amount' => 0]);
+        $service = app(BookingConfirmationEmailService::class);
+
+        $this->assertEquals(10000, $service->previewForLead($lead, $agent)['total_amount']);
+
+        $latestFollowup->update(['pricing_revision' => true]);
+
+        $this->assertEquals(0, $service->previewForLead($lead, $agent)['total_amount']);
+    }
+
     public function test_final_send_uses_the_senders_time_and_duration_choices(): void
     {
         Mail::fake();
@@ -1182,6 +1225,7 @@ class BookingConfirmationEmailServiceTest extends TestCase
             $table->json('service_ids')->nullable();
             $table->json('extra_service_ids')->nullable();
             $table->decimal('total_amount', 12, 2)->nullable();
+            $table->boolean('pricing_revision')->nullable();
             $table->decimal('discount_amount', 12, 2)->nullable();
             $table->decimal('service_amount', 12, 2)->nullable();
             $table->json('service_details')->nullable();

@@ -21,17 +21,23 @@ class SalesBookingCohortService
         ?array $representativeIds = null
     ): Collection {
         $from = $from->copy()->startOfDay();
-        $to = $to->copy()->endOfDay();
+
+        // Exclusive upper bound prevents missing payments
+        // recorded during the final fractional second of a day.
+        $toExclusive = $to->copy()->startOfDay()->addDay();
 
         if ($representativeIds !== null && empty($representativeIds)) {
             return collect();
         }
-
-        $query = DB::table('payment_audit_trail as pat')
-            ->join('lead_followups as lf', 'lf.id', '=', 'pat.lead_followup_id')
-            ->join('leads as l', 'l.id', '=', 'lf.lead_id')
-            ->where('pat.payment_status', PaymentAuditTrail::STATUS_APPROVED)
-            ->whereNotNull('pat.paid_date');
+    $query = DB::table('payment_audit_trail as pat')
+        ->join('lead_followups as lf', 'lf.id', '=', 'pat.lead_followup_id')
+        ->join('leads as l', 'l.id', '=', 'lf.lead_id')
+        ->where(
+            'pat.payment_status',
+            PaymentAuditTrail::STATUS_APPROVED
+        )
+        ->where('pat.paid_amount', '>', 0)
+        ->whereNotNull('pat.paid_date');
 
         if ($representativeIds !== null) {
             $query->whereIn('l.representative_user_id', $representativeIds);
@@ -40,7 +46,7 @@ class SalesBookingCohortService
         return $query
             ->groupBy('lf.lead_id')
             ->havingRaw('MIN(pat.paid_date) >= ?', [$from])
-            ->havingRaw('MIN(pat.paid_date) <= ?', [$to])
+            ->havingRaw('MIN(pat.paid_date) < ?', [$toExclusive])
             ->pluck('lf.lead_id')
             ->values();
     }

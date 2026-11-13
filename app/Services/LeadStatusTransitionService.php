@@ -104,6 +104,13 @@ class LeadStatusTransitionService
             ]);
         }
 
+        if ($this->displayedBusinessStatus($lead) === LeadFollowup::STATUS_RIDE_COMPLETED
+            && !in_array($toStatus, LeadFollowup::FOLLOWUP_ONLY_STATUSES, true)) {
+            throw ValidationException::withMessages([
+                'status' => 'A completed ride cannot change business status through a follow-up.',
+            ]);
+        }
+
         if ($isSales && !in_array($toStatus, $this->allowedSalesStatuses($lead), true)) {
             throw ValidationException::withMessages([
                 'status' => 'After an approved payment, Sales can only record a payment, Sales Follow-up, or Close Follow-up.',

@@ -1430,9 +1430,7 @@ class InvoiceController extends Controller
             ? (float) $voucherInvoiceData['total_amount']
             : (float) ($latestPayment->total_amount ?? 0);
 
-        $discountInfo = !empty($voucherInvoiceData['items'])
-            ? $this->reconciledInvoiceDiscount($lead, $voucherTotal)
-            : null;
+        $discountInfo = $this->reconciledInvoiceDiscount($lead, $voucherTotal);
 
         $totalAmount = $discountInfo['net'] ?? $voucherTotal;
         // Sum all approved payments for this lead (across followups)

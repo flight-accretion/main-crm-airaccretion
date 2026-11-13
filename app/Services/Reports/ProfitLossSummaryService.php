@@ -40,7 +40,34 @@ class ProfitLossSummaryService
                 ->sum('refund_amount')
             : 0.0;
 
-        $chargeableRevenue = max(0, (float) $latest->total_amount - $customerRefunded);
+            $bookingAmount = max(
+                0.0,
+                (float) ($latest->total_amount ?? 0)
+            );
+
+            if (
+                $latest->pricing_revision === null &&
+                $bookingAmount === 0.0 &&
+                empty($latest->service_details_array)
+            ) {
+                $pricingSnapshot = LeadFollowup::latestPricingSnapshot(
+                    (string) $latest->lead_id,
+                    $latest
+                );
+
+                if ($pricingSnapshot !== null) {
+                    $bookingAmount = max(
+                        0,
+                        (float) $pricingSnapshot->total_amount
+                    );
+                }
+            }
+
+            $chargeableRevenue = max(
+                0,
+                round($bookingAmount - $customerRefunded, 2)
+            );
+
         $earnedRevenue = min($cashReceived, $chargeableRevenue);
         $overpayment = max(0, $cashReceived - $earnedRevenue);
 
@@ -80,12 +107,15 @@ class ProfitLossSummaryService
         if ($leadIds->isEmpty()) {
             return $this->emptyResult();
         }
-
         $latestFollowups = LeadFollowup::query()
             ->with(['enquiry.leadVendorPayments.vendor'])
             ->whereIn('lead_id', $leadIds)
-            ->whereIn('status', [2, 3, 4, 5, 6, 7, 8])
+            ->whereIn(
+                'status',
+                LeadFollowup::FINANCIAL_REPORT_STATUSES
+            )
             ->orderByDesc('created_at')
+            ->orderByDesc('id')
             ->get()
             ->groupBy('lead_id')
             ->map(fn ($rows) => $rows->first())
