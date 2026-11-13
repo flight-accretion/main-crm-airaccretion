@@ -2353,18 +2353,16 @@ private function paymentSectionPositions(
         Lead $lead,
         ?LeadFollowup $followup
     ): array {
-        $followupIds =
+        $leadIds =
             $this->ids(
-                optional(
-                    $followup
-                )->service_ids
+                $lead->service_ids
             );
 
 
         return
-            $followupIds
+            $leadIds
             ?: $this->ids(
-                $lead->service_ids
+                $followup?->service_ids
             );
     }
 
@@ -2494,41 +2492,14 @@ private function paymentSectionPositions(
         Lead $lead,
         Collection $services
     ): Collection {
-        $productIds =
-            collect(
-                $this->ids(
-                    $lead->product_ids
-                )
-            );
-
-
-        $services->each(
-            function (
-                Service $service
-            ) use (
-                $productIds
-            ) {
-                foreach (
-                    $this->ids(
-                        $service
-                            ->product_ids
-                    )
-                    as $productId
-                ) {
-                    $productIds
-                        ->push(
-                            $productId
-                        );
-                }
-            }
-        );
-
-
-        $productIds =
-            $productIds
+        $productIds = $this->ids($lead->product_ids);
+        if ($productIds === []) {
+            $productIds = $services
+                ->flatMap(fn (Service $service) => $this->ids($service->product_ids))
                 ->unique()
                 ->values()
                 ->all();
+        }
 
 
         if (

@@ -853,20 +853,20 @@ class BookingConfirmationEmailServiceTest extends TestCase
         }
     }
 
-    public function test_preview_uses_service_saved_after_the_priced_followup(): void
+    public function test_preview_prefers_the_lead_service_after_a_workspace_edit(): void
     {
         [$lead, $agent] = $this->leadWithRide([
             'from_date' => '2026-10-04 12:00:00',
             'to_date' => '2026-10-04 12:00:00',
         ]);
-        $updatedService = Service::findOrFail($lead->service_ids[0])->replicate();
+        $originalServiceIds = $lead->service_ids;
+        $updatedService = Service::findOrFail($originalServiceIds[0])->replicate();
         $updatedService->id = (string) Str::uuid();
         $updatedService->service = 'Updated Charter';
         $updatedService->save();
 
         foreach ([
-            [now()->subDays(2), $lead->service_ids, 10000],
-            [now()->subDay(), [$updatedService->id], null],
+            [now()->subDays(2), $originalServiceIds, 10000],
             [now(), null, null],
         ] as [$createdAt, $serviceIds, $totalAmount]) {
             DB::table('lead_followups')->insert([
@@ -881,6 +881,11 @@ class BookingConfirmationEmailServiceTest extends TestCase
         $result = app(BookingConfirmationEmailService::class)->previewForLead($lead, $agent);
 
         $this->assertTrue($result['success']);
+        $this->assertStringStartsWith('Booking Confirmation | Helicopter Charter | Ref:', $result['subject']);
+
+        $lead->update(['service_ids' => [$updatedService->id]]);
+        $result = app(BookingConfirmationEmailService::class)->previewForLead($lead, $agent);
+
         $this->assertStringStartsWith('Booking Confirmation | Updated Charter | Ref:', $result['subject']);
         $this->assertEquals(10000, $result['total_amount']);
 
@@ -894,6 +899,44 @@ class BookingConfirmationEmailServiceTest extends TestCase
         $latestFollowup->update(['pricing_revision' => true]);
 
         $this->assertEquals(0, $service->previewForLead($lead, $agent)['total_amount']);
+    }
+
+    public function test_preview_uses_current_lead_product_customer_and_travel_details(): void
+    {
+        [$lead, $agent] = $this->leadWithRide([
+            'from_date' => '2026-10-04 12:00:00',
+            'to_date' => '2026-10-04 12:00:00',
+        ]);
+        $lead->load('client', 'rideSegments');
+        $originalProduct = Product::create([
+            'id' => (string) Str::uuid(),
+            'product' => 'Original Product',
+            'status' => 1,
+        ]);
+        $currentProduct = Product::create([
+            'id' => (string) Str::uuid(),
+            'product' => 'Current Product',
+            'status' => 1,
+        ]);
+        Service::findOrFail($lead->service_ids[0])->update(['product_ids' => [$originalProduct->id]]);
+        Lead::whereKey($lead->id)->firstOrFail()->update([
+            'product_ids' => [$currentProduct->id],
+            'number_of_passengers' => 4,
+        ]);
+        Client::whereKey($lead->client_id)->update(['email' => 'updated@example.test']);
+        DB::table('lead_rides')->where('lead_id', $lead->id)->update([
+            'from_date' => '2026-10-05 16:00:00',
+            'to_date' => '2026-10-05 18:00:00',
+        ]);
+        BookingEmailTemplate::active()->update([
+            'subject' => '{{product_name}} | {{service_date}} | {{passengers}}',
+        ]);
+
+        $result = app(BookingConfirmationEmailService::class)->previewForLead($lead, $agent);
+
+        $this->assertTrue($result['success']);
+        $this->assertSame('updated@example.test', $result['customer_email']);
+        $this->assertStringStartsWith('Current Product | Monday, 5th October 2026 | 4 | Ref:', $result['subject']);
     }
 
     public function test_final_send_uses_the_senders_time_and_duration_choices(): void
