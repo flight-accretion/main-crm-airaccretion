@@ -187,6 +187,7 @@ abstract class KpiFeatureTestCase extends TestCase
         });
 
         Schema::create('attendance_records', function (Blueprint $table) {
+            $table->timestamp('correction_voided_at')->nullable();
             $table->uuid('id')->primary();
             $table->uuid('user_id');
             $table->string('paycode', 100)->nullable();

@@ -38,6 +38,7 @@ class HrDashboardDynamicTest extends KpiFeatureTestCase
             $table->uuid('id')->primary();
             $table->uuid('operation_case_id');
             $table->uuid('user_id')->nullable();
+            $table->string('action')->nullable();
             $table->timestamps();
         });
         Schema::create('attendance_imports', function (Blueprint $table) {
@@ -88,6 +89,13 @@ class HrDashboardDynamicTest extends KpiFeatureTestCase
         $this->case($ops->id, 'vendor_followup', '2026-09-17 12:00:00');
         $reviewDone = $this->case($ops->id, 'review', '2026-09-17 12:00:00');
         DB::table('operation_cases')->where('id', $reviewDone)->update(['metadata' => json_encode(['review_status' => 'completed'])]);
+        // Completed sub-work is recorded separately from current pending workload.
+        $vendorDone = $this->case($ops->id, 'vendor_followup', '2026-09-17 12:00:00', 'completed');
+        foreach ([[$reviewDone, 'review_completed'], [$vendorDone, 'vendor_followup_completed']] as [$completedCase, $action]) {
+            DB::table('operation_case_activities')->insert(['id' => Str::uuid(),
+                'operation_case_id' => $completedCase, 'user_id' => $ops->id, 'action' => $action,
+                'created_at' => now(), 'updated_at' => now()]);
+        }
         $this->case($ops->id, 'customer_call', '2026-09-16 12:00:00');
         $this->case($ops->id, 'customer_call', '2026-09-18 12:00:00');
         $this->case($other->id, 'review', '2026-09-17 10:00:00');

@@ -298,6 +298,8 @@ class AttendanceCalendarTest extends KpiFeatureTestCase
             $t->uuid('id')->primary(); $t->string('paycode')->unique(); $t->uuid('user_id');
             $t->string('employee_name')->nullable(); $t->uuid('updated_by')->nullable(); $t->timestamps();
         });
+        $correctionMigration = require database_path('migrations/2026_11_15_120000_create_attendance_corrections.php');
+        $correctionMigration->up();
         $directory = sys_get_temp_dir().'/crm-attendance-integration-'.Str::uuid();
         mkdir($directory);
         config(['filesystems.disks.local.root' => $directory, 'session.driver' => 'array']);

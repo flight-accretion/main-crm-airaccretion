@@ -146,6 +146,7 @@ class KPIReportIndividualExport implements FromCollection, WithHeadings, WithMap
     {
         $query = LeadFollowup::with(['enquiry.representative.userType', 'enquiry.rideSegments'])
             ->whereIn('status', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        $query = app(\App\Services\Kpi\KpiDataScopeService::class)->scopeAccountsLeadQuery($query, auth()->user());
 
         // Filter by specific representative
         if ($this->representativeId) {

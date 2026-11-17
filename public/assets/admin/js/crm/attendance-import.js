@@ -55,6 +55,12 @@
             cell(row, 'In', record.raw_in);
             cell(row, 'Out', record.raw_out);
             cell(row, 'Status', displayStatus(record.raw_status));
+            const select = [...page.querySelectorAll('.attendance-user-map')].find(input => input.dataset.mappingKey === record.mapping_key);
+            const key = (select?.value || '') + '|' + record.attendance_date;
+            const before = payload.attendance_before?.[key]?.values;
+            const closed = (payload.closed_months || []).some(month => month.slice(0, 7) === record.attendance_date.slice(0, 7));
+            cell(row, 'Before', before ? [before.raw_status, before.raw_in, before.raw_out].filter(Boolean).join(' · ') : 'No existing attendance');
+            cell(row, 'Payroll handling', closed ? 'Closed · approval required' : 'Open · applies on confirmation');
             body.appendChild(row);
         });
         byId('attendanceRowsPage').textContent = `${rows.length ? start + 1 : 0}-${Math.min(start + pageSize, rows.length)} of ${rows.length}`;
@@ -87,7 +93,7 @@
             select.appendChild(new Option('Select employee', ''));
             result.users.forEach(user => select.appendChild(new Option(`${user.name}${user.role ? ' (' + user.role + ')' : ''}`, user.id)));
             select.value = employee.user_id || '';
-            select.addEventListener('change', mappingsValid);
+            select.addEventListener('change', () => { mappingsValid(); renderRows(); });
             td.appendChild(select);
             cell(row, 'Period', `${employee.period_from} - ${employee.period_to}`);
             cell(row, 'Rows', employee.record_count);

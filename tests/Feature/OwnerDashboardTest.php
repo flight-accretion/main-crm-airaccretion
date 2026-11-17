@@ -549,6 +549,7 @@ class OwnerDashboardTest extends TestCase
         });
 
         Schema::create('attendance_records', function (Blueprint $t) {
+            $t->timestamp('correction_voided_at')->nullable();
             $t->string('id')->primary();
             $t->string('user_id')->nullable();
             $t->timestamp('attendance_date')->nullable();

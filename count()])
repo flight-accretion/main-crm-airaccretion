@@ -1,0 +1,21 @@
+
+   InvalidArgumentException 
+
+  Unexpected end of input
+
+  at C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\psy\psysh\src\Shell.php:1481
+    1477▕ 
+    1478▕         if (!$this->hasValidCode()) {
+    1479▕             $this->popCodeStack();
+    1480▕ 
+  ➜ 1481▕             throw new \InvalidArgumentException('Unexpected end of input');
+    1482▕         }
+    1483▕     }
+    1484▕ 
+    1485▕     /**
+
+  1   C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\psy\psysh\src\Shell.php:2180
+      Psy\Shell::setCode("'$q")
+
+  2   C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\tinker\src\Console\TinkerCommand.php:77
+      Psy\Shell::execute("'$q")

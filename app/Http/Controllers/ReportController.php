@@ -1134,31 +1134,7 @@ class ReportController extends Controller
             ]);
 
             // Filters
-            if ($request->filled('from_payment_date')) {
-                $fromDate = Carbon::parse($request->from_payment_date)->startOfDay();
-                $query->whereHas('vendorPayments', function ($q) use ($fromDate) {
-                    $q->where('paid_date', '>=', $fromDate);
-                });
-            }
-            if ($request->filled('to_payment_date')) {
-                $toDate = Carbon::parse($request->to_payment_date)->endOfDay();
-                $query->whereHas('vendorPayments', function ($q) use ($toDate) {
-                    $q->where('paid_date', '<=', $toDate);
-                });
-            }
-
-            if ($request->filled('service_date_from')) {
-                $serviceDateFrom = Carbon::parse($request->service_date_from)->startOfDay();
-                $query->whereHas('lead.rideSegments', function ($q) use ($serviceDateFrom) {
-                    $q->where('from_date', '>=', $serviceDateFrom);
-                });
-            }
-            if ($request->filled('service_date_to')) {
-                $serviceDateTo = Carbon::parse($request->service_date_to)->endOfDay();
-                $query->whereHas('lead.rideSegments', function ($q) use ($serviceDateTo) {
-                    $q->where('from_date', '<=', $serviceDateTo);
-                });
-            }
+            $query->withinReportDateRanges($request->only(['from_payment_date', 'to_payment_date', 'service_date_from', 'service_date_to']));
 
             if ($request->filled('search')) {
                 $search = trim((string) $request->search);
@@ -2040,6 +2016,11 @@ class ReportController extends Controller
      */
     public function exportKpiReport(Request $request)
     {
+        if (in_array($request->user()?->userType?->user_type, \App\Models\UserType::ACCOUNTS_ROLES, true)) {
+            foreach ([$request->input('representative_user_id'), $request->input('manager_user_id')] as $person) {
+                app(\App\Services\Kpi\KpiDataScopeService::class)->assertRequestedUserAllowed($request->user(), $person, 'accounts');
+            }
+        }
         try {
             if ($response = $this->abortLargeUnfilteredExport($request)) {
                 return $response;
@@ -2049,11 +2030,11 @@ class ReportController extends Controller
             $filters = $request->except('format');
 
             if (!empty($filters['representative_user_id'])) {
-                $this->abortIfRepresentativeOutsideScope($filters['representative_user_id']);
+                if (!in_array($request->user()?->userType?->user_type, \App\Models\UserType::ACCOUNTS_ROLES, true)) $this->abortIfRepresentativeOutsideScope($filters['representative_user_id']);
             }
 
             if (!empty($filters['manager_user_id'])) {
-                $this->abortIfRepresentativeOutsideScope($filters['manager_user_id']);
+                if (!in_array($request->user()?->userType?->user_type, \App\Models\UserType::ACCOUNTS_ROLES, true)) $this->abortIfRepresentativeOutsideScope($filters['manager_user_id']);
             }
 
             $fileName = 'kpi_report_' . date('Y-m-d_His') . '.' . $format;
@@ -2082,6 +2063,11 @@ class ReportController extends Controller
      */
     public function exportKpiReportIndividual(Request $request, $representative_id)
     {
+        if (in_array($request->user()?->userType?->user_type, \App\Models\UserType::ACCOUNTS_ROLES, true)) {
+            foreach ([$representative_id, $request->input('representative_user_id'), $request->input('manager_user_id')] as $person) {
+                app(\App\Services\Kpi\KpiDataScopeService::class)->assertRequestedUserAllowed($request->user(), $person, 'accounts');
+            }
+        }
         try {
             if ($response = $this->abortLargeUnfilteredExport($request)) {
                 return $response;
@@ -2090,14 +2076,14 @@ class ReportController extends Controller
             $format = $request->get('format', 'xlsx');
             $filters = $request->except('format');
 
-            $this->abortIfRepresentativeOutsideScope($representative_id);
+            if (!in_array($request->user()?->userType?->user_type, \App\Models\UserType::ACCOUNTS_ROLES, true)) $this->abortIfRepresentativeOutsideScope($representative_id);
 
             if (!empty($filters['representative_user_id'])) {
-                $this->abortIfRepresentativeOutsideScope($filters['representative_user_id']);
+                if (!in_array($request->user()?->userType?->user_type, \App\Models\UserType::ACCOUNTS_ROLES, true)) $this->abortIfRepresentativeOutsideScope($filters['representative_user_id']);
             }
 
             if (!empty($filters['manager_user_id'])) {
-                $this->abortIfRepresentativeOutsideScope($filters['manager_user_id']);
+                if (!in_array($request->user()?->userType?->user_type, \App\Models\UserType::ACCOUNTS_ROLES, true)) $this->abortIfRepresentativeOutsideScope($filters['manager_user_id']);
             }
 
             // Get the representative name for the filename

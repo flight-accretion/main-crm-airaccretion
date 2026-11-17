@@ -10,6 +10,14 @@ use Illuminate\Support\Collection;
 
 class KpiDataScopeService
 {
+    public function scopeAccountsLeadQuery(\Illuminate\Database\Eloquent\Builder $query, ?User $actor): \Illuminate\Database\Eloquent\Builder
+    {
+        if ($actor && in_array($actor->userType?->user_type, UserType::ACCOUNTS_ROLES, true)) {
+            $ids = $this->allowedUserIds($actor, 'accounts');
+            $query->whereHas('enquiry', fn ($leads) => $leads->whereIn('representative_user_id', $ids));
+        }
+        return $query;
+    }
     public function departmentFor(User $user): ?string
     {
         $role = $user->userType->user_type ?? null;
@@ -110,6 +118,7 @@ class KpiDataScopeService
         $department = $this->departmentFor($current);
 
         $isAccountsManager = in_array($role, [
+            UserType::ACCOUNTS_EXECUTIVE,
             UserType::SENIOR_ACCOUNTS_MANAGER,
             UserType::ACCOUNTS_MANAGER,
         ], true);
@@ -131,6 +140,7 @@ class KpiDataScopeService
 
             return User::with('userType')
                 ->where('status', 1)
+                ->when($isAccountsManager, fn ($query) => $query->whereHas('userType', fn ($roles) => $roles->whereIn('user_type', UserType::ACCOUNTS_ROLES)))
                 ->whereIn('id', $ids)
                 ->orderBy('name')
                 ->get();

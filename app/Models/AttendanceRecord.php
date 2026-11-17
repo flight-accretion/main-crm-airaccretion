@@ -36,6 +36,8 @@ class AttendanceRecord extends Model
 
     protected static function booted()
     {
+        static::addGlobalScope('effective-attendance', fn ($query) => $query->whereNull('attendance_records.correction_voided_at'));
+
         static::creating(function ($model) {
             if (!$model->id) {
                 $model->id = (string) Str::uuid();

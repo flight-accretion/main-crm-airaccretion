@@ -16,6 +16,8 @@ use Illuminate\Validation\ValidationException;
 class VendorFollowupService
 {
     public const DEFAULT_PURPOSE = 'Confirm Ride Date & Time';
+    public const PURPOSE_REFUND = 'Refund';
+    public const PURPOSES = ['Query', 'Timeslot', self::PURPOSE_REFUND];
 
     public function create(
         Lead $lead,
@@ -44,7 +46,9 @@ class VendorFollowupService
                 ? Carbon::parse($data['tentative_ride_at'])
                 : null;
 
-            if ($tentativeRideAt && $followupDate->gt($tentativeRideAt->copy()->startOfDay())) {
+            $purpose = trim((string) ($data['purpose'] ?? self::DEFAULT_PURPOSE)) ?: self::DEFAULT_PURPOSE;
+            if ($purpose !== self::PURPOSE_REFUND && $tentativeRideAt
+                && $followupDate->gt($tentativeRideAt->copy()->startOfDay())) {
                 throw ValidationException::withMessages([
                     'followup_date' => 'Vendor Follow-up date cannot be after the tentative ride date.',
                 ]);
@@ -53,7 +57,7 @@ class VendorFollowupService
             $metadata = [
                 'vendor_id' => $vendor->id,
                 'vendor_name_snapshot' => $vendor->name,
-                'purpose' => trim((string) ($data['purpose'] ?? self::DEFAULT_PURPOSE)) ?: self::DEFAULT_PURPOSE,
+                'purpose' => $purpose,
                 'tentative_ride_at' => $tentativeRideAt ? $tentativeRideAt->toDateTimeString() : null,
                 'confirmed_ride_at' => null,
                 'vendor_response' => null,
@@ -119,7 +123,8 @@ class VendorFollowupService
             $newFollowupDate = Carbon::parse($newDate)->startOfDay();
             $tentativeRideAt = data_get($case->metadata, 'tentative_ride_at');
 
-            if ($tentativeRideAt && $newFollowupDate->gt(Carbon::parse($tentativeRideAt)->startOfDay())) {
+            if (data_get($case->metadata, 'purpose') !== self::PURPOSE_REFUND && $tentativeRideAt
+                && $newFollowupDate->gt(Carbon::parse($tentativeRideAt)->startOfDay())) {
                 throw ValidationException::withMessages([
                     'followup_date' => 'Vendor Follow-up date cannot be after the tentative ride date.',
                 ]);

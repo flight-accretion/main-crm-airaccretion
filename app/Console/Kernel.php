@@ -82,6 +82,11 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping()
             ->appendOutputTo(storage_path('logs/review-reminders.log'));
 
+        $schedule->command('lead:cancel-aged-dnp')->dailyAt('00:45')
+            ->when(fn () => filter_var(env('CRM_DNP_AUTO_CANCEL_ENABLED', false), FILTER_VALIDATE_BOOLEAN))
+            ->timezone('Asia/Kolkata')->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/dnp-auto-cancel.log'));
+
         $schedule->command('lead:auto-cancel-expired-active-rides')
             ->dailyAt('00:30')
             ->timezone('Asia/Kolkata')

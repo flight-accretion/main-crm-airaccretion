@@ -368,8 +368,17 @@ class AttendanceImportController extends Controller
                         $users
                     );
 
+            $correctionService = app(\App\Services\Attendance\AttendanceCorrectionService::class);
+            $snapshot = AttendanceRecord::withoutGlobalScope('effective-attendance')->whereBetween('attendance_date', [$fromDate->toDateString(), $toDate->toDateString()])
+                ->get()->mapWithKeys(fn ($row) => [$row->user_id.'|'.$row->attendance_date->toDateString() => [
+                    'version' => $correctionService->version($row), 'values' => $correctionService->values($row),
+                ]])->all();
+            $import->forceFill(['correction_snapshot' => json_encode($snapshot, JSON_THROW_ON_ERROR)])->save();
+            $closedMonths = \Illuminate\Support\Facades\DB::table('attendance_payroll_periods')->where('closed', true)->pluck('month')->all();
             return response()
                 ->json([
+                    'attendance_before' => $snapshot,
+                    'closed_months' => $closedMonths,
                     'ok' =>
                         true,
 
@@ -479,6 +488,7 @@ class AttendanceImportController extends Controller
     ) {
         $validated =
             $request->validate([
+                'correction_reason' => 'nullable|string|max:2000',
                 'import_id' =>
                     'required|uuid|exists:attendance_imports,id',
 
@@ -716,87 +726,20 @@ class AttendanceImportController extends Controller
                          * weekly and monthly
                          * imports consolidate.
                          */
-                        $existing =
-                            AttendanceRecord::
-                                query()
-                                ->where(
-                                    'user_id',
-                                    $userId
-                                )
-                                ->where(
-                                    'attendance_date',
-                                    $record[
-                                        'attendance_date'
-                                    ]
-                                )
-                                ->exists();
-
                         $policy = $policiesByDate->get($record['attendance_date']);
+                        $values = array_merge(array_intersect_key($record, array_flip(['in_time', 'out_time', 'raw_in', 'raw_out', 'raw_status'])),
+                            $this->shiftPolicySnapshot($policy), ['correction_voided_at' => null, 'source_import_id' => $import->id,
+                                'paycode' => $paycode ?? AttendanceRecord::where('user_id', $userId)->whereDate('attendance_date', $record['attendance_date'])->value('paycode')]);
+                        $snapshots = json_decode($import->correction_snapshot ?? '{}', true);
+                        $key = $userId.'|'.$record['attendance_date'];
+                        $version = $snapshots[$key]['version'] ?? hash('sha256', 'missing');
+                        $outcome = app(\App\Services\Attendance\AttendanceCorrectionService::class)->importRow(
+                            $userId, $record['attendance_date'], $values, (string) $request->input('correction_reason'),
+                            $version, $request->user(), $import->id
+                        );
+                        if ($outcome === 'created') $created++;
+                        if ($outcome === 'applied') $updated++;
 
-                        AttendanceRecord::
-                            updateOrCreate(
-                                [
-                                    'user_id' =>
-                                        $userId,
-
-                                    'attendance_date' =>
-                                        $record[
-                                            'attendance_date'
-                                        ],
-                                ],
-                                array_merge(
-                                    [
-                                    'paycode' => $paycode ?? AttendanceRecord::query()
-                                        ->where('user_id', $userId)
-                                        ->where('attendance_date', $record['attendance_date'])
-                                        ->value('paycode'),
-
-                                    'day_name' =>
-                                        $record[
-                                            'day_name'
-                                        ],
-
-                                    'in_time' =>
-                                        $record[
-                                            'in_time'
-                                        ],
-
-                                    'out_time' =>
-                                        $record[
-                                            'out_time'
-                                        ],
-
-                                    'raw_in' =>
-                                        $record[
-                                            'raw_in'
-                                        ],
-
-                                    'raw_out' =>
-                                        $record[
-                                            'raw_out'
-                                        ],
-
-                                    'raw_status' =>
-                                        $record[
-                                            'raw_status'
-                                        ],
-
-                                    'source_import_id' =>
-                                        $import
-                                            ->id,
-                                    ],
-                                    $this
-                                        ->shiftPolicySnapshot(
-                                            $policy
-                                        )
-                                )
-                            );
-
-                        if ($existing) {
-                            $updated++;
-                        } else {
-                            $created++;
-                        }
                     }
                 }
 
@@ -846,7 +789,7 @@ class AttendanceImportController extends Controller
             )
             ->with(
                 'success',
-                "Attendance imported successfully. {$created} new daily records added and {$updated} existing daily records updated."
+                "Attendance imported successfully. {$created} new daily records added and {$updated} existing daily records updated. Closed-period changes await Super Admin approval in Attendance Corrections."
             );
     }
 

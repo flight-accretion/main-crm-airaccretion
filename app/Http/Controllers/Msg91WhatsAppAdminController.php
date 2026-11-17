@@ -144,7 +144,8 @@ class Msg91WhatsAppAdminController extends Controller
         */
 
 
-        $sender->save();
+        \Illuminate\Support\Facades\DB::transaction(fn () => $sender->save());
+        if ($sender->isVerifiedActive()) \App\Jobs\SyncMsg91SenderTemplates::dispatch($sender->id)->afterCommit();
 
 
         return back()

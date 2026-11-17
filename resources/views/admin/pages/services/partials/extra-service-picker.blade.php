@@ -22,10 +22,10 @@
                     <input type="checkbox"
                         name="extra_service_ids[]"
                         value="{{ $extraService->id }}"
-                        class="ti-form-checkbox mt-1"
+                        class="ti-form-checkbox mt-1 shrink-0"
                         {{ in_array((string) $extraService->id, $selectedExtraServiceIds, true) ? 'checked' : '' }}>
                     <span class="min-w-0">
-                        <span class="block font-medium text-defaulttextcolor dark:text-defaulttextcolor/70">
+                        <span class="block break-words font-medium text-defaulttextcolor dark:text-defaulttextcolor/70" style="overflow-wrap: anywhere">
                             {{ $extraService->extra_service }}
                         </span>
                         <span class="block text-xs text-gray-500 dark:text-white/50">

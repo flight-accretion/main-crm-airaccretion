@@ -842,7 +842,8 @@
                 // If there is an existing uploaded proof, wire the Preview button to open it in a new tab
                 if (existingProofPath) {
                     try {
-                        const storageUrl = `{{ asset('storage') }}/${existingProofPath}`;
+                        const storageUrl = @json(route('admin.refunds.download', ':refundId'))
+                            .replace(':refundId', encodeURIComponent(data.refund.id)) + '?preview=1';
                         $('#preview-proof-btn').data('preview-url', storageUrl);
                         $('#preview-proof-btn').data('preview-name', existingProofPath.split('/').pop());
                         $('#preview-proof-btn').show();
@@ -1611,8 +1612,8 @@
             if (!filename || filename === 'No file uploaded' || filename === 'No file selected') return;
 
             if (currentRefundData && currentRefundData.refund && currentRefundData.refund.refund_proof) {
-                const path = currentRefundData.refund.refund_proof;
-                const storageUrl = `{{ asset('storage') }}/${path}`;
+                const storageUrl = @json(route('admin.refunds.download', ':refundId'))
+                    .replace(':refundId', encodeURIComponent(currentRefundData.refund.id)) + '?preview=1';
                 try {
                     window.open(storageUrl, '_blank');
                 } catch (e) {

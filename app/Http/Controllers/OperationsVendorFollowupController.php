@@ -29,11 +29,13 @@ class OperationsVendorFollowupController extends Controller
         $this->applyFilters($base, $filters);
 
         $countsBase = clone $base;
+        $openCounts = (clone $base)->whereNull('completed_at')
+            ->where('status', '!=', OperationCase::STATUS_COMPLETED);
         $counts = [
-            'open' => (clone $countsBase)->whereNull('completed_at')->count(),
-            'overdue' => (clone $countsBase)->whereNull('completed_at')->whereDate('next_followup_at', '<', now()->toDateString())->count(),
-            'today' => (clone $countsBase)->whereNull('completed_at')->whereDate('next_followup_at', now()->toDateString())->count(),
-            'upcoming' => (clone $countsBase)->whereNull('completed_at')->whereDate('next_followup_at', '>', now()->toDateString())->count(),
+            'open' => (clone $openCounts)->count(),
+            'overdue' => (clone $openCounts)->whereDate('next_followup_at', '<', now()->toDateString())->count(),
+            'today' => (clone $openCounts)->whereDate('next_followup_at', now()->toDateString())->count(),
+            'upcoming' => (clone $openCounts)->whereDate('next_followup_at', '>', now()->toDateString())->count(),
             'closed' => (clone $countsBase)->whereNotNull('completed_at')->count(),
             'all' => (clone $countsBase)->count(),
            
@@ -49,8 +51,8 @@ class OperationsVendorFollowupController extends Controller
                 ->count(),
             'cancelled' => (clone $countsBase)->whereNotNull('completed_at')->where('metadata->resolution', 'cancelled')->count(),
             'completed_week' => (clone $countsBase)->where('metadata->resolution', 'confirmed')->whereBetween('completed_at', [now()->startOfWeek(), now()->endOfWeek()])->count(),
-            'age_2_7' => (clone $countsBase)->whereNull('completed_at')->where('opened_at', '>=', now()->subDays(7)->startOfDay())->where('opened_at', '<', now()->subDay()->startOfDay())->count(),
-            'age_over_7' => (clone $countsBase)->whereNull('completed_at')->where('opened_at', '<', now()->subDays(7)->startOfDay())->count(),
+            'age_2_7' => (clone $openCounts)->where('opened_at', '>=', now()->subDays(7)->startOfDay())->where('opened_at', '<', now()->subDay()->startOfDay())->count(),
+            'age_over_7' => (clone $openCounts)->where('opened_at', '<', now()->subDays(7)->startOfDay())->count(),
         ];
 
         $query = clone $base;
@@ -134,7 +136,7 @@ class OperationsVendorFollowupController extends Controller
         $data = $request->validate([
             'vendor_id' => ['required', 'uuid', 'exists:vendors,id'],
             'assigned_to' => ['nullable', 'uuid', 'exists:users,id'],
-            'purpose' => ['nullable', 'string', 'max:255'],
+            'purpose' => ['required', \Illuminate\Validation\Rule::in(VendorFollowupService::PURPOSES)],
             'tentative_ride_at' => ['nullable', 'date'],
             'followup_date' => ['required', 'date', 'after_or_equal:today'],
             'remarks' => ['nullable', 'string', 'max:5000'],
@@ -454,7 +456,7 @@ class OperationsVendorFollowupController extends Controller
             return;
         }
 
-        $query->whereNull('completed_at');
+        $query->whereNull('completed_at')->where('status', '!=', OperationCase::STATUS_COMPLETED);
 
         if ($bucket === 'overdue') {
             $query->whereDate('next_followup_at', '<', now()->toDateString());

@@ -430,6 +430,7 @@
 
 .crm-lead-workspace .lw-edit-panel.is-open {
     display: block;
+    margin-top: 10px;
 }
 
 .crm-lead-workspace .lw-save-feedback {

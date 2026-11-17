@@ -38,6 +38,12 @@
             @endforeach
         </div>
         <form method="GET" action="{{ route('admin.upcoming-follow-up.index') }}" id="filter-form" class="lq-filters">
+            <div><label for="followup-status-filter">Status</label><select id="followup-status-filter" name="status">
+                <option value="">All eligible statuses</option>
+                @foreach(\App\Models\LeadFollowup::statusLabels() as $value => $label)
+                    <option value="{{ $value }}" {{ request()->filled('status') && (string) request('status') === (string) $value ? 'selected' : '' }}>{{ $label }}</option>
+                @endforeach
+            </select></div>
             <div><label for="from-date">Next follow-up date</label><input id="from-date" type="date" name="from_date"
                     value="{{ $fromDate->format('Y-m-d') }}"></div>
             <div><label for="product_id">Product</label><select id="product_id" name="product_id">

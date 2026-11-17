@@ -16,6 +16,15 @@ use Illuminate\Validation\ValidationException;
  */
 class LeadStatusTransitionService
 {
+    public function filterLatestActivity(\Illuminate\Database\Eloquent\Builder $query, string $status): void
+    {
+        if (in_array(strtolower($status), ['na', 'n/a'], true)) {
+            $query->whereDoesntHave('leadFollowups');
+            return;
+        }
+        $query->whereRaw('(SELECT lf.status FROM lead_followups lf WHERE lf.lead_id = leads.id ORDER BY lf.created_at DESC, lf.id DESC LIMIT 1) = ?', [(int) $status]);
+    }
+
     public function latestActivityStatus(Lead $lead): ?int
     {
         $status = $lead->leadFollowups()
@@ -117,6 +126,10 @@ class LeadStatusTransitionService
             ]);
         }
 
+        if (!in_array($toStatus, $this->allowedManualStatuses($lead, $user), true)) {
+            throw ValidationException::withMessages(['status' => 'This status action is not permitted for this role or booking.']);
+        }
+
         if ($toStatus === LeadFollowup::STATUS_SALES_FOLLOW_UP && empty($nextFollowupDate)) {
             throw ValidationException::withMessages([
                 'next_followup_date' => 'Next follow-up date and time are required for Sales Follow-up.',
@@ -128,5 +141,25 @@ class LeadStatusTransitionService
                 'notes' => 'A closing remark is required for Close Follow-up.',
             ]);
         }
+    }
+
+    public function allowedManualStatuses(Lead $lead, User $user): array
+    {
+        $role = $user->userType?->user_type;
+        if (in_array($role, UserType::SALES_ROLES, true)) {
+            $allowed = $this->allowedSalesStatuses($lead);
+        } elseif (in_array($role, array_merge(UserType::ADMIN_ROLES, UserType::OPERATIONS_ROLES, [UserType::OWNER]), true)) {
+            $allowed = array_values(array_diff(array_keys(LeadFollowup::statusLabels()), [LeadFollowup::STATUS_RIDE_COMPLETED]));
+            // Owner status authorization does not grant payment-entry privileges.
+            if ($role === UserType::OWNER) $allowed = array_values(array_diff($allowed, [
+                LeadFollowup::STATUS_FULL_PAYMENT_RECEIVED, LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
+            ]));
+        } else {
+            return [];
+        }
+        if ($this->displayedBusinessStatus($lead) === LeadFollowup::STATUS_RIDE_COMPLETED) {
+            return array_values(array_intersect($allowed, LeadFollowup::FOLLOWUP_ONLY_STATUSES));
+        }
+        return $allowed;
     }
 }

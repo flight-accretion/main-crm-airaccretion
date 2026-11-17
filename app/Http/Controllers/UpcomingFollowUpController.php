@@ -22,7 +22,8 @@ class UpcomingFollowUpController extends Controller
     public function index(Request $request): View|JsonResponse
     {
         $request->validate(['from_date' => 'nullable|date', 'product_id' => 'nullable|string|max:64',
-            'representative_user_id' => 'nullable|uuid', 'lead_score_temperature' => 'nullable|in:hot,neutral,cold']);
+            'representative_user_id' => 'nullable|uuid', 'lead_score_temperature' => 'nullable|in:hot,neutral,cold',
+            'status' => ['nullable', \Illuminate\Validation\Rule::in(array_keys(LeadFollowup::statusLabels()))]]);
         $currentUser = auth()->user();
         $representatives = getRepresentativeIds($currentUser);
 
@@ -252,6 +253,11 @@ class UpcomingFollowUpController extends Controller
         });
 
         $arrFollowUps = $notMissed->values()->merge($missed->values());
+
+        // Filter the final eligible latest activity, never historical candidates.
+        if ($request->filled('status')) {
+            $arrFollowUps = $arrFollowUps->where('status', (int) $request->status)->values();
+        }
 
         if ($request->filled('product_id')) {
             $selectedProductId = (string) $request->product_id;

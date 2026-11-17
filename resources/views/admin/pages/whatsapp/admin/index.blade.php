@@ -383,6 +383,7 @@
                                         <span>
 
                                             {{ $integratedNumber }}
+<small>Templates: {{ $member->msg91CampaignSender?->template_sync_status ?? 'pending' }}</small>
 
                                         </span>
 
@@ -622,6 +623,7 @@
                                 <i class="ri-whatsapp-line"></i>
 
                                 {{ $integratedNumber }}
+<small>Templates: {{ $member->msg91CampaignSender?->template_sync_status ?? 'pending' }}</small>
 
                             </strong>
 

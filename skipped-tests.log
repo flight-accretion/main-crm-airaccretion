@@ -1,0 +1,640 @@
+PHPUnit 9.6.34 by Sebastian Bergmann and contributors.
+
+Runtime:       PHP 8.2.12
+Configuration: C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\phpunit.xml
+
+...............................................................  63 / 904 (  6%)
+............................................................... 126 / 904 ( 13%)
+............................................................... 189 / 904 ( 20%)
+............................................................... 252 / 904 ( 27%)
+............................................................... 315 / 904 ( 34%)
+............................................................... 378 / 904 ( 41%)
+............................................................... 441 / 904 ( 48%)
+............................................................... 504 / 904 ( 55%)
+............................................................... 567 / 904 ( 62%)
+............................................................... 630 / 904 ( 69%)
+............................................................... 693 / 904 ( 76%)
+............................................................... 756 / 904 ( 83%)
+..............................................................S 819 / 904 ( 90%)
+SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS 882 / 904 ( 97%)
+SSSSSSSSSSS...........                                          904 / 904 (100%)
+
+Time: 03:00.552, Memory: 192.00 MB
+
+There were 75 skipped tests:
+
+1) Tests\Feature\Wave1QueuePostgresAcceptanceTest::test_due_today_matches_all_linked_pages_and_vendor_subset
+Set CRM_WAVE1_QA_ROOT to the existing isolated QA directory.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave1QueuePostgresAcceptanceTest.php:21
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave1QueuePostgresAcceptanceTest.php:30
+
+2) Tests\Feature\Wave1QueuePostgresAcceptanceTest::test_review_segments_filters_and_pagination_match_database_ids
+Set CRM_WAVE1_QA_ROOT to the existing isolated QA directory.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave1QueuePostgresAcceptanceTest.php:21
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave1QueuePostgresAcceptanceTest.php:30
+
+3) Tests\Feature\Wave1QueuePostgresAcceptanceTest::test_completed_status_is_excluded_from_dashboard_linked_open_queues
+Set CRM_WAVE1_QA_ROOT to the existing isolated QA directory.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave1QueuePostgresAcceptanceTest.php:21
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave1QueuePostgresAcceptanceTest.php:30
+
+4) Tests\Feature\Wave1QueuePostgresAcceptanceTest::test_waiting_refund_approval_ids_tabs_filters_and_transitions
+Set CRM_WAVE1_QA_ROOT to the existing isolated QA directory.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave1QueuePostgresAcceptanceTest.php:21
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave1QueuePostgresAcceptanceTest.php:30
+
+5) Tests\Feature\Wave1QueuePostgresAcceptanceTest::test_role_routes_and_approval_permissions_remain_unchanged
+Set CRM_WAVE1_QA_ROOT to the existing isolated QA directory.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave1QueuePostgresAcceptanceTest.php:21
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave1QueuePostgresAcceptanceTest.php:30
+
+6) Tests\Feature\Wave1ReportsPostgresAcceptanceTest::test_hr_distinct_lead_volume_filters_and_role_scope
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave1ReportsPostgresAcceptanceTest.php:22
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave1ReportsPostgresAcceptanceTest.php:31
+
+7) Tests\Feature\Wave1ReportsPostgresAcceptanceTest::test_add_to_sales_reload_filters_duplicate_and_audit_preservation
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave1ReportsPostgresAcceptanceTest.php:22
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave1ReportsPostgresAcceptanceTest.php:31
+
+8) Tests\Feature\Wave1ReportsPostgresAcceptanceTest::test_mixed_overpayments_and_history_survive_date_filters
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave1ReportsPostgresAcceptanceTest.php:22
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave1ReportsPostgresAcceptanceTest.php:31
+
+9) Tests\Feature\Wave1ReportsPostgresAcceptanceTest::test_vendor_report_filter_matrix_matches_html_csv_and_xlsx_ids
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave1ReportsPostgresAcceptanceTest.php:22
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave1ReportsPostgresAcceptanceTest.php:31
+
+10) Tests\Feature\Wave1ReportsPostgresAcceptanceTest::test_voucher_accepts_same_lead_unlinked_passenger_and_rolls_back_foreign_lead
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave1ReportsPostgresAcceptanceTest.php:22
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave1ReportsPostgresAcceptanceTest.php:31
+
+11) Tests\Feature\Wave2AccountsTeamPostgresAcceptanceTest::test_existing_and_new_executives_get_only_explicit_team_scope_and_scoped_exports
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+
+12) Tests\Feature\Wave2AccountsTeamPostgresAcceptanceTest::test_legacy_managers_keep_team_scope_and_financial_permissions
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+
+13) Tests\Feature\Wave2AttendanceCorrectionsPostgresAcceptanceTest::test_open_correction_audit_idempotency_stale_version_and_reversal
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+
+14) Tests\Feature\Wave2AttendanceCorrectionsPostgresAcceptanceTest::test_closed_period_approval_rejection_review_and_closed_reversal
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+
+15) Tests\Feature\Wave2AttendanceCorrectionsPostgresAcceptanceTest::test_stale_approval_pending_conflict_and_forced_failure_are_atomic
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+
+16) Tests\Feature\Wave2AttendanceCorrectionsPostgresAcceptanceTest::test_mixed_corrected_file_is_atomic_and_closed_rows_wait_for_approval
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+
+17) Tests\Feature\Wave2AttendanceCorrectionsPostgresAcceptanceTest::test_simultaneous_hr_edits_reject_the_stale_editor
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+
+18) Tests\Feature\Wave2AttendanceCorrectionsPostgresAcceptanceTest::test_additive_migration_has_a_transactional_rollback_and_preserves_original_record
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+
+19) Tests\Feature\Wave2AttendanceCorrectionsPostgresAcceptanceTest::test_new_closed_period_row_stays_ineffective_until_approved_and_reversal_restores_absence
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+
+20) Tests\Feature\Wave2AttendanceCorrectionsPostgresAcceptanceTest::test_file_failure_rolls_back_earlier_rows_and_requests_in_the_batch
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+
+21) Tests\Feature\Wave2HistoricPerformancePostgresAcceptanceTest::test_first_positive_approved_paid_date_uses_timestamp_cutoff_without_recounting_installments
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+
+22) Tests\Feature\Wave2LeadStatusPostgresAcceptanceTest::test_owner_has_only_field_scoped_status_write_and_terminal_guard
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+
+23) Tests\Feature\Wave2LeadStatusPostgresAcceptanceTest::test_today_filter_narrows_latest_eligible_activity_without_resurrecting_closed_history
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+
+24) Tests\Feature\Wave2LeadStatusPostgresAcceptanceTest::test_sales_and_operations_transition_validation_and_payment_audit_integrity
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+
+25) Tests\Feature\Wave2LeadStatusPostgresAcceptanceTest::test_all_thirteen_role_read_boundaries_and_status_filter_labels
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+
+26) Tests\Feature\Wave2LeadStatusPostgresAcceptanceTest::test_latest_status_filter_breaks_timestamp_ties_and_never_exposes_another_sales_users_lead
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+
+27) Tests\Feature\Wave2LeadStatusPostgresAcceptanceTest::test_legitimate_installments_remain_pending_attempts_and_completed_business_status_stays_terminal
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+
+28) Tests\Feature\Wave2LeadStatusPostgresAcceptanceTest::test_partial_full_and_rejected_only_sales_locks_and_owner_approval_states
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+
+29) Tests\Feature\Wave2LeadStatusPostgresAcceptanceTest::test_manager_team_scope_and_status_export_match_exact_filtered_leads
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+
+30) Tests\Feature\Wave2LeadStatusPostgresAcceptanceTest::test_status_only_actions_preserve_persisted_financial_and_historical_snapshots
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+
+31) Tests\Feature\Wave2Msg91TemplatesPostgresAcceptanceTest::test_verified_onboarding_dispatches_automatic_compatible_central_linking_without_overwriting_central_or_other_binding
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2Msg91TemplatesPostgresAcceptanceTest.php:23
+
+32) Tests\Feature\Wave2Msg91TemplatesPostgresAcceptanceTest::test_missing_pending_rejected_incompatible_and_incomplete_definitions_do_not_become_send_ready
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2Msg91TemplatesPostgresAcceptanceTest.php:23
+
+33) Tests\Feature\Wave2Msg91TemplatesPostgresAcceptanceTest::test_sender_change_inactive_unverified_and_timeout_fail_closed_and_remain_retryable
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2Msg91TemplatesPostgresAcceptanceTest.php:23
+
+34) Tests\Feature\Wave2Msg91TemplatesPostgresAcceptanceTest::test_personal_ownership_foreign_sender_and_forged_campaign_template_remain_restricted
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2Msg91TemplatesPostgresAcceptanceTest.php:23
+
+35) Tests\Feature\Wave2Msg91TemplatesPostgresAcceptanceTest::test_multi_sender_partial_deletion_is_durable_retryable_and_preserves_campaign_history
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2Msg91TemplatesPostgresAcceptanceTest.php:23
+
+36) Tests\Feature\Wave2Msg91TemplatesPostgresAcceptanceTest::test_ambiguous_timeout_generic_404_and_dry_run_never_report_success
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2Msg91TemplatesPostgresAcceptanceTest.php:23
+
+37) Tests\Feature\Wave2Msg91TemplatesPostgresAcceptanceTest::test_provider_confirmed_absence_reconciles_without_delete_and_language_ambiguity_blocks_all_mutations
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2Msg91TemplatesPostgresAcceptanceTest.php:23
+
+38) Tests\Feature\Wave2Msg91TemplatesPostgresAcceptanceTest::test_open_retryable_or_unresolved_campaigns_block_deletion_and_other_languages_block_name_only_deletion
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2Msg91TemplatesPostgresAcceptanceTest.php:23
+
+39) Tests\Feature\Wave2Msg91TemplatesPostgresAcceptanceTest::test_all_roles_delete_authorization_and_super_admin_rendered_controls
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2Msg91TemplatesPostgresAcceptanceTest.php:23
+
+40) Tests\Feature\Wave2Msg91TemplatesPostgresAcceptanceTest::test_central_and_personal_creation_keep_pending_approval_and_safe_400_feedback_and_visibility
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2Msg91TemplatesPostgresAcceptanceTest.php:23
+
+41) Tests\Feature\Wave2Msg91TemplatesPostgresAcceptanceTest::test_simultaneous_reconciliation_uses_two_postgres_connections_without_duplicate_bindings
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2Msg91TemplatesPostgresAcceptanceTest.php:23
+
+42) Tests\Feature\Wave2Msg91TemplatesPostgresAcceptanceTest::test_unknown_deletion_reconciles_confirmed_absence_without_resending_and_live_lease_rejects_duplicate
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2Msg91TemplatesPostgresAcceptanceTest.php:23
+
+43) Tests\Feature\Wave2Msg91TemplatesPostgresAcceptanceTest::test_unsupported_components_and_sender_changes_during_fetch_cannot_become_send_ready
+Requires the isolated PostgreSQL QA environment.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:13
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Support\IsolatedWave2PostgresTestCase.php:21
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2Msg91TemplatesPostgresAcceptanceTest.php:23
+
+44) Tests\Feature\Wave2PostgresAcceptanceTest::test_vendor_refund_requires_saved_assessment_through_authenticated_routes
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+45) Tests\Feature\Wave2PostgresAcceptanceTest::test_sales_cannot_forge_service_revision_after_partial_or_full_approval with data set "executive partial" ('Sales Executive', 4)
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+46) Tests\Feature\Wave2PostgresAcceptanceTest::test_sales_cannot_forge_service_revision_after_partial_or_full_approval with data set "manager full" ('Sales Manager', 3)
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+47) Tests\Feature\Wave2PostgresAcceptanceTest::test_sales_cannot_forge_service_revision_after_partial_or_full_approval with data set "senior manager partial" ('Senior Sales Manager', 4)
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+48) Tests\Feature\Wave2PostgresAcceptanceTest::test_independent_extra_services_reconcile_approved_balance with data set "executive partial" ('Sales Executive', 4)
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+49) Tests\Feature\Wave2PostgresAcceptanceTest::test_independent_extra_services_reconcile_approved_balance with data set "manager full" ('Sales Manager', 3)
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+50) Tests\Feature\Wave2PostgresAcceptanceTest::test_independent_extra_services_reconcile_approved_balance with data set "senior manager partial" ('Senior Sales Manager', 4)
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+51) Tests\Feature\Wave2PostgresAcceptanceTest::test_simultaneous_extra_service_saves_reject_one_conflicting_version
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+52) Tests\Feature\Wave2PostgresAcceptanceTest::test_existing_product_service_edit_permissions with data set "executive rejected only" ('Sales Executive', false, 302)
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+53) Tests\Feature\Wave2PostgresAcceptanceTest::test_existing_product_service_edit_permissions with data set "manager rejected only" ('Sales Manager', false, 302)
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+54) Tests\Feature\Wave2PostgresAcceptanceTest::test_existing_product_service_edit_permissions with data set "senior manager rejected only" ('Senior Sales Manager', false, 302)
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+55) Tests\Feature\Wave2PostgresAcceptanceTest::test_existing_product_service_edit_permissions with data set "operations approved" ('Operations Manager', true, 302)
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+56) Tests\Feature\Wave2PostgresAcceptanceTest::test_existing_product_service_edit_permissions with data set "super admin approved" ('Super Admin', true, 302)
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+57) Tests\Feature\Wave2PostgresAcceptanceTest::test_existing_product_service_edit_permissions with data set "owner approved partial product editor" ('Owner', true, 302, 4)
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+58) Tests\Feature\Wave2PostgresAcceptanceTest::test_existing_product_service_edit_permissions with data set "owner approved full product editor" ('Owner', true, 302, 3)
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+59) Tests\Feature\Wave2PostgresAcceptanceTest::test_existing_product_service_edit_permissions with data set "accounts cannot edit" ('Accounts Manager', true, 403)
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+60) Tests\Feature\Wave2PostgresAcceptanceTest::test_existing_product_service_edit_permissions with data set "hr cannot edit" ('Hr', true, 403)
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+61) Tests\Feature\Wave2PostgresAcceptanceTest::test_hr_work_done_uses_completion_actors_and_distinct_cases
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+62) Tests\Feature\Wave2PostgresAcceptanceTest::test_add_lead_requires_deliberate_duplicate_client_selection_without_profile_updates
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+63) Tests\Feature\Wave2PostgresAcceptanceTest::test_refund_status_filters_return_exact_rows_without_financial_writes
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+64) Tests\Feature\Wave2PostgresAcceptanceTest::test_dnp_age_boundary_fixtures_remain_read_only_on_queue_requests
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+65) Tests\Feature\Wave2PostgresAcceptanceTest::test_dnp_thirty_complete_days_command_dry_run_exclusions_and_dashboard_export
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+66) Tests\Feature\Wave2PostgresAcceptanceTest::test_simultaneous_dnp_processors_create_one_cancellation
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+67) Tests\Feature\Wave2PostgresAcceptanceTest::test_incentives_count_full_booking_once_after_first_approved_installment
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+68) Tests\Feature\Wave2PostgresAcceptanceTest::test_hr_can_correct_existing_attendance_using_changed_file_without_duplicate_rows
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+69) Tests\Feature\Wave2PostgresAcceptanceTest::test_accounts_role_routes_and_team_scope_preserve_existing_permissions
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+70) Tests\Feature\Wave2PostgresAcceptanceTest::test_add_lead_persists_and_lists_country_scoped_city_uuids
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+71) Tests\Feature\Wave2PostgresAcceptanceTest::test_client_city_update_creates_reuses_and_rejects_foreign_city
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+72) Tests\Feature\Wave2PostgresAcceptanceTest::test_conversion_includes_outreach_while_response_time_excludes_it
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+73) Tests\Feature\Wave2PostgresAcceptanceTest::test_vendor_followup_purpose_date_rules_and_permissions
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+74) Tests\Feature\Wave2PostgresAcceptanceTest::test_hr_department_pages_keep_the_other_page_and_date_filters
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+75) Tests\Feature\Wave2PostgresAcceptanceTest::test_first_extra_service_selection_saves_without_creating_a_quote_or_payment
+Requires the existing isolated PostgreSQL QA bootstrap.
+
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1031
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:109
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\vendor\laravel\framework\src\Illuminate\Foundation\Testing\TestCase.php:86
+C:\xampp\htdocs\maincrm-airaccretion-git\main-crm-airaccretion\tests\Feature\Wave2PostgresAcceptanceTest.php:1041
+
+OK, but incomplete, skipped, or risky tests!
+Tests: 904, Assertions: 4925, Skipped: 75.

@@ -577,6 +577,21 @@ class InvoiceCancelledAndAdjustedExportsTest extends TestCase
         $this->assertSame(-8500.0, $rows->first()->balance);
     }
 
+    public function test_exceptional_dashboard_does_not_treat_unapproved_audits_as_legacy_cash(): void
+    {
+        Schema::create('lead_refunds', function (Blueprint $table) {
+            $table->string('lead_followup_id');
+        });
+        $scenario = $this->createPaidCancelledScenario(8500);
+        $scenario['followup']->update(['total_amount' => 1000, 'received_amount' => 8500]);
+        PaymentAuditTrail::where('lead_followup_id', $scenario['followup']->id)
+            ->update(['payment_status' => PaymentAuditTrail::STATUS_REJECTED]);
+        $this->actingAs($this->createAdminUser());
+        $rows = app(\App\Http\Controllers\ExceptionalController::class)
+            ->index(Request::create('/admin/account/exceptional'))->getData()['payments'];
+        $this->assertCount(0, $rows);
+    }
+
     public function test_invoice_discount_reconciles_gross_and_net_voucher_without_double_discount(): void
     {
         $scenario = $this->createPaidCancelledScenario(8500);
@@ -791,6 +806,11 @@ class InvoiceCancelledAndAdjustedExportsTest extends TestCase
         mkdir($root, 0777, true);
         $disk = app('filesystem')->createLocalDriver(['driver' => 'local', 'root' => $root]);
         \Illuminate\Support\Facades\Storage::set('public', $disk);
+        $privateRoot = $testStorage.'/private';
+        mkdir($privateRoot, 0777, true);
+        \Illuminate\Support\Facades\Storage::set('local', app('filesystem')->createLocalDriver([
+            'driver' => 'local', 'root' => $privateRoot,
+        ]));
         $originalStorage = storage_path();
         $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/P8sAAAAASUVORK5CYII=');
         $payload = [
@@ -807,16 +827,51 @@ class InvoiceCancelledAndAdjustedExportsTest extends TestCase
             $refund = LeadRefund::findOrFail($response->json('refund_id'));
             $this->assertNotEmpty($refund->refund_proof);
             $this->assertSame($png, file_get_contents($root.'/'.$refund->refund_proof));
+            $this->assertFileDoesNotExist($privateRoot.'/'.$refund->refund_proof);
             $this->app->useStoragePath($testStorage);
             try {
                 $download = $this->get(route('admin.refunds.download', $refund->id));
                 $download->assertOk();
-                $this->assertSame($png, file_get_contents($download->baseResponse->getFile()->getPathname()));
+                $this->assertSame($png, $download->streamedContent());
+                $preview = $this->get(route('admin.refunds.download', ['refundId' => $refund->id, 'preview' => 1]));
+                $preview->assertOk()->assertHeader('Content-Type', 'image/png');
+                $this->assertStringStartsWith('inline;', $preview->headers->get('Content-Disposition'));
+                $this->assertSame($png, $preview->streamedContent());
             } finally {
                 $this->app->useStoragePath($originalStorage);
             }
         }
         $this->assertSame(1, LeadRefund::count());
+        $failSave = true;
+        LeadRefund::saving(function () use (&$failSave) {
+            if ($failSave) {
+                throw new \RuntimeException('Synthetic persistence failure');
+            }
+        });
+        $filesBeforeFailure = \Illuminate\Support\Facades\Storage::disk('public')->allFiles();
+        $this->post(route('admin.refunds.store'), $payload + [
+            'refund_proof' => \Illuminate\Http\UploadedFile::fake()->createWithContent('failed.png', $png),
+        ])->assertStatus(500);
+        $failSave = false;
+        $this->assertSame($filesBeforeFailure, \Illuminate\Support\Facades\Storage::disk('public')->allFiles());
+        $this->assertSame($refund->refund_proof, $refund->fresh()->refund_proof);
+        // Public uploads and prior private copies both remain readable.
+        $proofPath = $refund->refund_proof;
+        $this->get(route('admin.refunds.download', $refund->id))->assertOk();
+        \Illuminate\Support\Facades\Storage::disk('local')->put('customer-refunds/compat.png', $png);
+        $refund->update(['refund_proof' => 'customer-refunds/compat.png']);
+        $fallback = $this->get(route('admin.refunds.download', $refund->id));
+        $fallback->assertOk();
+        $this->assertSame($png, $fallback->streamedContent());
+        $this->assertFileExists($root.'/'.$proofPath);
+        \Illuminate\Support\Facades\Storage::disk('public')->put('refunds/legacy proof.v1.png', $png);
+        $refund->update(['refund_proof' => 'refunds/legacy proof.v1.png']);
+        $legacy = $this->get(route('admin.refunds.download', $refund->id));
+        $legacy->assertOk();
+        $this->assertSame($png, $legacy->streamedContent());
+        $refund->update(['refund_proof' => 'refunds/../secret.png']);
+        $this->get(route('admin.refunds.download', $refund->id))->assertNotFound();
+        $refund->update(['refund_proof' => $proofPath]);
         $user->userType()->update(['user_type' => UserType::HR]);
         $this->actingAs($user->fresh());
         $this->get(route('admin.refunds.download', $refund->id))->assertForbidden();
@@ -1002,6 +1057,24 @@ class InvoiceCancelledAndAdjustedExportsTest extends TestCase
         ]));
 
         $this->assertCount(0, $emptyResponse->getData()['rows']);
+    }
+
+    public function test_vendor_report_range_requires_one_ride_inside_both_bounds(): void
+    {
+        $this->actingAs($this->createAdminUser());
+        $scenario = $this->createPaidCancelledScenario();
+        LeadRide::create([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $scenario['lead']->id,
+            'from_date' => '2026-09-17 10:00:00',
+            'to_date' => '2026-09-17 11:00:00',
+        ]);
+        $filters = ['service_date_from' => '2026-09-16', 'service_date_to' => '2026-09-16'];
+        $view = app(ReportController::class)->vendorReport(
+            Request::create('/admin/report/vendor-payments', 'GET', $filters)
+        );
+        $this->assertCount(0, $view->getData()['rows']);
+        $this->assertSame(0, (new VendorReportExport($filters))->query()->count());
     }
 
     public function test_profit_loss_report_screen_includes_paid_cancelled_ride_with_adjusted_vendor_amount(): void

@@ -49,6 +49,16 @@ class VendorFollowupDesignTest extends KpiFeatureTestCase
         parent::tearDown();
     }
 
+    public function test_completed_status_without_timestamp_is_not_open_vendor_work(): void
+    {
+        $closed = $this->makeCase('2026-09-15', '2026-09-17');
+        $closed->update(['status' => OperationCase::STATUS_COMPLETED]);
+        $data = app(OperationsVendorFollowupController::class)->index($this->request())->getData();
+        $this->assertSame(3, $data['counts']['open']);
+        $this->assertSame(3, $data['cases']->total());
+        $this->assertNotContains($closed->id, $data['cases']->pluck('id')->all());
+    }
+
     private function makeCase(string $opened, ?string $due, ?string $resolution = null, ?string $completed = null): OperationCase
     {
         $case = OperationCase::create(['lead_id' => $this->lead->id, 'type' => 'vendor_followup', 'assigned_to' => $this->ops->id,
@@ -132,6 +142,39 @@ class VendorFollowupDesignTest extends KpiFeatureTestCase
         $this->assertStringContainsString(route('admin.operations.vendor-followups.cancel', $case), $html);
     }
 
+    public function test_non_refund_purposes_respect_the_tentative_date(): void
+    {
+        $service = app(VendorFollowupService::class);
+        foreach (['Query', 'Timeslot', 'Confirm Ride Date & Time'] as $purpose) {
+            $case = $this->makeCase('2026-09-15', '2026-09-17');
+            $case->update(['metadata' => ['purpose' => $purpose, 'tentative_ride_at' => '2026-09-17 15:00:00']]);
+            try {
+                $service->reschedule($case, $this->ops, '2026-09-18', 'Later follow-up');
+                $this->fail('Rescheduling beyond the tentative date succeeded for '.$purpose);
+            } catch (\Illuminate\Validation\ValidationException $error) {
+                $this->assertArrayHasKey('followup_date', $error->errors());
+            }
+            $this->assertSame($purpose, $case->fresh()->metadata['purpose']);
+            $this->assertSame('2026-09-17', $case->fresh()->next_followup_at->toDateString());
+        }
+
+        foreach (['Query', 'Timeslot'] as $purpose) {
+            $vendor = \App\Models\Vendor::create([
+                'id' => (string) Str::uuid(), 'name' => 'QA '.$purpose, 'status' => 1,
+            ]);
+            try {
+                $service->create($this->lead, $vendor, $this->ops, $this->ops, [
+                    'purpose' => $purpose, 'followup_date' => '2026-09-18',
+                    'tentative_ride_at' => '2026-09-17 15:00:00',
+                ]);
+                $this->fail('Creation beyond the tentative date succeeded for '.$purpose);
+            } catch (\Illuminate\Validation\ValidationException $error) {
+                $this->assertArrayHasKey('followup_date', $error->errors());
+            }
+            $this->assertFalse(OperationCase::where('metadata->vendor_id', $vendor->id)->exists());
+        }
+    }
+
     public function test_operations_user_can_save_a_vendor_followup_and_write_compatible_lead_history(): void
     {
         $newVendor = \App\Models\Vendor::create([
@@ -142,8 +185,9 @@ class VendorFollowupDesignTest extends KpiFeatureTestCase
         ]);
         $request = Request::create('/admin/operations/vendor-followups/lead', 'POST', [
             'vendor_id' => $newVendor->id,
-            'purpose' => 'Confirm availability',
+            'purpose' => 'Refund',
             'followup_date' => now()->toDateString(),
+            'tentative_ride_at' => now()->subDay()->toDateTimeString(),
             'remarks' => 'Call vendor before departure.',
         ]);
         auth()->setUser($this->ops);
@@ -168,5 +212,10 @@ class VendorFollowupDesignTest extends KpiFeatureTestCase
         $this->assertSame('operations_vendor', $history->source);
         $this->assertSame('vendor_followup_note', $history->followup_type);
         $this->assertSame($this->ops->id, $case->assigned_to);
+        $this->assertSame('Refund', $case->metadata['purpose']);
+        $rescheduled = app(VendorFollowupService::class)->reschedule(
+            $case, $this->ops, now()->addDay()->toDateString(), 'Awaiting refund'
+        );
+        $this->assertSame(now()->addDay()->toDateString(), $rescheduled->next_followup_at->toDateString());
     }
 }

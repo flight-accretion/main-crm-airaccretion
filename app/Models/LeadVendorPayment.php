@@ -27,6 +27,30 @@ class LeadVendorPayment extends Model
      * Relationships
      */
 
+    public function scopeWithinReportDateRanges($query, array $filters)
+    {
+        foreach ([
+            ['vendorPayments', 'paid_date', 'from_payment_date', 'to_payment_date'],
+            ['lead.rideSegments', 'from_date', 'service_date_from', 'service_date_to'],
+        ] as [$relation, $column, $fromKey, $toKey]) {
+            $from = $filters[$fromKey] ?? null;
+            $to = $filters[$toKey] ?? null;
+
+            if ($from || $to) {
+                $query->whereHas($relation, function ($related) use ($column, $from, $to) {
+                    if ($from) {
+                        $related->where($column, '>=', \Carbon\Carbon::parse($from)->startOfDay());
+                    }
+                    if ($to) {
+                        $related->where($column, '<=', \Carbon\Carbon::parse($to)->endOfDay());
+                    }
+                });
+            }
+        }
+
+        return $query;
+    }
+
     public function lead()
     {
         return $this->belongsTo(Lead::class, 'lead_id');

@@ -26,9 +26,24 @@ class SalesAmountCalculator
         return max(0, round(max(0, $amount) - self::feeAmount($amount, $feePercent), 2));
     }
 
+    public static function grossTotalForFollowup(LeadFollowup $followup): float
+    {
+        $storedTotal = max(0, (float) ($followup->total_amount ?? 0));
+
+        if ($storedTotal > 0) {
+            return round($storedTotal, 2);
+        }
+
+        $serviceAmount = max(0, (float) ($followup->service_amount ?? 0));
+        $discountAmount = max(0, (float) ($followup->discount_amount ?? 0));
+
+        return max(0, round($serviceAmount - $discountAmount, 2));
+    }
+
     public static function salesAmountForFollowup(LeadFollowup $followup, float $refundAmount = 0): float
     {
-        $grossTotal = max(0, (float) ($followup->total_amount ?? 0));
+        // $grossTotal = max(0, (float) ($followup->total_amount ?? 0));
+        $grossTotal = self::grossTotalForFollowup($followup);
         if ($grossTotal <= 0) {
             return 0.0;
         }
@@ -40,7 +55,11 @@ class SalesAmountCalculator
 
     public static function netAmountForFollowup(LeadFollowup $followup, ?float $grossTotal = null): float
     {
-        $grossTotal = max(0, (float) ($grossTotal ?? $followup->total_amount ?? 0));
+        // $grossTotal = max(0, (float) ($grossTotal ?? $followup->total_amount ?? 0));
+        $grossTotal = max(
+            0,
+            (float) ($grossTotal ?? self::grossTotalForFollowup($followup))
+        );
         if ($grossTotal <= 0) {
             return 0.0;
         }

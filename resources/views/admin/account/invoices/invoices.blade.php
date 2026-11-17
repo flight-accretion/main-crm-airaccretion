@@ -983,12 +983,33 @@
             const serviceNames = service.service_names || service.service_display || '';
             const extra = (service.extra_services && service.extra_services.length) ? service.extra_services.join(', ') : (
                 service.extra_service_names || service.extra_service_display || 'None');
-            // Profit/Loss: controller provides invoiceData.profit_loss (received - vendor_cost)
-            const profitRaw = (typeof invoiceData.profit_loss !== 'undefined') ? parseFloat(invoiceData.profit_loss) : NaN;
-            const profit = isNaN(profitRaw) ? 0 : profitRaw;
-            const profitClass = profit > 0 ? 'text-success' : (profit < 0 ? 'text-danger' :
-                'text-gray-800 dark:text-white');
-            const profitLabel = profit > 0 ? 'Profit' : (profit < 0 ? 'Loss' : 'Profit/Loss');
+            // Booking Profit: value supplied by ProfitLossSummaryService.
+            // Do not recalculate profit from received payments.
+            
+            const hasProfit = invoiceData.profit_loss !== null
+                && invoiceData.profit_loss !== undefined
+                && invoiceData.profit_loss !== '';
+
+            const profitRaw = hasProfit
+                ? Number(invoiceData.profit_loss)
+                : NaN;
+
+            const profitAvailable = Number.isFinite(profitRaw);
+            const profit = profitAvailable ? profitRaw : 0;
+
+            const profitClass = !profitAvailable
+                ? 'text-gray-500'
+                : (profit > 0
+                    ? 'text-success'
+                    : profit < 0
+                        ? 'text-danger'
+                        : 'text-gray-800 dark:text-white');
+
+            const profitLabel = 'Booking Profit / Loss';
+
+            const profitDisplay = profitAvailable
+                ? `₹${formatNumber(Math.abs(profit))}${profit > 0 ? ' (Profit)' : profit < 0 ? ' (Loss)' : ''}`
+                : '--';
 
             const html = `
         <div class="xl:col-span-6 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
@@ -1005,7 +1026,7 @@
         </div>
         <div class="xl:col-span-4 lg:col-span-4 md:col-span-6 sm:col-span-12 col-span-12 mt-3">
             <label class="ti-form-label dark:text-defaulttextcolor/70 mb-0">${profitLabel}</label>
-            <p class="${profitClass}">₹${formatNumber(Math.abs(profit))}${profit !== 0 ? ' ' + (profit > 0 ? '(Profit)' : '(Loss)') : ''}</p>
+           <p class="${profitClass}">${profitDisplay}</p>
         </div>
     `;
             document.getElementById('service-info').innerHTML = html;

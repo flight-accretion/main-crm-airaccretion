@@ -26,6 +26,7 @@ class LeadStatusPreservationTest extends KpiFeatureTestCase
         Http::fake(); Mail::fake(); Queue::fake();
         Event::fake(['eloquent.created: '.LeadFollowup::class, 'eloquent.updated: '.LeadFollowup::class]);
         Schema::table('lead_followups', function (Blueprint $table) {
+            $table->boolean('pricing_revision')->nullable();
             $table->uuid('parent_followup_id')->nullable();
             foreach (['file', 'service_ids', 'extra_service_ids', 'service_details', 'payment_method', 'paid_date', 'contact_outcome'] as $name) {
                 $table->text($name)->nullable();
@@ -63,6 +64,15 @@ class LeadStatusPreservationTest extends KpiFeatureTestCase
     {
         $actor = $this->createUserWithRole('Status '.$role, $role);
         $lead = Lead::findOrFail($this->createLeadFor($actor));
+        if ($status === LeadFollowup::STATUS_REJECTED) {
+            // Rejected activity is not a pricing source. Keep the legitimate
+            // earlier commercial quote that this note-only scenario preserves.
+            $commercial = LeadFollowup::withoutEvents(fn () => LeadFollowup::create([
+                'id' => (string) Str::uuid(), 'lead_id' => $lead->id, 'status' => 4,
+                'total_amount' => 1000, 'created_at' => now()->subHours(2), 'updated_at' => now()->subHours(2),
+            ]));
+            DB::table('lead_followups')->where('id', $commercial->id)->update(['created_at' => now()->subHours(2), 'updated_at' => now()->subHours(2)]);
+        }
         $previous = LeadFollowup::withoutEvents(fn () => LeadFollowup::create([
             'id' => (string) Str::uuid(), 'lead_id' => $lead->id, 'status' => $status,
             'followup_note' => 'Payment recorded', 'total_amount' => 1000, 'received_amount' => 1000,
@@ -88,6 +98,7 @@ class LeadStatusPreservationTest extends KpiFeatureTestCase
     public function test_note_only_preserves_status_without_recording_another_payment(string $role, int $status, bool $json, ?string $submittedStatus): void
     {
         [, $lead] = $this->fixture($role, $status);
+        $history = $lead->leadFollowups()->orderBy('id')->get()->toArray();
         $data = ['notes' => 'Called customer about travel details'];
         if ($submittedStatus !== null) $data['status'] = $submittedStatus;
         $request = $this->request($data, $json);
@@ -95,7 +106,8 @@ class LeadStatusPreservationTest extends KpiFeatureTestCase
         $this->assertSame($json ? 200 : 302, $response->getStatusCode());
         $this->assertFalse(session()->has('errors'), json_encode(session('errors')?->all()));
         $this->assertFalse(session()->has('error'), (string) session('error'));
-        $this->assertSame(2, $lead->leadFollowups()->count());
+        $this->assertSame(count($history) + 1, $lead->leadFollowups()->count());
+        $this->assertSame($history, $lead->leadFollowups()->whereIn('id', array_column($history, 'id'))->orderBy('id')->get()->toArray());
         $saved = $lead->leadFollowups()->orderByDesc('created_at')->orderByDesc('id')->first();
         $this->assertSame($status, (int) $saved->status);
         $this->assertNull($saved->received_amount);
@@ -140,9 +152,11 @@ class LeadStatusPreservationTest extends KpiFeatureTestCase
 
     public function test_explicit_new_payment_still_creates_one_payment_entry(): void
     {
-        [, $lead] = $this->fixture(UserType::OPERATIONS_EXECUTIVE, 4);
+        [, $lead, $previous] = $this->fixture(UserType::OPERATIONS_EXECUTIVE, 4);
         $service = (string) Str::uuid();
         DB::table('services')->insert(['id' => $service, 'service' => 'Flight', 'service_amount' => 2000]);
+        $previous->update(['service_ids' => [$service]]);
+        $lead->update(['service_ids' => [$service]]);
         $request = $this->request([
             'notes' => 'Received final payment', 'status' => 3, 'services' => [$service],
             'received_amount' => 1000, 'payment_method' => 'Paid Directly to Vendor', 'paid_date' => now()->toDateString(),

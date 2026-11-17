@@ -59,17 +59,14 @@ class RefundController extends Controller
                 'enquiry.representative',
                 'enquiry.rideSegments'
             ])
-                ->whereHas('refunds', function ($refundQ) use ($hasTwoStepSettlements) {
-                    $refundQ->where(function ($refundQ) use ($hasTwoStepSettlements) {
-                        $refundQ->where('status', '>=', 1);
-                        if ($hasTwoStepSettlements) {
-                            $refundQ->orWhereIn(
-                                'id',
-                                CustomerRefundSettlement::query()->select('lead_refund_id')
-                            );
-                        }
-                    });
-                })
+                ->whereHas('refunds', function ($refundQ) {
+                $refundQ->whereIn(
+                    'id',
+                    app(\App\Services\Operations\RefundSummaryService::class)
+                        ->visibleCustomerRefunds()
+                        ->select('id')
+                );
+              })
                 ->orderBy('created_at', 'desc');
 
             // Apply filters
@@ -171,22 +168,18 @@ class RefundController extends Controller
             // This prevents multiple cancelled followups for the same lead from appearing as duplicates
             $seenLeadIds = [];
            
-            $rides = $rides->filter(function ($ride) use (
-                &$seenLeadIds,
-                $hasTwoStepSettlements
+           $rides = $rides->filter(function ($ride) use (
+                &$seenLeadIds
             ) {
                 // Only include if refund is notified (status>=1: email/WA sent via popup OK)
-                $hasRefund = LeadRefund::where('lead_followup_id', $ride->id)
-                    ->where(function ($refundQ) use ($hasTwoStepSettlements) {
-                        $refundQ->where('status', '>=', 1);
-                        if ($hasTwoStepSettlements) {
-                            $refundQ->orWhereIn(
-                                'id',
-                                CustomerRefundSettlement::query()->select('lead_refund_id')
-                            );
-                        }
-                    })
+               
+                $hasRefund = app(
+                    \App\Services\Operations\RefundSummaryService::class
+                )
+                    ->visibleCustomerRefunds()
+                    ->where('lead_followup_id', $ride->id)
                     ->exists();
+
                 if ($hasRefund) {
                     return true;
                 }
@@ -325,6 +318,9 @@ class RefundController extends Controller
                     'followup_id' => $ride->id,
                     'remarks' => $existingRefund->remarks ?? null,
                     'approval_status' => $existingRefund->approval_status ?? null,
+                    'refund_numeric_status' => $existingRefund
+                    ? (int) $existingRefund->status
+                    : null,
                 ];
             }
 
@@ -334,16 +330,20 @@ class RefundController extends Controller
             // By default show pending refunds so Accounts / Operations can process them first
             $requestedStatus = $request->input('refund_status', 'pending');
 
-            if ($requestedStatus === 'complete') {
-                // Only include items that have an existing refund with status == 2 (completed)
-                $refundsData = array_filter($refundsData, function ($item) {
-                    return isset($item['refund_status']) && strtolower($item['refund_status']) === 'completed';
-                });
+           if ($requestedStatus === 'complete') {
+                $refundsData = array_filter(
+                    $refundsData,
+                    fn ($item) => $item['refund_numeric_status'] === 2
+                );
             } else {
-                // 'pending' or any other value: exclude completed refund entries
-                $refundsData = array_filter($refundsData, function ($item) {
-                    return !(isset($item['refund_status']) && strtolower($item['refund_status']) === 'completed');
-                });
+                $refundsData = array_filter(
+                    $refundsData,
+                    fn ($item) => in_array(
+                        $item['refund_numeric_status'],
+                        [0, 1],
+                        true
+                    )
+                );
             }
 
             // Reindex array to keep the view indexes consistent
@@ -575,6 +575,7 @@ class RefundController extends Controller
      */
     public function store(Request $request)
     {
+        $refundProofPath = null;
         if (!auth()->user()) {
             return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
         }
@@ -672,14 +673,16 @@ class RefundController extends Controller
             }
 
             // Handle file upload
-            $refundProofPath = null;
-            if ($request->hasFile('refund_proof')) {
+            if (($isAccounts || $isAdmin) && $request->hasFile('refund_proof')) {
                 try {
                     $file = $request->file('refund_proof');
 
                     $fileName = SafeUploadName::make($file, 'refund');
 
                     $refundProofPath = $file->storeAs('refunds', $fileName, 'public');
+                    if (!$refundProofPath) {
+                        throw new \RuntimeException('Refund proof could not be stored.');
+                    }
 
                     Log::info('Refund proof uploaded successfully', [
                         'path' => $refundProofPath,
@@ -736,6 +739,7 @@ class RefundController extends Controller
                 Log::info('Updating existing refund', ['refund_id' => $existingRefund->id, 'role' => $currentRole]);
                 if (!empty($payload)) {
                     $existingRefund->update($payload + ['updated_at' => now()]);
+                    $refundProofPath = null;
                 }
 
                 Log::info('Refund updated successfully', ['refund_id' => $existingRefund->id]);
@@ -760,6 +764,7 @@ class RefundController extends Controller
                 ];
 
                 $refund = LeadRefund::create($createData);
+                $refundProofPath = null;
 
                 Log::info('Refund created successfully', ['refund_id' => $refund->id]);
                 return response()->json([
@@ -771,7 +776,7 @@ class RefundController extends Controller
         } catch (ValidationException $e) {
             Log::error('Refund validation failed', [
                 'errors' => $e->errors(),
-                'request' => $request->all()
+                'followup_id' => $request->input('followup_id')
             ]);
             return response()->json([
                 'success' => false,
@@ -779,10 +784,13 @@ class RefundController extends Controller
                 'errors' => $e->errors()
             ], 422);
         } catch (\Exception $e) {
+            if ($refundProofPath) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($refundProofPath);
+            }
             Log::error('Error processing refund', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
-                'request' => $request->all()
+                'followup_id' => $request->input('followup_id')
             ]);
             return response()->json([
                 'success' => false,
@@ -799,31 +807,35 @@ class RefundController extends Controller
         if (!auth()->user()) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
-        try {
-            $refund = LeadRefund::findOrFail($refundId);
+        $refund = LeadRefund::findOrFail($refundId);
+        $path = ltrim((string) $refund->refund_proof, '/');
+        abort_unless(
+            preg_match('~\A(?:refunds|customer-refunds|vendor-refunds)/.+\.(?:pdf|jpe?g|png)\z~i', $path)
+            && !str_contains($path, "\0")
+            && !str_contains($path, '\\')
+            && !preg_match('~(?:^|/)\.\.?(/|$)~', $path),
+            404
+        );
 
-            if (!$refund->refund_proof) {
-                return response()->json(['error' => 'No proof file available'], 404);
-            }
-
-            $filePath = storage_path('app/public/' . ltrim($refund->refund_proof, '/'));
-
-            if (!file_exists($filePath)) {
-                return response()->json(['error' => 'File not found'], 404);
-            }
-
-            // Clean up filename for download
-            $originalName = basename($refund->refund_proof);
-            $cleanName = 'refund_proof_' . $refundId . '.' . pathinfo($filePath, PATHINFO_EXTENSION);
-
-            return response()->download($filePath, $cleanName, [
-                'Content-Type' => mime_content_type($filePath),
-                'Content-Disposition' => 'attachment; filename="' . $cleanName . '"'
-            ]);
-        } catch (\Exception $e) {
-            Log::error("Download error: " . $e->getMessage());
-            return response()->json(['error' => 'Download failed'], 500);
+        $role = optional(auth()->user()->userType)->user_type;
+        abort_unless(in_array($role, array_merge(
+            UserType::ADMIN_ROLES, UserType::ACCOUNTS_ROLES,
+            UserType::OPERATIONS_ROLES, [UserType::OWNER]
+        ), true), 403);
+        $disk = \Illuminate\Support\Facades\Storage::disk('public');
+        if (!$disk->exists($path)) {
+            $disk = \Illuminate\Support\Facades\Storage::disk('local');
         }
+        abort_unless($disk->exists($path), 404);
+        $mime = $disk->mimeType($path);
+        abort_unless(in_array($mime, ['application/pdf', 'image/jpeg', 'image/png'], true), 404);
+
+        return $disk->response(
+            $path,
+            'refund_proof_' . $refund->id . '.' . pathinfo($path, PATHINFO_EXTENSION),
+            ['Content-Type' => $mime, 'X-Content-Type-Options' => 'nosniff', 'Cache-Control' => 'private, no-store'],
+            request()->boolean('preview') ? 'inline' : 'attachment'
+        );
     }
 
     public function markAsDone($refundId)
@@ -991,23 +1003,14 @@ private function closeOperationsRefundCase(LeadRefund $refund): void
                 return response()->json(['success' => false, 'message' => $validator->errors()->first(), 'errors' => $validator->errors()], 422);
             }
 
-            // Delete the physical file if exists
-            if ($refund->refund_proof) {
-                try {
-                    $path = ltrim($refund->refund_proof, '/');
-                    if (\Illuminate\Support\Facades\Storage::disk('public')->exists($path)) {
-                        \Illuminate\Support\Facades\Storage::disk('public')->delete($path);
-                    }
-                } catch (\Exception $e) {
-                    Log::warning('Could not delete refund proof file: ' . $e->getMessage(), ['refund_id' => $refundId]);
-                }
-            }
 
             $refund->update([
                 'refund_proof' => null,
                 'remarks' => $request->remarks,
                 'updated_at' => now(),
             ]);
+
+            // Retain physical proof files for historical compatibility and audit.
 
             Log::info('Refund proof removed', ['refund_id' => $refundId, 'user_id' => auth()->id()]);
 

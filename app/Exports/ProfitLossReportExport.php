@@ -300,9 +300,16 @@ class ProfitLossReportExport implements FromGenerator, WithHeadings, WithMapping
         });
     }
 
+    
     if (array_key_exists('_allowed_representative_ids', $this->filters)) {
         $allowedRepresentativeIds = $this->filters['_allowed_representative_ids'];
-        if (empty($allowedRepresentativeIds)) {
+
+        // null = unrestricted access (e.g. Super Admin).
+        // [] = no permitted representatives.
+        // Non-empty array = restricted representative scope.
+        if ($allowedRepresentativeIds === null) {
+            // No additional restriction.
+        } elseif (empty($allowedRepresentativeIds)) {
             $query->whereRaw('1 = 0');
         } else {
             $query->whereHas('enquiry', function ($q) use ($allowedRepresentativeIds) {

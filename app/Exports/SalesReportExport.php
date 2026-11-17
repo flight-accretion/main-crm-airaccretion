@@ -245,7 +245,8 @@ class SalesReportExport implements FromGenerator, WithHeadings, WithMapping, Wit
             $latest = $group->sortByDesc('created_at')->first();
             $client = $latest->enquiry->client ?? null;
             $ride = $latest->enquiry->rideSegments->first() ?? null;
-            $totalAmount = (float) $latest->total_amount;
+            // $totalAmount = (float) $latest->total_amount;
+            $totalAmount = SalesAmountCalculator::grossTotalForFollowup($latest);
 
             // Get ALL followup IDs for this lead (not just current group)
             // This is important because payment might be in an earlier followup

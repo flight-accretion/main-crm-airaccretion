@@ -255,7 +255,7 @@ class KpiManagementController extends Controller
             ->findOrFail($data['member_user_id']);
 
         $managerRoles = $data['department'] === 'accounts'
-            ? [UserType::SENIOR_ACCOUNTS_MANAGER, UserType::ACCOUNTS_MANAGER]
+            ? UserType::ACCOUNTS_ROLES
             : [UserType::SENIOR_OPERATIONS_MANAGER, UserType::OPERATIONS_MANAGER];
 
         $memberRoles = $data['department'] === 'accounts'

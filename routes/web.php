@@ -453,6 +453,16 @@ Route::prefix('admin/chat-notifications')
             ->middleware('role:ATTENDANCE_IMPORT_ROLES,OWNER')
             ->name('admin.attendance.import.sample');
 
+        Route::get('/corrections', [\App\Http\Controllers\AttendanceCorrectionController::class, 'index'])
+            ->middleware('role:ATTENDANCE_IMPORT_ROLES')->name('admin.attendance.corrections.index');
+        Route::post('/corrections/records/{record}', [\App\Http\Controllers\AttendanceCorrectionController::class, 'store'])
+            ->middleware('role:ATTENDANCE_IMPORT_ROLES')->name('admin.attendance.corrections.store');
+        Route::post('/corrections/{correction}/decision', [\App\Http\Controllers\AttendanceCorrectionController::class, 'decide'])
+            ->middleware('role:SUPER_ADMIN')->name('admin.attendance.corrections.decide');
+        Route::post('/corrections/{correction}/reverse', [\App\Http\Controllers\AttendanceCorrectionController::class, 'reverse'])
+            ->middleware('role:ATTENDANCE_IMPORT_ROLES')->name('admin.attendance.corrections.reverse');
+        Route::post('/payroll-periods/close', [\App\Http\Controllers\AttendanceCorrectionController::class, 'close'])
+            ->middleware('role:SUPER_ADMIN')->name('admin.attendance.periods.close');
         Route::post('/import/preview', [AttendanceImportController::class, 'preview'])
             ->middleware('role:ATTENDANCE_IMPORT_ROLES')
             ->name('admin.attendance.import.preview');
@@ -764,19 +774,19 @@ Route::get(
             ->whereUuid('campaign')
             ->middleware('throttle:5,1')
             ->name('campaigns.retry-failed');
-        Route::get('/admin/subscriptions', [\App\Http\Controllers\Msg91WhatsAppAdminController::class, 'index'])->name('admin.index');
-        Route::put('/admin/subscriptions', [\App\Http\Controllers\Msg91WhatsAppAdminController::class, 'save'])->name('admin.save');
-        Route::get('/templates', [\App\Http\Controllers\Msg91WhatsAppTemplateController::class, 'index'])->name('templates.index');
-        Route::post('/templates', [\App\Http\Controllers\Msg91WhatsAppTemplateController::class, 'save'])->name('templates.save');
-        Route::post('/templates/create', [\App\Http\Controllers\Msg91WhatsAppTemplateController::class, 'create'])->name('templates.create');
+        Route::get('/admin/subscriptions', [\App\Http\Controllers\Msg91WhatsAppAdminController::class, 'index'])->middleware('role:ADMIN_ROLES')->name('admin.index');
+        Route::put('/admin/subscriptions', [\App\Http\Controllers\Msg91WhatsAppAdminController::class, 'save'])->middleware('role:ADMIN_ROLES')->name('admin.save');
+        Route::get('/templates', [\App\Http\Controllers\Msg91WhatsAppTemplateController::class, 'index'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('templates.index');
+        Route::post('/templates', [\App\Http\Controllers\Msg91WhatsAppTemplateController::class, 'save'])->middleware('role:SUPER_ADMIN')->name('templates.save');
+        Route::post('/templates/create', [\App\Http\Controllers\Msg91WhatsAppTemplateController::class, 'create'])->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('templates.create');
         Route::delete(
             '/templates/{template}',
             [\App\Http\Controllers\Msg91WhatsAppTemplateController::class, 'destroy']
-        )->whereUuid('template')->name('templates.destroy');
-        Route::post('/templates/senders/{sender}/sync', [\App\Http\Controllers\Msg91WhatsAppTemplateController::class, 'sync'])->whereUuid('sender')->name('templates.sync');
+        )->whereUuid('template')->middleware('role:SUPER_ADMIN')->name('templates.destroy');
+        Route::post('/templates/senders/{sender}/sync', [\App\Http\Controllers\Msg91WhatsAppTemplateController::class, 'sync'])->whereUuid('sender')->middleware('role:ADMIN_ROLES,SALES_ROLES')->name('templates.sync');
         Route::post('/admin/subscriptions/refresh-senders',
         [\App\Http\Controllers\Msg91WhatsAppAdminController::class, 'refreshSenders'])
-        ->middleware('throttle:3,1')
+        ->middleware(['role:ADMIN_ROLES', 'throttle:3,1'])
         ->name('admin.refresh-senders');
     });
 
@@ -1118,9 +1128,14 @@ Route::post(
             ->whereUuid('lead')
             ->name('admin.leads.follow-up.create');
 
+        Route::put('/{lead}/extra-services', [ClientController::class, 'saveExtraServiceQuote'])
+            ->whereUuid('lead')->middleware('role:SALES_ROLES,OPERATIONS_ROLES,OWNER,SUPER_ADMIN')
+            ->name('admin.leads.extra-services.update');
         Route::post('/{lead}/follow-up', [ClientController::class, 'storeLeadFollowUp'])
             ->whereUuid('lead')
             ->name('admin.leads.follow-up.store');
+        Route::post('/{lead}/status', [ClientController::class, 'updateLeadStatus'])
+            ->whereUuid('lead')->middleware('role:OWNER')->name('admin.leads.status.update');
     });
 
     Route::get('admin/leads/export', [ClientController::class, 'exportLeads'])

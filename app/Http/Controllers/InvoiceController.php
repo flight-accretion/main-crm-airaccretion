@@ -1467,8 +1467,7 @@ class InvoiceController extends Controller
                 'latest_payment' => $latestPayment
             ],
             'voucher_customer_items' => $voucherInvoiceData['items'],
-            'profit_loss' => $financial['booking_profit']
-                ?? ((float) $totalAmount - (float) ($vendor['totalVendorCost'] ?? 0)),
+            'profit_loss' => $financial['booking_profit'] ?? null,
             'vendor_bills' => $vendorBills,
             'invoice_discount' => $discountInfo,
         ];

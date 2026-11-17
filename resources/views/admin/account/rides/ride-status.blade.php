@@ -475,19 +475,28 @@
                                 {{-- Ride Status page: small popup under the Ride Status button (moved there by JS).
                                 Same element IDs as the drawer, so the existing status/refund/date handlers are unchanged. --}}
                                 <div id="rs-status-popover" class="rs-popover" role="dialog" aria-label="Ride status" hidden>
-                                    
-                            @if($canChangeRideStatus)
+                           
+                              
+                            @if(
+                                $canChangeRideStatus ||
+                                in_array($role, \App\Models\UserType::ACCOUNTS_ROLES, true)
+                            )
                                 <label class="ti-form-label mb-1" for="ride-status-dropdown">
                                     Ride Status
                                 </label>
-                                <select class="ti-form-select form-control-sm rounded-sm"
-                                    id="ride-status-dropdown">
+
+                                <select
+                                    id="ride-status-dropdown"
+                                    class="ti-form-select form-control-sm rounded-sm"
+                                    @disabled(!$canChangeRideStatus)
+                                >
                                     <option value="">Select Status</option>
                                     <option value="2">Ride Cancelled</option>
                                     <option value="5">Ride Completed</option>
                                     <option value="7">Ride Reschedule</option>
                                 </select>
                             @endif
+
 
                                     <div class="rs-popover-actions" id="action-buttons" style="display: none;">
                                         <button type="button" class="ti-btn bg-theme ti-btn-primary-full ti-btn-sm"
@@ -796,12 +805,50 @@
                                         </div>
 
 
+                                        <div class="vendor-refund-form-band mb-4">
+                                            <!-- Cancellation Reason -->
+
+                                            <div class="vendor-refund-field col-span-12">
+
+                                                <label class="ti-form-label">
+
+                                                    Cancellation Reason
+
+                                                    <span class="text-danger">
+                                                        *
+                                                    </span>
+
+                                                </label>
+
+                                                <textarea class="form-control" id="ride-vendor-refund-reason"
+                                                    name="refund_reason" rows="3"
+                                                    placeholder="Enter reason for vendor cancellation / refund..."
+                                                    required></textarea>
+
+                                            </div>
+
+                                        </div>
+                                        <div class="mt-4 flex flex-wrap gap-3 justify-end">
+                                            <button type="submit" class="ti-btn ti-btn-outline-primary"
+                                                id="ride-vendor-save-cancellation" data-vendor-save="cancellation">
+                                                <i class="ri-save-line me-1"></i> Save Cancellation
+                                            </button>
+                                            <button type="button" class="ti-btn ti-btn-outline-primary d-none"
+                                                id="ride-vendor-edit-cancellation">
+                                                <i class="ri-edit-line me-1"></i> Edit Cancellation
+                                            </button>
+                                            <button type="button" class="ti-btn ti-btn-outline-secondary d-none"
+                                                id="ride-vendor-cancel-cancellation-edit">
+                                                Cancel Edit
+                                            </button>
+                                        </div>
+
                                         <!-- =====================================================
                                         REFUND DETAILS
                                         ===================================================== -->
 
                                         <h6 class="font-semibold mt-5 mb-3">Step 2 · Vendor Refund</h6>
-                                        <p class="text-muted mb-3">Record the actual received amount after Step 1. Partial receipts are supported. Zero-refund settlements remain open for manual review.</p>
+                                        <p class="text-muted mb-3">Save the cancellation assessment in Step 1 before recording money received from the vendor. Partial receipts are supported. Zero-refund settlements remain open for manual review.</p>
                                         <div class="vendor-refund-form-band grid grid-cols-12 gap-4 mt-5">
 
 
@@ -1001,44 +1048,12 @@
                                             </div>
 
 
-                                            <!-- Refund Reason -->
-
-                                            <div class="vendor-refund-field col-span-12">
-
-                                                <label class="ti-form-label">
-
-                                                    Refund Reason
-
-                                                    <span class="text-danger">
-                                                        *
-                                                    </span>
-
-                                                </label>
-
-                                                <textarea class="form-control" id="ride-vendor-refund-reason"
-                                                    name="refund_reason" rows="3"
-                                                    placeholder="Enter reason for vendor cancellation / refund..."
-                                                    required></textarea>
-
-                                            </div>
 
                                         </div>
 
 
-                                        <!-- Two independent actions; keep the same existing form and AJAX endpoint. -->
+                                        <!-- Record a receipt against the saved Step 1 assessment. -->
                                         <div class="mt-4 flex flex-wrap gap-3 justify-end">
-                                            <button type="submit" class="ti-btn ti-btn-outline-primary"
-                                                id="ride-vendor-save-cancellation" data-vendor-save="cancellation">
-                                                <i class="ri-save-line me-1"></i> Save Cancellation
-                                            </button>
-                                            <button type="button" class="ti-btn ti-btn-outline-primary d-none"
-                                                id="ride-vendor-edit-cancellation">
-                                                <i class="ri-edit-line me-1"></i> Edit Cancellation
-                                            </button>
-                                            <button type="button" class="ti-btn ti-btn-outline-secondary d-none"
-                                                id="ride-vendor-cancel-cancellation-edit">
-                                                Cancel Edit
-                                            </button>
                                             <button type="submit" class="ti-btn ti-btn-primary"
                                                 id="ride-vendor-save-refund" data-vendor-save="refund" disabled
                                                 title="Save the cancellation first">
@@ -1666,6 +1681,9 @@
                 const isAccounts = {!! json_encode($isAccounts ?? false) !!};
                 const isOperations = {!! json_encode($isOperations ?? false) !!};
 
+                const canChangeRideStatus = @json($canChangeRideStatus);
+                let rideStatusFrozen = true;
+
                 $(document).ready(function () {
                     // Check if we need to reopen a modal after page reload
                     const reopenRideId = sessionStorage.getItem('reopenRideModal');
@@ -1767,13 +1785,20 @@
                     });
 
                     // Status change handler
+                   
                     $('#ride-status-dropdown').on('change', function () {
-                        const newStatus = parseInt($(this).val());
-                        // ...removed debug log...
+                        if (!canChangeRideStatus || rideStatusFrozen) {
+                            $(this).val('');
+                            return;
+                        }
+
+                        const newStatus = parseInt($(this).val(), 10);
+
                         if (newStatus) {
                             showStatusChangeConfirmation(newStatus);
                         }
                     });
+
 
                     // Confirmation modal handlers
                     // $('#confirm-status-change').on('click', function() {
@@ -2069,21 +2094,27 @@
                     const hasRefundNotified = !!(data.refund && data.refund.id && parseInt(data.refund.status) >= 1);
                     const statusInt2 = parseInt(data.status);
                     const shouldFreezeStatus = (statusInt2 === 5) || (statusInt2 === 2 && hasRefundNotified);
+                    rideStatusFrozen = shouldFreezeStatus;
 
-                    $('#ride-status-freeze-msg').remove();
-                    if (shouldFreezeStatus) {
-                        $('#ride-status-dropdown').prop('disabled', true);
-                        const freezeMsg = (statusInt2 === 5)
-                            ? 'Status is locked — ride completed and invoice generated.'
-                            : 'Status is locked — refund notifications already sent.';
-                        $('#ride-status-dropdown').after(
-                            '<small id="ride-status-freeze-msg" class="text-danger mt-1 d-block">' +
-                            '<i class="ri-lock-line me-1"></i>' + freezeMsg +
-                            '</small>'
-                        );
-                    } else {
-                        $('#ride-status-dropdown').prop('disabled', false);
-                    }
+                   
+                $('#ride-status-freeze-msg').remove();
+
+                $('#ride-status-dropdown').prop(
+                    'disabled',
+                    !canChangeRideStatus || rideStatusFrozen
+                );
+
+                if (rideStatusFrozen) {
+                    const freezeMsg = (statusInt2 === 5)
+                        ? 'Status is locked — ride completed and invoice generated.'
+                        : 'Status is locked — refund notifications already sent.';
+
+                    $('#ride-status-dropdown').after(
+                        '<small id="ride-status-freeze-msg" class="text-danger mt-1 d-block">' +
+                        '<i class="ri-lock-line me-1"></i>' + freezeMsg +
+                        '</small>'
+                    );
+                }
 
                     // Calculate and update payment progress
                     const totalAmount = parseFloat(data.total_amount || 0);
@@ -2483,6 +2514,10 @@
 
                 function updateRideStatus(newStatus) {
                     if (!ensureRideDetailsReady()) return;
+                    if (!canChangeRideStatus || rideStatusFrozen) {
+                    showError('You are not allowed to change this ride status.');
+                    return;
+                   }
                     if (!currentRideId) {
                         showError('No ride selected');
                         return;
@@ -2675,10 +2710,14 @@
                             showError(errorMsg);
                             $('#ride-status-dropdown').val('');
                         },
-                        complete: function () {
-                            hideStatusLoader();
-                            $('#ride-status-dropdown').prop('disabled', false);
-                        }
+                       complete: function () {
+                        hideStatusLoader();
+
+                        $('#ride-status-dropdown').prop(
+                            'disabled',
+                            !canChangeRideStatus || rideStatusFrozen
+                        );
+                    }
                     });
                 }
 
@@ -3188,6 +3227,7 @@
                     const $reason = $('#ride-vendor-refund-reason');
 
                     vendorCancellationMode = assessmentExists ? mode : 'create';
+                    $('#ride-vendor-save-refund').prop('disabled', !assessmentExists || mode === 'edit');
                     if (!assessmentExists) {
                         $amount.prop('readonly', false);
                         $reason.prop('readonly', false);
@@ -3564,11 +3604,6 @@
                                 );
                         }
 
-                        const cancellationSaved =
-                            cancellationRaw !== ''
-                            && cancellationRaw !== undefined
-                            && Number.isFinite(cancellationAmount);
-
                         const assessmentExists = $selected.attr('data-assessment-exists') === '1';
                         if (assessmentExists) {
                             $('#ride-vendor-refund-reason').val($selected.attr('data-assessment-reason') || '');
@@ -3578,10 +3613,10 @@
                         }
 
                         $('#ride-vendor-save-refund')
-                            .prop('disabled', !cancellationSaved)
+                            .prop('disabled', !assessmentExists)
                             .attr(
                                 'title',
-                                cancellationSaved
+                                assessmentExists
                                     ? 'Record money received from the vendor'
                                     : 'Save the cancellation first'
                             );

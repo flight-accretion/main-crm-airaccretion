@@ -4,6 +4,7 @@ namespace App\Services\Hr;
 
 use App\Models\AttendanceRecord;
 use App\Models\OperationCase;
+use App\Models\OperationCaseActivity;
 use App\Models\User;
 use App\Models\UserType;
 use App\Services\Kpi\KpiDashboardService;
@@ -159,12 +160,30 @@ class HrDashboardDataService
         $dueDate = 'COALESCE(next_followup_at, opened_at, created_at)';
         $counts = (clone $due)->whereBetween(\Illuminate\Support\Facades\DB::raw($dueDate), [$from, $to])
             ->selectRaw('assigned_to, type, COUNT(*) AS total')->groupBy('assigned_to', 'type')->get()->groupBy('assigned_to');
-        $reviews = (clone $due)->whereBetween(\Illuminate\Support\Facades\DB::raw($dueDate), [$from, $to])
-            ->where('type', OperationCase::TYPE_REVIEW)
-            ->where(fn ($query) => $query->whereNull('metadata->review_status')->orWhereNotIn('metadata->review_status', ['completed', 'cancelled']))
-            ->where(fn ($query) => $query->whereNull('metadata->review_completed')->orWhere('metadata->review_completed', false))
-            ->where(fn ($query) => $query->whereNull('metadata->review_cancelled')->orWhere('metadata->review_cancelled', false))
-            ->selectRaw('assigned_to, COUNT(*) AS total')->groupBy('assigned_to')->pluck('total', 'assigned_to');
+       
+            $completedActions = OperationCaseActivity::query()
+                ->whereIn('user_id', $userIds)
+                ->whereBetween('created_at', [$from, $to])
+                ->where(function ($query) {
+                    $query->where(function ($q) {
+                        $q->where('action', 'review_completed')
+                            ->whereHas('case', function ($case) {
+                                $case->where('type', OperationCase::TYPE_REVIEW);
+                            });
+                    })->orWhere(function ($q) {
+                        $q->where('action', 'vendor_followup_completed')
+                            ->whereHas('case', function ($case) {
+                                $case->where('type', OperationCase::TYPE_VENDOR_FOLLOWUP);
+                            });
+                    });
+                })
+                ->selectRaw(
+                    'user_id, action, COUNT(DISTINCT operation_case_id) AS total'
+                )
+                ->groupBy('user_id', 'action')
+                ->get()
+                ->groupBy('user_id');
+
         $overdue = (clone $due)->whereRaw($dueDate . ' < ?', [$from])
             ->selectRaw('assigned_to, COUNT(*) AS total')->groupBy('assigned_to')->pluck('total', 'assigned_to');
         $rows = [];
@@ -173,8 +192,8 @@ class HrDashboardDataService
             $rows[$id] = [
                 'completed' => (int) ($completed[$id] ?? 0), 'active' => (int) ($active[$id] ?? 0),
                 'outreach' => null, 'pending' => (int) $types->sum('total'),
-                'review' => (int) ($reviews[$id] ?? 0),
-                'vendor' => (int) $types->where('type', OperationCase::TYPE_VENDOR_FOLLOWUP)->sum('total'),
+                'review' => (int) $completedActions->get($id, collect())->where('action', 'review_completed')->sum('total'),
+                'vendor' => (int) $completedActions->get($id, collect())->where('action', 'vendor_followup_completed')->sum('total'),
                 'overdue' => (int) ($overdue[$id] ?? 0), 'notice' => null,
             ];
         }

@@ -129,7 +129,8 @@ class OperationsDashboardController extends Controller
         )
         ->whereNull(
             'completed_at'
-        );
+        )
+        ->where('status', '!=', OperationCase::STATUS_COMPLETED);
 
     $unfilteredCases = clone $cases;
     $this->applyCaseFilters(

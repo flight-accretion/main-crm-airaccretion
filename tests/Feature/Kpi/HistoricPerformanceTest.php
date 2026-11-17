@@ -86,15 +86,25 @@ class HistoricPerformanceTest extends KpiFeatureTestCase
     {
         $lead = $this->createLeadFor($this->employee);
         DB::table('lead_followups')->insert(['id'=>'live-sale','lead_id'=>$lead,'status'=>3,'total_amount'=>1000,'created_at'=>'2026-09-10']);
-        DB::table('payment_audit_trail')->insert(['id'=>'live-payment','lead_followup_id'=>'live-sale','paid_amount'=>1000,'paid_date'=>'2026-09-10','payment_status'=>0]);
+        DB::table('payment_audit_trail')->insert(['id'=>'live-payment','lead_followup_id'=>'live-sale','paid_amount'=>1000,'paid_date'=>'2026-09-10 00:00:00','payment_status'=>0]);
         $service = app(\App\Services\TargetIncentiveService::class);
         $from = Carbon::parse('2026-09-01'); $to = Carbon::parse('2026-09-17');
         $this->assertSame(0, $service->ledgerForPeriod($from,$to)->count());
         DB::table('payment_audit_trail')->where('id','live-payment')->update(['payment_status'=>1]);
         $this->assertSame(1, $service->ledgerForPeriod($from,$to)->count());
         $this->assertSame(0, $service->ledgerForPeriod(Carbon::parse('2026-09-11'),$to)->count());
-        DB::table('payment_audit_trail')->where('id','live-payment')->update(['paid_date'=>'2026-09-18']);
+        // Match PostgreSQL timestamp storage: SQLite otherwise compares a bare date
+        // lexically before the same day's midnight exclusive upper bound.
+        DB::table('payment_audit_trail')->where('id','live-payment')->update(['paid_date'=>'2026-09-17 23:59:59.999999']);
+        $this->assertSame(1000.0, $service->ledgerForPeriod($from,$to)->sum('amount'));
+        DB::table('payment_audit_trail')->where('id','live-payment')->update(['paid_date'=>'2026-09-18 00:00:00']);
         $this->assertSame(0, $service->ledgerForPeriod($from,$to)->count());
+        DB::table('payment_audit_trail')->insert(['id'=>'later-installment','lead_followup_id'=>'live-sale',
+            'paid_amount'=>250,'paid_date'=>'2026-09-19 12:00:00','payment_status'=>1]);
+        $nextPeriod = $service->ledgerForPeriod(Carbon::parse('2026-09-18'), Carbon::parse('2026-09-30'));
+        $this->assertSame([$lead], $nextPeriod->pluck('lead_id')->all());
+        $this->assertSame(1000.0, $nextPeriod->sum('amount'));
+        $this->assertSame(0, $service->ledgerForPeriod(Carbon::parse('2026-09-19'), Carbon::parse('2026-09-30'))->count());
     }
 
     public function test_conversion_and_response_exclude_activity_after_selected_end(): void

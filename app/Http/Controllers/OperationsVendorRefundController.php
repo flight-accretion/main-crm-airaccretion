@@ -54,9 +54,12 @@ class OperationsVendorRefundController extends Controller
         $refundProducts = \App\Models\Product::pluck('product', 'id');
         $rows = LeadVendorPayment::query()
             ->with(self::RELATIONS)
-            ->whereHas('vendorRefunds', function ($query) {
-                $this->wherePending($query);
-            })
+            ->whereIn(
+                'id',
+                app(\App\Services\Operations\RefundSummaryService::class)
+                    ->pendingVendorPayments()
+                    ->select('id')
+            )
             ->orderByDesc('created_at')
             ->get()
             ->map(fn (LeadVendorPayment $payment) => $this->buildRow($payment, $refundProducts))

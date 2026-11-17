@@ -31,15 +31,27 @@ class Msg91WhatsAppTemplateController extends Controller
         $canManageAll = $this->access->canManage($request->user());
         $canManageVisibility = $this->access->canManageTemplateVisibility($request->user());
 
-        $senders = Msg91WhatsAppSender::query()
+       // All configured and CRM-active senders visible to the current role.
+        $senderDirectory = Msg91WhatsAppSender::query()
             ->with('user:id,name,email')
             ->where('status', 'active')
-            ->where('verified_at', '>=', now()->subMinutes(
-            (int) config('services.msg91_campaigns.sender_verification_ttl_minutes', 15)
-            ))
-            ->when(!$canManageAll, fn ($query) => $query->where('user_id', $request->user()->id))
+            ->whereNotNull('integrated_number')
+            ->where('integrated_number', '<>', '')
+            ->when(
+                !$canManageAll,
+                fn ($query) =>
+                    $query->where('user_id', $request->user()->id)
+            )
             ->orderBy('integrated_number')
             ->get();
+
+        // Only freshly verified senders may be selected for
+        // MSG91 template creation or provider operations.
+        $senders = $senderDirectory
+            ->filter(
+                fn ($sender) => $sender->isVerifiedActive()
+            )
+            ->values();
 
         $templates = $this->visibleTemplates($request, $canManageAll)
             ->with(['bindings.sender.user:id,name,email'])
@@ -54,7 +66,7 @@ class Msg91WhatsAppTemplateController extends Controller
             abort_unless($canManageAll || (string) $editingTemplate->owner_user_id === (string) $request->user()->id, 403);
         }
 
-        return view('admin.pages.whatsapp.admin.templates', compact('senders', 'templates', 'editingTemplate', 'canManageAll', 'canManageVisibility'));
+        return view('admin.pages.whatsapp.admin.templates', compact('senders','senderDirectory', 'templates', 'editingTemplate', 'canManageAll', 'canManageVisibility'));
     }
 
     public function save(Request $request): RedirectResponse
@@ -66,6 +78,7 @@ class Msg91WhatsAppTemplateController extends Controller
             'crm_enabled' => ['required', 'boolean'],
         ]);
         $template = Msg91WhatsAppTemplate::query()->findOrFail($data['template_id']);
+        abort_if(in_array($template->status, ['deleting', 'deleted'], true), 422, 'Deletion reconciliation must finish before availability can change.');
         $template->fill([
             'crm_enabled' => (bool) $data['crm_enabled'],
             'crm_visibility_overridden' => true,
@@ -74,157 +87,28 @@ class Msg91WhatsAppTemplateController extends Controller
         return back()->with('success', $template->crm_enabled ? 'Template is visible in CRM campaigns.' : 'Template is hidden from CRM campaigns.');
     }
 
-    public function destroy(
-    Request $request,
-    Msg91WhatsAppTemplate $template
-) {
-    abort_unless(
-        $this->access->canManageTemplateVisibility($request->user()),
-        403
-    );
-
-    $hasOpenCampaign = Msg91WhatsAppCampaign::query()
-        ->where('template_id', $template->id)
-        ->whereIn('status', ['queued', 'processing'])
-        ->exists();
-
-    if ($hasOpenCampaign) {
-        return $this->templateDeleteFailure(
-            $request,
-            'This template has an active campaign. Cancel or complete that campaign before deleting it.'
-        );
-    }
-
-    $bindings = $template->bindings()
-        ->with('sender')
-        ->get();
-
-    if ($bindings->isEmpty()) {
-        return $this->templateDeleteFailure(
-            $request,
-            'No MSG91 sender is linked to this template. The CRM record was kept for safety.'
-        );
-    }
-
-    foreach ($bindings as $binding) {
-        if (!$binding->sender || blank($binding->sender->integrated_number)) {
-            return $this->templateDeleteFailure(
-                $request,
-                'A linked MSG91 sender is missing. The template was not deleted.'
-            );
-        }
-    }
-
-    foreach ($bindings as $binding) {
-        if ($binding->provider_status === 'deleted') {
-            continue;
-        }
-
+    public function destroy(Request $request, Msg91WhatsAppTemplate $template)
+    {
+        abort_unless($this->access->canManageTemplateVisibility($request->user()), 403);
         try {
-            $this->client->deleteTemplate(
-                $binding->sender->integrated_number,
-                $template->name
-            );
-
-            $binding->forceFill([
-                'provider_status' => 'deleted',
-                'last_synced_at' => now(),
-                'provider_meta' => array_merge(
-                    is_array($binding->provider_meta)
-                        ? $binding->provider_meta
-                        : [],
-                    [
-                        'deleted_at' => now()->toIso8601String(),
-                        'deleted_by' => $request->user()->id,
-                    ]
-                ),
-            ])->save();
-        } catch (Msg91ProviderException $exception) {
-
-    $providerReason =
-        $this->providerRejectionReason(
-            $exception->payload,
-            'MSG91 did not accept the delete request (HTTP '
-                . $exception->httpStatus
-                . '). Confirm the template and sender in MSG91, then try again.'
-        );
-
-    Log::warning(
-        'MSG91 template deletion failed.',
-        [
-            'template_id' =>
-                $template->id,
-
-            'template_name' =>
-                $template->name,
-
-            'sender_id' =>
-                $binding->sender_id,
-
-            'integrated_number' =>
-                $binding->sender->integrated_number,
-
-            'http_status' =>
-                $exception->httpStatus,
-
-            'provider_payload' =>
-                $exception->payload,
-
-            'provider_reason' =>
-                $providerReason,
-        ]
-    );
-
-    return $this->templateDeleteFailure(
-        $request,
-        'MSG91 could not delete template "'
-            . $template->name
-            . '" for sender '
-            . $binding->sender->integrated_number
-            . '. MSG91 response: '
-            . $providerReason
-            . ' The CRM template was kept for safety.'
-    );
-} catch (Throwable $exception) {
-            Log::error('MSG91 template deletion failed unexpectedly.', [
-                'template_id' => $template->id,
-                'sender_id' => $binding->sender_id,
-                'exception' => $exception,
-            ]);
-
-            return $this->templateDeleteFailure(
-                $request,
-                'The template could not be deleted from MSG91. The CRM template was kept.'
-            );
+            $result = app(\App\Services\WhatsApp\Msg91\Msg91TemplateDeletionService::class)->delete($template, $request->user());
+        } catch (\Illuminate\Validation\ValidationException $exception) {
+            throw $exception;
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $exception) {
+            throw $exception;
+        } catch (\Throwable $exception) {
+            return $this->templateDeleteFailure($request, 'MSG91 deletion scope could not be confirmed. No global deletion success was recorded; refresh and retry.');
         }
+        if (!$result['complete']) {
+            $message = 'Deletion incomplete: '.$result['succeeded'].' sender(s) confirmed, '.$result['remaining'].' unresolved. Template is unavailable for campaigns. Retry reconciliation.';
+            if (!empty($result['errors'])) $message .= ' '.implode(' ', $result['errors']);
+            if ($request->expectsJson()) return response()->json($result + ['message' => $message], 422);
+            return back()->withErrors(['msg91_template' => $message]);
+        }
+        $message = 'Template deleted from all confirmed MSG91 senders and removed from CRM campaigns. History retained.';
+        if ($request->expectsJson()) return response()->json($result + ['message' => $message, 'template_id' => $template->id]);
+        return redirect()->route('admin.msg91.templates.index')->with('success', $message);
     }
-
-    DB::transaction(function () use ($template) {
-        $template->bindings()->delete();
-
-        $template->forceFill([
-            'status' => 'deleted',
-            'crm_enabled' => false,
-            'crm_visibility_overridden' => true,
-            'provider_template_id' => null,
-            'last_synced_at' => now(),
-        ])->save();
-    });
-
-    $message = 'Template deleted successfully from MSG91 and removed from CRM campaigns.';
-
-    if ($request->expectsJson()) {
-        return response()->json([
-            'message' => $message,
-            'template_id' => $template->id,
-        ]);
-    }
-
-    return redirect()
-        ->route('admin.msg91.templates.index')
-        ->with('success', $message);
-}
-
 private function templateDeleteFailure(
     Request $request,
     string $message,
@@ -250,7 +134,7 @@ private function templateDeleteFailure(
         try {
             $count = $this->sync->syncSender($sender, $request->user(), $this->access->canManage($request->user()));
         } catch (Throwable $exception) {
-            return back()->withErrors(['msg91_sync' => $exception->getMessage()]);
+            return back()->withErrors(['msg91_sync' => 'MSG91 templates could not be reconciled. Check sender identity and retry.']);
         }
 
         return back()->with('success', "Updated {$count} template(s) from MSG91 for {$sender->integrated_number}.");
@@ -341,6 +225,7 @@ private function templateDeleteFailure(
             'name' => $data['name'],
             'language' => $data['language'],
         ]);
+        abort_if($template->exists && in_array($template->status, ['deleting', 'deleted'], true), 422, 'This name has a deletion history. Use a new name; automatic recreation is blocked.');
         $template->fill([
             'owner_user_id' => $this->access->canManage($request->user()) ? null : $request->user()->id,
             'scope' => $this->access->canManage($request->user()) ? 'central' : 'personal',
@@ -446,35 +331,7 @@ private function templateDeleteFailure(
         string $fallback = 'MSG91 rejected the template. Check the template fields and sender configuration.'
     ): string
     {
-        $candidates = [
-            data_get($payload, 'errors.0.message'),
-            data_get($payload, 'errors.0'),
-            data_get($payload, 'errors.message'),
-            data_get($payload, 'errors'),
-            data_get($payload, 'error.message'),
-            data_get($payload, 'error_description'),
-            data_get($payload, 'data.message'),
-            data_get($payload, 'message'),
-        ];
-
-        foreach ($candidates as $candidate) {
-            if (is_array($candidate)) {
-                $candidate = data_get($candidate, 'message')
-                    ?? data_get($candidate, 'description');
-            }
-
-            if (is_scalar($candidate) && trim((string) $candidate) !== '') {
-                $reason = strip_tags((string) $candidate);
-                $reason = preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $reason) ?? '';
-                $reason = trim(preg_replace('/\s+/', ' ', $reason) ?? '');
-
-                if ($reason !== '') {
-                    return mb_substr($reason, 0, 300);
-                }
-            }
-        }
-
-        return $fallback;
+        return \App\Services\WhatsApp\Msg91\Msg91SafeError::message($payload, $fallback);
     }
 
  private function visibleTemplates(Request $request, bool $canManageAll)

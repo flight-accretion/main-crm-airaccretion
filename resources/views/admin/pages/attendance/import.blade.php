@@ -9,7 +9,8 @@
 @endphp
 <link rel="stylesheet" href="{{ asset('assets/admin/css/crm/attendance/import.css') }}">
 <div class="attendance-import" id="attendanceImportPage" data-preview-url="{{ route('admin.attendance.import.preview') }}">
-    <header class="ai-heading"><h1>Attendance Import</h1></header>
+    <header class="ai-heading"><h1>Attendance Import</h1>@if(in_array(auth()->user()?->userType?->user_type, \App\Models\UserType::ATTENDANCE_IMPORT_ROLES, true))<a class="ti-btn" href="{{ route('admin.attendance.corrections.index') }}">Edit Attendance / Corrections</a>@endif</header>
+    @if($errors->any())<div class="alert alert-danger" role="alert">{{ $errors->first() }}</div>@endif
     @foreach(['success', 'error'] as $messageType)
         @if(session($messageType))
             <div class="ai-notice ai-{{ $messageType }}" role="status">{{ session($messageType) }}</div>
@@ -60,11 +61,12 @@
         <h3>Employee mapping</h3>
         <div class="ai-table-wrap"><table><thead><tr><th>Paycode</th><th>Employee in file</th><th>CRM employee</th><th>Period</th><th>Rows</th><th>Match</th></tr></thead><tbody id="attendanceMappingBody"></tbody></table></div>
         <h3>Daily attendance rows</h3>
-        <div class="ai-table-wrap"><table><thead><tr><th>Paycode</th><th>Employee</th><th>Date</th><th>Day</th><th>In</th><th>Out</th><th>Status</th></tr></thead><tbody id="attendanceRowsBody"></tbody></table></div>
+        <div class="ai-table-wrap"><table><thead><tr><th>Paycode</th><th>Employee</th><th>Date</th><th>Day</th><th>In</th><th>Out</th><th>Status</th><th>Before</th><th>Payroll handling</th></tr></thead><tbody id="attendanceRowsBody"></tbody></table></div>
         <div class="ai-pager"><button type="button" id="attendanceRowsPrevious" class="ai-icon" title="Previous daily rows" aria-label="Previous daily rows"><i class="ti ti-chevron-left"></i></button><span id="attendanceRowsPage" aria-live="polite"></span><button type="button" id="attendanceRowsNext" class="ai-icon" title="Next daily rows" aria-label="Next daily rows"><i class="ti ti-chevron-right"></i></button></div>
         <form method="POST" action="{{ route('admin.attendance.import.confirm') }}" id="attendanceConfirmForm" class="ai-confirm">
             @csrf
             <input type="hidden" name="import_id" id="attendanceImportId"><div id="attendanceMappingHidden"></div>
+            <label>Correction reason<textarea class="form-control" id="attendanceCorrectionReason" name="correction_reason" maxlength="2000" placeholder="Required when changing existing attendance or submitting closed-period attendance">{{ old('correction_reason') }}</textarea></label>
             <span id="attendanceConfirmHint" class="ai-meta" aria-live="polite"></span><button type="submit" id="attendanceConfirmButton" class="ai-primary" disabled><i class="ti ti-check" aria-hidden="true"></i> Confirm Import</button>
         </form>
     </section>

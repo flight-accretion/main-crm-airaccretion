@@ -197,6 +197,7 @@ class KPIReportExport implements WithMultipleSheets
             // Get all sales persons
             $query = LeadFollowup::with(['enquiry.representative.userType', 'enquiry.rideSegments'])
                 ->whereIn('status', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        $query = app(\App\Services\Kpi\KpiDataScopeService::class)->scopeAccountsLeadQuery($query, auth()->user());
 
             // Apply filters — use lead's created_at for date filtering (matches Leads page)
             if (!empty($this->filters['month'])) {
@@ -308,6 +309,7 @@ class KPIReportSummarySheet implements FromCollection, WithHeadings, WithMapping
     {
         $query = LeadFollowup::with(['enquiry.representative.userType', 'enquiry.rideSegments'])
             ->whereIn('status', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        $query = app(\App\Services\Kpi\KpiDataScopeService::class)->scopeAccountsLeadQuery($query, auth()->user());
 
         // Apply filters — use lead's created_at for date filtering (matches Leads page)
         if (!empty($this->filters['month'])) {

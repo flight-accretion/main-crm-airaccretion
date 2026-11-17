@@ -552,6 +552,7 @@ class ClientController extends Controller
 
     public function index(Request $request)
     {
+        // $request->validate(['status' => ['nullable', Rule::in(array_merge(array_keys(LeadFollowup::statusLabels()), ['na', 'n/a']))]]);
 
     $dateGroups = [
             'service' => ['from_date', 'to_date'],
@@ -600,6 +601,24 @@ class ClientController extends Controller
 
 
         $currentUser = auth()->user();
+
+        $filterRole = $currentUser?->userType?->user_type;
+
+        $allowedStatusIds = in_array(
+            $filterRole,
+            UserType::SALES_ROLES,
+            true
+        )
+            ? [0, 1, 2, 3, 4, 5, 10, 11]
+            : array_keys(LeadFollowup::statusLabels());
+
+        // Only View Leads filtering is affected.
+        $request->validate([
+            'status' => [
+                'nullable',
+                Rule::in($allowedStatusIds),
+            ],
+        ]);
 
         $isSuperAdmin = (bool) (
             $currentUser &&
@@ -668,72 +687,23 @@ class ClientController extends Controller
     }
 }
 
-        // Status filter (latest follow-up) - using subquery for efficiency
-        // Note: Using created_at instead of MAX(id) because id is UUID type which doesn't support MAX() in PostgreSQL
-       /*
-|--------------------------------------------------------------------------
-| Follow-up Status Filter
-|--------------------------------------------------------------------------
-|
-| Normal numeric values filter by the latest follow-up status.
-|
-| "na" / "n/a" means the lead does not yet have any follow-up,
-| which matches the N/A displayed in the Leads table.
-|
-*/
-if ($request->filled('status')) {
+        
+        /*
+        |--------------------------------------------------------------------------
+        | View Leads - Status Filter
+        |--------------------------------------------------------------------------
+        | Role-wise validation is already performed above.
+        | Filter only by the latest follow-up activity.
+        |--------------------------------------------------------------------------
+        */
+        if ($request->filled('status')) {
+            app(LeadStatusTransitionService::class)
+                ->filterLatestActivity(
+                    $query,
+                    (int) $request->input('status')
+                );
+        }
 
-    $statusFilter = strtolower(
-        trim(
-            (string) $request->input('status')
-        )
-    );
-
-    if (
-        in_array(
-            $statusFilter,
-            ['na', 'n/a'],
-            true
-        )
-    ) {
-
-        $query->whereNotExists(
-            function ($subQuery) {
-
-                $subQuery
-                    ->select(DB::raw(1))
-                    ->from('lead_followups as lf')
-                    ->whereColumn(
-                        'lf.lead_id',
-                        'leads.id'
-                    );
-            }
-        );
-
-    } else {
-
-        $query->whereIn(
-            'id',
-            function ($subQuery) use ($request) {
-
-                $subQuery
-                    ->select('lf.lead_id')
-                    ->from('lead_followups as lf')
-                    ->where(
-                        'lf.status',
-                        $request->status
-                    )
-                    ->whereRaw(
-                        'lf.created_at = (
-                            SELECT MAX(lf2.created_at)
-                            FROM lead_followups as lf2
-                            WHERE lf2.lead_id = lf.lead_id
-                        )'
-                    );
-            }
-        );
-    }
-}
 
 /*
 |--------------------------------------------------------------------------
@@ -923,20 +893,15 @@ if (
                 ->get();
         });
 
-        $statusOptions = [
-            0 => 'Initiated',
-            1 => 'Active',
-            2 => 'Cancelled',
-            3 => 'Full Payment Received',
-            4 => 'Partial Payment Received',
-            5 => 'Confirm',
-            6 => 'Pending',
-            7 => 'Reschedule',
-            8 => 'Approve',
-            9 => 'Reject',
-            10 => 'Sales Follow-up',
-            11 => 'Close Follow-up',
-        ];
+        
+        $statusOptions = LeadFollowup::statusLabels();
+
+        if (in_array($filterRole, UserType::SALES_ROLES, true)) {
+            $statusOptions = array_intersect_key(
+                $statusOptions,
+                array_flip($allowedStatusIds)
+            );
+        }
 
         $staff = $this->getUsersInHierarchy() ?: auth()->user();
 
@@ -1083,7 +1048,7 @@ if ($isSuperAdmin) {
                 ->first();
         }
 
-        $existingClients = Client::with('country')
+        $existingClients = $this->applyClientDirectoryScope(Client::with('country'))
             ->where('status', 1)
             ->orderBy('name')
             ->get([
@@ -1330,16 +1295,21 @@ if ($isSuperAdmin) {
                 $request->contact_number
             );
 
-            if ($matchedClients->count() > 1) {
+            if ($matchedClients->count() > 1 && !$usingExistingClient) {
                 return back()
                     ->withInput()
                     ->withErrors([
                         'contact_number' =>
-                            'Multiple clients have this phone number. Please resolve the duplicate client records first.',
+                            'Multiple clients match this phone number. Select the intended existing client before creating the lead.',
                     ]);
             }
 
-            $matchedClient = $matchedClients->first();
+            $matchedClient = $usingExistingClient
+                ? $matchedClients->firstWhere('id', $request->client_id)
+                : $matchedClients->first();
+            if ($matchedClient) {
+                $this->abortUnlessCanAccessClient($matchedClient);
+            }
 
             if ($matchedClient && $request->filled('client_id')
                 && $request->client_id !== 'new'
@@ -1429,6 +1399,7 @@ try {
                     ->firstOrFail();
 
             } elseif ($usingExistingClient) {
+                $this->abortUnlessCanAccessClient(Client::findOrFail($request->client_id));
                 // Explicitly selected client. Do not silently overwrite profile.
                 $client = Client::whereKey($request->client_id)
                     ->lockForUpdate()
@@ -1474,7 +1445,7 @@ try {
                     'contact_number' => $strContactNumber,
                     'alternate_number' => $strAlternateNumber,
                     'date_of_birth' => $request->date_of_birth,
-                    'city_id' => $request->city,
+                    'city_id' => $this->resolveCityId($request->input('country_id'), $request->input('city')),
                     'country_id' => $request->country_id,
                     'address' => $request->address,
                     'description' => $request->description,
@@ -3279,6 +3250,93 @@ $leadFollowUp = LeadFollowUp::create([
             'cityName'
         ));
     }
+    public function saveExtraServiceQuote(Request $request, Lead $lead)
+    {
+        $this->abortUnlessCanAccessLead($lead);
+        $data = $request->validate([
+            'selection_submitted' => 'required|accepted',
+            'preview' => 'sometimes|boolean',
+            'quote_version' => 'required_unless:preview,true|string|size:64',
+            'extra_service_ids' => 'sometimes|array',
+            'extra_service_ids.*' => 'uuid|distinct|exists:extra_services,id',
+        ]);
+
+        $quote = DB::transaction(function () use ($lead, $data) {
+            $lockedLead = Lead::whereKey($lead->id)->lockForUpdate()->firstOrFail();
+            $snapshot = LeadFollowup::latestPricingSnapshot((string) $lead->id);
+            $previous = json_decode($lockedLead->extra_service_quote ?? 'null', true);
+            $current = $snapshot && ($previous['snapshot_id'] ?? null) === $snapshot->id
+                ? new LeadFollowup($previous)
+                : $snapshot;
+            $existing = collect($current?->service_details_array ?? [])
+                ->where('type', 'extra_service')->keyBy('id');
+            $eligible = Service::whereIn('id', $lockedLead->service_ids_array)
+                ->with('extraServices')->get()->pluck('extraServices')->flatten()->keyBy('id');
+            $lines = [];
+            foreach ($data['extra_service_ids'] ?? [] as $id) {
+                if ($existing->has($id)) {
+                    $lines[] = $existing->get($id);
+                    continue;
+                }
+                $extra = $eligible->get($id);
+                if (!$extra || (int) $extra->status !== 1) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'extra_service_ids' => 'An Extra Service is unavailable for the current Service.',
+                    ]);
+                }
+                $lines[] = ['type' => 'extra_service', 'id' => $id,
+                    'original_amount' => $extra->usage_scope === ExtraService::SCOPE_VENDOR ? 0 : (float) $extra->extra_service_amount, 'discount_amount' => 0];
+            }
+
+            // Before pricing exists, persist selection separately from commercial amounts.
+            $quote = $current
+                ? app(\App\Services\ExtraServiceQuoteCalculator::class)->replaceExtras($current, $lines) + ['snapshot_id' => $snapshot->id]
+                : ['draft_extra_service_ids' => array_column($lines, 'id')];
+
+            if (empty($data['preview']) && $quote != $previous) {
+                abort_unless(
+                    hash_equals(hash('sha256', $lockedLead->extra_service_quote ?? ''), $data['quote_version']),
+                    409,
+                    'The booking quote changed. Reload the lead before saving Extra Services.'
+                );
+                $lockedLead->forceFill(['extra_service_quote' => json_encode($quote, JSON_THROW_ON_ERROR)])->save();
+                app(\App\Services\ActivityAuditService::class)->record(
+                    'lead', 'extra_services_updated', $lockedLead, $previous ?? [], $quote
+                );
+            }
+
+            $approved = PaymentAuditTrail::whereIn('lead_followup_id', $lead->leadFollowups()->select('id'))
+                ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)->sum('paid_amount');
+            $quote['extra_services_total'] = array_sum(array_column($lines, 'original_amount'))
+                - array_sum(array_column($lines, 'discount_amount'));
+            $quote['outstanding_balance'] = isset($quote['total_amount'])
+                ? max(0, round($quote['total_amount'] - $approved, 2))
+                : null;
+            if (!$snapshot) {
+                $quote['extra_service_ids'] = $quote['draft_extra_service_ids'];
+            }
+
+            return $quote;
+        });
+
+        return $request->expectsJson() ? response()->json($quote)
+            : back()->with('success', 'Extra Services updated.');
+    }
+
+    public function updateLeadStatus(Request $request, Lead $lead)
+    {
+        abort_unless($request->user()?->userType?->user_type === UserType::OWNER, 403);
+        $unexpected = array_diff(array_keys($request->all()), ['_token', '_method', 'status', 'notes', 'next_followup_date']);
+        if ($unexpected) throw \Illuminate\Validation\ValidationException::withMessages(['status' => 'Only status, notes and next follow-up date may be changed here.']);
+        $data = $request->validate(['status' => ['required', Rule::in(app(LeadStatusTransitionService::class)->allowedManualStatuses($lead, $request->user()))],
+            'notes' => 'required|string|max:1000', 'next_followup_date' => 'nullable|date']);
+        if (!empty($data['next_followup_date'])) {
+            $data['next_followup_date'] = Carbon::parse($data['next_followup_date'])->format($request->expectsJson() ? 'Y-m-d H:i' : 'Y-m-d\TH:i');
+        }
+        $request->replace($data + ['pricing_action' => 'preserve']);
+        return $this->storeLeadFollowUp($request, $lead);
+    }
+
     public function storeLeadFollowUp(Request $request, Lead $lead)
     {
             $this->abortUnlessCanAccessLead($lead);
@@ -3343,7 +3401,7 @@ if ($preservePricing) {
         $isAcepointPayment = $request->payment_method === 'Acepoint Point Redeem';
         $isVendorPayment = $request->payment_method === 'Paid Directly to Vendor';
 
-        if ($isAjaxRequest) {
+        if ($isAjaxRequest && !in_array((int) $request->input('status'), [3, 4], true)) {
             // Simple validation for AJAX requests
             $validator = Validator::make($request->all(), [
                 'notes' => [
@@ -3394,7 +3452,7 @@ if ($preservePricing) {
                     },
                 ],
                 'status' => ['required', Rule::in(['keep', 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])],
-                'next_followup_date' => ['nullable', 'date_format:Y-m-d\TH:i'],
+                'next_followup_date' => ['nullable', $isAjaxRequest ? 'date_format:Y-m-d H:i' : 'date_format:Y-m-d\TH:i'],
                 'services' => [
                     'nullable',
                     'array',
@@ -3470,6 +3528,7 @@ if ($preservePricing) {
 
             if ($validator->fails()) {
                 // dd($validator->errors()->toArray());
+                if ($isAjaxRequest) return response()->json(['success' => false, 'message' => $validator->errors()->first(), 'errors' => $validator->errors()], 422);
                 return back()->withErrors($validator)->withInput();
             }
 
@@ -3506,7 +3565,7 @@ if ($preservePricing) {
         DB::beginTransaction();
         try {
             // Serialize note saves so Keep uses the current server-side status, not a stale form value.
-            Lead::whereKey($lead->id)->lockForUpdate()->firstOrFail();
+            $lockedLead = Lead::whereKey($lead->id)->lockForUpdate()->firstOrFail();
             $pricingSnapshot = $preservePricing
                 ? LeadFollowup::latestPricingSnapshot((string) $lead->id)
                 : null;
@@ -3585,6 +3644,21 @@ if ($preservePricing) {
                 $lead->update(array_merge($leadUpdates, ['updated_at' => now()]));
             }
 
+
+            if (!$preservePricing && !empty($services)
+                && in_array($role, UserType::SALES_ROLES, true)
+                && app(LeadStatusTransitionService::class)->hasApprovedPayment($lead)) {
+                $existingServiceIds = $this->normalizeIdList($lead->service_ids);
+                $submittedServiceIds = array_values(array_unique(array_map('strval', $services)));
+                sort($existingServiceIds);
+                sort($submittedServiceIds);
+
+                if ($existingServiceIds !== $submittedServiceIds) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'services' => 'Product and Service details are locked after payment approval.',
+                    ]);
+                }
+            }
 
             if (!$preservePricing && !empty($services)) {
                 $lead->update([
@@ -3739,11 +3813,18 @@ if ($preservePricing) {
             if ($preservePricing) {
                 if ($pricingSnapshot !== null) {
                     $services = $pricingSnapshot->service_ids_array;
-                    $extraServices = $pricingSnapshot->extra_service_ids_array;
-                    $serviceDetails = $pricingSnapshot->service_details_array;
-                    $calculatedServiceAmount = $pricingSnapshot->service_amount;
-                    $discountAmount = $pricingSnapshot->discount_amount;
-                    $totalAmount = $pricingSnapshot->total_amount;
+                    $savedQuote = json_decode($lockedLead->extra_service_quote ?? 'null', true);
+                    $isPaymentEntry = !$preserveStatus && in_array($statusToSave, [
+                        LeadFollowup::STATUS_FULL_PAYMENT_RECEIVED, LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
+                    ], true);
+                    $paymentPricing = $isPaymentEntry && ($savedQuote['snapshot_id'] ?? null) === $pricingSnapshot->id
+                        ? new LeadFollowup($savedQuote)
+                        : $pricingSnapshot;
+                    $extraServices = $paymentPricing->extra_service_ids_array;
+                    $serviceDetails = $paymentPricing->service_details_array;
+                    $calculatedServiceAmount = $paymentPricing->service_amount;
+                    $discountAmount = $paymentPricing->discount_amount;
+                    $totalAmount = $paymentPricing->total_amount;
                 } else {
                     $services = [];
                     $extraServices = [];
@@ -4015,6 +4096,15 @@ if ($preservePricing) {
                 ]);
             }
 
+            if ($preservePricing && $pricingSnapshot && $lockedLead->extra_service_quote) {
+                $currentExtraQuote = json_decode($lockedLead->extra_service_quote, true);
+                if (($currentExtraQuote['snapshot_id'] ?? null) === $pricingSnapshot->id
+                    && LeadFollowup::latestPricingSnapshot((string) $lead->id)?->id === $followup->id) {
+                    $currentExtraQuote['snapshot_id'] = $followup->id;
+                    $lockedLead->forceFill(['extra_service_quote' => json_encode($currentExtraQuote, JSON_THROW_ON_ERROR)])->save();
+                }
+            }
+
             DB::commit();
 
             if ($isAjaxRequest) {
@@ -4107,16 +4197,7 @@ if ($preservePricing) {
         $statusTransitionService = app(LeadStatusTransitionService::class);
         $currentRole = optional(auth()->user()?->userType)->user_type;
         $isSalesUser = in_array($currentRole, UserType::SALES_ROLES, true);
-        $allowedStatusOptions = $isSalesUser
-            ? $statusTransitionService->allowedSalesStatuses($lead)
-            : [
-                LeadFollowup::STATUS_ACTIVE,
-                LeadFollowup::STATUS_CANCELLED,
-                LeadFollowup::STATUS_FULL_PAYMENT_RECEIVED,
-                LeadFollowup::STATUS_PARTIAL_PAYMENT_RECEIVED,
-                LeadFollowup::STATUS_SALES_FOLLOW_UP,
-                LeadFollowup::STATUS_CLOSE_FOLLOW_UP,
-            ];
+        $allowedStatusOptions = $statusTransitionService->allowedManualStatuses($lead, auth()->user());
 
         $clientInfo = $leadFollowupData['clientInfo'];
         $followups = $leadFollowupData['followups'];
@@ -5481,6 +5562,7 @@ $this->abortUnlessRepresentativeInScope($staff ? $staff->id : null);
      */
     public function exportLeads(Request $request)
     {
+        $request->validate(['status' => ['nullable', Rule::in(array_merge(array_keys(LeadFollowup::statusLabels()), ['na', 'n/a']))]]);
         try {
             // Log incoming export filters for debugging
             // try {
@@ -5568,16 +5650,7 @@ $this->abortUnlessRepresentativeInScope($staff ? $staff->id : null);
 
             // Status filter (latest follow-up) - keep same behavior as index
             if ($request->filled('status')) {
-                $query->whereHas('leadFollowups', function ($q) use ($request) {
-                    $q->where('status', $request->status)
-                        ->whereIn('id', function ($subQuery) {
-                            $subQuery->select('id')
-                                ->from('lead_followups as lf1')
-                                ->whereColumn('lf1.lead_id', 'lead_followups.lead_id')
-                                ->orderBy('lf1.created_at', 'desc')
-                                ->limit(1);
-                        });
-                });
+                app(LeadStatusTransitionService::class)->filterLatestActivity($query, (string) $request->status);
             }
 
             // Exclude DNP (Call Not Connected) by service id if not explicitly filtering by service
@@ -5897,6 +5970,34 @@ $this->abortUnlessRepresentativeInScope($staff ? $staff->id : null);
             
 $actor = $request->user();
 $actor->loadMissing('userType');
+
+if ($actor->userType?->user_type === UserType::OWNER) {
+    abort_unless($request->input('workspace_section') === 'services-details-editor', 403);
+    $data = $request->validate([
+        'product_ids' => 'required|array|min:1',
+        'product_ids.*' => 'required|uuid|distinct|exists:products,id',
+        'service_ids' => 'nullable|array',
+        'service_ids.*' => 'required|uuid|distinct|exists:services,id',
+    ]);
+    DB::transaction(function () use ($lead, $data) {
+        $locked = Lead::whereKey($lead->id)->lockForUpdate()->firstOrFail();
+        $before = $locked->only(['product_ids', 'service_ids']);
+        $locked->fill([
+            'product_ids' => array_values($data['product_ids']),
+            'service_ids' => array_values($data['service_ids'] ?? []),
+        ]);
+        if ($locked->isDirty(['product_ids', 'service_ids'])) {
+            $locked->save();
+            app(\App\Services\ActivityAuditService::class)->record(
+                'lead', 'product_services_updated', $locked, $before,
+                $locked->only(['product_ids', 'service_ids'])
+            );
+        }
+    });
+    return redirect()->route('admin.leads.follow-up.create', $lead)
+        ->with('success', 'Product and Service details updated.')
+        ->with('workspace_section', 'services-details-editor');
+}
 
 $isSales = in_array(
     $actor->userType?->user_type,
@@ -6811,86 +6912,33 @@ public function destroyLead(Lead $lead)
 
     public function getDnpLeads(Request $request)
     {
-        $currentUser = auth()->user();
-        $representatives = getRepresentativeIds($currentUser);
-        $service = Service::where('service', 'Call Not Connected')->first();
-
-        if ($service) {
-            $query = Lead::with(['client', 'representative'])
-                ->whereRaw("
-                replace(trim(both '\"' from service_ids::text), '\\', '') LIKE ?
-                ", ['%' . $service->id . '%']);
-
-            if ($request->filled('from_date')) {
-                $fromDate = Carbon::parse($request->from_date)->startOfDay();
-                $query->whereHas('rideSegments', function ($q) use ($fromDate) {
-                    $q->where('from_date', '>=', $fromDate);
-                });
-            }
-            if ($request->filled('to_date')) {
-                $toDate = Carbon::parse($request->to_date)->endOfDay();
-                $query->whereHas('rideSegments', function ($q) use ($toDate) {
-                    $q->where('to_date', '<=', $toDate);
-                });
-            }
-            if ($request->filled('name')) {
-                $query->whereHas('client', function ($q) use ($request) {
-                    $q->where('name', 'like', '%' . $request->name . '%');
-                });
-            }
-
-            if ($request->filled('email')) {
-                $query->whereHas('client', function ($q) use ($request) {
-                    $q->where('email', 'like', '%' . $request->email . '%');
-                });
-            }
-
-            if ($request->filled('phone')) {
-                $query->whereHas('client', function ($q) use ($request) {
-                    $q->where('contact_number', 'like', '%' . $request->phone . '%');
-                });
-            }
-
-            // If the user selected a specific staff representative, apply that filter
-            if ($request->filled('representative_user_id')) {
-                $repId = $request->input('representative_user_id');
-
-                if (!$this->isUnassignedRepresentativeFilter($repId)) {
-                $this->abortUnlessRepresentativeInScope($repId);
-                }
-                // Ensure the selected rep is allowed within the current user's hierarchy when applicable
-                if (is_array($representatives) && !empty($representatives)) {
-                    if (in_array($repId, $representatives)) {
-                        $query->where('representative_user_id', $repId);
-                    } else {
-                        // Selected rep is outside user's allowed scope - return empty
-                        $dnpLeads = collect();
-                        $services = Service::all()->where('status', 1);
-                        $staff = $this->getUsersInHierarchy();
-
-                        return $this->dnpQueueView($dnpLeads, $services, $staff);
-                    }
-                } else {
-                    // No representative scope, just filter by selection
-                    $query->where('representative_user_id', $repId);
-                }
-            } else {
-                if ($representatives) {
-                    $query->whereIn('representative_user_id', $representatives);
-                }
-            }
-
-            $dnpLeads = $query->get();
-        } else {
-            $dnpLeads = collect();
+        $scope = getRepresentativeIds(auth()->user());
+        $dnp = app(\App\Services\DnpCancellationService::class);
+        $query = $dnp->listingQuery();
+        if ($scope !== null) {
+            $query->whereIn('representative_user_id', collect($scope)->all());
         }
-
-        $services = Service::all()->where('status', 1);
+        if ($request->filled('representative_user_id')) {
+            $this->abortUnlessRepresentativeInScope($request->representative_user_id);
+            $query->where('representative_user_id', $request->representative_user_id);
+        }
+        foreach (['from_date' => '>=', 'to_date' => '<='] as $field => $operator) {
+            if ($request->filled($field)) {
+                $boundary = Carbon::parse($request->input($field));
+                $boundary = $field === 'from_date' ? $boundary->startOfDay() : $boundary->endOfDay();
+                $query->whereHas('rideSegments', fn ($rides) => $rides->where('from_date', $operator, $boundary));
+            }
+        }
+        foreach (['name' => 'name', 'email' => 'email', 'phone' => 'contact_number'] as $field => $column) {
+            if ($request->filled($field)) {
+                $query->whereHas('client', fn ($clients) => $clients->where($column, 'like', '%'.$request->input($field).'%'));
+            }
+        }
+        $dnpLeads = $query->get()->filter(fn ($lead) => $dnp->visible($lead))->values();
+        $services = Service::where('status', 1)->get();
         $staff = $this->getUsersInHierarchy();
-
         return $this->dnpQueueView($dnpLeads, $services, $staff);
     }
-
     private function dnpQueueView($dnpLeads, $services, $staff)
     {
         $leads = new \Illuminate\Database\Eloquent\Collection($dnpLeads->all());
@@ -7018,7 +7066,7 @@ public function searchClients(Request $request)
     $page = (int) ($data['page'] ?? 1);
     $limit = 20;
 
-    $clients = Client::query()
+    $clients = $this->applyClientDirectoryScope(Client::query())
         ->where('status', 1)
         ->where(function ($query) use ($term) {
             $like = '%' . $term . '%';
@@ -7075,7 +7123,6 @@ private function findClientsByPhone(
     return Client::query()
         ->whereRaw("{$expression} = ?", [$normalized])
         ->orderBy('id')
-        ->limit(2)
         ->get();
 }
 
@@ -7119,23 +7166,26 @@ private function resolveCityId(
         ]);
     }
 
-    $existing = City::query()
-        ->where('country_id', $countryId)
-        ->whereRaw('LOWER(name) = LOWER(?)', [$name])
-        ->first();
+    return DB::transaction(function () use ($countryId, $name) {
+        Country::query()->whereKey($countryId)->lockForUpdate()->firstOrFail();
+        $existing = City::query()
+            ->where('country_id', $countryId)
+            ->whereRaw('LOWER(name) = LOWER(?)', [$name])
+            ->first();
 
-    if ($existing) {
-        return $existing->id;
-    }
+        if ($existing) {
+            return $existing->id;
+        }
 
-    $city = City::create([
-        'id' => (string) Str::uuid(),
-        'country_id' => $countryId,
-        'name' => mb_convert_case($name, MB_CASE_TITLE, 'UTF-8'),
-        'status' => 1,
-    ]);
+        $city = City::create([
+            'id' => (string) Str::uuid(),
+            'country_id' => $countryId,
+            'name' => mb_convert_case($name, MB_CASE_TITLE, 'UTF-8'),
+            'status' => 1,
+        ]);
 
-    return $city->id;
+        return $city->id;
+    });
 }
 
 }

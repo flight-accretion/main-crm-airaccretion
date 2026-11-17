@@ -37,18 +37,27 @@ class ExceptionalController extends Controller
                 $query->where('created_at', '<=', Carbon::parse($toDate)->endOfDay());
             }
 
-            $allPayments = $query->orderBy('created_at', 'desc')->get();
-            
-            $addedToSalesCount = $allPayments
-                ->filter(fn ($followup) => (bool) $followup->added_to_sales)
-                ->pluck('lead_id')
-                ->filter()
-                ->unique()
-                ->count();
+            $addedToSalesCount = (clone $query)->where('added_to_sales', true)
+                ->distinct()->count('lead_id');
+
+            // Dates select active bookings, not fragments of their financial history.
+            // Retain prior pricing/payment rows and exclude revisions after the selected end date.
+            $history = LeadFollowup::with(['enquiry.client', 'enquiry.rideSegments'])
+                ->whereIn('lead_id', (clone $query)->select('lead_id'));
+            if ($toDate) {
+                $history->where('created_at', '<=', Carbon::parse($toDate)->endOfDay());
+            }
+            $allPayments = $history->orderByDesc('created_at')->orderByDesc('id')->get();
+
+            $auditsByFollowup = PaymentAuditTrail::whereIn('lead_followup_id', $allPayments->pluck('id'))
+                ->get(['lead_followup_id', 'paid_amount', 'payment_status'])
+                ->groupBy('lead_followup_id');
+            $refundsByFollowup = \App\Models\LeadRefund::whereIn('lead_followup_id', $allPayments->pluck('id'))
+                ->get()->keyBy('lead_followup_id');
 
             $payments = $allPayments
                 ->groupBy('lead_id')
-                ->map(function ($group) {
+                ->map(function ($group) use ($auditsByFollowup, $refundsByFollowup) {
                     $sortedGroup = $group->sortByDesc('created_at')->values();
                     $latest = $sortedGroup->first();
                     $client = $latest->enquiry->client ?? null;
@@ -67,16 +76,15 @@ class ExceptionalController extends Controller
                     });
 
                     // Get approved received amount too (for reference)
-                    $approvedPayments = PaymentAuditTrail::whereIn('lead_followup_id', $group->pluck('id'))
-                        ->where('payment_status', PaymentAuditTrail::STATUS_APPROVED)
-                        ->get();
+                    $audits = $group->flatMap(fn ($followup) => $auditsByFollowup->get($followup->id, collect()));
+                    $approvedPayments = $audits->where('payment_status', PaymentAuditTrail::STATUS_APPROVED);
                     $totalReceivedApproved = $approvedPayments->sum('paid_amount');
 
                     // Prefer approved audit total; fallback to received_amount sum for older data.
-                    $effectiveReceived = $totalReceivedApproved > 0 ? (float) $totalReceivedApproved : $totalReceivedFromFollowups;
+                    $effectiveReceived = $audits->isNotEmpty() ? (float) $totalReceivedApproved : $totalReceivedFromFollowups;
 
                     // Check if a refund note already exists for the effective total followup
-                    $existingRefund = \App\Models\LeadRefund::where('lead_followup_id', $effectiveTotalFollowup->id)->first();
+                    $existingRefund = $refundsByFollowup->get($effectiveTotalFollowup->id);
 
                     return (object) [
                         'followup_id' => $effectiveTotalFollowup->id,
@@ -333,7 +341,8 @@ class ExceptionalController extends Controller
             $followupReceivedSum = LeadFollowup::whereIn('id', $allFollowupIds)->sum('received_amount');
 
             // Mirror index(): prefer approved audit total; fall back to followup sum for older data
-            $effectiveReceived = $approvedTotal > 0 ? (float) $approvedTotal : (float) $followupReceivedSum;
+            $hasAudits = PaymentAuditTrail::whereIn('lead_followup_id', $allFollowupIds)->exists();
+            $effectiveReceived = $hasAudits ? (float) $approvedTotal : (float) $followupReceivedSum;
 
             $extraAmount = $effectiveReceived - $oldTotal;   // e.g. ₹31k - ₹26.5k = ₹4.5k
 

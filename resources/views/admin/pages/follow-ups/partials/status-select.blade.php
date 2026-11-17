@@ -2,10 +2,12 @@
     $currentLeadFollowup =
         $followups->first();
 
-    $currentLeadStatusLabel =
-        $currentLeadFollowup
-            ? $currentLeadFollowup->statusLabel()
-            : 'Initiated';
+    $statusLead = $lead ?? $currentLeadFollowup?->enquiry;
+    $currentLeadStatusLabel = $statusLead
+        ? (\App\Models\LeadFollowup::statusLabels()[
+            app(\App\Services\LeadStatusTransitionService::class)->displayedBusinessStatus($statusLead)
+        ] ?? 'Initiated')
+        : 'Initiated';
 
     /*
      * "keep" remains the internal default.
@@ -109,5 +111,6 @@
 )
     <p class="text-xs text-gray-500 mt-2">
         Active and Cancelled are unavailable because a payment has already been approved.
+        Full/Partial Payment Received records a new payment attempt and requires payment details; it does not approve a payment.
     </p>
 @endif

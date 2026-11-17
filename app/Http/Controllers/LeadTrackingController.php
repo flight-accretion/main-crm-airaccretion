@@ -110,7 +110,7 @@ class LeadTrackingController extends Controller
                 // Name filter: search by client name
                 if ($request->filled('name')) {
                     $query->whereHas('client', function ($q) use ($request) {
-                        $q->where('name', 'like', '%' . $request->name . '%');
+                        $q->where('name', 'ilike', '%' . $request->name . '%');
                     });
                 }
 

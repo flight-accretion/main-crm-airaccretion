@@ -82,6 +82,16 @@ class ReviewQueueTest extends KpiFeatureTestCase
         $this->assertSame(0, $empty['summary']['all']); $this->assertSame(null, $empty['summary']['average_days']);
     }
 
+    public function test_completed_status_without_timestamp_is_not_an_open_review(): void
+    {
+        $case = $this->case(['status' => 'completed', 'completed_at' => null]);
+        $this->conversation($case, ['initial_message_sent_at' => now()]);
+        $data = app(OperationsDashboardController::class)->queue($this->request(), 'review')->getData();
+        $this->assertSame(0, $data['cases']->total());
+        $this->assertSame(0, $data['summary']['all']);
+        $this->assertSame(0, $data['summary']['waiting']);
+    }
+
     public function test_review_claim_cannot_take_another_assignment_and_does_not_change_sales_owner(): void
     {
         $case = $this->case(['assigned_to' => $this->other->id]);

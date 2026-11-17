@@ -31,7 +31,7 @@ class Msg91Client
         try {
             $response = Http::acceptJson()->asJson()
                 ->withHeaders(['authkey' => $authKey])
-                ->withOptions(['connect_timeout' => (int) config('services.msg91_campaigns.connect_timeout', 10)])
+                ->withOptions(['allow_redirects' => false, 'connect_timeout' => (int) config('services.msg91_campaigns.connect_timeout', 10)])
                 ->timeout((int) config('services.msg91_campaigns.timeout', 30))
                 ->post(rtrim((string) config('services.msg91_campaigns.template_create_url'), '/') . '/api/v5/whatsapp/client-panel-template/', $payload);
         } catch (ConnectionException $exception) {
@@ -109,7 +109,7 @@ if (!$response->successful()) {
 
     // Never delete a real MSG91 template while dry-run mode is enabled.
     if ((bool) config('services.msg91_campaigns.dry_run', true)) {
-        return;
+        throw new RuntimeException('Dry run: no provider deletion was performed.');
     }
 
     $url = rtrim((string) config('services.msg91_campaigns.control_url'), '/')
@@ -126,6 +126,7 @@ if (!$response->successful()) {
                 'Content-Type' => 'application/json',
             ])
             ->withOptions([
+                'allow_redirects' => false,
                 'connect_timeout' => (int) config(
                     'services.msg91_campaigns.connect_timeout',
                     10
@@ -141,24 +142,7 @@ if (!$response->successful()) {
         );
     }
 
-    // Idempotent retry: template is already absent from MSG91.
-    if ($response->status() === 404) {
-        return;
-    }
-
     $body = $response->json() ?: [];
-
-    // MSG91 reports an already-absent template as HTTP 400. Treat that exact
-    // provider response as an idempotent success so stale CRM records can be
-    // cleaned up without leaving provider/CRM state mismatched.
-    $providerError = data_get($body, 'errors');
-    if (
-        $response->status() === 400
-        && is_string($providerError)
-        && stripos($providerError, "Template doesn't exist in our database") !== false
-    ) {
-        return;
-    }
 
     if (!$response->successful()) {
         throw new Msg91ProviderException(
@@ -172,7 +156,7 @@ if (!$response->successful()) {
 
     if (
         data_get($body, 'hasError') === true
-        || strtolower((string) data_get($body, 'status')) === 'error'
+        || !in_array(strtolower((string) data_get($body, 'status')), ['success', 'ok'], true)
     ) {
         throw new Msg91ProviderException(
             'MSG91 rejected the template deletion.',
@@ -196,7 +180,7 @@ if (!$response->successful()) {
         try {
             $response = Http::acceptJson()
                 ->withHeaders(['authkey' => $authKey])
-                ->withOptions(['connect_timeout' => (int) config('services.msg91_campaigns.connect_timeout', 10)])
+                ->withOptions(['allow_redirects' => false, 'connect_timeout' => (int) config('services.msg91_campaigns.connect_timeout', 10)])
                 ->timeout((int) config('services.msg91_campaigns.timeout', 30))
                 ->get(rtrim((string) config('services.msg91_campaigns.control_url'), '/') . '/api/v5/whatsapp/get-template-client/' . rawurlencode($integratedNumber));
         } catch (ConnectionException $exception) {
@@ -208,9 +192,17 @@ if (!$response->successful()) {
         }
 
         $body = $response->json() ?: [];
-        $templates = data_get($body, 'data.templates', data_get($body, 'data', data_get($body, 'templates', [])));
-        if (!is_array($templates)) {
+        if (data_get($body, 'hasError') === true || in_array(strtolower((string) data_get($body, 'status')), ['error', 'fail', 'failed'], true)
+            || data_get($body, 'has_more') || data_get($body, 'pagination.has_more') || data_get($body, 'data.has_more')
+            || data_get($body, 'hasMore') || data_get($body, 'pagination.next') || data_get($body, 'next_cursor')) {
+            throw new RuntimeException('MSG91 template list is rejected or incomplete.');
+        }
+        $templates = data_get($body, 'data.templates', data_get($body, 'data', data_get($body, 'templates')));
+        if (!is_array($templates) || !array_is_list($templates) || count($templates) > 10000) {
             throw new RuntimeException('MSG91 template sync returned an unexpected response.');
+        }
+        if ((int) data_get($body, 'pagination.total', count($templates)) > count($templates)) {
+            throw new RuntimeException('MSG91 template list is paginated and incomplete.');
         }
 
         return $templates;

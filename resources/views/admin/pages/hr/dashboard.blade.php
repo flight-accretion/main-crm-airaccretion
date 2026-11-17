@@ -155,8 +155,8 @@
                                 @endif
                                 @if($department === 'operations')
                                     <th scope="col" class="hr-num">Pending tasks</th>
-                                    <th scope="col" class="hr-num">Review</th>
-                                    <th scope="col" class="hr-num">Vendor follow-up</th>
+                                    <th scope="col" class="hr-num">Reviews completed</th>
+                                    <th scope="col" class="hr-num">Vendor follow-ups completed</th>
                                 @endif
                                 <th scope="col">Attendance</th>
                             </tr></thead>

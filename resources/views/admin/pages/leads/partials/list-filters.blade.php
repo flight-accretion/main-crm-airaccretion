@@ -40,12 +40,26 @@
                         {{ $user->name }}
                 </option>@endforeach
             </select></label>
-        <label><span class="sr-only">Status</span><select name="status" id="status-filter">
-                <option value="">All statuses</option>
-                <option value="na" @if(in_array(strtolower((string) request('status')), ['na', 'n/a'], true)) selected
-                @endif>N/A</option>@foreach($statusOptions as $value => $label)
-                    <option value="{{ $value }}" @if((string) request('status') !== '' && (string) request('status') === (string) $value) selected @endif>{{ $label }}</option>@endforeach
-            </select></label>
+        
+            <label>
+                <span class="sr-only">Status</span>
+
+                <select name="status" id="status-filter">
+                    <option value="">All statuses</option>
+
+                    @foreach($statusOptions as $value => $label)
+                        <option
+                            value="{{ $value }}"
+                            {{ (string) request('status') === (string) $value
+                                ? 'selected'
+                                : '' }}
+                        >
+                            {{ $label }}
+                        </option>
+                    @endforeach
+                </select>
+            </label>
+
     </div>
     <div class="leads-date-row">
         <div class="leads-date-tabs" aria-label="Date filter type">

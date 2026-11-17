@@ -156,13 +156,49 @@ document.addEventListener('DOMContentLoaded', function() {
         utilsScript: "https://cdn.jsdelivr.net/npm/intl-tel-input@25.3.1/build/js/utils.js"
     });
 
-    // Copy contact number to WhatsApp if empty
-    phoneInput.addEventListener('blur', function() {
-        if (phoneInput.value && !whatsappInput.value) {
-            whatsappInput.value = phoneInput.value;
-            itiWhatsapp.setNumber(phoneInput.value);
+ 
+    // Auto-sync Phone to WhatsApp while user is typing.
+    // Never overwrite a WhatsApp number manually entered by the user.
+    let whatsappManuallyEdited = whatsappInput.value.trim() !== '';
+
+    function syncPhoneToWhatsapp() {
+        if (whatsappManuallyEdited) {
+            return;
         }
+
+        const phoneNumber = phoneInput.value.trim();
+        const phoneCountry = itiPhone.getSelectedCountryData();
+
+        // Match the Phone country code.
+        if (phoneCountry?.iso2 &&
+            itiWhatsapp.getSelectedCountryData()?.iso2 !== phoneCountry.iso2) {
+            itiWhatsapp.setCountry(phoneCountry.iso2);
+        }
+
+        whatsappInput.value = phoneNumber;
+
+        if (phoneCountry?.dialCode) {
+            whatsappCodeInput.value = '+' + phoneCountry.dialCode;
+        }
+    }
+
+    // A manual change takes priority over automatic syncing.
+    whatsappInput.addEventListener('input', function () {
+        whatsappManuallyEdited = true;
     });
+
+    // Update as the phone number is typed, pasted or edited.
+    phoneInput.addEventListener('input', syncPhoneToWhatsapp);
+
+    // Also update when the phone country flag/code changes.
+    phoneInput.addEventListener('countrychange', syncPhoneToWhatsapp);
+
+    // Preserve autofill when leaving the phone field.
+    phoneInput.addEventListener('blur', syncPhoneToWhatsapp);
+
+    // Initialize the WhatsApp field for a fresh form.
+    syncPhoneToWhatsapp();
+
 
     // Form submission handler
     const form = document.querySelector('form.ti-custom-validation');

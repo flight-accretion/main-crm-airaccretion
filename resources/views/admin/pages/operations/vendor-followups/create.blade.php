@@ -12,7 +12,14 @@
                 <div class="vf-form-grid">
                     <div><label>Vendor <span aria-hidden="true">*</span><select name="vendor_id" required><option value="">Select vendor</option>@foreach($vendors as $vendor)<option value="{{ $vendor->id }}" data-phone="{{ $vendor->contact_number }}" {{ old('vendor_id') === $vendor->id ? 'selected' : '' }}>{{ $vendor->name }}</option>@endforeach</select></label><div class="vf-vendor-contact" id="vf-vendor-contact" hidden><strong data-vendor-name></strong><small data-vendor-phone></small></div></div>
                     <label>Assigned to<select name="assigned_to"><option value="">Me - {{ auth()->user()->name }}</option>@foreach($operationUsers as $user)<option value="{{ $user->id }}" {{ old('assigned_to') === $user->id ? 'selected' : '' }}>{{ $user->name }}</option>@endforeach</select></label>
-                    <label class="vf-full">Purpose<input type="text" name="purpose" value="{{ old('purpose', 'Confirm Ride Date & Time') }}" maxlength="255"></label>
+                    <label class="vf-full">Purpose
+                        <select name="purpose" required>
+                            <option value="">Select purpose</option>
+                            @foreach (\App\Services\Operations\VendorFollowupService::PURPOSES as $purpose)
+                                <option value="{{ $purpose }}" {{ old('purpose') === $purpose ? 'selected' : '' }}>{{ $purpose }}</option>
+                            @endforeach
+                        </select>
+                    </label>
                     <label>Tentative ride date &amp; time<input type="datetime-local" name="tentative_ride_at" value="{{ old('tentative_ride_at', $tentativeRideAt?->format('Y-m-d\TH:i')) }}"></label>
                     <div><label>Follow-up date <span aria-hidden="true">*</span><input type="date" name="followup_date" required min="{{ now()->toDateString() }}" value="{{ old('followup_date', $suggestedFollowupDate->toDateString()) }}"></label><div class="vf-quick-dates" role="group" aria-label="Follow-up date">@foreach([0 => 'Today', 1 => 'Tomorrow', 3 => '+3 days', 7 => '+7 days'] as $offset => $label)<button type="button" data-date-offset="{{ $offset }}" aria-pressed="false">{{ $label }}</button>@endforeach</div></div>
                     <label class="vf-full">Remarks<textarea name="remarks" maxlength="5000" rows="5">{{ old('remarks') }}</textarea></label>

@@ -2,8 +2,6 @@
 
 namespace App\Exports;
 
-use App\Models\Lead;
-use App\Models\Service;
 use App\Support\PhoneNormalizer;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
@@ -14,6 +12,7 @@ use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
+use function App\Helpers\getRepresentativeIds;
 
 class DnpLeadsExport implements FromCollection, WithHeadings, WithMapping, WithStyles, WithEvents
 {
@@ -26,13 +25,12 @@ class DnpLeadsExport implements FromCollection, WithHeadings, WithMapping, WithS
 
     public function collection()
     {
-        $service = Service::where('service', 'Call Not Connected')->first();
-        if (!$service) {
-            return collect();
+        $dnp = app(\App\Services\DnpCancellationService::class);
+        $query = $dnp->listingQuery();
+        $scope = getRepresentativeIds(auth()->user());
+        if ($scope !== null) {
+            $query->whereIn('representative_user_id', collect($scope)->all());
         }
-
-        $query = Lead::with(['client', 'representative'])
-            ->whereRaw("replace(trim(both '\"' from service_ids::text), '\\', '') LIKE ?", ['%' . $service->id . '%']);
 
         // apply same filters as controller
         if (!empty($this->filters['from_date'])) {
@@ -75,7 +73,7 @@ class DnpLeadsExport implements FromCollection, WithHeadings, WithMapping, WithS
             $query->whereIn('id', $ids);
         }
 
-        $dnpLeads = $query->get();
+        $dnpLeads = $query->get()->filter(fn ($lead) => $dnp->visible($lead))->values();
 
         // transform to collection of arrays
         $export = $dnpLeads->map(function ($enquiry, $index) {
@@ -93,6 +91,8 @@ class DnpLeadsExport implements FromCollection, WithHeadings, WithMapping, WithS
 
             return [
                 'sno' => $index + 1,
+                'lead_id' => $enquiry->id,
+                'status' => app(\App\Services\LeadStatusTransitionService::class)->displayedBusinessStatus($enquiry) === \App\Models\LeadFollowup::STATUS_CANCELLED ? 'Cancelled' : 'DNP',
                 'name' => $enquiry->client->name ?? 'N/A',
                 'email' => $enquiry->client->email ?? 'N/A',
                 'phone' => ($enquiry->client->contact_number ?? '') !== '' ? PhoneNormalizer::digits($enquiry->client->contact_number) : 'N/A',
@@ -117,6 +117,7 @@ class DnpLeadsExport implements FromCollection, WithHeadings, WithMapping, WithS
             'Created Date',
             'Assigned',
             'Services',
+            'Status',
         ];
     }
 
@@ -131,6 +132,7 @@ class DnpLeadsExport implements FromCollection, WithHeadings, WithMapping, WithS
             $row['created_date'],
             $row['assigned'],
             Str::limit($row['services'], 100),
+            $row['status'],
         ];
     }
 
@@ -147,7 +149,7 @@ class DnpLeadsExport implements FromCollection, WithHeadings, WithMapping, WithS
             AfterSheet::class => function (AfterSheet $event) {
                 $sheet = $event->sheet->getDelegate();
                 $highestRow = $sheet->getHighestRow();
-                $sheet->getStyle('A1:H1')->applyFromArray([
+                $sheet->getStyle('A1:I1')->applyFromArray([
                     'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
                     'fill' => [
                         'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
@@ -163,6 +165,7 @@ class DnpLeadsExport implements FromCollection, WithHeadings, WithMapping, WithS
                 $sheet->getColumnDimension('F')->setWidth(15);  // Created Date
                 $sheet->getColumnDimension('G')->setWidth(20);  // Assigned
                 $sheet->getColumnDimension('H')->setWidth(40);  // Services
+                $sheet->getColumnDimension('I')->setWidth(18);  // Status
 
                 // Alignments
                 $highestRow = $sheet->getHighestRow();

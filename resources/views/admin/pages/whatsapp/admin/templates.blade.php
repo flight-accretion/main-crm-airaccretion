@@ -177,7 +177,7 @@
 
             <div class="msg91-sync-list">
 
-                @forelse($senders as $sender)
+                 @forelse($senderDirectory as $sender)
 
                     <div class="msg91-sync-row">
 
@@ -195,6 +195,7 @@
                                 <strong>
 
                                     {{ $sender->integrated_number }}
+                                    <small>Template sync: {{ $sender->template_sync_status }}@if($sender->template_sync_error) — {{ $sender->template_sync_error }}@endif</small>
 
                                 </strong>
 
@@ -204,6 +205,20 @@
                                     {{ $sender->user?->name ?? 'Unknown user' }}
 
                                 </span>
+
+                                @if($sender->isVerifiedActive())
+                            <small style="display:block;color:#16803c;font-weight:600;">
+                                Verified — Ready to Sync
+                            </small>
+                            @elseif($sender->verified_at !== null)
+                                <small style="display:block;color:#b45309;font-weight:600;">
+                                    Verification Expired — Refresh Sender Status
+                                </small>
+                            @else
+                                <small style="display:block;color:#dc2626;font-weight:600;">
+                                    Not Verified — Refresh Sender Status
+                                </small>
+                            @endif
 
                             </div>
 
@@ -218,7 +233,7 @@
                             @csrf
 
 
-                            <button
+                            <!-- <button
                                 class="msg91-button msg91-button--secondary"
                                 type="submit"
                             >
@@ -227,7 +242,24 @@
 
                                 Refresh Now
 
-                            </button>
+                            </button> -->
+                           
+                        <button
+                            class="msg91-button msg91-button--secondary"
+                            type="submit"
+                            title="{{ $sender->isVerifiedActive()
+                                ? 'Refresh MSG91 templates'
+                                : 'Verify this sender from Sender Access first' }}"
+                            {{ $sender->isVerifiedActive() ? '' : 'disabled' }}
+                        >
+                            <i class="ri-refresh-line"></i>
+
+                            @if($sender->isVerifiedActive())
+                                Refresh Now
+                            @else
+                                Verification Required
+                            @endif
+                        </button>
 
                         </form>
 
@@ -692,6 +724,7 @@
                                 data-msg91-open-delete-modal
                                 data-template-id="{{ $template->id }}"
                                 data-template-name="{{ $template->name }}"
+                                data-sender-count="{{ $template->bindings->pluck('sender_id')->unique()->count() }}"
                                 data-delete-url="{{ route('admin.msg91.templates.destroy', $template) }}"
                             >
                                 <i class="ri-delete-bin-line"></i>
@@ -936,6 +969,7 @@
                         data-msg91-open-delete-modal
                         data-template-id="{{ $template->id }}"
                         data-template-name="{{ $template->name }}"
+                                data-sender-count="{{ $template->bindings->pluck('sender_id')->unique()->count() }}"
                         data-delete-url="{{ route('admin.msg91.templates.destroy', $template) }}"
                     >
                         <i class="ri-delete-bin-line"></i>
@@ -1938,6 +1972,7 @@
                         <span>
                             You are deleting:
                             <strong data-msg91-delete-template-name></strong>
+                            across <strong data-msg91-delete-sender-count></strong> sender(s).
                         </span>
                     </div>
 
@@ -1987,6 +2022,7 @@
 document.addEventListener(
     'DOMContentLoaded',
     function () {
+        let lastModalTrigger = null;
 
         /*
         |--------------------------------------------------------------------------
@@ -1997,6 +2033,7 @@ document.addEventListener(
         function openModal(
             modalId
         ) {
+            lastModalTrigger = document.activeElement;
 
             const modal =
                 document.getElementById(
@@ -2027,7 +2064,7 @@ document.addEventListener(
 
             const firstInput =
                 modal.querySelector(
-                    'input:not([type="hidden"]), select, textarea'
+                    'input:not([type="hidden"]), select, textarea, button:not([disabled])'
                 );
 
 
@@ -2061,6 +2098,7 @@ document.addEventListener(
     }
 
     modal.classList.remove('is-open');
+    lastModalTrigger?.focus();
 
     modal.setAttribute(
         'aria-hidden',
@@ -2371,6 +2409,7 @@ if (deleteTemplateModal) {
     const deleteTemplateName = deleteTemplateModal.querySelector(
         '[data-msg91-delete-template-name]'
     );
+    const deleteSenderCount = deleteTemplateModal.querySelector('[data-msg91-delete-sender-count]');
 
     const deleteSubmitButton = deleteTemplateModal.querySelector(
         '[data-msg91-delete-submit]'
@@ -2427,6 +2466,7 @@ if (deleteTemplateModal) {
 
         deleteTemplateForm.action = button.dataset.deleteUrl;
         deleteTemplateName.textContent = button.dataset.templateName;
+        deleteSenderCount.textContent = button.dataset.senderCount || '0';
         deleteFeedback.hidden = true;
 
         openModal('msg91-delete-template-modal');
@@ -2474,6 +2514,7 @@ if (deleteTemplateModal) {
                 if (!result.ok) {
                     throw new Error(
                         result.payload.message
+                        || Object.values(result.payload.errors || {}).flat().join(' ')
                         || 'Template could not be deleted. Please try again.'
                     );
                 }
@@ -2510,6 +2551,17 @@ if (deleteTemplateModal) {
             });
     });
 }
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key !== 'Tab') return;
+            const modal = document.querySelector('.msg91-modal.is-open');
+            if (!modal) return;
+            const controls = Array.from(modal.querySelectorAll('button:not([disabled]), input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href]')).filter(node => node.getClientRects().length);
+            if (!controls.length) return;
+            const first = controls[0], last = controls[controls.length - 1];
+            if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+        });
 
         /*
         |--------------------------------------------------------------------------

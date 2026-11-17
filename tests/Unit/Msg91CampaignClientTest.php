@@ -72,17 +72,19 @@ class Msg91CampaignClientTest extends TestCase
         });
     }
 
-    public function test_template_deletion_uses_query_parameters_and_treats_missing_template_as_already_deleted(): void
+    public function test_template_deletion_uses_query_parameters_but_generic_404_does_not_prove_absence(): void
     {
         config()->set('services.msg91_campaigns.template_create_enabled', true);
         Http::fake([
             '*' => Http::response([], 404),
         ]);
 
-        app(Msg91Client::class)->deleteTemplate(
-            '919876543210',
-            'follow up & reminders'
-        );
+        try {
+            app(Msg91Client::class)->deleteTemplate('919876543210', 'follow up & reminders');
+            $this->fail('Generic 404 must not imply successful deletion.');
+        } catch (\App\Services\WhatsApp\Msg91\Msg91ProviderException $exception) {
+            $this->assertSame(404, $exception->httpStatus);
+        }
 
         Http::assertSent(function ($request) {
             return $request->method() === 'DELETE'
@@ -103,7 +105,7 @@ class Msg91CampaignClientTest extends TestCase
             $this->assertSame('Template cannot be deleted while pending approval.', data_get($exception->payload, 'message'));
         }
     }
-    public function test_template_deletion_treats_msg91_already_missing_template_as_success(): void
+    public function test_provider_sync_database_400_is_not_proof_of_actual_template_absence(): void
     {
         config()->set('services.msg91_campaigns.template_create_enabled', true);
         Http::fake(['*' => Http::response([
@@ -112,8 +114,41 @@ class Msg91CampaignClientTest extends TestCase
             'errors' => "Template doesn't exist in our database, please use 'Sync template' option before trying again",
         ], 400)]);
 
-        app(Msg91Client::class)->deleteTemplate('919575303162', 'xyz');
+        try {
+            app(Msg91Client::class)->deleteTemplate('12025550101', 'qa_template');
+            $this->fail('A provider sync instruction is not a deletion confirmation.');
+        } catch (\App\Services\WhatsApp\Msg91\Msg91ProviderException $exception) {
+            $this->assertSame(400, $exception->httpStatus);
+        }
 
         Http::assertSent(fn ($request) => $request->method() === 'DELETE');
+    }
+
+    public function test_dry_run_cannot_be_reported_as_completed_provider_deletion(): void
+    {
+        config(['services.msg91_campaigns.template_create_enabled' => true, 'services.msg91_campaigns.dry_run' => true]);
+        Http::fake();
+        try {
+            app(Msg91Client::class)->deleteTemplate('12025550101', 'qa_template');
+            $this->fail('Dry run must not report deletion.');
+        } catch (\RuntimeException $exception) {
+            $this->assertStringContainsString('no provider deletion', $exception->getMessage());
+        }
+        Http::assertNothingSent();
+    }
+
+    public function test_empty_success_response_is_ambiguous_and_errors_are_redacted(): void
+    {
+        config(['services.msg91_campaigns.template_create_enabled' => true]);
+        Http::fake(['*' => Http::response([], 200)]);
+        try {
+            app(Msg91Client::class)->deleteTemplate('12025550101', 'qa_template');
+            $this->fail('An empty response does not confirm deletion.');
+        } catch (\App\Services\WhatsApp\Msg91\Msg91ProviderException $exception) {
+            $this->assertSame(200, $exception->httpStatus);
+        }
+        $safe = \App\Services\WhatsApp\Msg91\Msg91SafeError::message(['message' => 'authkey=test-auth-key Authorization: Bearer private-token'], 'Fallback');
+        $this->assertStringNotContainsString('test-auth-key', $safe);
+        $this->assertStringNotContainsString('private-token', $safe);
     }
 }

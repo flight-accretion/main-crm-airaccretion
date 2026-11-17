@@ -25,7 +25,8 @@ class Msg91CampaignService
         $resolved = $this->recipients->resolve($user, $leadIds);
         return array_merge($resolved, [
             'sender' => $sender,
-            'templates' => $this->templates->approvedFor($user, $sender)->get(['id', 'name', 'language', 'category', 'components', 'variable_schema']),
+            'templates' => $this->templates->approvedFor($user, $sender)->get(['id', 'name', 'language', 'category', 'components', 'variable_schema'])
+                ->filter(fn ($template) => $this->templates->supportsMappings($template))->values(),
         ]);
     }
 
@@ -38,6 +39,8 @@ class Msg91CampaignService
         abort_if($resolved['recipients']->isEmpty(), 422, 'No eligible WhatsApp recipients were found.');
 
         return DB::transaction(function () use ($user, $sender, $template, $resolved, $name, $leadIds) {
+            \App\Models\Msg91WhatsAppTemplate::whereKey($template->id)->lockForUpdate()->firstOrFail();
+            $this->templates->assertApproved($user, $sender, $template->id);
             $campaign = Msg91WhatsAppCampaign::create([
                 'created_by' => $user->id,
                 'sender_id' => $sender->id,
@@ -146,6 +149,8 @@ public function retryFailed(
     $this->access->assertCanSend($campaign->sender->user);
 
     return DB::transaction(function () use ($campaign) {
+        \App\Models\Msg91WhatsAppTemplate::whereKey($campaign->template_id)->lockForUpdate()->firstOrFail();
+        $this->templates->assertApproved($campaign->sender->user, $campaign->sender, $campaign->template_id);
         $lockedCampaign = Msg91WhatsAppCampaign::query()
             ->lockForUpdate()
             ->findOrFail($campaign->id);

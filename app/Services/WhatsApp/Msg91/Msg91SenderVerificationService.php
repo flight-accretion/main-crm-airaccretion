@@ -55,9 +55,13 @@ class Msg91SenderVerificationService
             'source' => 'msg91-number-status-api',
             'provider_status' => $state,
             'checked_at' => now()->toIso8601String(),
+            'integrated_number' => $sender->integrated_number,
         ];
         // Never change `status`: Admin/Super Admin own CRM Active/Inactive.
         $sender->save();
+        if ($connected && $sender->isVerifiedActive()) {
+            \App\Jobs\SyncMsg91SenderTemplates::dispatch($sender->id)->afterCommit();
+        }
     }
 
     /** @return array<string,string> normalized number => normalized provider status */

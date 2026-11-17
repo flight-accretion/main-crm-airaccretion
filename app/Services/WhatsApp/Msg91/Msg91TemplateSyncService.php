@@ -27,125 +27,68 @@ class Msg91TemplateSyncService
      */
     public function syncSender(Msg91WhatsAppSender $sender, ?User $actor = null, bool $central = false): int
     {
-        $rows = $this->client->fetchTemplates($sender->integrated_number);
-        $count = 0;
-
-        foreach ($rows as $row) {
-            $name = trim((string) data_get($row, 'template_name', data_get($row, 'name', '')));
-            if ($name === '') {
-                continue;
-            }
-
-            $variants = data_get($row, 'languages');
-            if (!is_array($variants) || $variants === []) {
-                $variants = [$row];
-            }
-
-            foreach ($variants as $variant) {
-                $language = trim((string) data_get($variant, 'language', data_get($row, 'language', 'en'))) ?: 'en';
-                $status = strtolower(trim((string) data_get($variant, 'status', data_get($row, 'status', 'unknown')))) ?: 'unknown';
-                $providerId = data_get($variant, 'msg91_template_id', data_get($variant, 'template_id', data_get($variant, 'id', data_get($row, 'template_id', data_get($row, 'id')))));
-
-                
-                $template = Msg91WhatsAppTemplate::query()
-                    ->where('name', $name)
-                    ->where('language', $language)
-                    ->whereHas('bindings', function ($bindings) use ($sender) {
-                        $bindings->where('sender_id', $sender->id);
-                    })
-                    ->first();
-
-                // Reuse an existing central template when the same
-                // template name and language exist on another sender.
-                if (!$template) {
-                    $template = Msg91WhatsAppTemplate::query()
-                        ->where('scope', 'central')
-                        ->whereNull('owner_user_id')
-                        ->where('name', $name)
-                        ->where('language', $language)
-                        ->first();
+        if (!$sender->isVerifiedActive()) throw new \RuntimeException('Sender must be verified and active before template reconciliation.');
+        $number = $sender->integrated_number;
+        $sender->forceFill(['template_sync_status' => 'pending', 'template_sync_error' => null])->save();
+        try {
+            // Provider IO occurs outside the transaction. Recheck the sender identity under lock.
+            $definition = app(Msg91TemplateDefinition::class);
+            $rows = $definition->variants($this->client->fetchTemplates($number));
+            return \Illuminate\Support\Facades\DB::transaction(function () use ($sender, $number, $rows, $central, $definition) {
+                $locked = Msg91WhatsAppSender::whereKey($sender->id)->lockForUpdate()->firstOrFail();
+                if ($locked->integrated_number !== $number || !$locked->isVerifiedActive()) throw new \RuntimeException('Sender changed during template reconciliation. Retry verification.');
+                $seen = []; $count = 0; $skipped = 0;
+                $groups = collect($rows)->groupBy(fn ($row) => $row['name'].'|'.$row['language']);
+                foreach ($groups as $variants) {
+                    $row = $variants->first();
+                    $fingerprint = $definition->fingerprint($row['category'], $row['components']);
+                    if ($variants->count() !== 1 || !preg_match('/^[a-z0-9_]+$/', $row['name']) || !$row['language']
+                        || !is_scalar($row['provider_id']) || is_bool($row['provider_id']) || trim((string) $row['provider_id']) === '' || !$fingerprint) { $skipped++; continue; }
+                    if (\Illuminate\Support\Facades\DB::getDriverName() === 'pgsql') {
+                        \Illuminate\Support\Facades\DB::select('SELECT pg_advisory_xact_lock(hashtext(?))', ['msg91-template:'.$row['name'].'|'.$row['language']]);
+                    }
+                    $candidates = Msg91WhatsAppTemplate::where('name', $row['name'])->where('language', $row['language'])
+                        ->where(fn ($q) => $q->where(fn ($c) => $c->where('scope', 'central')->whereNull('owner_user_id'))
+                            ->orWhere('owner_user_id', $locked->user_id))->lockForUpdate()->get();
+                    if ($candidates->contains(fn ($item) => in_array($item->status, ['deleting', 'deleted'], true))) { $skipped++; continue; }
+                    $existingBinding = Msg91WhatsAppSenderTemplateBinding::where('sender_id', $locked->id)
+                        ->whereHas('template', fn ($q) => $q->where('name', $row['name'])->where('language', $row['language']))->first();
+                    $template = $existingBinding ? $candidates->firstWhere('id', $existingBinding->template_id) : null;
+                    if (!$template) {
+                        $centralCandidates = $candidates->where('scope', 'central');
+                        if ($centralCandidates->count() > 1) { $skipped++; continue; }
+                        $template = $centralCandidates->first() ?? $candidates->first();
+                    }
+                    if ($template && $definition->fingerprint($template->category, $template->components) !== $fingerprint) { $skipped++; continue; }
+                    $variant = ['code' => $row['components'], 'variables' => $row['variables']];
+                    if (!$template) {
+                        $schema = $this->schemaForVariant($variant);
+                        $template = Msg91WhatsAppTemplate::create(['owner_user_id' => $central ? null : $locked->user_id,
+                            'scope' => $central ? 'central' : 'personal', 'name' => $row['name'], 'language' => $row['language'],
+                            'category' => $row['category'], 'provider_template_id' => $row['provider_id'], 'status' => $row['status'],
+                            'components' => $row['components'], 'variable_schema' => $schema,
+                            'crm_enabled' => $row['status'] === 'approved' && !$this->hasUnsupportedDynamicComponents($variant, $schema),
+                            'last_synced_at' => now()]);
+                    }
+                    // Shared definition, mappings and visibility are immutable during sender sync.
+                    $status = $this->hasUnsupportedDynamicComponents($variant, $template->variable_schema ?? []) ? 'unsupported' : $row['status'];
+                    $binding = Msg91WhatsAppSenderTemplateBinding::updateOrCreate(['sender_id' => $locked->id, 'template_id' => $template->id],
+                        ['provider_template_id' => $row['provider_id'], 'provider_status' => $status, 'last_synced_at' => now(),
+                            'provider_meta' => ['integrated_number' => $number, 'definition_fingerprint' => $fingerprint, 'template' => $row]]);
+                    $seen[] = $binding->id; $count++;
                 }
-
-                if (!$template) {
-                    $template = new Msg91WhatsAppTemplate([
-                        'owner_user_id' => $central ? null : $sender->user_id,
-                        'scope' => $central ? 'central' : 'personal',
-                        'name' => $name,
-                        'language' => $language,
-                    ]);
-                }
-
-
-                if (!$template) {
-                    $template = new Msg91WhatsAppTemplate([
-                        'owner_user_id' => $central ? null : $sender->user_id,
-                        'scope' => $central ? 'central' : 'personal',
-                        'name' => $name,
-                        'language' => $language,
-                    ]);
-                }
-
-                
-            $autoVisible = !$template->exists
-                || !(bool) $template->crm_visibility_overridden;
-
-            // Preserve the existing CRM variable mapping.
-            // MSG91 provides placeholder positions but not our CRM field choices.
-            $existingSchema = $template->variable_schema;
-
-            $variableSchema = (
-                $template->exists
-                && is_array($existingSchema)
-                && !empty($existingSchema)
-            )
-                ? $existingSchema
-                : $this->schemaForVariant($variant);
-
-                $hasUnsupportedDynamicComponents =
-                $this->hasUnsupportedDynamicComponents(
-                    $variant,
-                    $variableSchema
-                );
-
-            $template->fill([
-                'category' => data_get($row, 'category'),
-                'provider_template_id' => $providerId,
-                'status' => $status,
-                'components' => data_get(
-                    $variant,
-                    'code',
-                    data_get($row, 'components')
-                ),
-                'variable_schema' => $variableSchema,
-                'crm_enabled' => $hasUnsupportedDynamicComponents
-                ? false
-                : (
-                    $autoVisible
-                        ? $status === 'approved'
-                        : $template->crm_enabled
-                ),
-                'last_synced_at' => now(),
-            ]);
-
-            $template->save();
-
-
-                Msg91WhatsAppSenderTemplateBinding::query()->updateOrCreate(
-                    ['sender_id' => $sender->id, 'template_id' => $template->id],
-                    [
-                        'provider_template_id' => $providerId,
-                        'provider_status' => $status,
-                        'last_synced_at' => now(),
-                        'provider_meta' => ['template' => $row, 'language' => $variant],
-                    ]
-                );
-                $count++;
-            }
+                $locked->bindings()->whereNotIn('id', $seen)->whereNotIn('provider_status', ['deleted', 'deleting'])
+                    ->update(['provider_status' => 'unavailable', 'last_synced_at' => now()]);
+                $locked->forceFill(['template_sync_status' => $skipped ? 'partial' : 'synced', 'templates_synced_at' => now(),
+                    'template_sync_error' => $skipped ? $skipped.' provider template variant(s) need compatible, unambiguous definitions.' : null])->save();
+                return $count;
+            });
+        } catch (\Throwable $exception) {
+            Msg91WhatsAppSender::whereKey($sender->id)->where('integrated_number', $number)->update([
+                'template_sync_status' => 'failed', 'template_sync_error' => 'Provider template reconciliation failed. Retry verified sender sync.']);
+            throw $exception;
         }
-
-        return $count;
     }
-
     public function schemaForBody(string $body): array
     {
         preg_match_all('/{{([1-9][0-9]*)}}/', $body, $matches);
@@ -199,6 +142,8 @@ class Msg91TemplateSyncService
         $type = strtolower(
             (string) data_get($component, 'type', '')
         );
+        if ($type === 'header' && in_array(strtoupper((string) data_get($component, 'format')), ['IMAGE', 'VIDEO', 'DOCUMENT', 'LOCATION'], true)) return true;
+        if ($type === 'buttons') $type = 'button';
 
         if (!in_array($type, ['header', 'button'], true)) {
             continue;

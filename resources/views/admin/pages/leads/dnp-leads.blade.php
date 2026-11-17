@@ -38,7 +38,7 @@
     <section class="lq-list"><header class="lq-heading"><h2>DNP list</h2><small>Age from lead-created date</small></header>
     @include('admin.pages.leads.partials.queue-table-controls')
     <table data-queue-table><thead><tr>
-    @foreach(['#','Client','Phone','Assigned','Next follow-up','Age','Product','Action'] as $heading)<th scope="col">@if($heading !== 'Action')<button type="button" data-queue-sort="{{ $loop->index }}">{{ $heading }} <i class="ri-arrow-up-down-line" aria-hidden="true"></i></button>@else{{ $heading }}@endif</th>@endforeach
+    @foreach(['#','Client','Phone','Assigned','Next follow-up','Age','Product','Status','Action'] as $heading)<th scope="col">@if($heading !== 'Action')<button type="button" data-queue-sort="{{ $loop->index }}">{{ $heading }} <i class="ri-arrow-up-down-line" aria-hidden="true"></i></button>@else{{ $heading }}@endif</th>@endforeach
     </tr></thead><tbody>
     @foreach($dnpLeads as $lead)
         @php($next=$queueSummary['followups']->get($lead->id)?->next_followup_date)
@@ -47,6 +47,7 @@
         <td data-label="Next follow-up" data-order="{{ $next?->timestamp ?? 0 }}"><span class="lq-pill {{ $next ? 'lq-scheduled' : 'lq-score-hot' }}">{{ $next?->format('d M Y, H:i') ?? 'Not set' }}</span></td>
         <td data-label="Age" data-order="{{ $age ?? -1 }}"><span class="lq-pill {{ $age !== null && $age > 90 ? 'lq-score-hot' : 'lq-score-neutral' }}">{{ $age === null ? 'Unknown' : $age.' days' }}</span></td>
         <td data-label="Product">{{ ($tableProductNames[$lead->id] ?? '') ?: 'N/A' }}</td>
+        <td data-label="Status">{{ app(\App\Services\LeadStatusTransitionService::class)->displayedBusinessStatus($lead) === \App\Models\LeadFollowup::STATUS_CANCELLED ? 'Cancelled' : 'DNP' }}</td>
         <td data-label="Action"><div class="lq-actions"><a class="ti-btn" href="{{ $isHr ? route('admin.clients.view',$lead->client_id) : route('admin.leads.view',$lead->id) }}" title="View lead" aria-label="View lead"><i class="ri-eye-line"></i></a>
         </div></td></tr>
     @endforeach

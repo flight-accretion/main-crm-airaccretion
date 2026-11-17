@@ -38,6 +38,7 @@ use Illuminate\Support\Facades\Storage;
 use App\Services\BookingSalesContactResolver;
 use App\Support\NotificationRecipientGuard;
 use App\Services\Rides\RideRefundStatusService;
+use App\Services\SalesAmountCalculator;
 
 
 class RideController extends Controller
@@ -2356,7 +2357,7 @@ public  function sendReminder($date, $days, $minutes = null, $leadId = null)
             $totalReceived = 0;
 
             if ($latestFollowup) {
-                $totalAmount = (float) $latestFollowup->total_amount;
+                $totalAmount = SalesAmountCalculator::grossTotalForFollowup($latestFollowup);
             }
 
             // If total amount is still 0, try to get it from payment history
@@ -2645,6 +2646,11 @@ return [
                 return response()->json(['success' => false, 'message' => 'No followup found'], 404);
             }
 
+            $totalAmount = max(0, (float) $request->input('total_amount', 0));
+            if ($totalAmount <= 0) {
+                $totalAmount = SalesAmountCalculator::grossTotalForFollowup($latestFollowup);
+            }
+
             // Helper function to parse IDs from various formats
             $parseIds = function ($ids) {
                 if (empty($ids)) {
@@ -2705,7 +2711,7 @@ return [
                 ][$request->status],
                 'next_followup_date' => now(),
                 'followed_by' => auth()->id(),
-                'total_amount' => $request->total_amount,
+                'total_amount' => $totalAmount,
                 'received_amount' => $latestFollowup->received_amount,
                 'service_ids' => !empty($serviceIds) ? json_encode($serviceIds) : null,
                 'extra_service_ids' => !empty($extraServiceIds) ? json_encode($extraServiceIds) : null,
@@ -2729,11 +2735,11 @@ return [
                 try {
                     Log::info('Ride completed - initiating Airpoints sync', [
                         'ride_id' => $rideId,
-                        'total_amount' => $request->total_amount
+                        'total_amount' => $totalAmount
                     ]);
 
                     $airpointsService = app(AirpointsIntegrationService::class);
-                    $airpointsResponse = $airpointsService->processCompletedRide($ride, $request->total_amount);
+                    $airpointsResponse = $airpointsService->processCompletedRide($ride, $totalAmount);
 
                     if ($airpointsResponse['success']) {
                         Log::info('Ride successfully synced to Airpoints', [

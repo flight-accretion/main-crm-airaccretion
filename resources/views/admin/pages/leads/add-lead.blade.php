@@ -70,7 +70,7 @@
                                             $altCountryCode = $altParts[0] ?? '';
                                             $altPhoneNumber = $altParts[1] ?? $client->alternate_number ?? '';
                                         @endphp
-                                        <option value="{{ $client->id }}"
+                                        <option value="{{ $client->id }}" data-normalized-phone="{{ preg_replace('/\D+/', '', $client->contact_number ?? '') }}"
                                             {{ (string) $selectedClientId === (string) $client->id ? 'selected' : '' }}
                                             data-email="{{ $client->email }}"
                                             data-phone="{{ $contactPhoneNumber }}"
@@ -151,6 +151,7 @@
                                             class="ti-form-input rounded-sm form-control-sm intl-phone-input"
                                                 value="{{ old('contact_number', $contactNumber ?: optional($outreachAssignment ?? null)->normalized_phone) }}" required>
                                             <input type="hidden" name="contact_country_code" id="contact_country_code" value="{{ old('contact_country_code', $defaultContactCountryCode) }}">
+                                            <div id="phone-client-matches" class="mt-2 space-y-2" aria-live="polite"></div>
                                             @error('contact_number') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                                         </div>
 
@@ -620,13 +621,12 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function initSelect2() {
-        $('#countryCodeSelect, #citySelect').select2({
-            placeholder: function () {
-                return $(this).attr('id') === 'countryCodeSelect' ? 'Select Country' : 'Select City';
-            },
+        $('#countryCodeSelect').select2({
+            placeholder: 'Select Country',
             allowClear: true,
             width: '100%'
         });
+        $('#citySelect').select2({ placeholder: 'Select City', allowClear: true, width: '100%', tags: true });
     }
 
    function initClientSelect2() {
@@ -1623,4 +1623,39 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const phone = document.getElementById('phone');
+    const code = document.getElementById('contact_country_code');
+    const clients = document.getElementById('clientSelect');
+    const matches = document.getElementById('phone-client-matches');
+    if (!phone || !code || !clients || !matches) return;
+    const renderMatches = () => {
+        matches.replaceChildren();
+        const digits = value => value.replace(/\D/g, '');
+        if (digits(phone.value).length < 5) return;
+        const number = digits(code.value + phone.value);
+        const options = Array.from(clients.options).filter(option => option.dataset.normalizedPhone === number);
+        if (!options.length) return;
+        const text = document.createElement('p');
+        text.textContent = 'Matching clients found. Select the intended client to use its existing profile.';
+        matches.append(text);
+        options.forEach(option => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'ti-btn ti-btn-outline-primary whitespace-normal';
+            button.textContent = option.textContent.trim();
+            button.addEventListener('click', () => {
+                clients.value = option.value;
+                clients.dispatchEvent(new Event('change', {bubbles: true}));
+            });
+            matches.append(button);
+        });
+    };
+    phone.addEventListener('input', renderMatches);
+    phone.addEventListener('countrychange', renderMatches);
+    code.addEventListener('change', renderMatches);
+    renderMatches();
+});
+</script>
 @endpush

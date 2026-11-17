@@ -82,7 +82,7 @@
                         <span><strong>Travel:</strong> {{ $clientInfo['trip_from'] ?? 'Not scheduled' }}</span>
                     </div>
                     <div class="lw-lead-badges">
-                        <span class="lw-pill lw-pill--green">{{ $lead->status ?? 'Active' }}</span>
+                        <span class="lw-pill lw-pill--green">{{ \App\Models\LeadFollowup::statusLabels()[app(\App\Services\LeadStatusTransitionService::class)->displayedBusinessStatus($lead)] ?? 'Initiated' }}</span>
                         <span class="lw-pill lw-pill--blue">{{ $clientInfo['passengers'] ?? 0 }} passengers</span>
                         @if(!empty($clientInfo['occasion']) && $clientInfo['occasion'] !== 'N/A')
                             <span class="lw-pill lw-pill--amber">{{ $clientInfo['occasion'] }}</span>
@@ -360,7 +360,11 @@
                     <div class="box-title">
                         Products, Services &amp; Requirement
                     </div>
-                    <button type="button" class="lw-btn lw-btn--small" data-workspace-editor="services-details-editor">Edit Services</button>
+                    @if(($isSalesUser ?? false) && ($hasApprovedPayment ?? false))
+                        <span class="lw-field-help">Product and Service are read-only after payment approval.</span>
+                    @else
+                        <button type="button" class="lw-btn lw-btn--small" data-workspace-editor="services-details-editor">Edit Services</button>
+                    @endif
                 </div>
                 <div class="lw-section-body lw-product-summary">
                     <div class="lw-summary-grid">
@@ -368,6 +372,103 @@
                         <div class="lw-info"><small>Services</small><strong>{{ $clientInfo['services'] ?? 'Not selected' }}</strong></div>
                     </div>
                     <div class="lw-info lw-requirement-summary"><small>Latest requirement / call note</small><strong>{{ $lead->description ?: 'No requirement recorded.' }}</strong></div>
+                    @if(in_array(auth()->user()?->userType?->user_type, array_merge(\App\Models\UserType::SALES_ROLES, \App\Models\UserType::OPERATIONS_ROLES, [\App\Models\UserType::OWNER, \App\Models\UserType::SUPER_ADMIN]), true))
+                        @php
+                            $savedExtraQuote = json_decode($lead->extra_service_quote ?? 'null', true);
+                            $extraQuoteSnapshot = \App\Models\LeadFollowup::latestPricingSnapshot((string) $lead->id);
+                            if (($savedExtraQuote['snapshot_id'] ?? null) !== $extraQuoteSnapshot?->id) {
+                                $savedExtraQuote = null;
+                            }
+                            $draftExtraSelection = $savedExtraQuote['draft_extra_service_ids'] ?? null;
+                            if ($draftExtraSelection !== null) $savedExtraQuote = null;
+                            $extraSelection = $draftExtraSelection ?? $savedExtraQuote['extra_service_ids'] ?? $selectedExtraServices ?? [];
+                            $eligibleExtraIds = collect($lead->service_ids_array)->flatMap(fn ($id) => $serviceExtraServicesMap[$id] ?? [])->map(fn ($id) => (string) $id)->all();
+                            $workspaceExtras = collect($allExtraServices)->filter(fn ($extra) => in_array((string) $extra->id, array_merge($eligibleExtraIds, $extraSelection), true));
+                        @endphp
+                        <section class="mt-4 pt-4 border-t border-defaultborder">
+                            <h3 class="font-semibold" style="font-size: 18px;">Extra Services</h3>
+                            <p class="lw-field-help">Manage additional services for this booking</p>
+                            @forelse($workspaceExtras->whereIn('id', $extraSelection) as $extra)
+                                <div>{{ $extra->extra_service }}</div>
+                            @empty
+                                <p>No extra services added yet.</p>
+                            @endforelse
+                            @if($savedExtraQuote)
+                                <p>Current booking quote: ₹{{ number_format($savedExtraQuote['total_amount'], 2) }}</p>
+                            @endif
+                            <button type="button" class="lw-btn lw-btn--small" data-workspace-editor="workspace-extra-editor" aria-controls="workspace-extra-editor">{{ empty($extraSelection) ? '+ Add Extra Service' : 'Add/Edit Extra Services' }}</button>
+                            <div id="workspace-extra-editor" class="lw-edit-panel">
+                                <h4 id="workspace-extra-title" class="font-semibold" style="font-size: 18px;">Add/Edit Extra Services</h4>
+                                <form id="workspace-extra-form" method="POST" action="{{ route('admin.leads.extra-services.update', $lead) }}">
+                                    @csrf
+                                    @method('PUT')
+                                    @include('admin.pages.services.partials.extra-service-picker', ['extraServices' => $workspaceExtras, 'selectedExtraServiceIds' => $extraSelection])
+                                    <output class="block mt-3" aria-live="polite" id="workspace-extra-preview"></output>
+                                    <div class="lw-edit-actions">
+                                        <button type="button" class="lw-btn" id="workspace-extra-cancel" data-close-workspace-editor="workspace-extra-editor">Cancel</button>
+                                        <button type="submit" class="lw-btn lw-btn--primary">Save Changes</button>
+                                    </div>
+                                </form>
+                            </div>
+                            <script>
+                                (() => {
+                                    const form = document.getElementById('workspace-extra-form');
+                                    const editor = document.getElementById('workspace-extra-editor');
+                                    const output = document.getElementById('workspace-extra-preview');
+                                    const save = form.querySelector('[type=submit]');
+                                    const money = new Intl.NumberFormat('en-IN', {style: 'currency', currency: 'INR'});
+                                    let revision = 0;
+                                    const request = async (preview) => {
+                                        const version = ++revision;
+                                        const data = new FormData(form);
+                                        if (!preview) {
+                                            save.disabled = true;
+                                            document.getElementById('workspace-extra-cancel').disabled = true;
+                                            save.textContent = 'Saving…';
+                                        }
+                                        try {
+                                            const response = await fetch(form.action, {
+                                                method: 'PUT',
+                                                headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': data.get('_token')},
+                                                body: JSON.stringify({selection_submitted: true, preview, quote_version: @json(hash('sha256', $lead->extra_service_quote ?? '')), extra_service_ids: data.getAll('extra_service_ids[]')})
+                                            });
+                                            const quote = await response.json();
+                                            if (version !== revision) return;
+                                            if (!response.ok) throw new Error(Object.values(quote.errors || {}).flat()[0] || quote.message || 'Unable to update Extra Services.');
+                                            if (!preview) {
+                                                window.location.reload();
+                                                return;
+                                            }
+                                            output.textContent = 'Preview · Extra Services Total ' + money.format(quote.extra_services_total)
+                                                + (quote.total_amount == null ? '' : ' · Revised Booking Quote ' + money.format(quote.total_amount)
+                                                + ' · Revised Outstanding Balance ' + money.format(quote.outstanding_balance));
+                                        } catch (error) {
+                                            if (version === revision) output.textContent = error.message;
+                                        } finally {
+                                            if (!preview) {
+                                                save.disabled = false;
+                                                document.getElementById('workspace-extra-cancel').disabled = false;
+                                                save.textContent = 'Save Changes';
+                                            }
+                                        }
+                                    };
+                                    document.querySelector('[data-workspace-editor=workspace-extra-editor]').addEventListener('click', () => { if (!save.disabled) request(true); });
+                                    form.addEventListener('change', () => { if (editor.classList.contains('is-open') && !save.disabled) request(true); });
+                                    form.addEventListener('submit', event => {
+                                        event.preventDefault();
+                                        if (!save.disabled) request(false);
+                                    });
+                                    document.getElementById('workspace-extra-cancel').addEventListener('click', () => {
+                                        editor.classList.remove('is-open');
+                                        ++revision;
+                                        form.reset();
+                                        output.textContent = '';
+                                        form.querySelectorAll('[type=checkbox]').forEach(input => input.dispatchEvent(new Event('change')));
+                                    });
+                                })();
+                            </script>
+                        </section>
+                    @endif
                 </div>
                 @php
                     // Compute approved paid amount across all followups for this lead
@@ -385,10 +486,27 @@
                             $approvedPaidSum = 0;
                         }
                     }
-                    $lastTotalAmountForPending = isset($lastFollowupTotalAmount) ? (float) $lastFollowupTotalAmount : 0;
+                    $lastTotalAmountForPending = (float) ($savedExtraQuote['total_amount'] ?? $lastFollowupTotalAmount ?? 0);
                     $pendingAmount = max(0, $lastTotalAmountForPending - $approvedPaidSum);
                 @endphp
 
+                @if(auth()->user()?->userType?->user_type === \App\Models\UserType::OWNER)
+                    <form method="POST" action="{{ route('admin.leads.status.update', $lead) }}" class="box-body">
+                        @csrf
+                        <label class="ti-form-label" for="owner-lead-status">Lead status action</label>
+                        <select id="owner-lead-status" name="status" class="ti-form-select" required>
+                            <option value="">Select action</option>
+                            @foreach($allowedStatusOptions as $value)
+                                <option value="{{ $value }}" {{ (string) old('status') === (string) $value ? 'selected' : '' }}>{{ \App\Models\LeadFollowup::statusLabels()[$value] }}</option>
+                            @endforeach
+                        </select>
+                        <label class="ti-form-label" for="owner-status-note">Notes</label>
+                        <textarea id="owner-status-note" name="notes" class="ti-form-input" maxlength="1000" required>{{ old('notes') }}</textarea>
+                        <label class="ti-form-label" for="owner-status-date">Next follow-up date</label>
+                        <input id="owner-status-date" type="datetime-local" name="next_followup_date" class="ti-form-input" value="{{ old('next_followup_date') }}">
+                        <button class="ti-btn ti-btn-primary-full" type="submit">Save status action</button>
+                    </form>
+                @else
                 <form id="followup-form" class="ti-custom-validation" method="POST"
                     action="{{ $followupFormAction }}"
                     enctype="multipart/form-data" novalidate>
@@ -427,7 +545,8 @@
                                 <select class="ti-form-select rounded-sm !py-2 !px-3" name="services[]" id="services"
                                     multiple {{ $operationsMode ? 'disabled' : '' }}>
                                     @php
-                                        $selectedServicesOld = old('services', $selectedServices);
+                                        $selectedServicesOld = old('services', $selectedServices ?? []);
+                                        $selectedServicesOld = is_array($selectedServicesOld) ? $selectedServicesOld : [];
                                     @endphp
                                     @foreach ($services as $service)
                                         <option value="{{ $service->id }}"
@@ -459,28 +578,18 @@
                             <button type="button" class="lw-quick-option" data-followup-note="{{ $quickNote }}">{{ $quickNote }}</button>
                         @endforeach
                     </div>
-                    <div class="lw-followup-service-picker">
-                        <label for="extra_services" class="ti-form-label dark:text-defaulttextcolor/70 mb-0">Extra services</label>
-                        <select class="ti-form-select rounded-sm !py-2 !px-3" name="extra_services[]"
-                            id="extra_services" multiple {{ $operationsMode ? 'disabled' : '' }}
-                            aria-describedby="extra-services-help">
-                            @php
-                                $selectedExtraServicesOld = old('extra_services', $selectedExtraServices);
-                            @endphp
-                            @foreach ($allExtraServices as $extraService)
+                    {{-- The pricing form still needs the saved extra lines for explicit revisions. --}}
+                    <div hidden>
+                        <select name="extra_services[]" id="extra_services" multiple aria-hidden="true" tabindex="-1">
+                            @foreach($allExtraServices as $extraService)
                                 <option value="{{ $extraService->id }}"
                                     data-extra-service-name="{{ $extraService->extra_service }}"
                                     data-extra-service-amount="{{ $extraService->extra_service_amount }}"
-                                    {{ in_array($extraService->id, $selectedExtraServicesOld) ? 'selected' : '' }}>
+                                    @if(in_array((string) $extraService->id, array_map('strval', (array) ($extraSelection ?? $selectedExtraServices ?? [])), true)) selected @endif>
                                     {{ $extraService->extra_service }}
-                                    (₹{{ number_format($extraService->extra_service_amount, 2) }})
                                 </option>
                             @endforeach
                         </select>
-                        <p id="extra-services-help" class="lw-field-help">Only extras available for the selected service are shown. Search and select one or more for this follow-up.</p>
-                        @error('extra_services')
-                            <p class="text-danger mt-1">{{ $message }}</p>
-                        @enderror
                     </div>
                     <div class="grid grid-cols-12 gap-6">
                         <div class="xl:col-span-12 lg:col-span-6 md:col-span-6 sm:col-span-12 col-span-12">
@@ -762,6 +871,7 @@
                     </div>
                 </div>
                 </form>
+                @endif
             </div>
         </div>
         @unless($operationsMode)
@@ -807,13 +917,7 @@
                                 <select id="services-editor-services" name="service_ids[]" {{ $selectedWorkspaceProductId ? '' : 'disabled' }}><option value="">Select a service</option>@foreach($workspaceServices as $service)<option value="{{ $service->id }}" {{ (string) $service->id === (string) $selectedWorkspaceServiceId ? 'selected' : '' }}>{{ $service->service }}</option>@endforeach</select>
                             </div>
                         </div>
-                        <div class="lw-field"><label for="services-editor-requirement">Requirement / call note</label><textarea id="services-editor-requirement" name="requirement_description" rows="3">{{ $lead->description }}</textarea></div>
-                        <div class="lw-field">
-                            <label for="services-editor-extra-services">Extra services</label>
-                            <input type="search" class="lw-select-search" data-filter-select="services-editor-extra-services" placeholder="Search extra services">
-                            <select id="services-editor-extra-services" data-extra-services-proxy multiple aria-describedby="services-editor-extra-services-help"></select>
-                            <p id="services-editor-extra-services-help" class="lw-field-help">Available extras update automatically when the service changes.</p>
-                        </div>
+                        <div class="lw-field"><label for="services-editor-requirement">Requirement / call note</label><textarea id="services-editor-requirement" name="requirement_description" rows="3" @if(auth()->user()?->userType?->user_type === \App\Models\UserType::OWNER) readonly @endif>{{ $lead->description }}</textarea></div>
                         <div class="lw-edit-actions">
                             <button type="submit" class="lw-btn lw-btn--primary">Save Services</button>
                             <button type="button" class="lw-btn" data-close-workspace-editor="services-details-editor">Cancel</button>
@@ -2637,10 +2741,10 @@
 @endsection
 @push('scripts')
     <script>
-        const lastFollowupTotalAmount = @json($lastFollowupTotalAmount);
-        const lastFollowupServiceAmount = @json($lastFollowupServiceAmount);
-        const lastFollowupDiscountAmount = @json($lastFollowupDiscountAmount);
-        const lastFollowupServiceDetails = @json($lastFollowupServiceDetails ?? []);
+        const lastFollowupTotalAmount = @json($savedExtraQuote['total_amount'] ?? $lastFollowupTotalAmount);
+        const lastFollowupServiceAmount = @json($savedExtraQuote['service_amount'] ?? $lastFollowupServiceAmount);
+        const lastFollowupDiscountAmount = @json($savedExtraQuote['discount_amount'] ?? $lastFollowupDiscountAmount);
+        const lastFollowupServiceDetails = @json($savedExtraQuote['service_details'] ?? $lastFollowupServiceDetails ?? []);
         const statusSelect = document.getElementById('status');
         const serviceBreakdownContainer = document.getElementById('service_breakdown_container');
         const serviceBreakdownBody = document.getElementById('service_breakdown_body');
@@ -2710,6 +2814,7 @@
         const initialPendingAmount = @json($pendingAmount ?? 0);
         // ids recorded on last followup (if any)
         let lastFollowupServiceIds = @json($lastFollowupServiceIds ?? []);
+        const persistedExtraSelection = @json($draftExtraSelection ?? $savedExtraQuote['extra_service_ids'] ?? null);
         let lastFollowupExtraServiceIds = @json($lastFollowupExtraServiceIds ?? []);
 
         // Debug: Log the loaded service details
@@ -2763,6 +2868,7 @@
         }
 
         function getStoredExtraServiceIds() {
+            if (Array.isArray(persistedExtraSelection)) return persistedExtraSelection.map(String);
             const ids = Array.isArray(lastFollowupExtraServiceIds)
                 ? lastFollowupExtraServiceIds.map(String)
                 : [];
@@ -2881,8 +2987,9 @@
             const servicesSelect = document.getElementById('services');
             const extraServicesSelect = document.getElementById('extra_services');
 
+            if (!servicesSelect) return;
             const selectedServices = Array.from(servicesSelect.selectedOptions).map(opt => opt.value);
-            const selectedExtraServices = Array.from(extraServicesSelect.selectedOptions).map(opt => opt.value);
+            const selectedExtraServices = Array.from(extraServicesSelect?.selectedOptions ?? []).map(opt => opt.value);
 
             // Store current breakdown data before clearing (to preserve discounts during rebuild)
             const previousBreakdownData = {
@@ -3147,7 +3254,7 @@
                         }
                     } else if (type === 'extra_service') {
                         const extraServicesSelect = document.getElementById('extra_services');
-                        const option = extraServicesSelect.querySelector(`option[value="${id}"]`);
+                        const option = extraServicesSelect?.querySelector(`option[value="${id}"]`);
                         if (option) option.selected = false;
                         if (typeof $ !== 'undefined' && $.fn.select2) {
                             $('#extra_services').trigger('change.select2');
@@ -3257,11 +3364,15 @@
             const servicesSelect = document.getElementById('services');
             const extraServicesSelect = document.getElementById('extra_services');
 
+            // Owner uses the independent status-only form; the old extras picker
+            // is intentionally absent from every ordinary follow-up form.
+            if (!statusSelect || !servicesSelect) return;
+
             syncExtraServicesForSelectedServices(true);
 
             // Initialize previous service selections
             previousServiceSelections = Array.from(servicesSelect.selectedOptions).map(opt => opt.value);
-            previousExtraSelections = Array.from(extraServicesSelect.selectedOptions).map(opt => opt.value);
+            previousExtraSelections = Array.from(extraServicesSelect?.selectedOptions ?? []).map(opt => opt.value);
 
             // ALWAYS build table on initial load to show last service breakdown
             // Even if status is not payment-related, show the previous breakdown
@@ -3442,11 +3553,6 @@
                     width: '100%'
                 });
 
-                $('#extra_services').select2({
-                    placeholder: "Select extra services",
-                    allowClear: true,
-                    width: '100%'
-                });
 
                 $('#services').on('change', function() {
                     isManualTotalEdited = false;
@@ -3461,7 +3567,7 @@
                     isManualTotalEdited = false;
                     handleServiceChange();
                 });
-                extraServicesSelect.addEventListener('change', function() {
+                extraServicesSelect?.addEventListener('change', function() {
                     isManualTotalEdited = false;
                     handleExtraServiceChange();
                 });
@@ -3472,14 +3578,26 @@
                 pricingSelectionBaseline = pricingSelectionKey();
             });
 
+            const hasSavedPricingSnapshot =
+                @json(isset($lead) && \App\Models\LeadFollowup::latestPricingSnapshot((string) $lead->id) !== null);
+
             pricingActionInput?.form?.addEventListener('submit', () => {
                 const selectionChanged = pricingSelectionTouched && pricingSelectionBaseline !== null
                     && pricingSelectionKey() !== pricingSelectionBaseline;
-                pricingActionInput.value = pricingEditable && (pricingValueEdited || selectionChanged)
-                    ? 'revise' : 'preserve';
+
+                const selectedStatus = statusSelect?.value;
+                const isPayment = selectedStatus === '3' || selectedStatus === '4';
+
+                const firstPaymentWithoutPricing =
+                    isPayment && !hasSavedPricingSnapshot;
+
+                pricingActionInput.value = pricingEditable &&
+                    (pricingValueEdited || selectionChanged || firstPaymentWithoutPricing)
+                    ? 'revise'
+                    : 'preserve';
             });
 
-            for (const select of [servicesSelect, extraServicesSelect]) {
+            for (const select of [servicesSelect, extraServicesSelect].filter(Boolean)) {
                 select.addEventListener('change', event => {
                     if (event.isTrusted) markPricingSelectionTouched();
                 });
