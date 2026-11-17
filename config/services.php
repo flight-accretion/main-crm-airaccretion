@@ -377,5 +377,10 @@ return [
 
 ],
 
+'n8n_attendance' => [
+    'token' => env('N8N_ATTENDANCE_API_TOKEN'),
+    'actor_user_id' => env('N8N_ATTENDANCE_ACTOR_USER_ID'),
+],
+
 
 ];

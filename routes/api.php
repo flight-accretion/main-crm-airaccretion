@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\SkyrackDashboardController;
 use App\Http\Middleware\VerifySkyrackToken;
 use App\Http\Controllers\Api\GoogleChatPubSubController;
 use App\Http\Controllers\Api\SkyrackLeadCancellationController;
+use App\Http\Controllers\Api\N8nAttendanceController;
 
 require __DIR__ . '/msg91-webhooks.php';
 
@@ -154,4 +155,31 @@ Route::prefix('skyrack')
             '/leads/cancel',
             [SkyrackLeadCancellationController::class, 'store']
         )->name('api.skyrack.leads.cancel');
+    });
+
+    /*
+|--------------------------------------------------------------------------
+| n8n Attendance Integration
+|--------------------------------------------------------------------------
+*/
+
+Route::prefix('n8n')
+    ->middleware([
+        'n8n.attendance.auth',
+        'throttle:60,1',
+    ])
+    ->group(function () {
+
+        // GET active CRM employees
+        Route::get(
+            '/employees/active',
+            [N8nAttendanceController::class, 'employees']
+        )->name('api.n8n.employees.active');
+
+        // POST attendance records
+        Route::post(
+            '/attendance',
+            [N8nAttendanceController::class, 'store']
+        )->name('api.n8n.attendance.store');
+
     });

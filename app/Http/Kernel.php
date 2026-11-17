@@ -77,5 +77,7 @@ class Kernel extends HttpKernel
     \App\Http\Middleware\VerifyWebsiteCatalogWebhook::class,
     'active.user' =>
     \App\Http\Middleware\EnsureActiveUser::class,
+    'n8n.attendance.auth' =>
+    \App\Http\Middleware\VerifyN8nAttendanceToken::class,
     ];
 }
