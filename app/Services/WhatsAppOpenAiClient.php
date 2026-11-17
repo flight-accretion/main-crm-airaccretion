@@ -36,13 +36,9 @@ private function generateTrackedReply(
     Collection $products,
     ?Collection $contextMessages = null
 ): array {
-    $agent =
-        $setting
-            ->aiAgent()
-            ->with(
-                'modelProfile'
-            )
-            ->first();
+    $agent = $setting->ai_agent_id !== null
+        ? $setting->aiAgent()->with('modelProfile')->first()
+        : null;
 
 
     if ($agent && !$agent->isReady()) {

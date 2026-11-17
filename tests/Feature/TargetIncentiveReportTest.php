@@ -27,6 +27,13 @@ class TargetIncentiveReportTest extends LeadListFixtureTestCase
             $table->decimal('total_amount', 15, 2)->default(0);
             foreach (['service_ids','extra_service_ids','service_details'] as $field) $table->text($field)->nullable();
         });
+        foreach (['service_amount', 'discount_amount'] as $field) {
+            if (!Schema::hasColumn('lead_followups', $field)) {
+                Schema::table('lead_followups', function (Blueprint $table) use ($field) {
+                    $table->decimal($field, 15, 2)->nullable();
+                });
+            }
+        }
         Schema::table('payment_audit_trail', fn (Blueprint $table) => $table->dateTime('paid_date')->nullable());
         Schema::table('services', function (Blueprint $table) {
             $table->decimal('service_amount',15,2)->default(0); $table->decimal('fees_percent',8,2)->default(0);
@@ -113,6 +120,57 @@ class TargetIncentiveReportTest extends LeadListFixtureTestCase
             if (str_starts_with($expected[8],'=')) $expected[8]="'".$expected[8];
             $this->assertSame($expected,array_slice($data[$sale->client_name],0,17));
         }
+    }
+
+    public function test_zero_total_uses_saved_service_price_in_incentive_table_and_download(): void
+    {
+        DB::table('lead_followups')->where('lead_id', $this->saleIds['sales'])->update([
+            'total_amount' => 0,
+            'service_amount' => 1000,
+            'discount_amount' => 0,
+        ]);
+
+        $rows = $this->csv();
+        $salesRow = collect(array_slice($rows, 1, -1))->firstWhere(0, 'Client sales');
+        $this->assertSame(1000.0, $this->amount($salesRow[5]));
+        $this->assertSame(800.0, $this->amount($salesRow[7]));
+        $this->assertSame(7.2, $this->amount($salesRow[21]));
+
+        $path = tempnam(sys_get_temp_dir(), 'incentive-zero-total-');
+        try {
+            file_put_contents($path, $this->download('excel'));
+            $book = \PhpOffice\PhpSpreadsheet\IOFactory::load($path);
+            $detail = $book->getSheetByName('Sales Detail');
+            $salesRowNumber = null;
+            foreach (range(2, $detail->getHighestDataRow()) as $rowNumber) {
+                if ($detail->getCell('A' . $rowNumber)->getValue() === 'Client sales') {
+                    $salesRowNumber = $rowNumber;
+                    break;
+                }
+            }
+            $this->assertNotNull($salesRowNumber);
+            $this->assertSame(1000.0, (float) $detail->getCell('F' . $salesRowNumber)->getValue());
+            $this->assertSame(800.0, (float) $detail->getCell('H' . $salesRowNumber)->getValue());
+            $book->disconnectWorksheets();
+        } finally {
+            @unlink($path);
+        }
+
+        $actor = User::findOrFail('hr');
+        auth()->setUser($actor);
+        $request = Request::create('/admin/targets/incentives', 'GET', [
+            'year' => 2026,
+            'month' => 10,
+            'person_id' => $this->people['sales']->id,
+        ]);
+        $request->setUserResolver(fn () => $actor);
+        $request->setLaravelSession(app('session.store'));
+        app()->instance('request', $request);
+
+        $view = (new TargetController(new TargetIncentiveService()))->incentives($request);
+        $salesTarget = collect($view->getData()['rows'])->firstWhere('id', $this->people['sales']->id);
+        $this->assertSame(800.0, (float) $salesTarget['achieved']);
+        $this->assertSame(1.6, (float) $salesTarget['incentive']);
     }
 
     public function test_selected_person_uses_their_own_team_or_company_sales_without_other_payouts(): void
